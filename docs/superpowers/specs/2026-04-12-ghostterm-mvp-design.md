@@ -260,7 +260,7 @@ worktree_switch 触发链:
   git_backend.worktree_switch()
     → project_manager.open_project(new_path)
       → fs_backend: stop + restart watching
-      → pty_manager: cd 或 respawn
+      → pty_manager: kill_pty + spawn_pty(new_cwd)
 
 独立模块:
   fs_backend ←→ git_backend    (各自独立)
@@ -298,7 +298,7 @@ interface EditorState {
   closeFile: (id: string) => void
   saveFile: (id: string) => Promise<void>
   setActive: (id: string) => void
-  handleExternalChange: (path: string, content: string) => void
+  handleExternalChange: (path: string, result: ReadFileResult) => void
 }
 
 interface OpenFile {
@@ -308,6 +308,7 @@ interface OpenFile {
   content: string       // 文本内容（kind='text' 时有效）
   diskContent: string   // 磁盘内容（kind='text' 时有效，用于冲突检测）
   isDirty: boolean      // 是否有未保存修改（仅 kind='text' 时可能为 true）
+  isSymlink: boolean    // 是否为符号链接（编辑器标签标记 "symlink"）
   errorMessage?: string // kind='error' 时的错误信息
   size?: number         // 文件大小（kind='binary'|'large' 时用于显示）
 }
@@ -369,7 +370,7 @@ interface SidebarState {
   activeTab: 'files' | 'changes' | 'worktrees'
   visible: boolean
 
-  setTab: (tab: string) => void
+  setTab: (tab: 'files' | 'changes' | 'worktrees') => void
   toggleVisibility: () => void
 }
 ```
