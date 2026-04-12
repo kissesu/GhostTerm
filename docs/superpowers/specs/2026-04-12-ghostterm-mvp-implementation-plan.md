@@ -62,7 +62,7 @@ PBI-0 项目脚手架 + 共享基础
 | # | 任务 | TDD 测试 | 产出文件 |
 |---|------|----------|----------|
 | 0.5 | React + Vite + TypeScript 初始化 | `pnpm dev` 启动 + 页面渲染 | `src/`, `package.json`, `vite.config.ts` |
-| 0.6 | pnpm 依赖安装 | `pnpm install` 成功 | `package.json`（zustand, react-resizable-panels, @xterm/xterm, @codemirror/*, @radix-ui/*, lucide-react） |
+| 0.6 | pnpm 依赖安装 | `pnpm install` 成功 | `package.json`（zustand, react-resizable-panels, @xterm/xterm, @xterm/addon-webgl, @xterm/addon-unicode11, @xterm/addon-attach, @codemirror/view, @codemirror/state, @codemirror/language, @codemirror/lang-javascript, @codemirror/lang-rust, @codemirror/lang-json, @codemirror/lang-html, @codemirror/lang-css, @codemirror/lang-python, @codemirror/theme-one-dark, @radix-ui/*, lucide-react） |
 | 0.7 | Feature-Sliced 目录结构 | 所有目录存在 | `src/features/terminal/`, `src/features/editor/`, `src/features/sidebar/`, `src/shared/`, `src/layouts/` |
 | 0.8 | 共享类型定义 | TypeScript 编译通过 | `src/shared/types/index.ts`（FileEntry, FileNode, StatusEntry, Worktree, Project, ProjectInfo, ReadFileResult, OpenFile, FsEvent） |
 | 0.9 | themeStore 实现 | vitest: dark 配色常量正确 | `src/shared/stores/themeStore.ts` |
@@ -140,7 +140,7 @@ PBI-0 项目脚手架 + 共享基础
 | # | 任务 | TDD 测试 | 产出文件 |
 |---|------|----------|----------|
 | 2.7 | editorStore | vitest: openFile 按 kind 分支创建 OpenFile；closeFile 移除；saveFile 更新 isDirty；setActive 切换 | `src/features/editor/editorStore.ts` |
-| 2.8 | Editor.tsx（CodeMirror） | vitest: 加载 text content；语法高亮根据扩展名动态加载对应 Lezer 语言包（`@codemirror/lang-*`）；binary/large/error 显示对应占位符 | `src/features/editor/Editor.tsx` |
+| 2.8 | Editor.tsx（CodeMirror） | vitest: 加载 text content；语法高亮根据扩展名动态加载对应 Lezer 语言包（`@codemirror/lang-*`）；binary 显示占位符；large 显示只读提示；error 显示错误状态；非 UTF-8 文件（kind='error' + 编码信息）显示编码提示 + "以只读模式打开" 选项（MVP 不做转码/hex，仅提示） | `src/features/editor/Editor.tsx` |
 | 2.9 | EditorTabs.tsx | vitest: 渲染打开的文件列表；点击切换 active；关闭按钮调用 closeFile；dirty 文件标记圆点 | `src/features/editor/tabs/EditorTabs.tsx` |
 | 2.10 | 文件保存快捷键 | vitest: Cmd+S 触发 saveFile | 集成到 `Editor.tsx` |
 | 2.11 | 编辑器主题同步 | vitest: 使用 themeStore 的 dark 配色应用 CM6 oneDark | 集成到 `Editor.tsx` |
@@ -345,11 +345,11 @@ e2e-tests/
 ### 创建 worktree 开始新 PBI
 
 ```bash
-# 在项目根目录执行
+# 在项目根目录执行（-b 自动创建新分支）
 mkdir -p ../ghostterm-worktrees
-git worktree add ../ghostterm-worktrees/terminal feat/terminal
-git worktree add ../ghostterm-worktrees/editor feat/editor
-git worktree add ../ghostterm-worktrees/sidebar feat/sidebar
+git worktree add -b feat/terminal ../ghostterm-worktrees/terminal
+git worktree add -b feat/editor ../ghostterm-worktrees/editor
+git worktree add -b feat/sidebar ../ghostterm-worktrees/sidebar
 ```
 
 ### 合并完成的 PBI
