@@ -140,7 +140,13 @@ ws://127.0.0.1:{port}?token={token}
 上行: Binary frame → PTY stdin
 下行: PTY stdout → Binary frame → xterm.js
 
-安全: 绑定 127.0.0.1 + URL query 一次性 token
+安全握手模型:
+  - 绑定 127.0.0.1（仅本地访问）
+  - token 由 spawn_pty 生成，短 TTL（30s）
+  - 首次成功握手后 token 立即失效（单连接限制）
+  - 无有效连接 5s 内自动 kill PTY + 关闭端口
+  - 端口随 PTY 生命周期销毁
+  - 禁止将完整 WS URL（含 token）写入日志
 ```
 
 依赖: `portable-pty`, `tokio-tungstenite`, `tokio`
@@ -166,12 +172,14 @@ stop_watching() → ()
 
 ```
 "fs:created"  { path }
-"fs:modified" { path }
+"fs:modified" { path }  → 前端收到后需调用 read_file(path) 获取新内容
 "fs:deleted"  { path }
 "fs:renamed"  { old_path, new_path }
 ```
 
 监听配置: 排除 `.git`、`node_modules` 等目录。Debounce 100ms 防止批量操作刷屏。
+
+路径安全: 作为开发工具，不做硬性路径沙箱（需要跨项目复制文件等操作）。但对系统敏感路径（如 `/etc`、`~/.ssh`）的写操作显示确认提示。
 
 依赖: `notify` (v6), `ignore` (gitignore 解析)
 
@@ -321,7 +329,8 @@ Claude Code 写入磁盘
   → debounce 100ms
   → app.emit("fs:modified", { path })
   → React listen("fs:modified")
-  → editorStore.handleExternalChange(path, content)
+  → invoke('read_file', { path }) 获取新内容
+  → editorStore.handleExternalChange(path, newContent)
   → 判断:
     - 文件未在编辑器中打开 → 忽略（文件树自动更新修改标记）
     - 文件已打开, isDirty = false → 直接替换 content + diskContent
@@ -424,7 +433,7 @@ Worktrees.tsx onClick(worktree)
 
 | 失败场景 | 检测 | 处理 |
 |---|---|---|
-| projects.json 损坏 | serde Err | 重置为空列表，日志记录错误 |
+| projects.json 损坏 | serde Err | 备份损坏文件为 `projects.json.corrupt.<timestamp>`，尝试部分恢复，无法恢复则重置为空列表并通知用户 |
 
 ## 11. 测试策略
 
