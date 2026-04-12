@@ -88,7 +88,10 @@ src/
       FileTree.tsx          # Files 标签页
       Changes.tsx           # Changes 标签页
       Worktrees.tsx         # Worktrees 标签页
-      sidebarStore.ts       # 活跃标签、展开状态
+      sidebarStore.ts       # 纯 UI 状态（活跃标签、可见性）
+      projectStore.ts       # 项目管理（当前项目、最近项目）
+      fileTreeStore.ts      # 文件树（懒加载、增量更新）
+      gitStore.ts           # Git 状态（changes、worktrees、branch）
   shared/
     components/
       ResizablePanel.tsx    # 可拖拽分屏组件
@@ -179,7 +182,23 @@ stop_watching() → ()
 
 监听配置: 排除 `.git`、`node_modules` 等目录。Debounce 100ms 防止批量操作刷屏。
 
+性能策略（大仓库场景）:
+- 文件树按目录懒加载：首次只加载根目录子项，展开时按需加载子目录内容
+- fs 事件做增量更新：新增/删除/重命名只修改受影响的节点，不全量刷新
+- Git 状态节流刷新：文件保存后主动刷新，fs 事件批量后延迟 500ms 刷新
+- 已知限制：monorepo（> 10000 文件）首次加载可能较慢，后续通过增量更新缓解
+
 路径安全: 作为开发工具，不做硬性路径沙箱（需要跨项目复制文件等操作）。但对系统敏感路径（如 `/etc`、`~/.ssh`）的写操作显示确认提示。
+
+文件类型处理策略:
+
+| 场景 | 检测方式 | 编辑器行为 |
+|---|---|---|
+| 二进制文件（图片、.wasm 等） | 文件头 magic bytes 检测 | 显示 "二进制文件" 占位符，不加载到编辑器 |
+| 大文件（> 1MB） | 文件 size 检查 | 提示 "文件较大，以只读模式打开"，禁用语法高亮 |
+| 非 UTF-8 编码 | 解码失败 | 提示编码类型，提供转码选项或以 hex 查看 |
+| 符号链接 | fs metadata | 正常跟随链接打开，编辑器标签标记 "symlink" |
+| 权限不足 | read_file Err | 编辑器标签显示 "权限不足" 错误状态 |
 
 依赖: `notify` (v6), `ignore` (gitignore 解析)
 
@@ -284,29 +303,84 @@ interface OpenFile {
 
 特点: 跟踪 `content` vs `diskContent` 用于检测 AI 修改文件后的冲突。
 
-### 7.3 sidebarStore
+### 7.3 projectStore
+
+```typescript
+interface ProjectState {
+  currentProject: Project | null
+  recentProjects: Project[]
+
+  switchProject: (path: string) => Promise<void>
+  closeProject: () => Promise<void>
+}
+```
+
+特点: 管理项目生命周期，切换时协调其他 store 重置。
+
+### 7.4 fileTreeStore
+
+```typescript
+interface FileTreeState {
+  fileTree: FileNode[]
+  expandedDirs: Set<string>
+
+  refreshFileTree: () => Promise<void>
+  toggleDir: (path: string) => void
+  // 增量更新：处理 fs 事件时按需更新单个节点，而非全量刷新
+  applyFsEvent: (event: FsEvent) => void
+}
+```
+
+特点: 文件树按目录懒加载（首次只加载根目录子项，展开时按需加载子目录），fs 事件做增量更新。
+
+### 7.5 gitStore
+
+```typescript
+interface GitState {
+  currentBranch: string | null
+  changes: StatusEntry[]
+  worktrees: Worktree[]
+
+  refreshGitStatus: () => Promise<void>
+  refreshWorktrees: () => Promise<void>
+  stage: (paths: string[]) => Promise<void>
+  unstage: (paths: string[]) => Promise<void>
+}
+```
+
+特点: Git 状态采用节流刷新（文件保存后主动刷新，fs 事件批量后延迟刷新）。
+
+### 7.6 sidebarStore
 
 ```typescript
 interface SidebarState {
   activeTab: 'files' | 'changes' | 'worktrees'
   visible: boolean
-  currentProject: Project | null
-  recentProjects: Project[]
-  fileTree: FileNode[]
-  expandedDirs: Set<string>
-  changes: StatusEntry[]
-  worktrees: Worktree[]
 
   setTab: (tab: string) => void
   toggleVisibility: () => void
-  switchProject: (path: string) => Promise<void>
-  refreshFileTree: () => Promise<void>
-  refreshGitStatus: () => Promise<void>
-  refreshWorktrees: () => Promise<void>
 }
 ```
 
-特点: 最复杂的 store，管理文件树 + Git 状态 + Worktree 列表 + 项目切换。
+特点: 收敛为纯 UI 状态，领域数据由 projectStore / fileTreeStore / gitStore 各自管理。
+
+### 7.7 themeStore
+
+```typescript
+interface ThemeState {
+  mode: 'dark' | 'light' | 'system'
+  resolvedMode: 'dark' | 'light'  // system 解析后的实际值
+
+  setMode: (mode: 'dark' | 'light' | 'system') => void
+}
+```
+
+职责: 统一协调三个渲染引擎的主题同步：
+- **shadcn/ui**: 通过 CSS 变量（`--background`、`--foreground` 等）
+- **CodeMirror 6**: 通过 CM6 Theme Extension（`oneDark` / 自定义 light theme）
+- **xterm.js**: 通过 `ITheme` options（`background`、`foreground`、ANSI 颜色映射）
+
+MVP 阶段仅支持 dark 主题（与 Ghostty 使用习惯一致），light 主题留到 Phase 2。
 
 ## 8. 核心数据流
 
@@ -337,19 +411,38 @@ Claude Code 写入磁盘
     - 文件已打开, isDirty = true → 提示用户: "文件已被外部修改" [保留修改] [加载新版本] [查看 diff]
 ```
 
-### 8.3 Worktree 切换
+### 8.3 Worktree 切换（事务流程）
+
+切换 worktree 是一个事务操作，任一步失败都回滚到旧上下文：
 
 ```
 Worktrees.tsx onClick(worktree)
-  → invoke('worktree_switch', { path })
-  → Rust project_manager 协调:
-    - fs_backend: stop_watching() → start_watching(new_path)
-    - pty_manager: cd new_path 或 respawn
-    - 更新 projects.json
-  → 前端连锁更新:
-    - sidebarStore: currentProject 更新, 刷新 fileTree + changes
-    - editorStore: 关闭所有文件（或提示保存未保存的）
-    - terminalStore: cwd 已通过 Rust 端更新
+  │
+  ├─ 第 1 步: 前置检查
+  │   → editorStore 检查是否有 isDirty 文件
+  │   → 有未保存文件 → 弹出提示: [全部保存并切换] [放弃修改并切换] [取消]
+  │   → 用户取消 → 中止切换
+  │
+  ├─ 第 2 步: 冻结 UI
+  │   → 禁用面板交互，显示切换进度指示
+  │
+  ├─ 第 3 步: Rust 端切换（invoke('worktree_switch', { path })）
+  │   → project_manager 按顺序执行:
+  │     1. fs_backend.stop_watching()
+  │     2. pty_manager: 在当前 PTY 中 cd new_path
+  │     3. fs_backend.start_watching(new_path)
+  │     4. 更新 projects.json
+  │   → 任一步失败 → 回滚已完成的步骤，返回 Err
+  │
+  ├─ 第 4 步: 前端刷新（仅 Rust 端成功后执行）
+  │   → projectStore: 更新 currentProject
+  │   → editorStore: 关闭所有文件标签
+  │   → fileTreeStore: 全量刷新文件树
+  │   → gitStore: 刷新 changes + worktrees（当前 worktree 标记为 active）
+  │
+  └─ 第 5 步: 解冻 UI
+      → 恢复面板交互
+      → Rust 端失败 → 恢复 UI 到旧状态，Toast 显示错误原因
 ```
 
 ## 9. 布局设计
@@ -491,3 +584,17 @@ Worktrees.tsx onClick(worktree)
 ```
 
 方案 B 的改动范围仅限 terminal feature 模块内部，不影响其他模块。这是 Feature-Sliced 架构的优势。
+
+为确保切换透明，Terminal 组件对外暴露统一 props 接口：
+
+```typescript
+interface TerminalProps {
+  wsPort: number
+  wsToken: string
+  onReady: () => void
+  onDisconnect: (reason: string) => void
+  onResize: (cols: number, rows: number) => void
+}
+```
+
+无论底层用 xterm.js 还是 alacritty_terminal，AppLayout 只依赖这个接口。
