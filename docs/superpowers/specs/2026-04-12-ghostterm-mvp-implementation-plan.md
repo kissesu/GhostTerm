@@ -62,7 +62,7 @@ PBI-0 项目脚手架 + 共享基础
 | # | 任务 | TDD 测试 | 产出文件 |
 |---|------|----------|----------|
 | 0.5 | React + Vite + TypeScript 初始化 | `pnpm dev` 启动 + 页面渲染 | `src/`, `package.json`, `vite.config.ts` |
-| 0.6 | pnpm 依赖安装 | `pnpm install` 成功 | `package.json`（zustand, react-resizable-panels, @xterm/xterm, @xterm/addon-webgl, @xterm/addon-unicode11, @xterm/addon-attach, @codemirror/view, @codemirror/state, @codemirror/language, @codemirror/lang-javascript, @codemirror/lang-rust, @codemirror/lang-json, @codemirror/lang-html, @codemirror/lang-css, @codemirror/lang-python, @codemirror/theme-one-dark, @radix-ui/*, lucide-react） |
+| 0.6 | pnpm 依赖安装 | `pnpm install` 成功 | `package.json`（zustand, react-resizable-panels, @xterm/xterm, @xterm/addon-webgl, @xterm/addon-unicode11, @xterm/addon-attach, @xterm/addon-fit, @codemirror/view, @codemirror/state, @codemirror/language, @codemirror/lang-javascript, @codemirror/lang-rust, @codemirror/lang-json, @codemirror/lang-html, @codemirror/lang-css, @codemirror/lang-python, @codemirror/theme-one-dark, @radix-ui/*, lucide-react） |
 | 0.7 | Feature-Sliced 目录结构 | 所有目录存在 | `src/features/terminal/`, `src/features/editor/`, `src/features/sidebar/`, `src/shared/`, `src/layouts/` |
 | 0.8 | 共享类型定义 | TypeScript 编译通过 | `src/shared/types/index.ts`（FileEntry, FileNode, StatusEntry, Worktree, Project, ProjectInfo, ReadFileResult, OpenFile, FsEvent） |
 | 0.9 | themeStore 实现 | vitest: dark 配色常量正确 | `src/shared/stores/themeStore.ts` |
@@ -105,7 +105,8 @@ PBI-0 项目脚手架 + 共享基础
 |---|------|----------|----------|
 | 1.8 | terminalStore | vitest: spawn 更新 ptyId/wsPort/wsToken；kill 重置为 null；reconnect 更新 token | `src/features/terminal/terminalStore.ts` |
 | 1.9 | useTerminal hook | vitest: WebSocket 连接建立/断开状态管理；onclose 触发 reconnect | `src/features/terminal/useTerminal.ts` |
-| 1.10 | Terminal.tsx | vitest: 组件挂载创建 xterm 实例；WebGL addon 加载；Unicode11 addon 加载；AttachAddon 连接 WebSocket | `src/features/terminal/Terminal.tsx` |
+| 1.10 | Terminal.tsx | vitest: 组件��载创建 xterm 实例；WebGL addon 加载；Unicode11 addon 加载；AttachAddon 连��� WebSocket | `src/features/terminal/Terminal.tsx` |
+| 1.10.1 | 终端 resize 联动 | vitest: 面板尺寸变化时通过 xterm.js FitAddon 重新计算 rows/cols → 调用 terminalStore.resize() → invoke resize_pty | 集成到 `Terminal.tsx` + `useTerminal.ts` |
 | 1.11 | xterm.js 主题同步 | vitest: 使用 themeStore 的 dark 配色 | 集成到 `Terminal.tsx` |
 | 1.12 | 终端错误 UI | vitest: 连接失败显示错误 + 重试按钮；PTY 退出显示退出码 | 集成到 `Terminal.tsx` |
 
@@ -128,7 +129,7 @@ PBI-0 项目脚手架 + 共享基础
 
 | # | 任务 | TDD 测试 | 产出文件 |
 |---|------|----------|----------|
-| 2.1 | read_file（判别联合） | `cargo test`: text 文件返回 kind='text' + content；二进制返回 kind='binary' + mime_hint；大文件返回 kind='large'；权限不足返回 kind='error'；非 UTF-8 文件返回 kind='text' + detected encoding 或 kind='error' + 编码信息 | `src-tauri/src/fs_backend/mod.rs` |
+| 2.1 | read_file（判别联合） | `cargo test`: text 文件返回 kind='text' + content；二进制返回 kind='binary' + mime_hint；大文件返回 kind='large'；权限不足返回 kind='error'；非 UTF-8 文件统一返回 kind='error' + message 含检测到的编码名（如 "Detected encoding: GBK. File cannot be opened as UTF-8."） | `src-tauri/src/fs_backend/mod.rs` |
 | 2.2 | write_file | `cargo test`: 写入内容 → 读回一致；敏感路径（/etc）拒绝或提示 | `src-tauri/src/fs_backend/mod.rs` |
 | 2.3 | list_dir | `cargo test`: 返回正确的 FileEntry 列表；排序；隐藏文件处理 | `src-tauri/src/fs_backend/mod.rs` |
 | 2.4 | create/delete/rename_entry | `cargo test`: 创建文件/目录；删除；重命名后路径更新 | `src-tauri/src/fs_backend/mod.rs` |
