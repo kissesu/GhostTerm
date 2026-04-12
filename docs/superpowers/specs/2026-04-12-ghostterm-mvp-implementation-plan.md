@@ -105,7 +105,7 @@ PBI-0 项目脚手架 + 共享基础
 |---|------|----------|----------|
 | 1.8 | terminalStore | vitest: spawn 更新 ptyId/wsPort/wsToken；kill 重置为 null；reconnect 更新 token | `src/features/terminal/terminalStore.ts` |
 | 1.9 | useTerminal hook | vitest: WebSocket 连接建立/断开状态管理；onclose 触发 reconnect | `src/features/terminal/useTerminal.ts` |
-| 1.10 | Terminal.tsx | vitest: 组件��载创建 xterm 实例；WebGL addon 加载；Unicode11 addon 加载；AttachAddon 连��� WebSocket | `src/features/terminal/Terminal.tsx` |
+| 1.10 | Terminal.tsx | vitest: 组件挂载创建 xterm 实例；WebGL addon 加载；Unicode11 addon 加载；AttachAddon 连接 WebSocket | `src/features/terminal/Terminal.tsx` |
 | 1.10.1 | 终端 resize 联动 | vitest: 面板尺寸变化时通过 xterm.js FitAddon 重新计算 rows/cols → 调用 terminalStore.resize() → invoke resize_pty | 集成到 `Terminal.tsx` + `useTerminal.ts` |
 | 1.11 | xterm.js 主题同步 | vitest: 使用 themeStore 的 dark 配色 | 集成到 `Terminal.tsx` |
 | 1.12 | 终端错误 UI | vitest: 连接失败显示错误 + 重试按钮；PTY 退出显示退出码 | 集成到 `Terminal.tsx` |
