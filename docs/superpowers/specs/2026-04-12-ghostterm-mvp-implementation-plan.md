@@ -67,6 +67,8 @@ PBI-0 项目脚手架 + 共享基础
 | 0.10 | AppLayout 骨架 | vitest: 三栏面板渲染 | `src/layouts/AppLayout.tsx`（PanelGroup + 3 Panel 占位） |
 | 0.11 | useTauriCommand hook | vitest: mock invoke 调用 | `src/shared/hooks/useTauriCommand.ts` |
 | 0.12 | vitest + testing-library 配置 | `pnpm test` 运行通过 | `vitest.config.ts`, `src/test/setup.ts` |
+| 0.13 | E2E 测试环境配置 | `pnpm e2e` 启动（空测试通过） | `e2e-tests/wdio.conf.ts`, `e2e-tests/package.json` |
+| 0.14 | tauri-webdriver 插件集成 | debug 构建加载插件，WebDriver server 启动 | `src-tauri/Cargo.toml`（tauri-plugin-webdriver-automation），`src-tauri/src/lib.rs` |
 
 ### 验收标准
 
@@ -283,16 +285,40 @@ PBI-0 项目脚手架 + 共享基础
 | 6.5 | 布局交互完善 | vitest: 双击面板标题栏全屏/恢复；Cmd+` 焦点切换；窗口 < 800px 自动折叠 | 集成到 `AppLayout.tsx` |
 | 6.6 | 快捷键系统 | vitest: Cmd+B 侧边栏；Cmd+` 焦点切换；Cmd+S 保存 | `src/shared/hooks/useKeyboardShortcuts.ts` |
 
-### 集成测试（tauri-driver）
+### E2E 集成测试（tauri-webdriver + WebdriverIO）
 
-| # | 测试场景 | 验证点 |
-|---|----------|--------|
-| 6.7 | 打开项目 → 文件树 → 点击文件 → 编辑器显示 | 全链路数据流 |
-| 6.8 | PTY spawn → WebSocket → 输入命令 → 输出回显 | 终端数据通道 |
-| 6.9 | 外部修改文件 → fs 事件 → 编辑器更新 | 文件监听链路 |
-| 6.10 | Worktree 切换 → 全模块重置 | 事务切换 |
-| 6.11 | 关闭项目 → 重新打开 → 状态恢复 | 生命周期 |
-| 6.12 | 窗口缩小 → 布局响应 → 放大恢复 | 响应式布局 |
+测试方案：使用 [danielraffel/tauri-webdriver](https://github.com/danielraffel/tauri-webdriver) 作为 WebDriver 后端，WebdriverIO 作为测试框架。
+
+**架构：**
+```
+WebdriverIO 测试脚本
+  → W3C WebDriver 协议 (port 4444)
+  → tauri-wd CLI (WebDriver server)
+  → tauri-plugin-webdriver-automation (嵌入 Tauri 应用的插件)
+  → WKWebView (macOS) / WebView2 (Windows) / WebKitGTK (Linux)
+```
+
+**配置：**
+```
+e2e-tests/
+  wdio.conf.ts          # WebdriverIO 配置
+  specs/
+    project-flow.test.ts    # 6.7 打开项目全链路
+    terminal.test.ts        # 6.8 终端数据通道
+    fs-watcher.test.ts      # 6.9 文件监听链路
+    worktree.test.ts        # 6.10 事务切换
+    lifecycle.test.ts       # 6.11 生命周期
+    layout.test.ts          # 6.12 响应式布局
+```
+
+| # | 测试场景 | 验证点 | WebdriverIO 操作 |
+|---|----------|--------|-----------------|
+| 6.7 | 打开项目 → 文件树 → 点击文件 → 编辑器显示 | 全链路数据流 | `$('.file-tree-item').click()` → 断言编辑器内容非空 |
+| 6.8 | PTY spawn → WebSocket → 输入命令 → 输出回显 | 终端数据通道 | `$('.terminal').click()` → 键入 `echo test` → 断言输出包含 `test` |
+| 6.9 | 外部修改文件 → fs 事件 → 编辑器更新 | 文件监听链路 | 终端中 `echo "new" > file.txt` → 断言编辑器 content 更新 |
+| 6.10 | Worktree 切换 → 全模块重置 | 事务切换 | `$('.worktree-item').click()` → 断言文件树 + 编辑器 + 终端 cwd 更新 |
+| 6.11 | 关闭项目 → 重新打开 → 状态恢复 | 生命周期 | 项目选择器切换 → 断言 recent list 更新 |
+| 6.12 | 窗口缩小 → 布局响应 → 放大恢复 | 响应式布局 | `browser.setWindowSize(600, 400)` → 断言侧边栏隐藏 |
 
 ### 验收标准（MVP 完成标准）
 
@@ -306,7 +332,7 @@ PBI-0 项目脚手架 + 共享基础
 - [ ] 项目可切换，状态正确重置
 - [ ] `cargo test` 全部通过
 - [ ] `pnpm test` 全部通过
-- [ ] 集成测试全部通过
+- [ ] E2E 集成测试全部通过（`pnpm e2e`，tauri-webdriver + WebdriverIO）
 
 ---
 
@@ -398,4 +424,81 @@ describe('terminalStore', () => {
     expect(store.connected).toBe(false) // WebSocket 未连接，仅 PTY 已 spawn
   })
 })
+```
+
+### E2E 测试模板（tauri-webdriver + WebdriverIO）
+
+```typescript
+// e2e-tests/specs/project-flow.test.ts
+describe('项目打开全链路', () => {
+  it('打开项目后文件树显示目录内容', async () => {
+    // 等待应用启动完成
+    await browser.waitUntil(
+      async () => (await $('.file-tree')).isDisplayed(),
+      { timeout: 10000, timeoutMsg: '文件树未在 10s 内加载' }
+    )
+
+    // 点击文件树中的文件
+    const fileItem = await $('.file-tree-item[data-path="src/App.tsx"]')
+    await fileItem.click()
+
+    // 验证编辑器加载了文件内容
+    const editorContent = await $('.cm-content')
+    await expect(editorContent).toHaveTextContaining('App')
+  })
+
+  it('编辑文件后标签页显示 dirty 标记', async () => {
+    const editor = await $('.cm-content')
+    await editor.click()
+    await browser.keys(['a']) // 输入一个字符
+
+    const activeTab = await $('.editor-tab.active')
+    const isDirty = await activeTab.$('.dirty-indicator')
+    await expect(isDirty).toBeDisplayed()
+  })
+})
+```
+
+### E2E 环境配置
+
+```typescript
+// e2e-tests/wdio.conf.ts
+import { join } from 'path'
+
+export const config: WebdriverIO.Config = {
+  runner: 'local',
+  specs: ['./specs/**/*.test.ts'],
+  maxInstances: 1, // Tauri 应用单实例
+  capabilities: [{
+    // tauri-webdriver 配置
+    browserName: 'tauri',
+    'tauri:options': {
+      application: join(__dirname, '../src-tauri/target/debug/ghostterm'),
+    },
+  }],
+  framework: 'mocha',
+  reporters: ['spec'],
+  mochaOpts: {
+    ui: 'bdd',
+    timeout: 30000, // E2E 测试给更长超时
+  },
+}
+```
+
+### 三层测试策略总览
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  E2E 测试 (tauri-webdriver + WebdriverIO)               │
+│  6 个关键链路 · 验证真实 webview 行为                    │
+│  pnpm e2e · 慢（~30s/case）· PBI-6 阶段编写             │
+├─────────────────────────────────────────────────────────┤
+│  前端组件/Store 测试 (vitest + testing-library)          │
+│  每个 feature 模块 · mock Tauri invoke                   │
+│  pnpm test · 快（~100ms/case）· 每个 PBI 编写            │
+├─────────────────────────────────────────────────────────┤
+│  Rust 单元测试 (cargo test)                              │
+│  4 个后端模块 · 真实文件系统/PTY/Git                     │
+│  cargo test · 中速（~1s/case）· 每个 PBI 编写            │
+└─────────────────────────────────────────────────────────┘
 ```

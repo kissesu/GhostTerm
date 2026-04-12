@@ -562,11 +562,14 @@ Worktrees.tsx onClick(worktree)
 - Store 测试: editorStore openFile/closeFile/handleExternalChange 状态变更
 - 组件测试: FileTree 点击 / EditorTabs 切换关闭 / ProjectSelector 渲染
 
-**集成测试** (`tauri-driver`):
-- 打开项目 → 文件树加载 → 点击文件 → 编辑器显示
-- PTY spawn → WebSocket 连接 → 输入命令 → 收到输出
-- 外部修改文件 → fs 事件 → 编辑器更新提示
-- Worktree 切换 → 全模块重置
+**E2E 集成测试** ([tauri-webdriver](https://github.com/danielraffel/tauri-webdriver) + WebdriverIO):
+- 使用 `tauri-plugin-webdriver-automation` 嵌入 debug 构建，`tauri-wd` CLI 暴露 W3C WebDriver 协议
+- 跨平台支持: macOS (WKWebView) + Windows (WebView2) + Linux (WebKitGTK)
+- 关键链路:
+  - 打开项目 → 文件树加载 → 点击文件 → 编辑器显示
+  - PTY spawn → WebSocket 连接 → 输入命令 → 收到输出
+  - 外部修改文件 → fs 事件 → 编辑器更新提示
+  - Worktree 切换 → 全模块重置
 
 ### 11.2 MVP 测试优先级
 
