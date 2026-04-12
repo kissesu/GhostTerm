@@ -131,6 +131,7 @@ PTY 走 WebSocket 而非 Tauri Events 的理由:
 
 ```
 spawn_pty(shell, cwd, env) → { pty_id, ws_port, ws_token }
+reconnect_pty(pty_id) → { ws_port, ws_token }  // 签发新 token，用于断线重连
 resize_pty(pty_id, cols, rows) → ()
 kill_pty(pty_id) → ()
 ```
@@ -162,7 +163,12 @@ ws://127.0.0.1:{port}?token={token}
 
 ```
 list_dir(path) → Vec<FileEntry>
-read_file(path) → { content, encoding }
+read_file(path) → ReadFileResult
+  // ReadFileResult 为判别联合:
+  // | { kind: 'text', content: string, encoding: string, size: number, is_symlink: boolean }
+  // | { kind: 'binary', size: number, mime_hint: string }
+  // | { kind: 'large', size: number }  (> 1MB)
+  // | { kind: 'error', message: string }  (权限不足等)
 write_file(path, content) → ()
 create_entry(path, is_dir) → ()
 delete_entry(path) → ()
@@ -188,7 +194,7 @@ stop_watching() → ()
 - Git 状态节流刷新：文件保存后主动刷新，fs 事件批量后延迟 500ms 刷新
 - 已知限制：monorepo（> 10000 文件）首次加载可能较慢，后续通过增量更新缓解
 
-路径安全: 作为开发工具，不做硬性路径沙箱（需要跨项目复制文件等操作）。但对系统敏感路径（如 `/etc`、`~/.ssh`）的写操作显示确认提示。
+路径安全: 作为开发工具，不做硬性路径沙箱（需要跨项目复制文件等操作）。但对系统敏感路径（如 `/etc`、`~/.ssh`）的写操作显示确认提示。所有写操作前先 `canonicalize/realpath` 解析符号链接，基于真实路径做敏感判断（防止 symlink 绕过）。
 
 文件类型处理策略:
 
@@ -429,10 +435,12 @@ Worktrees.tsx onClick(worktree)
   ├─ 第 3 步: Rust 端切换（invoke('worktree_switch', { path })）
   │   → project_manager 按顺序执行:
   │     1. fs_backend.stop_watching()
-  │     2. pty_manager: 在当前 PTY 中 cd new_path
-  │     3. fs_backend.start_watching(new_path)
-  │     4. 更新 projects.json
-  │   → 任一步失败 → 回滚已完成的步骤，返回 Err
+  │     2. pty_manager.kill_pty() 销毁旧 PTY
+  │     3. pty_manager.spawn_pty(shell, new_path) 以新 cwd 创建新 PTY
+  │     4. fs_backend.start_watching(new_path)
+  │     5. 更新 projects.json
+  │   → 步骤 3 失败 → 以旧 cwd 重新 spawn PTY + restart watching，返回 Err
+  │   → 步骤 4/5 失败 → PTY 已切换成功，仅报告 watcher/持久化错误
   │
   ├─ 第 4 步: 前端刷新（仅 Rust 端成功后执行）
   │   → projectStore: 更新 currentProject
@@ -504,7 +512,7 @@ Worktrees.tsx onClick(worktree)
 | 失败场景 | 检测 | 处理 |
 |---|---|---|
 | PTY 启动失败 | spawn_pty 返回 Err | 终端区域显示错误 + 重试按钮 |
-| WebSocket 断开 | onclose 事件 | 显示 "连接已断开" + 自动重连（进程存活时）或提示重启 |
+| WebSocket 断开 | onclose 事件 | 显示 "连接已断开"；调用 `reconnect_pty(pty_id)` 获取新 token 重连（PTY 存活时），PTY 已退出则提示重启 |
 | PTY 进程退出 | Rust wait() 检测 | 终端显示退出码 + "按任意键重启" |
 
 ### 10.2 fs_backend
@@ -589,12 +597,11 @@ Worktrees.tsx onClick(worktree)
 
 ```typescript
 interface TerminalProps {
-  wsPort: number
-  wsToken: string
+  sessionId: string       // PTY 会话标识，terminal 内部通过 sessionId 查询连接信息
   onReady: () => void
   onDisconnect: (reason: string) => void
   onResize: (cols: number, rows: number) => void
 }
 ```
 
-无论底层用 xterm.js 还是 alacritty_terminal，AppLayout 只依赖这个接口。
+`sessionId` 对应 `pty_id`，Terminal 组件内部通过 `terminalStore` 获取 `wsPort`/`wsToken` 来建立连接。AppLayout 不感知传输细节，无论底层用 xterm.js + WebSocket 还是 alacritty_terminal + 其他管道。
