@@ -444,7 +444,7 @@ Worktrees.tsx onClick(worktree)
   ├─ 第 2 步: 冻结 UI
   │   → 禁用面板交互，显示切换进度指示
   │
-  ├─ 第 3 步: Rust 端切换（invoke('worktree_switch', { path })）
+  ├─ 第 3 步: Rust 端切换（invoke('worktree_switch', { worktree_path })）
   │   → project_manager 按顺序执行:
   │     1. fs_backend.stop_watching()
   │     2. pty_manager.kill_pty() 销毁旧 PTY
