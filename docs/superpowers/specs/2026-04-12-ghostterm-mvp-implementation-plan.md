@@ -23,7 +23,7 @@ PBI-0 项目脚手架 + 共享基础
   │      │      依赖: PBI-1(终端运行) + PBI-2(编辑器) + PBI-3(文件树)
   │      │
   │      └──→ PBI-5 Git + Worktree (Rust git_backend + React Changes/Worktrees)
-  │             依赖: PBI-3(侧边栏 UI)
+  │             依赖: PBI-1(PTY respawn) + PBI-2(dirty检查) + PBI-3(侧边栏UI) + PBI-4(watcher重启)
   │
   └──→ PBI-6 项目管理 + 集成 (Rust project_manager + 全模块串联)
          依赖: PBI-1 + PBI-2 + PBI-3 + PBI-4 + PBI-5
@@ -31,12 +31,14 @@ PBI-0 项目脚手架 + 共享基础
 
 ### 并行策略
 
-| 阶段 | 可并行的 PBI | worktree 分支 |
-|------|-------------|--------------|
-| 阶段 1 | PBI-0（串行） | `main` |
-| 阶段 2 | PBI-1 / PBI-2 / PBI-3 | `feat/terminal` / `feat/editor` / `feat/sidebar` |
-| 阶段 3 | PBI-4 / PBI-5 | `feat/fs-watcher` / `feat/git-worktree` |
-| 阶段 4 | PBI-6（串行） | `feat/project-manager` |
+| 阶段 | 可并行的 PBI | worktree 分支 | 说明 |
+|------|-------------|--------------|------|
+| 阶段 1 | PBI-0（串行） | `main` | 项目初始化 |
+| 阶段 2 | PBI-1 / PBI-2 / PBI-3 | `feat/terminal` / `feat/editor` / `feat/sidebar` | 三个独立 feature 并行 |
+| 阶段 2.5 | 合并阶段 2 到 main（串行） | `main` | 解决 lib.rs/AppLayout 冲突 |
+| 阶段 3 | PBI-4（串行） | `feat/fs-watcher` | 需要终端+编辑器+文件树 |
+| 阶段 4 | PBI-5（串行） | `feat/git-worktree` | 需要全部前置模块含 watcher |
+| 阶段 5 | PBI-6（串行） | `feat/project-manager` | 全模块集成 |
 
 ---
 
@@ -53,7 +55,7 @@ PBI-0 项目脚手架 + 共享基础
 | 0.1 | Tauri 2 项目初始化 | `cargo build` 编译通过 | `src-tauri/` 整体 |
 | 0.2 | Rust 模块骨架 | 各模块 `mod.rs` 存在且编译通过 | `src-tauri/src/pty_manager/mod.rs`, `fs_backend/mod.rs`, `git_backend/mod.rs`, `project_manager/mod.rs` |
 | 0.3 | Cargo.toml 依赖声明 | `cargo check` 通过 | `src-tauri/Cargo.toml`（portable-pty, tokio-tungstenite, tokio, notify, ignore, git2, serde, serde_json, dirs） |
-| 0.4 | 共享类型定义 | 类型编译通过 | `src-tauri/src/types.rs`（FileEntry, StatusEntry, Worktree, Project, ReadFileResult） |
+| 0.4 | 共享类型定义 | 类型编译通过 | `src-tauri/src/types.rs`（FileEntry, FileNode, StatusEntry, Worktree, Project, ProjectInfo, ReadFileResult, FsEvent） |
 
 ### 前端任务
 
@@ -62,7 +64,7 @@ PBI-0 项目脚手架 + 共享基础
 | 0.5 | React + Vite + TypeScript 初始化 | `pnpm dev` 启动 + 页面渲染 | `src/`, `package.json`, `vite.config.ts` |
 | 0.6 | pnpm 依赖安装 | `pnpm install` 成功 | `package.json`（zustand, react-resizable-panels, @xterm/xterm, @codemirror/*, @radix-ui/*, lucide-react） |
 | 0.7 | Feature-Sliced 目录结构 | 所有目录存在 | `src/features/terminal/`, `src/features/editor/`, `src/features/sidebar/`, `src/shared/`, `src/layouts/` |
-| 0.8 | 共享类型定义 | TypeScript 编译通过 | `src/shared/types/index.ts`（FileEntry, StatusEntry, Worktree, Project, ReadFileResult, OpenFile, FsEvent） |
+| 0.8 | 共享类型定义 | TypeScript 编译通过 | `src/shared/types/index.ts`（FileEntry, FileNode, StatusEntry, Worktree, Project, ProjectInfo, ReadFileResult, OpenFile, FsEvent） |
 | 0.9 | themeStore 实现 | vitest: dark 配色常量正确 | `src/shared/stores/themeStore.ts` |
 | 0.10 | AppLayout 骨架 | vitest: 三栏面板渲染 | `src/layouts/AppLayout.tsx`（PanelGroup + 3 Panel 占位） |
 | 0.11 | useTauriCommand hook | vitest: mock invoke 调用 | `src/shared/hooks/useTauriCommand.ts` |
@@ -103,7 +105,7 @@ PBI-0 项目脚手架 + 共享基础
 |---|------|----------|----------|
 | 1.8 | terminalStore | vitest: spawn 更新 ptyId/wsPort/wsToken；kill 重置为 null；reconnect 更新 token | `src/features/terminal/terminalStore.ts` |
 | 1.9 | useTerminal hook | vitest: WebSocket 连接建立/断开状态管理；onclose 触发 reconnect | `src/features/terminal/useTerminal.ts` |
-| 1.10 | Terminal.tsx | vitest: 组件挂载创建 xterm 实例；WebGL addon 加载；Unicode11 addon 加载 | `src/features/terminal/Terminal.tsx` |
+| 1.10 | Terminal.tsx | vitest: 组件挂载创建 xterm 实例；WebGL addon 加载；Unicode11 addon 加载；AttachAddon 连接 WebSocket | `src/features/terminal/Terminal.tsx` |
 | 1.11 | xterm.js 主题同步 | vitest: 使用 themeStore 的 dark 配色 | 集成到 `Terminal.tsx` |
 | 1.12 | 终端错误 UI | vitest: 连接失败显示错误 + 重试按钮；PTY 退出显示退出码 | 集成到 `Terminal.tsx` |
 
@@ -126,7 +128,7 @@ PBI-0 项目脚手架 + 共享基础
 
 | # | 任务 | TDD 测试 | 产出文件 |
 |---|------|----------|----------|
-| 2.1 | read_file（判别联合） | `cargo test`: text 文件返回 kind='text' + content；二进制返回 kind='binary' + mime_hint；大文件返回 kind='large'；权限不足返回 kind='error' | `src-tauri/src/fs_backend/mod.rs` |
+| 2.1 | read_file（判别联合） | `cargo test`: text 文件返回 kind='text' + content；二进制返回 kind='binary' + mime_hint；大文件返回 kind='large'；权限不足返回 kind='error'；非 UTF-8 文件返回 kind='text' + detected encoding 或 kind='error' + 编码信息 | `src-tauri/src/fs_backend/mod.rs` |
 | 2.2 | write_file | `cargo test`: 写入内容 → 读回一致；敏感路径（/etc）拒绝或提示 | `src-tauri/src/fs_backend/mod.rs` |
 | 2.3 | list_dir | `cargo test`: 返回正确的 FileEntry 列表；排序；隐藏文件处理 | `src-tauri/src/fs_backend/mod.rs` |
 | 2.4 | create/delete/rename_entry | `cargo test`: 创建文件/目录；删除；重命名后路径更新 | `src-tauri/src/fs_backend/mod.rs` |
@@ -138,7 +140,7 @@ PBI-0 项目脚手架 + 共享基础
 | # | 任务 | TDD 测试 | 产出文件 |
 |---|------|----------|----------|
 | 2.7 | editorStore | vitest: openFile 按 kind 分支创建 OpenFile；closeFile 移除；saveFile 更新 isDirty；setActive 切换 | `src/features/editor/editorStore.ts` |
-| 2.8 | Editor.tsx（CodeMirror） | vitest: 加载 text content；语法高亮根据扩展名选择；binary/large/error 显示对应占位符 | `src/features/editor/Editor.tsx` |
+| 2.8 | Editor.tsx（CodeMirror） | vitest: 加载 text content；语法高亮根据扩展名动态加载对应 Lezer 语言包（`@codemirror/lang-*`）；binary/large/error 显示对应占位符 | `src/features/editor/Editor.tsx` |
 | 2.9 | EditorTabs.tsx | vitest: 渲染打开的文件列表；点击切换 active；关闭按钮调用 closeFile；dirty 文件标记圆点 | `src/features/editor/tabs/EditorTabs.tsx` |
 | 2.10 | 文件保存快捷键 | vitest: Cmd+S 触发 saveFile | 集成到 `Editor.tsx` |
 | 2.11 | 编辑器主题同步 | vitest: 使用 themeStore 的 dark 配色应用 CM6 oneDark | 集成到 `Editor.tsx` |
@@ -176,6 +178,7 @@ PBI-0 项目脚手架 + 共享基础
 | 3.6 | fileTreeStore | vitest: refreshFileTree 填充树；toggleDir 展开/折叠；applyFsEvent 增量更新 | `src/features/sidebar/fileTreeStore.ts` |
 | 3.7 | ProjectSelector.tsx | vitest: 显示当前项目名+路径；下拉列表渲染 recent projects；点击切换调用 switchProject | `src/features/sidebar/ProjectSelector.tsx` |
 | 3.8 | FileTree.tsx | vitest: 渲染目录树；点击文件调用 editorStore.openFile；点击目录调用 toggleDir | `src/features/sidebar/FileTree.tsx` |
+| 3.8.1 | FileTree 右键菜单 | vitest: 右键文件/目录弹出菜单（新建文件/新建目录/重命名/删除）；菜单操作调用对应 fs_backend 命令 | 集成到 `FileTree.tsx` |
 | 3.9 | Sidebar.tsx | vitest: 三标签页容器；根据 activeTab 渲染对应面板 | `src/features/sidebar/Sidebar.tsx` |
 | 3.10 | Cmd+B 快捷键 | vitest: 切换侧边栏显隐 | 集成到 `AppLayout.tsx` |
 
@@ -226,8 +229,8 @@ PBI-0 项目脚手架 + 共享基础
 ## PBI-5: Git + Worktree
 
 **分支:** `feat/git-worktree`（worktree: `../ghostterm-worktrees/git-worktree`）
-**前置:** PBI-3（侧边栏 UI 就绪）
-**交付物:** Git 状态显示 + 暂存操作 + Worktree 管理与切换
+**前置:** PBI-1（PTY respawn）+ PBI-2（dirty 检查）+ PBI-3（侧边栏 UI）+ PBI-4（watcher 重启）
+**交付物:** Git 状态显示 + 暂存操作 + Worktree 管理（创建/删除/切换）
 
 ### 后端任务
 
@@ -249,8 +252,9 @@ PBI-0 项目脚手架 + 共享基础
 | 5.9 | gitStore | vitest: refreshGitStatus 填充 changes/currentBranch；refreshWorktrees 填充 worktrees；stage/unstage 更新状态 | `src/features/sidebar/gitStore.ts` |
 | 5.10 | Changes.tsx | vitest: 渲染 staged/unstaged 列表；文件状态标记（M/A/D）；stage/unstage 按钮 | `src/features/sidebar/Changes.tsx` |
 | 5.11 | Worktrees.tsx | vitest: 渲染 worktree 列表；当前 worktree 高亮；点击切换调用 worktree_switch | `src/features/sidebar/Worktrees.tsx` |
-| 5.12 | Worktree 切换事务 UI | vitest: 未保存文件弹出提示；切换中 UI 冻结 + 进度指示；失败恢复 + Toast 错误 | 集成到 `Worktrees.tsx` |
-| 5.13 | 文件树 Git 状态标记 | vitest: FileTree 节点根据 git status 显示颜色标记（M-黄/A-绿/D-红） | 集成到 `FileTree.tsx` |
+| 5.12 | Worktree 创建/删除 UI | vitest: 创建按钮→弹出分支名输入→调用 worktree_add；删除按钮→确认对话框→调用 worktree_remove | 集成到 `Worktrees.tsx` |
+| 5.13 | Worktree 切换事务 UI | vitest: 未保存文件弹出提示；切换中 UI 冻结 + 进度指示；失败恢复 + Toast 错误 | 集成到 `Worktrees.tsx` |
+| 5.14 | 文件树 Git 状态标记 | vitest: FileTree 节点根据 git status 显示颜色标记（M-黄/A-绿/D-红） | 集成到 `FileTree.tsx` |
 
 ### 集成验证
 
@@ -370,7 +374,13 @@ git worktree remove ../ghostterm-worktrees/terminal
 - `feat/editor` 只修改 `src/features/editor/` + `src-tauri/src/fs_backend/`（CRUD 部分）
 - `feat/sidebar` 只修改 `src/features/sidebar/` + `src-tauri/src/project_manager/`
 
-唯一共享修改点：`src-tauri/src/lib.rs`（Tauri Command 注册）。合并时需手动解决此文件的冲突（简单追加注册代码）。
+共享修改点（壳层文件）:
+- `src-tauri/src/lib.rs` — Tauri Command 注册
+- `src/layouts/AppLayout.tsx` — 挂载 Sidebar/Editor/Terminal 组件
+- `src/shared/types/index.ts` — 跨模块类型定义
+- `src/App.tsx` — 顶层路由/Provider
+
+**策略：** 阶段 2 各分支只产出各自 feature 目录内的文件和对应 Rust 模块。壳层文件的接线统一在阶段 2.5 合并时由主分支完成。各分支中的组件用 `export default` 导出，合并时在 AppLayout 中统一 import 挂载。
 
 ---
 
