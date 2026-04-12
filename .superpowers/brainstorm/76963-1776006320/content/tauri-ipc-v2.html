@@ -1,0 +1,117 @@
+<h2>Tauri 前后端通信方案（修正版）</h2>
+<p class="subtitle">基于 PTY 二进制流特性重新分析，点击选择</p>
+
+<div class="section" style="margin-bottom:20px;padding:16px;background:#1a1a2e;border-radius:8px;">
+  <h3 style="margin-top:0;">核心洞察</h3>
+  <p style="color:#e0e0e0;font-size:14px;">GhostTerm 有两种通信模式，最优解可能不同：</p>
+  <table style="width:100%;border-collapse:collapse;font-size:13px;color:#e0e0e0;">
+    <tr style="border-bottom:1px solid #333;">
+      <td style="padding:6px;"></td>
+      <td style="padding:6px;"><strong>请求/响应</strong>（文件、Git）</td>
+      <td style="padding:6px;"><strong>双向流</strong>（PTY）</td>
+    </tr>
+    <tr style="border-bottom:1px solid #222;">
+      <td style="padding:6px;">频率</td>
+      <td style="padding:6px;">低频，用户触发</td>
+      <td style="padding:6px;">高频突发（编译输出数千行/秒）</td>
+    </tr>
+    <tr style="border-bottom:1px solid #222;">
+      <td style="padding:6px;">数据类型</td>
+      <td style="padding:6px;">结构化 JSON</td>
+      <td style="padding:6px;">二进制字节流</td>
+    </tr>
+    <tr>
+      <td style="padding:6px;">最佳传输</td>
+      <td style="padding:6px;">Tauri Commands (天然适合)</td>
+      <td style="padding:6px;color:#fbbf24;">需要评估</td>
+    </tr>
+  </table>
+</div>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Commands + Events</h3>
+      <div class="pros-cons">
+        <div class="pros">
+          <h4>优势</h4>
+          <ul>
+            <li>零额外依赖，纯 Tauri 原生</li>
+            <li>请求/响应操作完美适配</li>
+            <li>架构简单，一种 IPC 通道</li>
+          </ul>
+        </div>
+        <div class="cons">
+          <h4>劣势</h4>
+          <ul>
+            <li>PTY 二进制数据需 base64 编码（+33% 体积）</li>
+            <li>每条 Event 都经 JSON 序列化 + IPC bridge</li>
+            <li>无背压机制，高频输出可能堆积</li>
+            <li>PTY 吞吐上限未验证</li>
+          </ul>
+        </div>
+      </div>
+      <p style="font-size:12px;color:#888;margin-top:8px;">适合场景：PTY 输出量不大（日常 AI CLI 交互）</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Commands + WebSocket（PTY 专用）  &larr; 修正推荐</h3>
+      <div class="pros-cons">
+        <div class="pros">
+          <h4>优势</h4>
+          <ul>
+            <li>WebSocket 原生二进制帧，零编码开销</li>
+            <li>xterm.js AttachAddon 直接对接，无需胶水代码</li>
+            <li>TCP 流控天然背压</li>
+            <li>本地 WebSocket 吞吐远超 IPC bridge</li>
+            <li>终端应用领域成熟方案（VS Code、Hyper 均用此模式）</li>
+          </ul>
+        </div>
+        <div class="cons">
+          <h4>劣势</h4>
+          <ul>
+            <li>需管理本地 WebSocket server 生命周期</li>
+            <li>端口分配 + 127.0.0.1 绑定 + token 验证</li>
+            <li>两个通信通道增加架构复杂度</li>
+          </ul>
+        </div>
+      </div>
+      <p style="font-size:12px;color:#888;margin-top:8px;">适合场景：高频终端数据流 + 结构化操作并存</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Commands + Channel API</h3>
+      <div class="pros-cons">
+        <div class="pros">
+          <h4>优势</h4>
+          <ul>
+            <li>Tauri 2 原生流式 API，专为此场景设计</li>
+            <li>比 Events 开销低，可批量发送</li>
+            <li>单一通信模式，架构最简洁</li>
+          </ul>
+        </div>
+        <div class="cons">
+          <h4>劣势</h4>
+          <ul>
+            <li>仍需经过 IPC 序列化（二进制编码问题同 A）</li>
+            <li>社区 PTY 场景实践案例较少</li>
+            <li>性能上限不如原生 WebSocket</li>
+          </ul>
+        </div>
+      </div>
+      <p style="font-size:12px;color:#888;margin-top:8px;">适合场景：追求架构简洁，愿意接受 IPC 瓶颈</p>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:20px;padding:16px;background:#162030;border:1px solid #2563eb33;border-radius:8px;">
+  <h3 style="margin-top:0;color:#60a5fa;">修正后的推荐：B</h3>
+  <p style="font-size:14px;">PTY 用 WebSocket（二进制原生 + xterm.js 直连 + 背压控制），文件/Git 用 Tauri Commands（类型安全 + 零额外开销）。<br>这是"为不同问题选择不同最优解"，而非强行统一。</p>
+</div>

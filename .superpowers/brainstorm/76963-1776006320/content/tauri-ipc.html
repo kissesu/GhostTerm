@@ -1,0 +1,75 @@
+<h2>Tauri 前后端通信方案</h2>
+<p class="subtitle">React 前端如何与 Rust 后端通信（PTY 控制、文件系统、Git 操作）</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Tauri Commands + Events (推荐)</h3>
+      <p><strong>思路：</strong>Tauri 原生方案。用 <code>#[tauri::command]</code> 做请求/响应，用 Events 做后端推送（如终端输出流）</p>
+      <p><strong>通信模型：</strong></p>
+      <ul style="margin:8px 0;padding-left:20px;font-size:13px;">
+        <li>前端 → 后端：<code>invoke('write_pty', { data })</code> 命令调用</li>
+        <li>后端 → 前端：<code>app.emit('pty-output', data)</code> 事件推送</li>
+        <li>文件/Git 操作：同步 command 即可</li>
+      </ul>
+      <p><strong>优势：</strong>零额外依赖，类型安全（tauri-specta 可自动生成 TS 类型），Tauri 2 官方推荐</p>
+      <p><strong>劣势：</strong>大量二进制数据传输时需注意序列化开销</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Tauri Commands + WebSocket（PTY 专用）</h3>
+      <p><strong>思路：</strong>文件/Git 操作用 Tauri Commands，但 PTY 数据流走本地 WebSocket</p>
+      <p><strong>通信模型：</strong></p>
+      <ul style="margin:8px 0;padding-left:20px;font-size:13px;">
+        <li>文件/Git：<code>invoke('read_file', { path })</code></li>
+        <li>PTY 数据流：WebSocket <code>ws://localhost:PORT</code></li>
+      </ul>
+      <p><strong>优势：</strong>WebSocket 对高频双向流更高效，xterm.js 原生支持 WebSocket attach</p>
+      <p><strong>劣势：</strong>多一个通信通道，需管理端口和连接生命周期</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>纯 Tauri Commands（全部统一）</h3>
+      <p><strong>思路：</strong>所有通信都走 Tauri Commands，PTY 输出通过轮询或 Channel API</p>
+      <p><strong>通信模型：</strong></p>
+      <ul style="margin:8px 0;padding-left:20px;font-size:13px;">
+        <li>所有操作：<code>invoke('xxx', { ... })</code></li>
+        <li>PTY 输出：Tauri 2 Channel API（streaming response）</li>
+      </ul>
+      <p><strong>优势：</strong>最简单，单一通信模式</p>
+      <p><strong>劣势：</strong>Channel API 相对较新，PTY 高频数据场景验证较少</p>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:24px;padding:16px;background:#1a1a2e;border-radius:8px;">
+  <h3 style="margin-top:0;">数据流示意（方案 A）</h3>
+  <pre style="color:#e0e0e0;font-size:13px;margin:0;">
+┌─────────────────────────────────────────────────┐
+│                React Frontend                    │
+│                                                  │
+│  Terminal.tsx ──invoke('write_pty')──┐            │
+│       ↑                              ↓            │
+│  listen('pty-output')        Tauri IPC Bridge    │
+│       ↑                              ↓            │
+│  Editor.tsx ──invoke('read_file')───┘            │
+│  Sidebar.tsx ──invoke('list_dir')───┘            │
+└─────────────────────────────────────────────────┘
+                       ↕
+┌─────────────────────────────────────────────────┐
+│                 Rust Backend                      │
+│                                                  │
+│  pty_manager.rs    (spawn/write/resize PTY)      │
+│  fs_backend.rs     (read/write/list files)       │
+│  git_backend.rs    (status/stage/worktree)       │
+│                                                  │
+│  PTY 输出 → app.emit('pty-output', bytes)        │
+└─────────────────────────────────────────────────┘</pre>
+</div>

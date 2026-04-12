@@ -1,0 +1,139 @@
+<h2>GhostTerm MVP -- 分屏布局设计</h2>
+<p class="subtitle">三栏布局 + 可拖拽分隔线 + 双击全屏</p>
+
+<div class="mockup">
+  <div class="mockup-header">默认布局 (启动状态)</div>
+  <div class="mockup-body" style="padding:0;height:400px;display:flex;overflow:hidden;">
+    <!-- Sidebar -->
+    <div style="width:220px;min-width:220px;background:#12121a;border-right:1px solid #2a2a3a;display:flex;flex-direction:column;">
+      <!-- Project Selector -->
+      <div style="padding:12px;border-bottom:1px solid #2a2a3a;">
+        <div style="font-size:13px;font-weight:600;color:#e0e0e0;">GhostTerm</div>
+        <div style="font-size:11px;color:#666;margin-top:2px;">~/Code/GhostTerm</div>
+      </div>
+      <!-- Tabs -->
+      <div style="display:flex;border-bottom:1px solid #2a2a3a;">
+        <div style="flex:1;padding:8px 0;text-align:center;font-size:12px;color:#60a5fa;border-bottom:2px solid #60a5fa;">Files</div>
+        <div style="flex:1;padding:8px 0;text-align:center;font-size:12px;color:#666;">Changes</div>
+        <div style="flex:1;padding:8px 0;text-align:center;font-size:12px;color:#666;">WT</div>
+      </div>
+      <!-- File Tree -->
+      <div style="padding:8px 12px;font-size:12px;color:#ccc;flex:1;overflow-y:auto;">
+        <div style="color:#60a5fa;margin-bottom:4px;">▼ src/</div>
+        <div style="padding-left:16px;margin-bottom:2px;">▶ features/</div>
+        <div style="padding-left:16px;margin-bottom:2px;">▶ shared/</div>
+        <div style="padding-left:16px;margin-bottom:2px;">▶ layouts/</div>
+        <div style="padding-left:16px;margin-bottom:2px;color:#e0e0e0;">App.tsx</div>
+        <div style="color:#60a5fa;margin:4px 0;">▼ src-tauri/</div>
+        <div style="padding-left:16px;margin-bottom:2px;">▶ src/</div>
+        <div style="padding-left:16px;margin-bottom:2px;color:#e0e0e0;">Cargo.toml</div>
+        <div style="margin-top:4px;color:#e0e0e0;">package.json</div>
+        <div style="color:#e0e0e0;">tsconfig.json</div>
+      </div>
+    </div>
+
+    <!-- Resize Handle 1 -->
+    <div style="width:4px;background:#1a1a2a;cursor:col-resize;display:flex;align-items:center;justify-content:center;">
+      <div style="width:2px;height:24px;background:#333;border-radius:1px;"></div>
+    </div>
+
+    <!-- Editor -->
+    <div style="flex:1;background:#1e1e2e;display:flex;flex-direction:column;min-width:0;">
+      <!-- Editor Tabs -->
+      <div style="display:flex;background:#16161e;border-bottom:1px solid #2a2a3a;height:36px;align-items:center;">
+        <div style="padding:0 16px;font-size:12px;color:#e0e0e0;background:#1e1e2e;height:100%;display:flex;align-items:center;border-right:1px solid #2a2a3a;">
+          App.tsx <span style="color:#666;margin-left:8px;font-size:10px;">×</span>
+        </div>
+        <div style="padding:0 16px;font-size:12px;color:#666;height:100%;display:flex;align-items:center;">
+          Terminal.tsx <span style="color:#555;margin-left:8px;font-size:10px;">×</span>
+        </div>
+      </div>
+      <!-- Editor Content -->
+      <div style="flex:1;padding:16px;font-family:'SF Mono',monospace;font-size:13px;color:#ccc;line-height:1.6;overflow:auto;">
+        <div><span style="color:#555;">1</span>  <span style="color:#c678dd;">import</span> { Terminal } <span style="color:#c678dd;">from</span> <span style="color:#98c379;">'./features/terminal'</span></div>
+        <div><span style="color:#555;">2</span>  <span style="color:#c678dd;">import</span> { Editor } <span style="color:#c678dd;">from</span> <span style="color:#98c379;">'./features/editor'</span></div>
+        <div><span style="color:#555;">3</span>  <span style="color:#c678dd;">import</span> { Sidebar } <span style="color:#c678dd;">from</span> <span style="color:#98c379;">'./features/sidebar'</span></div>
+        <div><span style="color:#555;">4</span></div>
+        <div><span style="color:#555;">5</span>  <span style="color:#c678dd;">export function</span> <span style="color:#61afef;">App</span>() {</div>
+        <div><span style="color:#555;">6</span>    <span style="color:#c678dd;">return</span> <span style="color:#e06c75;">&lt;</span><span style="color:#61afef;">AppLayout</span><span style="color:#e06c75;">&gt;</span></div>
+        <div><span style="color:#555;">7</span>      <span style="color:#e06c75;">&lt;</span><span style="color:#61afef;">Sidebar</span> <span style="color:#e06c75;">/&gt;</span></div>
+        <div><span style="color:#555;">8</span>      <span style="color:#e06c75;">&lt;</span><span style="color:#61afef;">Editor</span> <span style="color:#e06c75;">/&gt;</span></div>
+        <div><span style="color:#555;">9</span>      <span style="color:#e06c75;">&lt;</span><span style="color:#61afef;">Terminal</span> <span style="color:#e06c75;">/&gt;</span></div>
+      </div>
+    </div>
+
+    <!-- Resize Handle 2 -->
+    <div style="width:4px;background:#1a1a2a;cursor:col-resize;display:flex;align-items:center;justify-content:center;">
+      <div style="width:2px;height:24px;background:#333;border-radius:1px;"></div>
+    </div>
+
+    <!-- Terminal -->
+    <div style="flex:1;background:#0a0a14;display:flex;flex-direction:column;min-width:0;">
+      <div style="padding:8px 12px;background:#12121a;border-bottom:1px solid #2a2a3a;font-size:12px;color:#666;">
+        Terminal — zsh
+      </div>
+      <div style="flex:1;padding:12px;font-family:'SF Mono',monospace;font-size:13px;color:#ccc;line-height:1.5;">
+        <div><span style="color:#60a5fa;">~/Code/GhostTerm</span> <span style="color:#98c379;">$</span> claude</div>
+        <div style="color:#888;margin-top:8px;">╭───────────────────────────────╮</div>
+        <div style="color:#888;">│  Claude Code                  │</div>
+        <div style="color:#888;">│  v1.0.0                       │</div>
+        <div style="color:#888;">╰───────────────────────────────╯</div>
+        <div style="margin-top:8px;"><span style="color:#c678dd;">></span> <span style="color:#555;">█</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:24px;">
+  <h3>交互行为</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:14px;">
+    <thead>
+      <tr style="border-bottom:2px solid #333;">
+        <th style="text-align:left;padding:8px;">操作</th>
+        <th style="text-align:left;padding:8px;">行为</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid #222;">
+        <td style="padding:8px;">拖拽分隔线</td>
+        <td>实时调整左右面板宽度比例，有最小宽度限制（sidebar 160px, editor/terminal 200px）</td>
+      </tr>
+      <tr style="border-bottom:1px solid #222;">
+        <td style="padding:8px;">双击面板标题栏</td>
+        <td>该面板全屏展开（动画过渡），再次双击恢复</td>
+      </tr>
+      <tr style="border-bottom:1px solid #222;">
+        <td style="padding:8px;">Cmd+B</td>
+        <td>切换左侧面板显示/隐藏</td>
+      </tr>
+      <tr style="border-bottom:1px solid #222;">
+        <td style="padding:8px;">Cmd+`</td>
+        <td>聚焦终端 / 聚焦编辑器 之间切换</td>
+      </tr>
+      <tr>
+        <td style="padding:8px;">窗口缩小时</td>
+        <td>自动折叠左侧面板（< 800px），编辑器和终端变为上下堆叠</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="section" style="margin-top:20px;">
+  <h3>实现方案</h3>
+  <p style="font-size:14px;">使用 <code>react-resizable-panels</code> 库（shadcn/ui 推荐，~3KB gzipped）。它提供 <code>PanelGroup</code> + <code>Panel</code> + <code>PanelResizeHandle</code> 三个组件，声明式定义分屏。</p>
+  <pre style="background:#1a1a2e;color:#e0e0e0;padding:12px;border-radius:6px;font-size:13px;">
+// layouts/AppLayout.tsx
+&lt;PanelGroup direction="horizontal"&gt;
+  &lt;Panel defaultSize={18} minSize={12}&gt;
+    &lt;Sidebar /&gt;
+  &lt;/Panel&gt;
+  &lt;PanelResizeHandle /&gt;
+  &lt;Panel defaultSize={41} minSize={15}&gt;
+    &lt;Editor /&gt;
+  &lt;/Panel&gt;
+  &lt;PanelResizeHandle /&gt;
+  &lt;Panel defaultSize={41} minSize={15}&gt;
+    &lt;Terminal /&gt;
+  &lt;/Panel&gt;
+&lt;/PanelGroup&gt;</pre>
+</div>

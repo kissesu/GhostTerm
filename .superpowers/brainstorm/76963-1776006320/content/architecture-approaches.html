@@ -1,0 +1,131 @@
+<h2>GhostTerm MVP -- 前端架构方案</h2>
+<p class="subtitle">三种不同的 React 组件组织和状态管理方式，点击选择你倾向的方案</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Feature-Sliced (推荐)</h3>
+      <p><strong>思路：</strong>按功能切片组织，每个功能（终端、编辑器、文件树）是独立模块，包含自己的组件、hooks、store</p>
+      <p><strong>状态管理：</strong>Zustand — 每个功能一个独立 store，通过 subscription 跨模块通信</p>
+      <p><strong>优势：</strong>模块隔离清晰，新增功能只加目录不改现有代码，适合渐进式开发</p>
+      <p><strong>劣势：</strong>初期目录结构略多</p>
+      <pre style="background:#1a1a2e;color:#e0e0e0;padding:12px;border-radius:6px;font-size:13px;margin-top:8px;">
+src/
+  features/
+    terminal/       # 终端模块
+      Terminal.tsx
+      useTerminal.ts
+      terminalStore.ts
+    editor/         # 编辑器模块
+      Editor.tsx
+      useEditor.ts
+      editorStore.ts
+    sidebar/        # 左侧面板
+      Sidebar.tsx
+      FileTree.tsx
+      Changes.tsx
+      Worktrees.tsx
+      sidebarStore.ts
+  shared/           # 共享组件/工具
+    components/
+    hooks/
+    types/
+  layouts/
+    AppLayout.tsx   # 分屏布局容器</pre>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Flat + Context</h3>
+      <p><strong>思路：</strong>扁平目录，components/hooks/stores 平级分开，用 React Context 管理全局状态</p>
+      <p><strong>状态管理：</strong>React Context + useReducer — 内置方案，零依赖</p>
+      <p><strong>优势：</strong>最简单，无额外依赖，小项目足够</p>
+      <p><strong>劣势：</strong>Context 更新会导致大范围重渲染；文件增多后难以定位功能边界</p>
+      <pre style="background:#1a1a2e;color:#e0e0e0;padding:12px;border-radius:6px;font-size:13px;margin-top:8px;">
+src/
+  components/
+    Terminal.tsx
+    Editor.tsx
+    Sidebar.tsx
+    FileTree.tsx
+    ...
+  hooks/
+    useTerminal.ts
+    useEditor.ts
+    ...
+  contexts/
+    AppContext.tsx
+    TerminalContext.tsx
+  layouts/
+    AppLayout.tsx</pre>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Minimal Monolith</h3>
+      <p><strong>思路：</strong>MVP 极简 — 尽量少的文件，快速出原型，等功能稳定后再重构</p>
+      <p><strong>状态管理：</strong>Zustand 单 store — 一个 store 管所有状态</p>
+      <p><strong>优势：</strong>最快能跑起来，初期开发速度最快</p>
+      <p><strong>劣势：</strong>Supremum 的教训（4849行上帝组件）就是这条路走到底的结果</p>
+      <pre style="background:#1a1a2e;color:#e0e0e0;padding:12px;border-radius:6px;font-size:13px;margin-top:8px;">
+src/
+  App.tsx
+  Terminal.tsx
+  Editor.tsx
+  Sidebar.tsx
+  store.ts        # 单一 store
+  types.ts</pre>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:24px;">
+  <h3>关键对比</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:14px;">
+    <thead>
+      <tr style="border-bottom:2px solid #333;">
+        <th style="text-align:left;padding:8px;"></th>
+        <th style="text-align:center;padding:8px;">A. Feature-Sliced</th>
+        <th style="text-align:center;padding:8px;">B. Flat + Context</th>
+        <th style="text-align:center;padding:8px;">C. Minimal</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid #222;">
+        <td style="padding:8px;">初期速度</td>
+        <td style="text-align:center;">中</td>
+        <td style="text-align:center;">中</td>
+        <td style="text-align:center;color:#4ade80;">快</td>
+      </tr>
+      <tr style="border-bottom:1px solid #222;">
+        <td style="padding:8px;">Phase 2 扩展性</td>
+        <td style="text-align:center;color:#4ade80;">好</td>
+        <td style="text-align:center;">中</td>
+        <td style="text-align:center;color:#f87171;">差</td>
+      </tr>
+      <tr style="border-bottom:1px solid #222;">
+        <td style="padding:8px;">性能</td>
+        <td style="text-align:center;color:#4ade80;">好（精准更新）</td>
+        <td style="text-align:center;color:#fbbf24;">Context 重渲染</td>
+        <td style="text-align:center;color:#4ade80;">好（Zustand）</td>
+      </tr>
+      <tr style="border-bottom:1px solid #222;">
+        <td style="padding:8px;">额外依赖</td>
+        <td style="text-align:center;">zustand</td>
+        <td style="text-align:center;color:#4ade80;">无</td>
+        <td style="text-align:center;">zustand</td>
+      </tr>
+      <tr>
+        <td style="padding:8px;">避免 Supremum 问题</td>
+        <td style="text-align:center;color:#4ade80;">是</td>
+        <td style="text-align:center;color:#fbbf24;">部分</td>
+        <td style="text-align:center;color:#f87171;">否</td>
+      </tr>
+    </tbody>
+  </table>
+</div>

@@ -1,0 +1,199 @@
+<h2>GhostTerm MVP -- 前端状态管理与数据流</h2>
+<p class="subtitle">Zustand 多 store 设计 + 模块间通信</p>
+
+<div class="section">
+  <h3>Store 划分（3 个独立 store）</h3>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;">
+
+    <div style="flex:1;min-width:280px;background:#1a1a2e;padding:16px;border-radius:8px;border-left:3px solid #60a5fa;">
+      <h4 style="color:#60a5fa;margin-top:0;">terminalStore</h4>
+      <pre style="color:#e0e0e0;font-size:12px;margin:8px 0;">
+interface TerminalState {
+  // PTY 连接信息
+  ptyId: string | null
+  wsPort: number | null
+  wsToken: string | null
+  connected: boolean
+
+  // 操作
+  spawn: (cwd: string) => Promise&lt;void&gt;
+  kill: () => Promise&lt;void&gt;
+  resize: (cols: number, rows: number)
+    => Promise&lt;void&gt;
+}</pre>
+      <p style="font-size:12px;color:#888;margin-bottom:0;">特点: 状态极少, 实际数据流走 WebSocket 不经过 store</p>
+    </div>
+
+    <div style="flex:1;min-width:280px;background:#1a1a2e;padding:16px;border-radius:8px;border-left:3px solid #4ade80;">
+      <h4 style="color:#4ade80;margin-top:0;">editorStore</h4>
+      <pre style="color:#e0e0e0;font-size:12px;margin:8px 0;">
+interface EditorState {
+  // 打开的文件
+  openFiles: OpenFile[]
+  activeFileId: string | null
+
+  // 操作
+  openFile: (path: string) => Promise&lt;void&gt;
+  closeFile: (id: string) => void
+  saveFile: (id: string) => Promise&lt;void&gt;
+  setActive: (id: string) => void
+
+  // 外部文件变更处理
+  handleExternalChange: (
+    path: string,
+    content: string
+  ) => void
+}
+
+interface OpenFile {
+  id: string        // 唯一标识
+  path: string      // 文件路径
+  content: string   // 当前编辑器内容
+  diskContent: string // 磁盘内容(比对用)
+  isDirty: boolean  // 是否有未保存修改
+}</pre>
+      <p style="font-size:12px;color:#888;margin-bottom:0;">特点: 跟踪 dirty 状态, 处理 AI 修改文件后的冲突检测</p>
+    </div>
+
+    <div style="flex:1;min-width:280px;background:#1a1a2e;padding:16px;border-radius:8px;border-left:3px solid #c678dd;">
+      <h4 style="color:#c678dd;margin-top:0;">sidebarStore</h4>
+      <pre style="color:#e0e0e0;font-size:12px;margin:8px 0;">
+interface SidebarState {
+  // 面板状态
+  activeTab: 'files' | 'changes' | 'worktrees'
+  visible: boolean
+
+  // 项目
+  currentProject: Project | null
+  recentProjects: Project[]
+
+  // 文件树
+  fileTree: FileNode[]
+  expandedDirs: Set&lt;string&gt;
+
+  // Git
+  changes: StatusEntry[]
+  worktrees: Worktree[]
+
+  // 操作
+  setTab: (tab) => void
+  toggleVisibility: () => void
+  switchProject: (path) => Promise&lt;void&gt;
+  refreshFileTree: () => Promise&lt;void&gt;
+  refreshGitStatus: () => Promise&lt;void&gt;
+  refreshWorktrees: () => Promise&lt;void&gt;
+}</pre>
+      <p style="font-size:12px;color:#888;margin-bottom:0;">特点: 最复杂的 store, 管理文件树 + Git + 项目状态</p>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:24px;">
+  <h3>数据流：文件打开到编辑到保存</h3>
+  <div class="mockup">
+    <div class="mockup-header">用户点击文件树中的 auth.ts</div>
+    <div class="mockup-body" style="padding:16px;">
+      <pre style="font-size:13px;color:#e0e0e0;line-height:1.8;margin:0;">
+1. FileTree.tsx  onClick(path)
+     |
+2. editorStore.openFile(path)
+     |
+3. invoke('read_file', { path })  →  Rust fs_backend
+     |                                    |
+4. 返回 { content, encoding }     ←------┘
+     |
+5. editorStore 更新:
+     openFiles.push({ path, content, diskContent: content, isDirty: false })
+     activeFileId = newId
+     |
+6. Editor.tsx 渲染:
+     CodeMirror 加载 content
+     根据文件扩展名选择语法高亮
+      </pre>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:20px;">
+  <h3>数据流：AI 修改文件后的实时更新</h3>
+  <div class="mockup">
+    <div class="mockup-header">Claude Code 在终端中修改了 auth.ts</div>
+    <div class="mockup-body" style="padding:16px;">
+      <pre style="font-size:13px;color:#e0e0e0;line-height:1.8;margin:0;">
+1. Claude Code 写入磁盘 auth.ts
+     |
+2. notify watcher 检测到 Modify 事件 (Rust fs_backend)
+     |
+3. debounce 100ms 后读取新内容
+     |
+4. app.emit("fs:modified", { path, content })
+     |
+5. React listen("fs:modified") → editorStore.handleExternalChange(path, content)
+     |
+6. editorStore 判断:
+     ├─ 文件未在编辑器中打开 → 忽略 (文件树会自动更新修改标记)
+     ├─ 文件已打开, isDirty = false → 直接替换 content + diskContent
+     └─ 文件已打开, isDirty = true → <span style="color:#fbbf24;">弹出提示: "文件已被外部修改, 保留你的修改 / 加载新版本 / 查看 diff"</span>
+      </pre>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:20px;">
+  <h3>数据流：Worktree 切换</h3>
+  <div class="mockup">
+    <div class="mockup-header">用户在 Worktrees 标签页点击 feat/auth</div>
+    <div class="mockup-body" style="padding:16px;">
+      <pre style="font-size:13px;color:#e0e0e0;line-height:1.8;margin:0;">
+1. Worktrees.tsx  onClick(worktree)
+     |
+2. invoke('worktree_switch', { path: worktree.path })
+     |
+3. Rust project_manager 协调:
+     ├─ fs_backend: stop_watching() → start_watching(new_path)
+     ├─ pty_manager: 在当前 PTY 中 cd new_path (或 respawn)
+     └─ 更新 projects.json
+     |
+4. 前端连锁更新:
+     ├─ sidebarStore: currentProject 更新, 刷新 fileTree + changes
+     ├─ editorStore: 关闭所有文件 (或提示保存未保存的)
+     └─ terminalStore: cwd 已通过 Rust 端更新, 无需额外操作
+      </pre>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:20px;">
+  <h3>模块间通信方式</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:14px;">
+    <thead>
+      <tr style="border-bottom:2px solid #333;">
+        <th style="text-align:left;padding:8px;">场景</th>
+        <th style="text-align:left;padding:8px;">方式</th>
+        <th style="text-align:left;padding:8px;">理由</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid #222;">
+        <td style="padding:8px;">文件树 → 编辑器 (打开文件)</td>
+        <td><code>editorStore.openFile()</code></td>
+        <td>直接调用目标 store 的 action, 最简单</td>
+      </tr>
+      <tr style="border-bottom:1px solid #222;">
+        <td style="padding:8px;">Rust fs 事件 → 多个 store</td>
+        <td>Tauri Event listener 分发</td>
+        <td>一个事件可能需要更新文件树 + 编辑器 + Git 状态</td>
+      </tr>
+      <tr style="border-bottom:1px solid #222;">
+        <td style="padding:8px;">Worktree 切换 → 全局重置</td>
+        <td>Rust 端协调 + 前端 Event 响应</td>
+        <td>级联操作由 Rust project_manager 统一触发</td>
+      </tr>
+      <tr>
+        <td style="padding:8px;">编辑器保存 → Git 状态刷新</td>
+        <td><code>sidebarStore.refreshGitStatus()</code></td>
+        <td>保存后主动刷新, 比依赖 fs 事件更及时</td>
+      </tr>
+    </tbody>
+  </table>
+</div>

@@ -1,0 +1,195 @@
+<h2>GhostTerm MVP -- Rust 后端模块设计</h2>
+<p class="subtitle">4 个模块的职责、API、依赖和数据流</p>
+
+<div class="section">
+  <h3>模块 1: pty_manager</h3>
+  <p class="subtitle">PTY 生命周期管理 + WebSocket 双向桥接</p>
+  <div style="display:flex;gap:20px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:300px;">
+      <h4 style="color:#60a5fa;">Tauri Commands (控制面)</h4>
+      <pre style="background:#1a1a2e;color:#e0e0e0;padding:12px;border-radius:6px;font-size:12px;">
+spawn_pty(shell, cwd, env)
+  → 创建 PTY 子进程
+  → 启动 WebSocket server
+  → 返回 { pty_id, ws_port, ws_token }
+
+resize_pty(pty_id, cols, rows)
+  → 调整 PTY 窗口大小
+
+kill_pty(pty_id)
+  → 终止 PTY 进程
+  → 关闭 WebSocket 连接</pre>
+    </div>
+    <div style="flex:1;min-width:300px;">
+      <h4 style="color:#4ade80;">WebSocket (数据面)</h4>
+      <pre style="background:#1a1a2e;color:#e0e0e0;padding:12px;border-radius:6px;font-size:12px;">
+ws://127.0.0.1:{port}?token={token}
+
+上行 (前端 → PTY):
+  Binary frame → 直接写入 PTY stdin
+
+下行 (PTY → 前端):
+  PTY stdout → Binary frame → xterm.js
+
+认证: URL query 中的一次性 token
+绑定: 127.0.0.1 (仅本地访问)</pre>
+    </div>
+  </div>
+  <div style="margin-top:12px;">
+    <span class="label">依赖</span>
+    <code style="background:#1a1a2e;padding:4px 8px;border-radius:4px;font-size:12px;">portable-pty</code>
+    <code style="background:#1a1a2e;padding:4px 8px;border-radius:4px;font-size:12px;">tokio-tungstenite</code>
+    <code style="background:#1a1a2e;padding:4px 8px;border-radius:4px;font-size:12px;">tokio</code>
+  </div>
+</div>
+
+<div class="section" style="margin-top:24px;">
+  <h3>模块 2: fs_backend</h3>
+  <p class="subtitle">文件系统操作 + 实时监听</p>
+  <div style="display:flex;gap:20px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:300px;">
+      <h4 style="color:#60a5fa;">Tauri Commands</h4>
+      <pre style="background:#1a1a2e;color:#e0e0e0;padding:12px;border-radius:6px;font-size:12px;">
+list_dir(path)
+  → Vec&lt;FileEntry&gt; { name, path,
+    is_dir, size, modified }
+
+read_file(path)
+  → { content: String, encoding }
+
+write_file(path, content)
+  → Result&lt;()&gt;
+
+create_entry(path, is_dir)
+  → 创建文件或目录
+
+delete_entry(path)
+  → 删除文件或目录
+
+rename_entry(old_path, new_path)
+  → 重命名/移动</pre>
+    </div>
+    <div style="flex:1;min-width:300px;">
+      <h4 style="color:#fbbf24;">Tauri Events (监听推送)</h4>
+      <pre style="background:#1a1a2e;color:#e0e0e0;padding:12px;border-radius:6px;font-size:12px;">
+start_watching(project_path)
+  → 启动 notify watcher
+  → 排除 .git, node_modules 等
+  → debounce 100ms
+
+事件推送:
+"fs:created"  { path }
+"fs:modified" { path, content? }
+"fs:deleted"  { path }
+"fs:renamed"  { old_path, new_path }
+
+stop_watching()
+  → 停止监听</pre>
+    </div>
+  </div>
+  <div style="margin-top:12px;">
+    <span class="label">依赖</span>
+    <code style="background:#1a1a2e;padding:4px 8px;border-radius:4px;font-size:12px;">notify (v6)</code>
+    <code style="background:#1a1a2e;padding:4px 8px;border-radius:4px;font-size:12px;">ignore (gitignore 解析)</code>
+  </div>
+</div>
+
+<div class="section" style="margin-top:24px;">
+  <h3>模块 3: git_backend</h3>
+  <p class="subtitle">Git 状态查询 + Worktree 管理</p>
+  <div style="display:flex;gap:20px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:300px;">
+      <h4 style="color:#60a5fa;">基础 Git 操作</h4>
+      <pre style="background:#1a1a2e;color:#e0e0e0;padding:12px;border-radius:6px;font-size:12px;">
+git_status(repo_path)
+  → Vec&lt;StatusEntry&gt; {
+      path, status (new/modified/
+      deleted/renamed), staged }
+
+git_diff(repo_path, path?)
+  → 文件级 diff 内容
+
+git_stage(repo_path, paths)
+  → 暂存指定文件
+
+git_unstage(repo_path, paths)
+  → 取消暂存
+
+git_current_branch(repo_path)
+  → 当前分支名</pre>
+    </div>
+    <div style="flex:1;min-width:300px;">
+      <h4 style="color:#c678dd;">Worktree 操作</h4>
+      <pre style="background:#1a1a2e;color:#e0e0e0;padding:12px;border-radius:6px;font-size:12px;">
+worktree_list(repo_path)
+  → Vec&lt;Worktree&gt; {
+      path, branch, is_current }
+
+worktree_add(repo_path, branch, path?)
+  → 创建新 worktree
+
+worktree_remove(worktree_path)
+  → 删除 worktree
+
+worktree_switch(worktree_path)
+  → 切换项目根目录到该 worktree
+  → 触发 fs_backend 重新 watch
+  → 触发 pty_manager 更新 cwd</pre>
+    </div>
+  </div>
+  <div style="margin-top:12px;">
+    <span class="label">依赖</span>
+    <code style="background:#1a1a2e;padding:4px 8px;border-radius:4px;font-size:12px;">git2</code>
+  </div>
+  <div style="margin-top:8px;padding:8px 12px;background:#2a1a1a;border-left:3px solid #f87171;border-radius:4px;font-size:13px;color:#fca5a5;">
+    注意: git2 的 worktree API 不完整。worktree_add / worktree_remove 可能需要 fallback 到 <code>std::process::Command</code> 调用 git CLI。这是一个已知限制，不是架构问题。
+  </div>
+</div>
+
+<div class="section" style="margin-top:24px;">
+  <h3>模块 4: project_manager</h3>
+  <p class="subtitle">项目列表持久化 + 切换</p>
+  <pre style="background:#1a1a2e;color:#e0e0e0;padding:12px;border-radius:6px;font-size:12px;">
+list_recent_projects()
+  → Vec&lt;Project&gt; { name, path, last_opened }
+  → 从 ~/.ghostterm/projects.json 读取
+
+open_project(path)
+  → 验证目录存在
+  → 更新 recent list
+  → 触发: fs_backend.start_watching(path)
+  → 触发: pty_manager.spawn_pty(shell, path)
+  → 返回项目信息
+
+close_project()
+  → 停止 watch, 关闭 PTY
+
+持久化路径: ~/.ghostterm/projects.json
+  </pre>
+  <div style="margin-top:12px;">
+    <span class="label">依赖</span>
+    <code style="background:#1a1a2e;padding:4px 8px;border-radius:4px;font-size:12px;">serde + serde_json</code>
+    <code style="background:#1a1a2e;padding:4px 8px;border-radius:4px;font-size:12px;">dirs (跨平台路径)</code>
+  </div>
+</div>
+
+<div class="section" style="margin-top:24px;">
+  <h3>模块间依赖关系</h3>
+  <pre style="background:#1a1a2e;color:#e0e0e0;padding:16px;border-radius:8px;font-size:13px;">
+project_manager (协调者)
+  │
+  ├──→ fs_backend.start_watching()    项目打开时
+  ├──→ pty_manager.spawn_pty()        项目打开时
+  └──→ git_backend (无直接调用, 前端按需查询)
+
+worktree_switch 触发链:
+  git_backend.worktree_switch()
+    → project_manager.open_project(new_path)
+      → fs_backend.stop + restart watching
+      → pty_manager cd 或 respawn
+
+独立模块 (无互相依赖):
+  fs_backend ←→ git_backend  (各自独立)
+  pty_manager ←→ fs_backend  (各自独立)
+  </pre>
+</div>

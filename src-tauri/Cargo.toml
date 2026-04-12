@@ -1,0 +1,54 @@
+[package]
+name = "ghostterm"
+version = "0.1.0"
+description = "GhostTerm - 轻量级代码编辑器 + 终端一体化工具，深度集成 Claude Code"
+authors = ["Atlas.oi"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "ghostterm_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+
+# 序列化/反序列化 - 用于 Tauri Commands 数据传输和持久化
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# 异步运行时 - 用于 WebSocket server 和异步文件操作
+tokio = { version = "1", features = ["full"] }
+
+# PTY 管理 - 跨平台伪终端支持
+portable-pty = "0.8"
+
+# WebSocket - PTY 数据流传输
+tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+futures-util = "0.3"
+
+# 文件系统监听 - 实时监听文件变化
+notify = "7"
+
+# 文件路径忽略规则 - .gitignore 等排除规则
+ignore = "0.4"
+
+# Git 操作 - 状态查询、暂存、Worktree 管理
+git2 = "0.20"
+
+# 系统路径工具 - 用于定位配置目录 (~/.config/ghostterm 等)
+dirs = "6"
+
+# 随机数 - 用于生成 WebSocket token
+rand = "0.9"
+
+# 字符编码检测 - 用于非 UTF-8 文件检测
+chardetng = "0.1"
+
+# E2E 测试支持 - tauri-webdriver + WebdriverIO 集成（PBI-6 使用）
+tauri-plugin-webdriver-automation = "0.1"

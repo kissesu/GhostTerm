@@ -1,0 +1,121 @@
+<h2>GhostTerm MVP -- 整体架构</h2>
+<p class="subtitle">Tauri 2 分层架构总览</p>
+
+<div class="mockup">
+  <div class="mockup-header">Architecture Overview</div>
+  <div class="mockup-body" style="padding:24px;">
+    <pre style="font-size:13px;line-height:1.6;color:#e0e0e0;margin:0;">
+┌─────────────────────────────────────────────────────────────────┐
+│                        Tauri Window                              │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │                    React Frontend                          │  │
+│  │                                                            │  │
+│  │  ┌──────────┐  ┌──────────────┐  ┌─────────────────────┐  │  │
+│  │  │ Sidebar  │  │    Editor    │  │      Terminal       │  │  │
+│  │  │          │  │              │  │                     │  │  │
+│  │  │ Project  │  │  CodeMirror  │  │    xterm.js +       │  │  │
+│  │  │ Selector │  │  6           │  │    WebGL Addon +    │  │  │
+│  │  │          │  │              │  │    Unicode11 Addon  │  │  │
+│  │  │ [Files]  │  │  Tree-sitter │  │                     │  │  │
+│  │  │ [Change] │  │  highlight   │  │    AttachAddon      │  │  │
+│  │  │ [WT]     │  │              │  │    (WebSocket)      │  │  │
+│  │  └──────────┘  └──────────────┘  └──────────┬──────────┘  │  │
+│  │       │               │                      │             │  │
+│  │       │         Tauri Commands          WebSocket          │  │
+│  │       │          (invoke)             ws://127.0.0.1:PORT  │  │
+│  └───────┼───────────────┼──────────────────────┼─────────────┘  │
+│          │               │                      │                │
+│  ┌───────┴───────────────┴──────────────────────┴─────────────┐  │
+│  │                     Rust Backend                            │  │
+│  │                                                             │  │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │  │
+│  │  │  fs_backend   │  │ git_backend  │  │   pty_manager    │  │  │
+│  │  │              │  │              │  │                  │  │  │
+│  │  │ read_file    │  │ git_status   │  │ spawn_pty       │  │  │
+│  │  │ write_file   │  │ git_stage    │  │ write_pty       │  │  │
+│  │  │ list_dir     │  │ git_diff     │  │ resize_pty      │  │  │
+│  │  │ watch_dir    │  │ worktree_*   │  │ kill_pty        │  │  │
+│  │  └──────────────┘  └──────────────┘  │                  │  │  │
+│  │                                       │ WebSocket Server │  │  │
+│  │  ┌──────────────────────────────┐    │ (warp/tokio-     │  │  │
+│  │  │       project_manager        │    │  tungstenite)    │  │  │
+│  │  │  recent projects / switch    │    └──────────────────┘  │  │
+│  │  └──────────────────────────────┘                          │  │
+│  └─────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘</pre>
+  </div>
+</div>
+
+<div class="section" style="margin-top:20px;">
+  <h3>Rust Backend 模块划分（4 个模块）</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:14px;">
+    <thead>
+      <tr style="border-bottom:2px solid #333;">
+        <th style="text-align:left;padding:8px;">模块</th>
+        <th style="text-align:left;padding:8px;">职责</th>
+        <th style="text-align:left;padding:8px;">通信方式</th>
+        <th style="text-align:left;padding:8px;">依赖库</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid #222;">
+        <td style="padding:8px;"><code>pty_manager</code></td>
+        <td>PTY 生命周期 + WebSocket server</td>
+        <td>WebSocket (二进制帧)</td>
+        <td>portable-pty + tokio-tungstenite</td>
+      </tr>
+      <tr style="border-bottom:1px solid #222;">
+        <td style="padding:8px;"><code>fs_backend</code></td>
+        <td>文件读写、目录遍历、文件监听</td>
+        <td>Tauri Commands</td>
+        <td>notify (fs watcher)</td>
+      </tr>
+      <tr style="border-bottom:1px solid #222;">
+        <td style="padding:8px;"><code>git_backend</code></td>
+        <td>Git 状态、暂存、Worktree 操作</td>
+        <td>Tauri Commands</td>
+        <td>git2</td>
+      </tr>
+      <tr>
+        <td style="padding:8px;"><code>project_manager</code></td>
+        <td>最近项目列表、项目切换</td>
+        <td>Tauri Commands</td>
+        <td>serde_json (持久化)</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="section" style="margin-top:20px;">
+  <h3>React Frontend 目录结构</h3>
+  <pre style="background:#1a1a2e;color:#e0e0e0;padding:16px;border-radius:8px;font-size:13px;">
+src/
+  features/
+    terminal/
+      Terminal.tsx          # xterm.js 容器
+      useTerminal.ts        # WebSocket 连接 + PTY 生命周期
+      terminalStore.ts      # 终端状态（连接状态、当前 shell）
+    editor/
+      Editor.tsx            # CodeMirror 6 容器
+      useEditor.ts          # 文件加载/保存
+      editorStore.ts        # 打开的文件列表、活跃文件
+      tabs/
+        EditorTabs.tsx      # 文件标签栏
+    sidebar/
+      Sidebar.tsx           # 三标签页容器
+      ProjectSelector.tsx   # 顶部项目选择器
+      FileTree.tsx          # Files 标签页
+      Changes.tsx           # Changes 标签页
+      Worktrees.tsx         # Worktrees 标签页
+      sidebarStore.ts       # 活跃标签、展开状态
+  shared/
+    components/
+      ResizablePanel.tsx    # 可拖拽分屏组件
+    hooks/
+      useTauriCommand.ts    # invoke 封装
+    types/
+      index.ts
+  layouts/
+    AppLayout.tsx           # 顶层分屏布局
+  App.tsx                   # 入口</pre>
+</div>
