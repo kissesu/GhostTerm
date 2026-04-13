@@ -59,8 +59,16 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
    * xterm.js Terminal 组件在拿到 wsPort/wsToken 后建立 WebSocket 连接。
    */
   spawn: async (cwd: string) => {
-    // 默认使用系统 shell
-    const shell = '/bin/sh';
+    // kill 旧 PTY（避免切换项目时 PTY 泄漏）
+    const { ptyId: oldPtyId } = get();
+    if (oldPtyId) {
+      await invoke('kill_pty_cmd', { ptyId: oldPtyId }).catch(() => {
+        // 旧 PTY 可能已退出，忽略 kill 错误
+      });
+    }
+
+    // 使用系统默认 shell（macOS 默认 zsh，Linux 默认 bash）
+    const shell = '/bin/zsh';
     const info = await invoke<PtyInfo>('spawn_pty_cmd', { shell, cwd });
     set({
       ptyId: info.pty_id,

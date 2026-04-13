@@ -129,8 +129,10 @@ export default function Terminal({ cwd = '/', className }: TerminalProps) {
 
   // ============================================
   // Effect 2：启动 PTY（cwd 变化时重启）
+  // 未打开项目时（cwd=undefined）不 spawn，等待项目打开
   // ============================================
   useEffect(() => {
+    if (!cwd) return;
     spawn(cwd).catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
       setError(`PTY 启动失败: ${msg}`);

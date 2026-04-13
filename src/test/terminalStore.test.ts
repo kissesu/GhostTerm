@@ -79,7 +79,7 @@ describe('terminalStore', () => {
       await useTerminalStore.getState().spawn('/home/user');
 
       expect(mockInvoke).toHaveBeenCalledWith('spawn_pty_cmd', {
-        shell: '/bin/sh',
+        shell: '/bin/zsh',
         cwd: '/home/user',
       });
     });

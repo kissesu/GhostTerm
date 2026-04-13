@@ -198,7 +198,7 @@ describe('Terminal', () => {
 
       await waitFor(() => {
         expect(mockInvoke).toHaveBeenCalledWith('spawn_pty_cmd', {
-          shell: '/bin/sh',
+          shell: '/bin/zsh',
           cwd: '/projects/test',
         });
       });

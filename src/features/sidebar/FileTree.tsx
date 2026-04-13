@@ -53,8 +53,9 @@ function FileTreeNode({ node, depth, gitStatusClass }: FileTreeNodeProps) {
     if (isDir) {
       await toggleDir(node.entry.path);
     } else {
-      // 点击文件：invoke read_file_cmd，合并后接入真实 editorStore.openFile
-      await invoke('read_file_cmd', { path: node.entry.path });
+      // 点击文件：通过 editorStore 打开（内部调 read_file_cmd + 添加标签 + 设为 active）
+      const { useEditorStore } = await import('../../features/editor/editorStore');
+      await useEditorStore.getState().openFile(node.entry.path);
     }
   };
 

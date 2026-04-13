@@ -29,6 +29,7 @@ const SIDEBAR_AUTO_COLLAPSE_WIDTH = 800;
  */
 export default function AppLayout() {
   const sidebarVisible = useSidebarStore((s) => s.visible);
+  const currentProjectPath = useProjectStore((s) => s.currentProject?.path);
 
   // 焦点面板状态：记录当前焦点在编辑器还是终端，供快捷键和 UI 使用
   const [activePanel, setActivePanel] = useState<'editor' | 'terminal'>('editor');
@@ -176,7 +177,7 @@ export default function AppLayout() {
           minSize={15}
           style={{ overflow: 'hidden' }}
         >
-          <Terminal />
+          <Terminal cwd={currentProjectPath} />
         </Panel>
       </PanelGroup>
     </div>
