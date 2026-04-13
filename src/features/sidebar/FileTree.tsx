@@ -260,7 +260,7 @@ export default function FileTree() {
         role="tree"
         aria-label="文件树"
         onWheel={(e) => e.stopPropagation()}
-        style={{ overflow: 'auto', height: '100%' }}
+        style={{ overflow: 'auto', width: '100%', height: '100%', minWidth: 0, minHeight: 0 }}
       >
         {tree.map((node) => (
           <FileTreeNode

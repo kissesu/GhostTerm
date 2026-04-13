@@ -28,6 +28,8 @@ export default function Sidebar() {
     <div
       style={{
         height: '100%',
+        minWidth: 0,
+        minHeight: 0,
         display: 'flex',
         flexDirection: 'column',
         background: '#16161e',
@@ -75,8 +77,8 @@ export default function Sidebar() {
         ))}
       </div>
 
-      {/* 标签页内容区 */}
-      <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+      {/* 标签页内容区 — minHeight: 0 允许 flex 收缩，防止内容撑开父容器 */}
+      <div style={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
         {/* Files 面板 */}
         <div
           role="tabpanel"
@@ -84,7 +86,7 @@ export default function Sidebar() {
           aria-labelledby="sidebar-tab-files"
           data-testid="panel-files"
           hidden={activeTab !== 'files'}
-          style={{ height: '100%' }}
+          style={{ height: '100%', minWidth: 0, minHeight: 0 }}
         >
           <FileTree />
         </div>
@@ -96,7 +98,7 @@ export default function Sidebar() {
           aria-labelledby="sidebar-tab-changes"
           data-testid="panel-changes"
           hidden={activeTab !== 'changes'}
-          style={{ height: '100%' }}
+          style={{ height: '100%', minWidth: 0, minHeight: 0 }}
         >
           <Changes />
         </div>
@@ -108,7 +110,7 @@ export default function Sidebar() {
           aria-labelledby="sidebar-tab-worktrees"
           data-testid="panel-worktrees"
           hidden={activeTab !== 'worktrees'}
-          style={{ height: '100%' }}
+          style={{ height: '100%', minWidth: 0, minHeight: 0 }}
         >
           <Worktrees />
         </div>

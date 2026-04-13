@@ -15,7 +15,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-opener = "2"
 
 # 序列化/反序列化 - 用于 Tauri Commands 数据传输和持久化
@@ -59,6 +59,10 @@ infer = "0.16"
 # E2E 测试支持 - tauri-webdriver + WebdriverIO 集成（PBI-6 使用）
 tauri-plugin-webdriver-automation = "0.1"
 tauri-plugin-dialog = "2.7.0"
+
+# macOS 原生 API - 用于 NSWindow 标题栏透明化（消除窗口四周留白）
+[target.'cfg(target_os = "macos")'.dependencies]
+objc = "0.2"
 
 [dev-dependencies]
 # 测试用临时目录 - 避免测试污染真实文件系统

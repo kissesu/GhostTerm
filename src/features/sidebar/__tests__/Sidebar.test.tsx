@@ -85,3 +85,15 @@ describe('Sidebar - 包含 ProjectSelector', () => {
     expect(screen.getByRole('button', { name: '选择项目' })).toBeInTheDocument();
   });
 });
+
+describe('Sidebar - 滚动结构', () => {
+  it('标签页内容层应允许收缩，避免撑开侧边栏根容器', () => {
+    render(<Sidebar />);
+
+    const contentShell = screen.getByTestId('panel-files').parentElement;
+    const filesPanel = screen.getByTestId('panel-files');
+
+    expect(contentShell).toHaveStyle({ minWidth: '0', minHeight: '0', overflow: 'hidden' });
+    expect(filesPanel).toHaveStyle({ height: '100%', minWidth: '0', minHeight: '0' });
+  });
+});

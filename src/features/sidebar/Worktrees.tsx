@@ -83,7 +83,10 @@ export default function Worktrees() {
       data-testid="worktrees-panel"
       onWheel={(e) => e.stopPropagation()}
       style={{
+        width: '100%',
         height: '100%',
+        minWidth: 0,
+        minHeight: 0,
         overflow: 'auto',
         display: 'flex',
         flexDirection: 'column',

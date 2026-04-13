@@ -44,12 +44,38 @@ pub fn run() {
         // CSS overscroll-behavior 在 WKWebView 上不可靠（wry#557、tauri#4309）
         // ============================================
         .setup(|app| {
-            // 设置窗口深色背景（消除 webview 与窗口之间的白色间隙）
-            // 参考 Supremum：使用 Tauri 原生 API set_background_color
             use tauri::Manager;
             if let Some(win) = app.get_webview_window("main") {
+                // 设置窗口深色背景（消除 webview 与窗口之间的白色间隙）
                 use tauri::window::Color;
                 let _ = win.set_background_color(Some(Color(26, 27, 38, 255))); // #1a1b26
+
+                // ============================================
+                // macOS: NSWindow 原生 API 消除标题栏留白
+                // titlebarAppearsTransparent: 标题栏完全透明，WebView 内容延伸到窗口边缘
+                // titleVisibility: 隐藏标题文字（配合 hiddenTitle: true）
+                // movableByWindowBackground: 禁用窗口背景拖拽（由 data-tauri-drag-region 管理）
+                // 参考 Supremum: https://github.com/HybridTalentComputing/Supremum
+                // ============================================
+                #[cfg(target_os = "macos")]
+                {
+                    use objc::runtime::{Object, YES, NO};
+                    use objc::msg_send;
+                    use objc::sel;
+                    use objc::sel_impl;
+
+                    if let Ok(ns_win) = win.ns_window() {
+                        let ns_win = ns_win as *mut Object;
+                        unsafe {
+                            // 标题栏透明化 — 消除标题栏区域的半透明渲染层
+                            let _: () = msg_send![ns_win, setTitlebarAppearsTransparent: YES];
+                            // 隐藏标题文字（NSWindowTitleHidden = 1）
+                            let _: () = msg_send![ns_win, setTitleVisibility: 1i64];
+                            // 禁止通过窗口背景拖拽 — 交由 data-tauri-drag-region 管理
+                            let _: () = msg_send![ns_win, setMovableByWindowBackground: NO];
+                        }
+                    }
+                }
             }
             Ok(())
         })

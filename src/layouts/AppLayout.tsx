@@ -9,6 +9,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Sidebar } from '../features/sidebar';
 import { useSidebarStore } from '../features/sidebar';
 import { useProjectStore } from '../features/sidebar';
@@ -18,6 +19,7 @@ import { useKeyboardShortcuts } from '../shared/hooks/useKeyboardShortcuts';
 
 // 侧边栏自动折叠阈值（px）：窗口宽度小于此值时自动隐藏侧边栏
 const SIDEBAR_AUTO_COLLAPSE_WIDTH = 800;
+
 
 /**
  * GhostTerm 三栏布局
@@ -65,6 +67,17 @@ export default function AppLayout() {
   // 替换原先散落在各组件的 keydown 监听，统一管理
   // ============================================
   useKeyboardShortcuts(handleFocusToggle, handleSidebarToggle);
+
+  // ============================================
+  // 标题栏拖拽 — Tauri 官方推荐方式
+  // mousedown 左键直接调用 startDragging()，OS 接管后续拖拽
+  // 需要 capabilities 配置 core:window:allow-start-dragging 权限
+  // ============================================
+  const handleTitlebarMouseDown = useCallback((e: React.MouseEvent) => {
+    // 只响应左键
+    if (e.buttons !== 1) return;
+    getCurrentWindow().startDragging();
+  }, []);
 
   // ============================================
   // 启动时恢复上次打开的项目
@@ -126,9 +139,11 @@ export default function AppLayout() {
         overflow: 'hidden',
       }}
     >
-      {/* macOS Overlay 标题栏拖拽区域（data-tauri-drag-region 启用窗口拖拽） */}
+      {/* macOS Overlay 标题栏拖拽区域
+          使用 JS startDragging() 而非 data-tauri-drag-region
+          参照 Supremum：mousedown → 4px 阈值 → startDragging() */}
       <div
-        data-tauri-drag-region
+        onMouseDown={handleTitlebarMouseDown}
         style={{
           height: 28,
           flexShrink: 0,
@@ -138,7 +153,7 @@ export default function AppLayout() {
           alignItems: 'center',
         }}
       />
-      <PanelGroup direction="horizontal" style={{ flex: 1 }}>
+      <PanelGroup direction="horizontal" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
         {/* 左侧面板 - PBI-3 Sidebar，根据 sidebarVisible 显隐 */}
         {sidebarVisible && (
           <>
@@ -146,7 +161,7 @@ export default function AppLayout() {
               defaultSize={20}
               minSize={10}
               maxSize={40}
-              style={{ background: '#16161e', overflow: 'hidden' }}
+              style={{ background: '#16161e', overflow: 'hidden', minWidth: 0, minHeight: 0 }}
             >
               <Sidebar />
             </Panel>
@@ -165,12 +180,12 @@ export default function AppLayout() {
         <Panel
           defaultSize={50}
           minSize={20}
-          style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+          style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}
         >
           {/* 标签页栏 */}
           <EditorTabs />
-          {/* 编辑器内容区 */}
-          <div style={{ flex: 1, overflow: 'hidden' }}>
+          {/* 编辑器内容区 — minHeight: 0 允许 flex 收缩 */}
+          <div style={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
             <Editor />
           </div>
         </Panel>
@@ -187,7 +202,7 @@ export default function AppLayout() {
         <Panel
           defaultSize={30}
           minSize={15}
-          style={{ overflow: 'hidden' }}
+          style={{ overflow: 'hidden', minWidth: 0, minHeight: 0 }}
         >
           <Terminal cwd={currentProjectPath} />
         </Panel>

@@ -111,7 +111,7 @@ export default function Editor() {
         }),
         // 编辑器基本样式
         EditorView.theme({
-          '&': { height: '100%', fontSize: '13px' },
+          '&': { height: '100%', minWidth: '0', minHeight: '0', fontSize: '13px' },
           '.cm-scroller': { overflow: 'auto', fontFamily: 'JetBrains Mono, Menlo, monospace' },
         }),
       ],
@@ -272,7 +272,7 @@ export default function Editor() {
     <div
       data-testid="editor-container"
       ref={editorContainerRef}
-      style={{ height: '100%', overflow: 'hidden' }}
+      style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden' }}
     />
   );
 }

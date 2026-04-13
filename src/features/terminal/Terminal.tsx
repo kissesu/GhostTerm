@@ -206,6 +206,8 @@ export default function Terminal({ cwd, className }: TerminalProps) {
       style={{
         width: '100%',
         height: '100%',
+        minWidth: 0,
+        minHeight: 0,
         position: 'relative',
         overflow: 'hidden',
         background: terminalTheme.background as string,
@@ -218,6 +220,8 @@ export default function Terminal({ cwd, className }: TerminalProps) {
         style={{
           width: '100%',
           height: '100%',
+          minWidth: 0,
+          minHeight: 0,
           overflow: 'hidden',
         }}
       />

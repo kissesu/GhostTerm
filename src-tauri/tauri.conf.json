@@ -24,6 +24,7 @@
         "acceptFirstMouse": true
       }
     ],
+    "macOSPrivateApi": true,
     "security": {
       "csp": null
     }

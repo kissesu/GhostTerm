@@ -174,3 +174,17 @@ describe('AppLayout - 窗口宽度自动折叠侧边栏', () => {
     expect(screen.queryByTestId('sidebar-root')).not.toBeInTheDocument();
   });
 });
+
+describe('AppLayout - 面板滚动边界', () => {
+  it('主工作区和编辑器/终端面板应允许收缩而不撑开页面', () => {
+    render(<AppLayout />);
+
+    const group = screen.getByTestId('editor-tabs').parentElement?.parentElement;
+    const editorPanel = screen.getByTestId('editor-panel').parentElement;
+    const terminalPanel = screen.getByTestId('terminal-panel').parentElement;
+
+    expect(group).toHaveStyle({ minWidth: '0', minHeight: '0' });
+    expect(editorPanel).toHaveStyle({ minWidth: '0', minHeight: '0', overflow: 'hidden' });
+    expect(terminalPanel).toHaveStyle({ minWidth: '0', minHeight: '0', overflow: 'hidden' });
+  });
+});
