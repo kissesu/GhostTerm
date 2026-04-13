@@ -38,6 +38,36 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         // E2E 测试支持（PBI-6 使用）
         .plugin(tauri_plugin_webdriver_automation::init())
+        // ============================================
+        // macOS: 禁用 WKWebView 弹性滚动 + 设置深色背景
+        // 通过原生 NSScrollView API 设置 scrollElasticity = None
+        // CSS overscroll-behavior 在 WKWebView 上不可靠（wry#557、tauri#4309）
+        // ============================================
+        .setup(|app| {
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::Manager;
+                let main_window = app.get_webview_window("main")
+                    .expect("找不到主窗口");
+                main_window.with_webview(|webview| {
+                    use objc2::msg_send;
+                    use objc2::runtime::AnyObject;
+                    unsafe {
+                        let wk_view: *const AnyObject = webview.inner().cast();
+                        // 获取 WKWebView 的封装 NSScrollView
+                        let scroll_view: *const AnyObject = msg_send![wk_view, enclosingScrollView];
+                        if !scroll_view.is_null() {
+                            // NSScrollElasticityNone = 1
+                            let _: () = msg_send![scroll_view, setHorizontalScrollElasticity: 1_isize];
+                            let _: () = msg_send![scroll_view, setVerticalScrollElasticity: 1_isize];
+                        }
+                        // 设置 WKWebView 背景透明（消除白色间隙）
+                        let _: () = msg_send![wk_view, setDrawsBackground: false];
+                    }
+                }).expect("with_webview 失败");
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             // PBI-1: PTY 管理
             spawn_pty_cmd,
