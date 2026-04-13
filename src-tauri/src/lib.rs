@@ -25,10 +25,10 @@ use fs_backend::{start_watching_cmd, stop_watching_cmd};
 // PBI-3 Commands
 use project_manager::{list_recent_projects_cmd, open_project_cmd, close_project_cmd};
 
-// PBI-5 Commands (占位，PBI-5 完成后取消注释)
-// use git_backend::{git_status_cmd, git_stage_cmd, git_unstage_cmd, git_diff_cmd,
-//                   git_current_branch_cmd, worktree_list_cmd, worktree_add_cmd,
-//                   worktree_remove_cmd, worktree_switch_cmd};
+// PBI-5 Commands - Git 操作
+use git_backend::{git_status_cmd, git_stage_cmd, git_unstage_cmd, git_diff_cmd,
+                  git_current_branch_cmd, worktree_switch_cmd};
+use git_backend::worktree::{worktree_list_cmd, worktree_add_cmd, worktree_remove_cmd};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -56,7 +56,16 @@ pub fn run() {
             // PBI-4: 文件系统实时监听
             start_watching_cmd,
             stop_watching_cmd,
-            // PBI-5: Git 操作（PBI-5 完成后添加）
+            // PBI-5: Git 操作
+            git_status_cmd,
+            git_stage_cmd,
+            git_unstage_cmd,
+            git_diff_cmd,
+            git_current_branch_cmd,
+            worktree_list_cmd,
+            worktree_add_cmd,
+            worktree_remove_cmd,
+            worktree_switch_cmd,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

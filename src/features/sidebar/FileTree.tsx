@@ -28,6 +28,7 @@ import {
   ContextMenuSeparator,
 } from '@radix-ui/react-context-menu';
 import { useFileTreeStore } from './fileTreeStore';
+import { useGitStore } from './gitStore';
 import type { FileNode } from '../../shared/types';
 
 /** FileTreeNode 组件的 Props */
@@ -204,9 +205,36 @@ function FileTreeNode({ node, depth, gitStatusClass }: FileTreeNodeProps) {
   );
 }
 
+/**
+ * 根据 git 状态确定节点的 CSS class 名称
+ *
+ * 颜色规则（与 Changes 面板状态颜色保持一致）：
+ * - M（修改）→ git-modified（黄色 #e0af68）
+ * - A（新增）/ ?（未跟踪）→ git-untracked（绿色 #9ece6a）
+ * - D（删除）→ git-deleted（红色 #f7768e）
+ */
+function resolveGitStatusClass(path: string, changes: ReturnType<typeof useGitStore>['changes']): string | undefined {
+  // 取文件名匹配（git status 返回相对路径，FileTree 使用绝对路径）
+  // 通过检查绝对路径是否以 git 相对路径结尾来匹配
+  const entry = changes.find((e) => path.endsWith(`/${e.path}`) || path === e.path);
+  if (!entry) return undefined;
+
+  // 优先判断 staged 状态
+  const status = entry.staged ?? entry.unstaged;
+  if (!status) return undefined;
+
+  if (status === 'M' || status === 'R') return 'git-modified';
+  if (status === 'A' || status === '?') return 'git-untracked';
+  if (status === 'D') return 'git-deleted';
+
+  return undefined;
+}
+
 /** 文件树根组件 */
 export default function FileTree() {
   const { tree } = useFileTreeStore();
+  // 从 gitStore 获取变更列表，用于给文件着色
+  const { changes } = useGitStore();
 
   if (tree.length === 0) {
     return (
@@ -220,14 +248,27 @@ export default function FileTree() {
   }
 
   return (
-    <div
-      role="tree"
-      aria-label="文件树"
-      style={{ overflow: 'auto', height: '100%' }}
-    >
-      {tree.map((node) => (
-        <FileTreeNode key={node.entry.path} node={node} depth={0} />
-      ))}
-    </div>
+    <>
+      {/* Git 状态颜色样式（注入到 shadow DOM 外层） */}
+      <style>{`
+        .git-modified { color: #e0af68 !important; }
+        .git-untracked { color: #9ece6a !important; }
+        .git-deleted { color: #f7768e !important; }
+      `}</style>
+      <div
+        role="tree"
+        aria-label="文件树"
+        style={{ overflow: 'auto', height: '100%' }}
+      >
+        {tree.map((node) => (
+          <FileTreeNode
+            key={node.entry.path}
+            node={node}
+            depth={0}
+            gitStatusClass={resolveGitStatusClass(node.entry.path, changes)}
+          />
+        ))}
+      </div>
+    </>
   );
 }
