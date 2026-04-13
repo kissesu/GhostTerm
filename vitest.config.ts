@@ -25,6 +25,14 @@ export default defineConfig({
     // 测试前加载 setup 文件（配置 @testing-library/jest-dom matchers）
     // 使用绝对路径避免 git worktree 中 .git 文件导致的根目录解析偏移
     setupFiles: [fileURLToPath(new URL('./src/test/setup.ts', import.meta.url))],
+    // 排除嵌套 worktree 目录（它们有独立的测试运行环境，避免 React 双实例问题）
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      'GhostTerm-feat-git-worktree/**',
+      'GhostTerm-feat-fs-watcher/**',
+      'ghostterm-worktrees/**',
+    ],
     // 覆盖率配置
     coverage: {
       provider: 'v8',
