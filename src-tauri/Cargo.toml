@@ -47,6 +47,9 @@ dirs = "6"
 # 随机数 - 用于生成 WebSocket token
 rand = "0.9"
 
+# 全局静态变量初始化 - 用于 PTY 注册表（全局 HashMap）
+lazy_static = "1"
+
 # 字符编码检测 - 用于非 UTF-8 文件检测
 chardetng = "0.1"
 

@@ -1449,6 +1449,7 @@ dependencies = [
  "futures-util",
  "git2",
  "ignore",
+ "lazy_static",
  "notify",
  "portable-pty",
  "rand 0.9.3",
