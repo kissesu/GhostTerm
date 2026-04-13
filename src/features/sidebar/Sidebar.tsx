@@ -9,6 +9,8 @@
 
 import ProjectSelector from './ProjectSelector';
 import FileTree from './FileTree';
+import Changes from './Changes';
+import Worktrees from './Worktrees';
 import { useSidebarStore, type SidebarTab } from './sidebarStore';
 
 /** 标签页定义 */
@@ -87,42 +89,28 @@ export default function Sidebar() {
           <FileTree />
         </div>
 
-        {/* Changes 面板 - PBI-5 实现 */}
+        {/* Changes 面板 */}
         <div
           role="tabpanel"
           id="sidebar-panel-changes"
           aria-labelledby="sidebar-tab-changes"
           data-testid="panel-changes"
           hidden={activeTab !== 'changes'}
-          style={{
-            height: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#565f89',
-            fontSize: 12,
-          }}
+          style={{ height: '100%' }}
         >
-          Git 状态 (PBI-5)
+          <Changes />
         </div>
 
-        {/* Worktrees 面板 - PBI-5 实现 */}
+        {/* Worktrees 面板 */}
         <div
           role="tabpanel"
           id="sidebar-panel-worktrees"
           aria-labelledby="sidebar-tab-worktrees"
           data-testid="panel-worktrees"
           hidden={activeTab !== 'worktrees'}
-          style={{
-            height: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#565f89',
-            fontSize: 12,
-          }}
+          style={{ height: '100%' }}
         >
-          Worktrees (PBI-5)
+          <Worktrees />
         </div>
       </div>
     </div>

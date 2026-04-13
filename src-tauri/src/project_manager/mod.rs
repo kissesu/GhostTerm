@@ -17,7 +17,8 @@ const MAX_RECENT_PROJECTS: usize = 20;
 
 /// 全局当前项目状态（内存中）
 /// 使用 Mutex 保证线程安全，Tauri Commands 从多线程调用
-static CURRENT_PROJECT: Mutex<Option<ProjectInfo>> = Mutex::new(None);
+/// pub 可见性：git_backend::worktree_switch 需要访问，以执行路径更新和事务回滚
+pub static CURRENT_PROJECT: Mutex<Option<ProjectInfo>> = Mutex::new(None);
 
 /// 获取 projects.json 的存储路径
 ///

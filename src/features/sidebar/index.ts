@@ -8,6 +8,9 @@
 export { default as Sidebar } from './Sidebar';
 export { default as FileTree } from './FileTree';
 export { default as ProjectSelector } from './ProjectSelector';
+export { default as Changes } from './Changes';
+export { default as Worktrees } from './Worktrees';
 export { useSidebarStore } from './sidebarStore';
 export { useProjectStore } from './projectStore';
 export { useFileTreeStore } from './fileTreeStore';
+export { useGitStore } from './gitStore';
