@@ -58,6 +58,7 @@ infer = "0.16"
 
 # E2E 测试支持 - tauri-webdriver + WebdriverIO 集成（PBI-6 使用）
 tauri-plugin-webdriver-automation = "0.1"
+tauri-plugin-dialog = "2.7.0"
 
 [dev-dependencies]
 # 测试用临时目录 - 避免测试污染真实文件系统

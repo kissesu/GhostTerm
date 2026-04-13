@@ -12,6 +12,11 @@ import ProjectSelector from '../ProjectSelector';
 import { useProjectStore } from '../projectStore';
 import type { ProjectInfo } from '../../../shared/types';
 
+// Mock Tauri dialog 插件 - 测试环境无原生对话框
+vi.mock('@tauri-apps/plugin-dialog', () => ({
+  open: vi.fn().mockResolvedValue(null),
+}));
+
 const mockInvoke = vi.mocked(invoke);
 
 const currentProject: ProjectInfo = {

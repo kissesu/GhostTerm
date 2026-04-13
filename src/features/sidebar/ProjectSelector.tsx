@@ -7,6 +7,7 @@
  */
 
 import { useState } from 'react';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { ChevronDown, FolderOpen, Folder } from 'lucide-react';
 import { useProjectStore } from './projectStore';
 
@@ -193,10 +194,17 @@ export default function ProjectSelector() {
           {/* 分割线 + 打开文件夹选项 */}
           <div style={{ borderTop: '1px solid #27293d', margin: '2px 0' }} />
           <button
-            onClick={() => {
+            onClick={async () => {
               setOpen(false);
-              // PBI-6 时接入 Tauri file dialog
-              console.log('[ProjectSelector] 打开文件夹 (PBI-6 接入)');
+              // 调用 Tauri 原生文件夹选择对话框
+              const selected = await openDialog({ directory: true, multiple: false });
+              if (selected) {
+                try {
+                  await switchProject(selected as string);
+                } catch (err) {
+                  console.error('[ProjectSelector] 打开项目失败:', err);
+                }
+              }
             }}
             style={{
               width: '100%',

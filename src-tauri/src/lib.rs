@@ -34,6 +34,8 @@ use git_backend::worktree::{worktree_list_cmd, worktree_add_cmd, worktree_remove
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        // 文件对话框 - 用于项目选择器"打开文件夹"功能
+        .plugin(tauri_plugin_dialog::init())
         // E2E 测试支持（PBI-6 使用）
         .plugin(tauri_plugin_webdriver_automation::init())
         .invoke_handler(tauri::generate_handler![
