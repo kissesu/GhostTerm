@@ -81,7 +81,7 @@ export default function Worktrees() {
   return (
     <div
       data-testid="worktrees-panel"
-      data-scrollable
+      onWheel={(e) => e.stopPropagation()}
       style={{
         height: '100%',
         overflow: 'auto',
