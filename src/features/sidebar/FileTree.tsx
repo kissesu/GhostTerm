@@ -29,7 +29,7 @@ import {
 } from '@radix-ui/react-context-menu';
 import { useFileTreeStore } from './fileTreeStore';
 import { useGitStore } from './gitStore';
-import type { FileNode } from '../../shared/types';
+import type { FileNode, StatusEntry } from '../../shared/types';
 
 /** FileTreeNode 组件的 Props */
 interface FileTreeNodeProps {
@@ -213,10 +213,10 @@ function FileTreeNode({ node, depth, gitStatusClass }: FileTreeNodeProps) {
  * - A（新增）/ ?（未跟踪）→ git-untracked（绿色 #9ece6a）
  * - D（删除）→ git-deleted（红色 #f7768e）
  */
-function resolveGitStatusClass(path: string, changes: ReturnType<typeof useGitStore>['changes']): string | undefined {
+function resolveGitStatusClass(path: string, changes: StatusEntry[]): string | undefined {
   // 取文件名匹配（git status 返回相对路径，FileTree 使用绝对路径）
   // 通过检查绝对路径是否以 git 相对路径结尾来匹配
-  const entry = changes.find((e) => path.endsWith(`/${e.path}`) || path === e.path);
+  const entry = changes.find((e: StatusEntry) => path.endsWith(`/${e.path}`) || path === e.path);
   if (!entry) return undefined;
 
   // 优先判断 staged 状态

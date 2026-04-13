@@ -8,7 +8,8 @@
  */
 
 import { useEffect, useRef, useCallback } from 'react';
-import { EditorView, basicSetup } from '@codemirror/view';
+import { EditorView } from '@codemirror/view';
+import { basicSetup } from 'codemirror';
 import { EditorState, Compartment } from '@codemirror/state';
 import { oneDark } from '@codemirror/theme-one-dark';
 import type { LanguageSupport } from '@codemirror/language';

@@ -41,7 +41,7 @@ interface FileItemProps {
 }
 
 /** 单个文件变更条目 */
-function FileItem({ entry, statusType, actionLabel, repoPath, onAction }: FileItemProps) {
+function FileItem({ entry, statusType, actionLabel, onAction }: FileItemProps) {
   const color = STATUS_COLORS[statusType] ?? '#c0caf5';
   const label = STATUS_LABELS[statusType] ?? statusType;
 

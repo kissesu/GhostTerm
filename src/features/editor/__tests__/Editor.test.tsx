@@ -29,8 +29,11 @@ const { EditorViewMock } = vi.hoisted(() => {
 
 vi.mock('@codemirror/view', () => ({
   EditorView: EditorViewMock,
-  basicSetup: [],
   keymap: vi.fn().mockReturnValue([]),
+}));
+
+vi.mock('codemirror', () => ({
+  basicSetup: [],
 }));
 
 vi.mock('@codemirror/state', () => ({

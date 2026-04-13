@@ -89,7 +89,7 @@ describe('useTerminal', () => {
   });
 
   it('WebSocket onopen 后应调用 setConnected(true)', async () => {
-    const { result } = renderHook(() => useTerminal());
+    renderHook(() => useTerminal());
 
     expect(MockWebSocket.instances.length).toBe(1);
     const ws = MockWebSocket.instances[0];
