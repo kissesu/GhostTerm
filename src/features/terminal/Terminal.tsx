@@ -40,7 +40,7 @@ interface TerminalProps {
  * 7. 加载 AttachAddon(ws) 连接 WebSocket
  * 8. ResizeObserver 监听容器尺寸 -> fitAddon.fit() -> resize_pty
  */
-export default function Terminal({ cwd = '/', className }: TerminalProps) {
+export default function Terminal({ cwd, className }: TerminalProps) {
   // 终端 DOM 容器 ref
   const containerRef = useRef<HTMLDivElement>(null);
   // XTerm 实例 ref（在多个 effect 中共享）
@@ -195,6 +195,28 @@ export default function Terminal({ cwd = '/', className }: TerminalProps) {
   }, [ptyId]); // ptyId 建立后才开始监听
 
   // ============================================
+  // 等待项目打开：未指定 cwd 时显示提示
+  // ============================================
+  if (!cwd && !connected) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100%',
+          background: '#1a1b26',
+          color: '#565f89',
+          fontSize: '13px',
+          fontFamily: 'system-ui, sans-serif',
+        }}
+      >
+        打开项目后启动终端
+      </div>
+    );
+  }
+
+  // ============================================
   // 错误 UI：PTY 启动失败或连接断开时显示
   // ============================================
   if (error && !connected) {
@@ -217,6 +239,7 @@ export default function Terminal({ cwd = '/', className }: TerminalProps) {
         </div>
         <button
           onClick={() => {
+            if (!cwd) return;
             setError(null);
             spawn(cwd).catch((err: unknown) => {
               const msg = err instanceof Error ? err.message : String(err);

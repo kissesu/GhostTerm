@@ -25,11 +25,20 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+html,
 body {
   margin: 0;
+  padding: 0;
+  border: none;
+  outline: none;
   min-width: 320px;
   min-height: 100vh;
   overflow: hidden;
+  /* 禁止 macOS 橡皮筋滚动效果（双指拖动页面晃动） */
+  overscroll-behavior: none;
+  /* 禁止用户选择文本（桌面应用行为，编辑器/终端各自管理选择） */
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 #root {
