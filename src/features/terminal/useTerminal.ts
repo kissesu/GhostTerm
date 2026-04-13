@@ -41,6 +41,12 @@ export function useTerminal(): UseTerminalResult {
     // wsPort/wsToken 均有值时才建立连接
     if (!wsPort || !wsToken) return;
 
+    // aborted 标记：effect 被清理后设为 true
+    // 解决 React StrictMode 双重挂载：第一次 effect 创建的 WebSocket
+    // 在 CONNECTING 状态时被清理，不直接 close（避免浏览器报 "closed before established"），
+    // 而是让 onopen 回调检查 aborted 后自行关闭
+    let aborted = false;
+
     // 清理旧的重连定时器
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
@@ -60,16 +66,22 @@ export function useTerminal(): UseTerminalResult {
     wsRef.current = ws;
 
     ws.onopen = () => {
+      if (aborted) {
+        // StrictMode 清理后连接才建立成功 → 关闭这个过时连接
+        ws.close();
+        return;
+      }
       setConnected(true);
     };
 
     ws.onclose = () => {
+      if (aborted) return; // effect 已清理，不触发重连
       setConnected(false);
       // 非主动关闭时，延迟 1s 重连（防止快速循环）
       if (!intentionalCloseRef.current) {
         reconnectTimerRef.current = setTimeout(() => {
           reconnect().catch(() => {
-            // PTY 已不存在，静默失败（不降级，直接暴露状态）
+            // PTY 已不存在，静默失败
           });
         }, 1000);
       }
@@ -80,15 +92,15 @@ export function useTerminal(): UseTerminalResult {
     };
 
     return () => {
-      // Effect 清理：组件卸载或依赖项变化时关闭 WebSocket
+      aborted = true;
       intentionalCloseRef.current = true;
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current);
       }
-      // 仅在连接已建立（OPEN）或正在建立（CONNECTING）时关闭
-      // CONNECTING 状态下 close() 会触发 "closed before established" 警告，
-      // 但不关闭会导致游离连接，因此仍需关闭
-      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+      // 仅关闭已连接的 WebSocket
+      // CONNECTING 状态不主动 close（避免 "closed before established" 警告）
+      // 该连接最终会在 onopen 中通过 aborted 标记被关闭
+      if (ws.readyState === WebSocket.OPEN) {
         ws.close();
       }
     };
