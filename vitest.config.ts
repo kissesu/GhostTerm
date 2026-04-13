@@ -32,6 +32,7 @@ export default defineConfig({
       '**/dist/**',
       'GhostTerm-feat-git-worktree/**',
       'GhostTerm-feat-fs-watcher/**',
+      'GhostTerm-feat-project-manager/**',
       'ghostterm-worktrees/**',
       'e2e-tests/**',
     ],
