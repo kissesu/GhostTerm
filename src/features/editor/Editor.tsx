@@ -1,0 +1,277 @@
+/**
+ * @file Editor.tsx - CodeMirror 6 编辑器组件
+ * @description 多标签文件编辑器：根据 activeFilePath 渲染对应文件的 CodeMirror 6 实例
+ *              支持语法高亮（Lezer 动态加载）、暗色主题、Cmd/Ctrl+S 保存快捷键
+ *              对 binary/large/error 类型文件展示对应的占位状态
+ * @author Atlas.oi
+ * @date 2026-04-13
+ */
+
+import { useEffect, useRef, useCallback } from 'react';
+import { EditorView, basicSetup } from '@codemirror/view';
+import { EditorState, Compartment } from '@codemirror/state';
+import { oneDark } from '@codemirror/theme-one-dark';
+import type { LanguageSupport } from '@codemirror/language';
+import { useEditorStore } from './editorStore';
+
+/** 语言包动态映射表 - 按需 import 避免打包体积过大 */
+const LANG_MAP: Record<string, () => Promise<LanguageSupport>> = {
+  js: () => import('@codemirror/lang-javascript').then((m) => m.javascript()),
+  jsx: () => import('@codemirror/lang-javascript').then((m) => m.javascript({ jsx: true })),
+  ts: () => import('@codemirror/lang-javascript').then((m) => m.javascript({ typescript: true })),
+  tsx: () => import('@codemirror/lang-javascript').then((m) =>
+    m.javascript({ jsx: true, typescript: true })
+  ),
+  rs: () => import('@codemirror/lang-rust').then((m) => m.rust()),
+  json: () => import('@codemirror/lang-json').then((m) => m.json()),
+  html: () => import('@codemirror/lang-html').then((m) => m.html()),
+  css: () => import('@codemirror/lang-css').then((m) => m.css()),
+  py: () => import('@codemirror/lang-python').then((m) => m.python()),
+};
+
+/** 语言隔间 - 用于运行时动态切换语法高亮，无需重建整个编辑器状态 */
+const langCompartment = new Compartment();
+
+export default function Editor() {
+  const { openFiles, activeFilePath, saveFile, updateContent } = useEditorStore();
+
+  // CodeMirror 挂载 DOM 容器引用
+  const editorContainerRef = useRef<HTMLDivElement>(null);
+  // CodeMirror EditorView 实例引用，用于销毁和更新
+  const viewRef = useRef<EditorView | null>(null);
+  // 追踪上一次渲染的文件路径，用于判断是否需要重建编辑器
+  const prevPathRef = useRef<string | null>(null);
+
+  const activeFile = openFiles.find((f) => f.path === activeFilePath) ?? null;
+
+  // ============================================
+  // Cmd/Ctrl+S 保存快捷键
+  // 挂载到 document 以捕获焦点在 CodeMirror 内部时的按键事件
+  // ============================================
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        if (activeFilePath) {
+          saveFile(activeFilePath);
+        }
+      }
+    },
+    [activeFilePath, saveFile]
+  );
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [handleKeyDown]);
+
+  // ============================================
+  // CodeMirror 编辑器生命周期管理
+  // 切换文件时销毁旧实例，重建新实例
+  // ============================================
+  useEffect(() => {
+    // 非 text 类型文件不需要 CodeMirror 实例
+    if (!activeFile || activeFile.kind !== 'text') {
+      if (viewRef.current) {
+        viewRef.current.destroy();
+        viewRef.current = null;
+      }
+      return;
+    }
+
+    if (!editorContainerRef.current) return;
+
+    // 切换文件时销毁旧实例
+    if (viewRef.current && prevPathRef.current !== activeFilePath) {
+      viewRef.current.destroy();
+      viewRef.current = null;
+    }
+
+    prevPathRef.current = activeFilePath;
+
+    // 创建新的 EditorView 实例
+    const state = EditorState.create({
+      doc: activeFile.content,
+      extensions: [
+        basicSetup,
+        oneDark,
+        // 语言隔间初始为空，异步加载后通过 dispatch 更新
+        langCompartment.of([]),
+        // 监听内容变化，更新 editorStore
+        EditorView.updateListener.of((update) => {
+          if (update.docChanged) {
+            const newContent = update.state.doc.toString();
+            if (activeFilePath) {
+              updateContent(activeFilePath, newContent);
+            }
+          }
+        }),
+        // 编辑器基本样式
+        EditorView.theme({
+          '&': { height: '100%', fontSize: '13px' },
+          '.cm-scroller': { overflow: 'auto', fontFamily: 'JetBrains Mono, Menlo, monospace' },
+        }),
+      ],
+    });
+
+    const view = new EditorView({
+      state,
+      parent: editorContainerRef.current,
+    });
+
+    viewRef.current = view;
+
+    // 异步加载语言包并注入
+    const langLoader = LANG_MAP[activeFile.language];
+    if (langLoader) {
+      langLoader().then((lang) => {
+        if (viewRef.current && prevPathRef.current === activeFilePath) {
+          viewRef.current.dispatch({
+            effects: langCompartment.reconfigure(lang),
+          });
+        }
+      });
+    }
+
+    return () => {
+      // cleanup：组件卸载时销毁实例
+    };
+  }, [activeFilePath, activeFile?.kind]);
+
+  // ============================================
+  // 组件卸载时销毁 CodeMirror 实例
+  // ============================================
+  useEffect(() => {
+    return () => {
+      if (viewRef.current) {
+        viewRef.current.destroy();
+        viewRef.current = null;
+      }
+    };
+  }, []);
+
+  // ============================================
+  // 渲染：根据文件类型展示不同 UI
+  // ============================================
+
+  // 无激活文件：空白欢迎状态
+  if (!activeFile) {
+    return (
+      <div
+        data-testid="editor-empty"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100%',
+          color: '#565f89',
+          fontSize: '14px',
+          flexDirection: 'column',
+          gap: '8px',
+        }}
+      >
+        <span>打开文件以开始编辑</span>
+      </div>
+    );
+  }
+
+  // 二进制文件占位符
+  if (activeFile.kind === 'binary') {
+    return (
+      <div
+        data-testid="editor-binary"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100%',
+          color: '#565f89',
+          fontSize: '14px',
+          flexDirection: 'column',
+          gap: '8px',
+        }}
+      >
+        <span>二进制文件，无法编辑</span>
+        {activeFile.mimeHint && (
+          <span style={{ fontSize: '12px', opacity: 0.7 }}>{activeFile.mimeHint}</span>
+        )}
+      </div>
+    );
+  }
+
+  // 大文件只读提示
+  if (activeFile.kind === 'large') {
+    return (
+      <div
+        data-testid="editor-large"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100%',
+          color: '#e0af68',
+          fontSize: '14px',
+          flexDirection: 'column',
+          gap: '8px',
+        }}
+      >
+        <span>文件过大，无法在编辑器中打开</span>
+        <span style={{ fontSize: '12px', color: '#565f89' }}>
+          建议使用系统默认程序打开
+        </span>
+      </div>
+    );
+  }
+
+  // 错误状态
+  if (activeFile.kind === 'error') {
+    const isEncodingError = activeFile.errorMessage?.includes('Detected encoding:') ?? false;
+    return (
+      <div
+        data-testid="editor-error"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100%',
+          color: '#f7768e',
+          fontSize: '14px',
+          flexDirection: 'column',
+          gap: '12px',
+        }}
+      >
+        <span>{activeFile.errorMessage}</span>
+        {isEncodingError && (
+          <button
+            style={{
+              padding: '6px 16px',
+              borderRadius: '4px',
+              border: '1px solid #565f89',
+              background: 'transparent',
+              color: '#c0caf5',
+              cursor: 'pointer',
+              fontSize: '13px',
+            }}
+            onClick={() => {
+              // TODO: PBI-2 扩展：以 latin1 只读模式重新打开
+              // 当前仅作为 UI 占位，点击无操作
+            }}
+          >
+            以只读模式打开
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // text 文件：CodeMirror 编辑器
+  return (
+    <div
+      data-testid="editor-container"
+      ref={editorContainerRef}
+      style={{ height: '100%', overflow: 'hidden' }}
+    />
+  );
+}
