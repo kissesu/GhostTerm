@@ -44,27 +44,37 @@ pub fn run() {
         // CSS overscroll-behavior 在 WKWebView 上不可靠（wry#557、tauri#4309）
         // ============================================
         .setup(|app| {
+            // macOS: 禁用 WKWebView 弹性滚动 + 设置窗口深色背景
+            // CSS overscroll-behavior 在 WKWebView 上不可靠（wry#557、tauri#4309）
             #[cfg(target_os = "macos")]
             {
                 use tauri::Manager;
-                let main_window = app.get_webview_window("main")
-                    .expect("找不到主窗口");
-                main_window.with_webview(|webview| {
-                    use objc2::msg_send;
-                    use objc2::runtime::AnyObject;
-                    unsafe {
-                        let wk_view: *const AnyObject = webview.inner().cast();
-                        // 获取 WKWebView 的封装 NSScrollView
-                        let scroll_view: *const AnyObject = msg_send![wk_view, enclosingScrollView];
-                        if !scroll_view.is_null() {
-                            // NSScrollElasticityNone = 1
-                            let _: () = msg_send![scroll_view, setHorizontalScrollElasticity: 1_isize];
-                            let _: () = msg_send![scroll_view, setVerticalScrollElasticity: 1_isize];
+                if let Some(main_window) = app.get_webview_window("main") {
+                    // 设置窗口背景色为深色（消除 webview 与窗口之间的白色间隙）
+                    let _ = main_window.with_webview(|webview| {
+                        unsafe {
+                            // 设置窗口背景色为深色（消除 webview 与窗口之间的白色间隙）
+                            let window: &objc2_app_kit::NSWindow = &*webview.ns_window().cast();
+                            let bg = objc2_app_kit::NSColor::colorWithDeviceRed_green_blue_alpha(
+                                0.102, 0.106, 0.149, 1.0, // #1a1b26
+                            );
+                            window.setBackgroundColor(Some(&bg));
+
+                            // 禁用 WKWebView 弹性滚动：
+                            // WKWebView 继承 NSView，通过 objc msg_send 调用 enclosingScrollView
+                            use objc2::msg_send;
+                            let wk_view: *mut objc2::runtime::AnyObject = webview.inner().cast();
+                            let scroll_view: *mut objc2::runtime::AnyObject =
+                                msg_send![wk_view, enclosingScrollView];
+                            if !scroll_view.is_null() {
+                                // NSScrollElasticityNone = 1
+                                let none: isize = 1;
+                                let _: () = msg_send![scroll_view, setHorizontalScrollElasticity: none];
+                                let _: () = msg_send![scroll_view, setVerticalScrollElasticity: none];
+                            }
                         }
-                        // 设置 WKWebView 背景透明（消除白色间隙）
-                        let _: () = msg_send![wk_view, setDrawsBackground: false];
-                    }
-                }).expect("with_webview 失败");
+                    });
+                }
             }
             Ok(())
         })
