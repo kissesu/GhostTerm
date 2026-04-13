@@ -52,3 +52,7 @@ chardetng = "0.1"
 
 # E2E 测试支持 - tauri-webdriver + WebdriverIO 集成（PBI-6 使用）
 tauri-plugin-webdriver-automation = "0.1"
+
+[dev-dependencies]
+# 临时目录工具 - 用于单元测试中创建隔离的文件系统环境
+tempfile = "3"

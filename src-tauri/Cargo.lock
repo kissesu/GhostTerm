@@ -1458,6 +1458,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-opener",
  "tauri-plugin-webdriver-automation",
+ "tempfile",
  "tokio",
  "tokio-tungstenite",
 ]
