@@ -21,6 +21,8 @@ interface SidebarState {
   setTab: (tab: SidebarTab) => void;
   /** 切换侧边栏显示/隐藏 */
   toggleVisibility: () => void;
+  /** 直接设置侧边栏可见状态（用于响应式宽度自动折叠） */
+  setVisibility: (visible: boolean) => void;
 }
 
 export const useSidebarStore = create<SidebarState>((set) => ({
@@ -31,4 +33,7 @@ export const useSidebarStore = create<SidebarState>((set) => ({
   setTab: (tab) => set({ activeTab: tab }),
 
   toggleVisibility: () => set((state) => ({ visible: !state.visible })),
+
+  // 用于响应式布局自动折叠，或程序性地设置可见状态
+  setVisibility: (visible: boolean) => set({ visible }),
 }));

@@ -90,6 +90,8 @@ interface EditorState {
   openFile: (path: string) => Promise<void>;
   /** 关闭文件：从 openFiles 中移除，切换 activeFilePath */
   closeFile: (path: string) => void;
+  /** 关闭所有文件：切换项目时清空编辑器状态 */
+  closeAll: () => void;
   /** 保存文件：invoke write_file_cmd → 更新 diskContent + isDirty=false */
   saveFile: (path: string) => Promise<void>;
   /** 切换激活标签 */
@@ -122,6 +124,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       openFiles: [...state.openFiles, newFile],
       activeFilePath: path,
     }));
+  },
+
+  closeAll: () => {
+    // 切换项目时清空所有已打开文件，避免旧项目文件残留在新项目中
+    set({ openFiles: [], activeFilePath: null });
   },
 
   closeFile: (path: string) => {

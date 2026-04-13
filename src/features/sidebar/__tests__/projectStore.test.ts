@@ -115,3 +115,103 @@ describe('projectStore - loadRecentProjects', () => {
     expect(mockInvoke).toHaveBeenCalledWith('list_recent_projects_cmd');
   });
 });
+
+// ============================================
+// PBI-6.4: openProject 协调链路测试
+// openProject 是 PBI-6 新增的完整协调入口，区别于旧的 switchProject
+// ============================================
+
+// mock 动态 import 路径，拦截 openProject 内部的 lazy import
+// vitest 的 vi.mock 会被 hoist 到文件顶部，确保在 import 前生效
+const mockRefreshFileTree = vi.fn().mockResolvedValue(undefined);
+const mockRefreshGitStatus = vi.fn().mockResolvedValue(undefined);
+const mockRefreshWorktrees = vi.fn().mockResolvedValue(undefined);
+const mockCloseAll = vi.fn();
+
+vi.mock('../fileTreeStore', () => ({
+  useFileTreeStore: {
+    getState: () => ({ refreshFileTree: mockRefreshFileTree }),
+  },
+}));
+
+vi.mock('../gitStore', () => ({
+  useGitStore: {
+    getState: () => ({
+      refreshGitStatus: mockRefreshGitStatus,
+      refreshWorktrees: mockRefreshWorktrees,
+    }),
+  },
+}));
+
+vi.mock('../../editor/editorStore', () => ({
+  useEditorStore: {
+    getState: () => ({ closeAll: mockCloseAll }),
+  },
+}));
+
+describe('projectStore - openProject（PBI-6.4 协调链路）', () => {
+  beforeEach(() => {
+    // 重置所有 mock 函数调用记录
+    mockRefreshFileTree.mockClear();
+    mockRefreshGitStatus.mockClear();
+    mockRefreshWorktrees.mockClear();
+    mockCloseAll.mockClear();
+  });
+
+  it('openProject 应更新 currentProject', async () => {
+    // open_project_cmd 返回项目信息，list_recent_projects_cmd 返回列表
+    mockInvoke
+      .mockResolvedValueOnce(sampleProject)   // open_project_cmd
+      .mockResolvedValueOnce([sampleProject]); // list_recent_projects_cmd（loadRecentProjects 调用）
+
+    await useProjectStore.getState().openProject('/Users/test/ghostterm');
+
+    const state = useProjectStore.getState();
+    expect(state.currentProject).toEqual(sampleProject);
+  });
+
+  it('openProject 应以新项目路径调用 refreshFileTree', async () => {
+    mockInvoke
+      .mockResolvedValueOnce(sampleProject)
+      .mockResolvedValueOnce([sampleProject]);
+
+    await useProjectStore.getState().openProject('/Users/test/ghostterm');
+
+    // fileTreeStore.refreshFileTree 应传入项目路径
+    expect(mockRefreshFileTree).toHaveBeenCalledWith('/Users/test/ghostterm');
+  });
+
+  it('openProject 应并行调用 refreshGitStatus 和 refreshWorktrees', async () => {
+    mockInvoke
+      .mockResolvedValueOnce(sampleProject)
+      .mockResolvedValueOnce([sampleProject]);
+
+    await useProjectStore.getState().openProject('/Users/test/ghostterm');
+
+    // 两者均应以项目路径调用
+    expect(mockRefreshGitStatus).toHaveBeenCalledWith('/Users/test/ghostterm');
+    expect(mockRefreshWorktrees).toHaveBeenCalledWith('/Users/test/ghostterm');
+  });
+
+  it('openProject 应调用 editorStore.closeAll 清除旧文件', async () => {
+    mockInvoke
+      .mockResolvedValueOnce(sampleProject)
+      .mockResolvedValueOnce([sampleProject]);
+
+    await useProjectStore.getState().openProject('/Users/test/ghostterm');
+
+    // 切换项目时应关闭所有已打开的编辑器文件
+    expect(mockCloseAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('openProject 应刷新 recentProjects', async () => {
+    mockInvoke
+      .mockResolvedValueOnce(sampleProject)
+      .mockResolvedValueOnce([sampleProject, anotherProject]); // loadRecentProjects 返回
+
+    await useProjectStore.getState().openProject('/Users/test/ghostterm');
+
+    const state = useProjectStore.getState();
+    expect(state.recentProjects).toHaveLength(2);
+  });
+});

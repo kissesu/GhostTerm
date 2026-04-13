@@ -26,12 +26,14 @@ export default defineConfig({
     // 使用绝对路径避免 git worktree 中 .git 文件导致的根目录解析偏移
     setupFiles: [fileURLToPath(new URL('./src/test/setup.ts', import.meta.url))],
     // 排除嵌套 worktree 目录（它们有独立的测试运行环境，避免 React 双实例问题）
+    // e2e-tests/ 使用 WebdriverIO + mocha 运行（需真实 Tauri webview），不在 vitest 中运行
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
       'GhostTerm-feat-git-worktree/**',
       'GhostTerm-feat-fs-watcher/**',
       'ghostterm-worktrees/**',
+      'e2e-tests/**',
     ],
     // 覆盖率配置
     coverage: {

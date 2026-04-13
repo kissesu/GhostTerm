@@ -1,11 +1,11 @@
 /**
  * @file AppLayout.test.tsx
- * @description AppLayout Cmd+B 快捷键测试 - 验证侧边栏显隐切换
+ * @description AppLayout 行为测试 - 快捷键、焦点切换、窗口自适应折叠（PBI-6.5）
  * @author Atlas.oi
  * @date 2026-04-13
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import AppLayout from '../AppLayout';
 import { useSidebarStore } from '../../features/sidebar';
@@ -56,6 +56,95 @@ describe('AppLayout - Cmd+B 快捷键', () => {
   it('其他快捷键不应影响侧边栏', () => {
     render(<AppLayout />);
     fireEvent.keyDown(window, { key: 'p', metaKey: true });
+    expect(screen.getByTestId('sidebar-root')).toBeInTheDocument();
+  });
+});
+
+// ============================================
+// PBI-6.5: Cmd+` 焦点切换测试
+// AppLayout 通过 data-active-panel 属性反映当前焦点面板
+// ============================================
+describe('AppLayout - Cmd+` 焦点切换', () => {
+  it('Cmd+` 应将焦点切换到终端面板', () => {
+    const { container } = render(<AppLayout />);
+    // 初始焦点在编辑器
+    const root = container.querySelector('[data-active-panel]');
+    expect(root).toHaveAttribute('data-active-panel', 'editor');
+
+    fireEvent.keyDown(window, { key: '`', metaKey: true });
+
+    expect(root).toHaveAttribute('data-active-panel', 'terminal');
+  });
+
+  it('再次 Cmd+` 应将焦点切回编辑器面板', () => {
+    const { container } = render(<AppLayout />);
+    const root = container.querySelector('[data-active-panel]');
+
+    // 第一次切换到终端
+    fireEvent.keyDown(window, { key: '`', metaKey: true });
+    expect(root).toHaveAttribute('data-active-panel', 'terminal');
+
+    // 第二次切回编辑器（handleFocusToggle 中若当前已是目标面板则切回 editor）
+    fireEvent.keyDown(window, { key: '`', metaKey: true });
+    expect(root).toHaveAttribute('data-active-panel', 'editor');
+  });
+
+  it('Ctrl+` 也应切换焦点（跨平台兼容）', () => {
+    const { container } = render(<AppLayout />);
+    const root = container.querySelector('[data-active-panel]');
+
+    fireEvent.keyDown(window, { key: '`', ctrlKey: true });
+
+    expect(root).toHaveAttribute('data-active-panel', 'terminal');
+  });
+});
+
+// ============================================
+// PBI-6.5: 窗口宽度自动折叠侧边栏测试
+// 窗口宽度 < 800px 时应自动隐藏侧边栏
+// ============================================
+describe('AppLayout - 窗口宽度自动折叠侧边栏', () => {
+  afterEach(() => {
+    // 恢复默认宽度，避免影响后续测试
+    Object.defineProperty(window, 'innerWidth', {
+      value: 1280,
+      configurable: true,
+      writable: true,
+    });
+  });
+
+  it('窗口宽度 < 800px 时应自动隐藏侧边栏', () => {
+    // 先设置宽度为窄屏再渲染，useEffect 初次执行时 checkWidth 会触发
+    Object.defineProperty(window, 'innerWidth', {
+      value: 600,
+      configurable: true,
+      writable: true,
+    });
+    render(<AppLayout />);
+
+    // 侧边栏应被自动折叠
+    expect(screen.queryByTestId('sidebar-root')).not.toBeInTheDocument();
+  });
+
+  it('窗口宽度恢复 >= 800px 时应自动展开侧边栏', () => {
+    // 先在窄屏下渲染（自动折叠）
+    Object.defineProperty(window, 'innerWidth', {
+      value: 600,
+      configurable: true,
+      writable: true,
+    });
+    render(<AppLayout />);
+    expect(screen.queryByTestId('sidebar-root')).not.toBeInTheDocument();
+
+    // 恢复宽度并触发 resize 事件
+    Object.defineProperty(window, 'innerWidth', {
+      value: 1280,
+      configurable: true,
+      writable: true,
+    });
+    fireEvent(window, new Event('resize'));
+
+    // 侧边栏应自动展开
     expect(screen.getByTestId('sidebar-root')).toBeInTheDocument();
   });
 });
