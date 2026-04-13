@@ -7,6 +7,9 @@
 pub mod watcher;
 pub mod security;
 
+// 导出 watcher 的 Tauri Commands，供 lib.rs 注册
+pub use watcher::{start_watching_cmd, stop_watching_cmd};
+
 use crate::types::{FileEntry, ReadFileResult};
 use security::check_write_path;
 use std::fs;
