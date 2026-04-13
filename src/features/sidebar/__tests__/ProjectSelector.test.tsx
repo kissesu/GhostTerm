@@ -94,8 +94,19 @@ describe('ProjectSelector - 下拉列表', () => {
   });
 
   it('点击最近项目应调用 switchProject', async () => {
+    // openProject 协调链路需要多个 invoke（共 6 次）：
+    // 1. open_project_cmd → 返回新项目信息
+    // 2. list_dir_cmd → refreshFileTree（返回空数组）
+    // 3. git_status_cmd → refreshGitStatus 之一（并行）
+    // 4. git_current_branch_cmd → refreshGitStatus 之二（并行）
+    // 5. worktree_list_cmd → refreshWorktrees（并行）
+    // 6. list_recent_projects_cmd → loadRecentProjects
     mockInvoke
       .mockResolvedValueOnce(recentProjects[1])   // open_project_cmd
+      .mockResolvedValueOnce([])                  // list_dir_cmd
+      .mockResolvedValueOnce([])                  // git_status_cmd（并行）
+      .mockResolvedValueOnce('main')              // git_current_branch_cmd（并行）
+      .mockResolvedValueOnce([])                  // worktree_list_cmd（并行）
       .mockResolvedValueOnce(recentProjects);      // list_recent_projects_cmd
 
     render(<ProjectSelector />);
@@ -105,26 +116,36 @@ describe('ProjectSelector - 下拉列表', () => {
     const options = screen.getAllByRole('option');
     fireEvent.click(options[1]);
 
+    // 等待完整异步链路完成（6 次 invoke 调用全部结束）
+    // 避免异步操作在测试结束后继续执行导致 unhandled error
     await waitFor(() => {
-      expect(mockInvoke).toHaveBeenCalledWith('open_project_cmd', {
-        path: '/Users/atlas/my-app',
-      });
+      expect(mockInvoke).toHaveBeenCalledTimes(6);
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith('open_project_cmd', {
+      path: '/Users/atlas/my-app',
     });
   });
 
   it('点击项目后下拉列表应关闭', async () => {
     mockInvoke
-      .mockResolvedValueOnce(recentProjects[1])
-      .mockResolvedValueOnce(recentProjects);
+      .mockResolvedValueOnce(recentProjects[1])   // open_project_cmd
+      .mockResolvedValueOnce([])                  // list_dir_cmd
+      .mockResolvedValueOnce([])                  // git_status_cmd
+      .mockResolvedValueOnce('main')              // git_current_branch_cmd
+      .mockResolvedValueOnce([])                  // worktree_list_cmd
+      .mockResolvedValueOnce(recentProjects);      // list_recent_projects_cmd
 
     render(<ProjectSelector />);
     fireEvent.click(screen.getByRole('button', { name: '选择项目' }));
     const options = screen.getAllByRole('option');
     fireEvent.click(options[1]);
 
+    // 等待完整异步链路完成后再断言 UI 状态
     await waitFor(() => {
-      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      expect(mockInvoke).toHaveBeenCalledTimes(6);
     });
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
   });
 });
 

@@ -3,13 +3,15 @@
 //               协调项目打开/关闭时的状态更新。
 //               使用 Mutex 保护内存中的当前项目状态，通过 persistence 模块持久化。
 //               PBI-6：open_project 协调 watcher 生命周期 + PTY spawn/kill（stop旧+start新）。
+//               PROJECT_SWITCH_LOCK 保证项目切换操作串行化，避免并发调用导致 PTY 泄漏。
 // @author: Atlas.oi
 // @date: 2026-04-13
 
 pub mod persistence;
 
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
+use tokio::sync::Mutex as TokioMutex;
 use crate::types::ProjectInfo;
 use crate::fs_backend::watcher::{start_watching, stop_watching};
 use persistence::{load_projects, save_projects};
@@ -26,6 +28,15 @@ pub static CURRENT_PROJECT: Mutex<Option<ProjectInfo>> = Mutex::new(None);
 /// project_manager 跟踪此 ID，以便 close_project 或切换项目时精确 kill 旧 PTY
 /// open_project 时先 kill 旧 PTY，再 spawn 新 PTY，避免 PTY 泄漏
 pub static CURRENT_PTY_ID: Mutex<Option<String>> = Mutex::new(None);
+
+/// 项目切换操作串行化锁
+/// 防止多次并发调用 open_project/close_project 导致 PTY 泄漏和状态不一致
+/// 使用 tokio::sync::Mutex：其 guard 实现 Send，可安全跨 await 持有
+static PROJECT_SWITCH_LOCK: OnceLock<TokioMutex<()>> = OnceLock::new();
+
+fn project_switch_lock() -> &'static TokioMutex<()> {
+    PROJECT_SWITCH_LOCK.get_or_init(TokioMutex::default)
+}
 
 /// 获取 projects.json 的存储路径
 ///
@@ -115,18 +126,28 @@ fn open_project_inner(path: &str) -> Result<ProjectInfo, String> {
 /// 打开指定路径的项目（PBI-6 协调版本：watcher + PTY 生命周期管理）
 ///
 /// 业务逻辑：
-/// 1. 调用 open_project_inner 完成核心业务（持久化、列表更新）
-/// 2. kill 旧 PTY（若存在），释放资源
-/// 3. 停止旧文件监听（若存在）
-/// 4. 为新项目路径启动文件监听
-/// 5. spawn 新 PTY 并记录 ID
+/// 1. 获取串行化锁（防止并发切换导致 PTY 泄漏）
+/// 2. 调用 open_project_inner 完成核心业务（持久化、列表更新、CURRENT_PROJECT）
+/// 3. kill 旧 PTY（若存在），释放资源
+/// 4. 停止旧文件监听（若存在）
+/// 5. 为新项目路径启动文件监听
+/// 6. spawn 新 PTY 并记录 ID
+///    ↑ 若步骤 5/6 失败，清空 CURRENT_PROJECT 为 None 并返回错误
+///    为什么不回滚到旧值：旧 PTY 和 watcher 已被释放，回滚只会制造
+///    "看似旧项目仍在但实际无资源"的虚假状态，不如诚实暴露错误
 pub async fn open_project(path: &str, app: &tauri::AppHandle) -> Result<ProjectInfo, String> {
+    // ============================================
+    // 串行化锁：保证 open_project/close_project 不并发执行
+    // tokio::sync::MutexGuard 实现 Send，可安全跨 await 持有
+    // ============================================
+    let _guard = project_switch_lock().lock().await;
+
+    // open_project_inner 完成持久化并设置 CURRENT_PROJECT
     let project = open_project_inner(path)?;
 
     // ============================================
     // kill 旧 PTY（若存在），避免 PTY 泄漏
-    // 必须在 await 前通过独立作用域释放 MutexGuard，
-    // 否则 std::sync::MutexGuard 不满足 Send 导致编译错误
+    // 使用块 scope 确保 std::sync::MutexGuard 在 await 前释放
     // ============================================
     let old_pty_id = { CURRENT_PTY_ID.lock().expect("PTY ID 锁").take() };
     if let Some(id) = old_pty_id {
@@ -136,20 +157,35 @@ pub async fn open_project(path: &str, app: &tauri::AppHandle) -> Result<ProjectI
     // 停止旧监听（之前可能未启动，忽略错误不影响主流程）
     stop_watching().ok();
 
-    // 为新项目路径启动 watcher
-    start_watching(path, app.clone())?;
+    // ============================================
+    // 启动新 watcher
+    // 失败时：清空 CURRENT_PROJECT（旧资源已释放，无法回滚到旧项目）
+    // ============================================
+    if let Err(e) = start_watching(path, app.clone()) {
+        { *CURRENT_PROJECT.lock().expect("获取项目锁失败") = None; }
+        return Err(e);
+    }
 
     // ============================================
     // spawn 新 PTY，使用系统默认 shell
     // 项目打开时预先建立 PTY，前端 Terminal 组件 mount 时直接连接
+    // 失败时：停止已启动的 watcher，清空 CURRENT_PROJECT
     // ============================================
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
-    let pty_info = crate::pty_manager::spawn_pty(
+    let pty_info = match crate::pty_manager::spawn_pty(
         &shell,
         path,
         std::collections::HashMap::new(),
     )
-    .await?;
+    .await
+    {
+        Ok(info) => info,
+        Err(e) => {
+            stop_watching().ok();
+            { *CURRENT_PROJECT.lock().expect("获取项目锁失败") = None; }
+            return Err(e);
+        }
+    };
 
     // 记录新 PTY ID（独立作用域，避免 guard 跨越后续代码）
     { *CURRENT_PTY_ID.lock().expect("PTY ID 锁") = Some(pty_info.pty_id.clone()); }
@@ -165,9 +201,12 @@ pub async fn open_project(path: &str, app: &tauri::AppHandle) -> Result<ProjectI
 /// 3. 清空内存中的当前项目状态
 /// 4. 不修改 projects.json（历史记录保留）
 pub async fn close_project() -> Result<(), String> {
+    // 获取串行化锁，防止与 open_project 并发执行
+    let _guard = project_switch_lock().lock().await;
+
     // ============================================
     // kill 当前 PTY（若存在）
-    // 用块 {} 确保 MutexGuard 在 await 前释放：
+    // 用块 {} 确保 std::sync::MutexGuard 在 await 前释放：
     // std::sync::MutexGuard 不是 Send，不能跨 await 存活
     // ============================================
     let old_pty_id = { CURRENT_PTY_ID.lock().expect("PTY ID 锁").take() };

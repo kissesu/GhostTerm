@@ -51,7 +51,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
    */
   openProject: async (path: string) => {
     // ============================================
-    // 第一步：通知后端打开项目（协调 watcher）
+    // 第一步：通知后端打开项目（协调 watcher + PTY）
     // ============================================
     const project = await invoke<ProjectInfo>('open_project_cmd', { path });
     set({ currentProject: project });
@@ -80,26 +80,19 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     // ============================================
     // 第五步：刷新最近项目列表（后端已更新排序）
+    // 注意：如果此处或上方步骤失败，currentProject 保持为已切换的新项目（与后端一致）
+    // 错误由调用方（handleSelect）捕获并记录，不清空 currentProject 以避免前后端分叉
     // ============================================
     await get().loadRecentProjects();
   },
 
   /**
-   * 切换到指定路径的项目（兼容旧接口）
+   * 切换到指定路径的项目（兼容旧接口，委托给 openProject）
    *
-   * 业务逻辑：
-   * 1. 调用后端 open_project_cmd，获取项目信息并更新内存状态
-   * 2. 再调用 list_recent_projects_cmd 刷新最近项目列表（后端已更新排序）
-   *
-   * 注意：此方法保留以兼容现有测试，新代码请使用 openProject
+   * @deprecated 请直接使用 openProject，此方法仅保留以兼容现有调用
    */
   switchProject: async (path: string) => {
-    const project = await invoke<ProjectInfo>('open_project_cmd', { path });
-    set({ currentProject: project });
-
-    // 刷新最近项目列表（后端已将新项目插入头部）
-    const recentProjects = await invoke<ProjectInfo[]>('list_recent_projects_cmd');
-    set({ recentProjects });
+    return get().openProject(path);
   },
 
   /**

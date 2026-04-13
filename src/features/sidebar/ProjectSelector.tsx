@@ -30,7 +30,13 @@ export default function ProjectSelector() {
 
   const handleSelect = async (path: string) => {
     setOpen(false);
-    await switchProject(path);
+    try {
+      await switchProject(path);
+    } catch (err) {
+      // 捕获防止 unhandled promise rejection
+      // currentProject 保持为已切换的项目（与后端一致），不清空
+      console.error('[ProjectSelector] 切换项目失败:', err);
+    }
   };
 
   return (
