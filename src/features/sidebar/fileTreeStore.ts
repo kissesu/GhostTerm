@@ -138,12 +138,83 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => ({
    * 当前为骨架实现，仅记录事件类型，不修改树状态。
    * PBI-4 完善后将处理 created/deleted/renamed/modified 各类事件。
    */
+  /**
+   * 应用文件系统事件（增量更新）
+   *
+   * 业务逻辑说明：
+   * 1. created  → 调用 list_dir_cmd 刷新父目录，将新节点插入父节点的 children
+   * 2. deleted  → 深度优先搜索并移除对应节点（含嵌套子目录）
+   * 3. modified → 只影响文件内容，树结构无需变化（editorStore 负责刷新内容）
+   * 4. renamed  → 移除旧路径节点 + 刷新父目录插入新路径节点
+   */
   applyFsEvent: (event: FsEvent) => {
-    // PBI-4 完善：根据事件类型增量更新树节点
-    // created → 在对应父目录 children 中插入新节点
-    // deleted → 从树中移除对应节点
-    // renamed → 更新节点路径
-    // modified → 无需修改树结构（仅文件内容变化）
-    console.log('[fileTreeStore] FsEvent received (PBI-4 to implement):', event.type);
+    const { tree } = get();
+
+    /**
+     * 递归移除指定路径的节点（纯函数，返回新数组）
+     */
+    const removeNodeByPath = (nodes: FileNode[], targetPath: string): FileNode[] =>
+      nodes
+        .filter((n) => n.entry.path !== targetPath)
+        .map((n) =>
+          n.children
+            ? { ...n, children: removeNodeByPath(n.children, targetPath) }
+            : n
+        );
+
+    /**
+     * 刷新父目录内容并更新树中对应节点的 children
+     * 使用 async/await 包裹，异常只记录日志不冒泡
+     */
+    const refreshParentDir = async (parentPath: string, treeSnapshot: FileNode[]) => {
+      try {
+        const entries = await invoke<FileEntry[]>('list_dir_cmd', { path: parentPath });
+        const newChildren: FileNode[] = entries.map((entry) => ({
+          entry,
+          children: entry.is_dir ? undefined : null,
+        }));
+
+        const parentNode = findNodeByPath(treeSnapshot, parentPath);
+        if (parentNode) {
+          set({ tree: updateNodeChildren(treeSnapshot, parentPath, newChildren) });
+        }
+      } catch (e) {
+        console.error('[fileTreeStore] 刷新父目录失败:', e);
+      }
+    };
+
+    switch (event.type) {
+      case 'created': {
+        // 新文件创建：找到其父目录节点，重新从后端加载父目录内容
+        const parentPath = event.path.substring(0, event.path.lastIndexOf('/')) || '/';
+        // 传入当前树快照，async 过程不阻塞 applyFsEvent
+        refreshParentDir(parentPath, tree);
+        break;
+      }
+
+      case 'deleted': {
+        // 文件/目录删除：从树中递归移除对应节点（同步操作）
+        set({ tree: removeNodeByPath(tree, event.path) });
+        break;
+      }
+
+      case 'modified': {
+        // 文件内容修改：树结构不变，editorStore 负责刷新已打开文件的内容
+        break;
+      }
+
+      case 'renamed': {
+        // 重命名：
+        // 第一步（同步）：移除旧路径节点，立即更新树
+        const { old_path, new_path } = event;
+        const treeAfterRemove = removeNodeByPath(tree, old_path);
+        set({ tree: treeAfterRemove });
+
+        // 第二步（异步）：刷新新路径的父目录
+        const newParentPath = new_path.substring(0, new_path.lastIndexOf('/')) || '/';
+        refreshParentDir(newParentPath, treeAfterRemove);
+        break;
+      }
+    }
   },
 }));
