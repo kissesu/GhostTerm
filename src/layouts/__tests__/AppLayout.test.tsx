@@ -126,7 +126,7 @@ describe('AppLayout - 窗口宽度自动折叠侧边栏', () => {
     expect(screen.queryByTestId('sidebar-root')).not.toBeInTheDocument();
   });
 
-  it('窗口宽度恢复 >= 800px 时应自动展开侧边栏', () => {
+  it('窗口宽度恢复 >= 800px 时应自动展开侧边栏（自动折叠场景）', () => {
     // 先在窄屏下渲染（自动折叠）
     Object.defineProperty(window, 'innerWidth', {
       value: 600,
@@ -144,7 +144,28 @@ describe('AppLayout - 窗口宽度自动折叠侧边栏', () => {
     });
     fireEvent(window, new Event('resize'));
 
-    // 侧边栏应自动展开
+    // 侧边栏应自动展开（因为是自动折叠，userCollapsedRef=false）
     expect(screen.getByTestId('sidebar-root')).toBeInTheDocument();
+  });
+
+  it('用户手动 Cmd+B 折叠后，窗口宽度恢复时不应自动展开', () => {
+    // 在宽屏下渲染
+    Object.defineProperty(window, 'innerWidth', {
+      value: 1280,
+      configurable: true,
+      writable: true,
+    });
+    render(<AppLayout />);
+    expect(screen.getByTestId('sidebar-root')).toBeInTheDocument();
+
+    // 用户手动 Cmd+B 折叠（userCollapsedRef 应变为 true）
+    fireEvent.keyDown(window, { key: 'b', metaKey: true });
+    expect(screen.queryByTestId('sidebar-root')).not.toBeInTheDocument();
+
+    // 触发 resize（仍是宽屏）——应保持折叠，不自动恢复
+    fireEvent(window, new Event('resize'));
+
+    // 侧边栏应保持隐藏（用户意图被尊重）
+    expect(screen.queryByTestId('sidebar-root')).not.toBeInTheDocument();
   });
 });

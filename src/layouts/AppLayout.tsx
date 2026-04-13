@@ -33,6 +33,8 @@ export default function AppLayout() {
   const [activePanel, setActivePanel] = useState<'editor' | 'terminal'>('editor');
 
   // 记录用户手动设置的侧边栏状态，避免 resize 事件覆盖用户意图
+  // true = 用户手动折叠（resize 宽度恢复后不自动展开）
+  // false = 自动折叠或用户手动展开（resize 宽度恢复后允许自动展开）
   const userCollapsedRef = useRef(false);
 
   // ============================================
@@ -44,10 +46,23 @@ export default function AppLayout() {
   }, []);
 
   // ============================================
+  // Cmd+B 侧边栏切换回调（传给 useKeyboardShortcuts）
+  // 更新 userCollapsedRef，区分用户主动折叠和自动折叠
+  // 使 resize 逻辑知道是否应该自动恢复侧边栏
+  // ============================================
+  const handleSidebarToggle = useCallback(() => {
+    const { visible, toggleVisibility } = useSidebarStore.getState();
+    // 即将折叠（visible=true）→ 标记为用户手动折叠（不允许 resize 自动恢复）
+    // 即将展开（visible=false）→ 清除手动折叠标记（允许 resize 再次自动折叠/展开）
+    userCollapsedRef.current = visible;
+    toggleVisibility();
+  }, []);
+
+  // ============================================
   // 注册全局快捷键（Cmd+B / Cmd+` / Cmd+S）
   // 替换原先散落在各组件的 keydown 监听，统一管理
   // ============================================
-  useKeyboardShortcuts(handleFocusToggle);
+  useKeyboardShortcuts(handleFocusToggle, handleSidebarToggle);
 
   // ============================================
   // 窗口宽度 < 800px 时自动折叠侧边栏

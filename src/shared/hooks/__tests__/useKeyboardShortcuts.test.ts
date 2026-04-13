@@ -20,7 +20,7 @@ beforeEach(() => {
 });
 
 describe('useKeyboardShortcuts - Cmd+B 侧边栏切换', () => {
-  it('Cmd+B 应调用 sidebarStore.toggleVisibility', () => {
+  it('Cmd+B 应调用 sidebarStore.toggleVisibility（无 onSidebarToggle 时直接操作 store）', () => {
     // 监视 toggleVisibility 函数
     const mockToggle = vi.fn();
     useSidebarStore.setState({ toggleVisibility: mockToggle });
@@ -29,6 +29,20 @@ describe('useKeyboardShortcuts - Cmd+B 侧边栏切换', () => {
     fireEvent.keyDown(window, { key: 'b', metaKey: true });
 
     expect(mockToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it('提供 onSidebarToggle 时 Cmd+B 应调用回调而非直接操作 store', () => {
+    // 有回调时优先走回调，让布局组件同步 userCollapsedRef
+    const mockToggle = vi.fn();
+    const onSidebarToggle = vi.fn();
+    useSidebarStore.setState({ toggleVisibility: mockToggle });
+
+    renderHook(() => useKeyboardShortcuts(undefined, onSidebarToggle));
+    fireEvent.keyDown(window, { key: 'b', metaKey: true });
+
+    expect(onSidebarToggle).toHaveBeenCalledTimes(1);
+    // store 的 toggleVisibility 不应被直接调用（由回调负责）
+    expect(mockToggle).not.toHaveBeenCalled();
   });
 
   it('Ctrl+B 也应触发 toggleVisibility（跨平台）', () => {

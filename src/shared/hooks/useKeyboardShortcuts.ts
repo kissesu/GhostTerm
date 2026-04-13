@@ -15,14 +15,16 @@ import { useEditorStore } from '../../features/editor/editorStore';
  * 注册全局键盘快捷键
  *
  * 业务逻辑：
- * 1. Cmd/Ctrl+B  → 切换侧边栏显隐（委托 sidebarStore.toggleVisibility）
+ * 1. Cmd/Ctrl+B  → 切换侧边栏显隐（优先调用 onSidebarToggle，否则直接 toggleVisibility）
  * 2. Cmd/Ctrl+`  → 在编辑器和终端面板间切换焦点（通过回调通知布局组件）
  * 3. Cmd/Ctrl+S  → 保存当前激活的编辑器文件（委托 editorStore.saveFile）
  *
  * @param onFocusToggle - 焦点切换回调，由布局组件提供，参数为目标面板 ('editor' | 'terminal')
+ * @param onSidebarToggle - 侧边栏切换回调，布局组件可借此同步 userCollapsedRef 状态
  */
 export function useKeyboardShortcuts(
   onFocusToggle?: (panel: 'editor' | 'terminal') => void,
+  onSidebarToggle?: () => void,
 ): void {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -32,11 +34,16 @@ export function useKeyboardShortcuts(
       switch (e.key) {
         // ============================================
         // Cmd+B：切换侧边栏显隐
-        // 与 VSCode 保持一致的快捷键习惯
+        // 若布局组件提供 onSidebarToggle 回调则优先调用（以便同步 userCollapsedRef）
+        // 否则直接操作 store（Hook 在无布局组件时的自包含模式）
         // ============================================
         case 'b': {
           e.preventDefault();
-          useSidebarStore.getState().toggleVisibility();
+          if (onSidebarToggle) {
+            onSidebarToggle();
+          } else {
+            useSidebarStore.getState().toggleVisibility();
+          }
           break;
         }
 
@@ -73,5 +80,5 @@ export function useKeyboardShortcuts(
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [onFocusToggle]);
+  }, [onFocusToggle, onSidebarToggle]);
 }
