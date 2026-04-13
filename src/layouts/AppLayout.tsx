@@ -2,23 +2,24 @@
  * @file AppLayout - 应用主布局
  * @description GhostTerm 三栏分屏布局：左侧面板 | 编辑器 | 终端
  *              使用 react-resizable-panels 支持拖拽调整比例。
- *              各功能模块在对应 PBI 完成后接入此布局。
- *              PBI-3：接入 Sidebar 组件，Cmd+B 控制侧边栏显隐。
+ *              阶段 2.5：接入 PBI-1/2/3 全部组件。
  * @author Atlas.oi
- * @date 2026-04-12
+ * @date 2026-04-13
  */
 
 import { useEffect } from 'react';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
 import { Sidebar } from '../features/sidebar';
 import { useSidebarStore } from '../features/sidebar';
+import { Editor, EditorTabs } from '../features/editor';
+import { Terminal } from '../features/terminal';
 
 /**
  * GhostTerm 三栏布局
  *
  * 布局结构：
- * 1. 左侧面板（侧边栏）- 项目选择器 + Files/Changes/Worktrees 标签（PBI-3）
- * 2. 中间面板（编辑器）- CodeMirror 6 + 多标签页（PBI-2）
+ * 1. 左侧面板（侧边栏）- 项目选择器 + Files/Changes/Worktrees（PBI-3）
+ * 2. 中间面板（编辑器）- EditorTabs + CodeMirror 6（PBI-2）
  * 3. 右侧面板（终端）- xterm.js + WebSocket（PBI-1）
  */
 export default function AppLayout() {
@@ -52,7 +53,7 @@ export default function AppLayout() {
       }}
     >
       <PanelGroup direction="horizontal" style={{ flex: 1 }}>
-        {/* 左侧面板 - 根据 sidebarVisible 条件显示/隐藏 */}
+        {/* 左侧面板 - PBI-3 Sidebar，根据 sidebarVisible 显隐 */}
         {sidebarVisible && (
           <>
             <Panel
@@ -74,23 +75,17 @@ export default function AppLayout() {
           </>
         )}
 
-        {/* 中间面板 - PBI-2 接入 Editor 组件 */}
+        {/* 中间面板 - PBI-2 编辑器 */}
         <Panel
           defaultSize={50}
           minSize={20}
-          style={{ overflow: 'hidden' }}
+          style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
         >
-          <div
-            style={{
-              height: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#565f89',
-              fontSize: 12,
-            }}
-          >
-            编辑器 (PBI-2)
+          {/* 标签页栏 */}
+          <EditorTabs />
+          {/* 编辑器内容区 */}
+          <div style={{ flex: 1, overflow: 'hidden' }}>
+            <Editor />
           </div>
         </Panel>
 
@@ -102,24 +97,13 @@ export default function AppLayout() {
           }}
         />
 
-        {/* 右侧面板 - PBI-1 接入 Terminal 组件 */}
+        {/* 右侧面板 - PBI-1 终端 */}
         <Panel
           defaultSize={30}
           minSize={15}
           style={{ overflow: 'hidden' }}
         >
-          <div
-            style={{
-              height: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#565f89',
-              fontSize: 12,
-            }}
-          >
-            终端 (PBI-1)
-          </div>
+          <Terminal />
         </Panel>
       </PanelGroup>
     </div>

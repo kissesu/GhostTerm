@@ -78,6 +78,8 @@ export default function Terminal({ cwd = '/', className }: TerminalProps) {
       scrollback: 1000,
       // 允许透明背景（与编辑器面板视觉一致）
       allowTransparency: false,
+      // Unicode11Addon 使用 proposed API，需要此选项启用
+      allowProposedApi: true,
     });
 
     // 加载 Unicode11Addon 支持 emoji 和中文宽字符
