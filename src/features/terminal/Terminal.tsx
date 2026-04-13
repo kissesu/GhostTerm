@@ -110,11 +110,15 @@ export default function Terminal({ cwd = '/', className }: TerminalProps) {
     }
 
     // 初始适配容器尺寸
-    try {
-      fitAddon.fit();
-    } catch {
-      // 容器可能还未完全布局，忽略初始 fit 错误
-    }
+    // 延迟到下一帧：term.open() 后渲染器需要一帧时间初始化 _renderer
+    // 立即调用 fit() 会因 _renderer 未就绪而抛 TypeError
+    requestAnimationFrame(() => {
+      try {
+        fitAddon.fit();
+      } catch {
+        // 组件可能已卸载（StrictMode 双重挂载），忽略
+      }
+    });
 
     return () => {
       term.dispose();

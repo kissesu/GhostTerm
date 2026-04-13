@@ -85,7 +85,12 @@ export function useTerminal(): UseTerminalResult {
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current);
       }
-      ws.close();
+      // 仅在连接已建立（OPEN）或正在建立（CONNECTING）时关闭
+      // CONNECTING 状态下 close() 会触发 "closed before established" 警告，
+      // 但不关闭会导致游离连接，因此仍需关闭
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close();
+      }
     };
   }, [wsPort, wsToken]); // 依赖 wsPort/wsToken，reconnect 时会变化
 
