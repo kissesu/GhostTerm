@@ -9,14 +9,14 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { useGitStore } from './gitStore';
+import { useProjectStore } from './projectStore';
 import type { Worktree } from '../../shared/types';
 
 /** Worktree 面板根组件 */
 export default function Worktrees() {
   const { worktrees, refreshWorktrees } = useGitStore();
-
-  // TODO: PBI-6 集成时从 projectStore.currentProject.path 获取
-  const repoPath = '';
+  // 从当前项目获取仓库路径，未打开项目时为空字符串（此时操作会被 UI 禁用）
+  const repoPath = useProjectStore((s) => s.currentProject?.path ?? '');
 
   /**
    * 切换到指定 worktree

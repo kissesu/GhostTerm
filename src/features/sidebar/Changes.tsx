@@ -7,6 +7,7 @@
  */
 
 import { useGitStore } from './gitStore';
+import { useProjectStore } from './projectStore';
 import type { StatusEntry } from '../../shared/types';
 
 /** 状态标记颜色映射 - 与 FileTree git 颜色规范一致 */
@@ -142,10 +143,8 @@ export default function Changes() {
     .filter((e) => e.unstaged != null)
     .map((e) => ({ entry: e, type: e.unstaged! }));
 
-  // 从 projectStore 获取仓库路径
-  // 临时方案：使用空字符串占位，实际集成时从 projectStore 注入
-  // TODO: PBI-6 集成时从 projectStore.currentProject.path 获取
-  const repoPath = '';
+  // 从当前项目获取仓库路径
+  const repoPath = useProjectStore((s) => s.currentProject?.path ?? '');
 
   return (
     <div
