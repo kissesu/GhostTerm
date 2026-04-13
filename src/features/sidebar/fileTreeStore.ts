@@ -78,7 +78,7 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => ({
    * 4. 清空展开状态（新项目重置展开记录）
    */
   refreshFileTree: async (rootPath: string) => {
-    const entries = await invoke<FileEntry[]>('list_dir_cmd', { path: rootPath });
+    const entries = await invoke<FileEntry[]>('list_dir_cmd', { path: rootPath, showHidden: false });
 
     // 将 FileEntry 列表转换为 FileNode 树（第一层）
     const tree: FileNode[] = entries.map((entry) => ({
@@ -118,7 +118,7 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => ({
 
     if (node.children === undefined) {
       // children=undefined 表示尚未加载，懒加载子目录
-      const entries = await invoke<FileEntry[]>('list_dir_cmd', { path });
+      const entries = await invoke<FileEntry[]>('list_dir_cmd', { path, showHidden: false });
       const children: FileNode[] = entries.map((entry) => ({
         entry,
         children: entry.is_dir ? undefined : null,
@@ -168,7 +168,7 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => ({
      */
     const refreshParentDir = async (parentPath: string, treeSnapshot: FileNode[]) => {
       try {
-        const entries = await invoke<FileEntry[]>('list_dir_cmd', { path: parentPath });
+        const entries = await invoke<FileEntry[]>('list_dir_cmd', { path: parentPath, showHidden: false });
         const newChildren: FileNode[] = entries.map((entry) => ({
           entry,
           children: entry.is_dir ? undefined : null,

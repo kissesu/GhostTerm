@@ -38,7 +38,7 @@ describe('fileTreeStore - refreshFileTree', () => {
 
     await useFileTreeStore.getState().refreshFileTree('/proj');
 
-    expect(mockInvoke).toHaveBeenCalledWith('list_dir_cmd', { path: '/proj' });
+    expect(mockInvoke).toHaveBeenCalledWith('list_dir_cmd', { path: '/proj', showHidden: false });
 
     const { tree } = useFileTreeStore.getState();
     expect(tree).toHaveLength(3);
@@ -89,7 +89,7 @@ describe('fileTreeStore - toggleDir', () => {
 
     await useFileTreeStore.getState().toggleDir('/proj/src');
 
-    expect(mockInvoke).toHaveBeenCalledWith('list_dir_cmd', { path: '/proj/src' });
+    expect(mockInvoke).toHaveBeenCalledWith('list_dir_cmd', { path: '/proj/src', showHidden: false });
   });
 
   it('展开目录后 expandedPaths 应包含该路径', async () => {
@@ -244,7 +244,7 @@ describe('fileTreeStore - applyFsEvent（完整实现）', () => {
       useFileTreeStore.getState().applyFsEvent({ type: 'created', path: '/proj/src/new.rs' });
 
       await vi.waitFor(() => {
-        expect(mockInvoke).toHaveBeenCalledWith('list_dir_cmd', { path: '/proj/src' });
+        expect(mockInvoke).toHaveBeenCalledWith('list_dir_cmd', { path: '/proj/src', showHidden: false });
       });
     });
 

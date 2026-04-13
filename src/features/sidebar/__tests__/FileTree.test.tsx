@@ -95,6 +95,7 @@ describe('FileTree - 点击目录（展开/折叠）', () => {
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith('list_dir_cmd', {
         path: '/proj/src',
+        showHidden: false,
       });
     });
   });
