@@ -11,6 +11,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
 import { Sidebar } from '../features/sidebar';
 import { useSidebarStore } from '../features/sidebar';
+import { useProjectStore } from '../features/sidebar';
 import { Editor, EditorTabs } from '../features/editor';
 import { Terminal } from '../features/terminal';
 import { useKeyboardShortcuts } from '../shared/hooks/useKeyboardShortcuts';
@@ -63,6 +64,27 @@ export default function AppLayout() {
   // 替换原先散落在各组件的 keydown 监听，统一管理
   // ============================================
   useKeyboardShortcuts(handleFocusToggle, handleSidebarToggle);
+
+  // ============================================
+  // 启动时恢复上次打开的项目
+  // 从 projects.json 加载最近项目列表，自动打开第一个（最近使用的）
+  // 解决刷新/重启后状态丢失问题
+  // ============================================
+  useEffect(() => {
+    const restore = async () => {
+      const { loadRecentProjects, openProject } = useProjectStore.getState();
+      await loadRecentProjects();
+      const { recentProjects } = useProjectStore.getState();
+      if (recentProjects.length > 0) {
+        try {
+          await openProject(recentProjects[0].path);
+        } catch {
+          // 上次项目路径可能已不存在，静默跳过
+        }
+      }
+    };
+    restore();
+  }, []);
 
   // ============================================
   // 窗口宽度 < 800px 时自动折叠侧边栏

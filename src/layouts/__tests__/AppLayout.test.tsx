@@ -7,10 +7,13 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { invoke } from '@tauri-apps/api/core';
 import AppLayout from '../AppLayout';
 import { useSidebarStore } from '../../features/sidebar';
 import { useFileTreeStore } from '../../features/sidebar';
 import { useProjectStore } from '../../features/sidebar';
+
+const mockInvoke = vi.mocked(invoke);
 
 // AppLayout 测试只验证布局/键盘行为，特性组件 mock 为轻量占位
 // 避免 xterm.js/CodeMirror 依赖浏览器 API 在 jsdom 中报错
@@ -26,6 +29,8 @@ beforeEach(() => {
   useSidebarStore.setState({ activeTab: 'files', visible: true });
   useFileTreeStore.setState({ tree: [], expandedPaths: new Set() });
   useProjectStore.setState({ currentProject: null, recentProjects: [] });
+  // 启动恢复 effect 会调用 list_recent_projects_cmd，返回空数组跳过自动打开
+  mockInvoke.mockResolvedValue([]);
 });
 
 describe('AppLayout - Cmd+B 快捷键', () => {

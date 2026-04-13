@@ -20,14 +20,15 @@ export default function Worktrees() {
 
   /**
    * 切换到指定 worktree
-   * 调用 worktree_switch_cmd，成功后刷新列表
+   * 直接调用 openProject 完成全链路协调（watcher/PTY/UI 一步到位）
+   * openProject 内部的 open_project_cmd 会处理 watcher 和 PTY 生命周期
    */
   const handleSwitch = async (wt: Worktree) => {
     if (wt.is_current) return; // 已是当前 worktree，无需切换
 
     try {
-      await invoke('worktree_switch_cmd', { newCwd: wt.path });
-      await refreshWorktrees(repoPath);
+      const { openProject } = useProjectStore.getState();
+      await openProject(wt.path);
     } catch (err) {
       console.error('[Worktrees] 切换 worktree 失败:', err);
       alert(`切换失败: ${err}`);

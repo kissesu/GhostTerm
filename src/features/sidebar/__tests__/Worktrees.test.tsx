@@ -89,8 +89,15 @@ describe('Worktrees - 列表渲染', () => {
 });
 
 describe('Worktrees - 切换操作', () => {
-  it('点击切换按钮应调用 worktree_switch_cmd', async () => {
-    mockInvoke.mockResolvedValue([mainWorktree, featureWorktree]);
+  it('点击切换按钮应通过 openProject 切换到目标 worktree', async () => {
+    // openProject 协调链路：open_project_cmd + list_dir_cmd + git 状态 + recent
+    mockInvoke
+      .mockResolvedValueOnce({ name: 'proj-feature', path: '/proj-feature', last_opened: 0 })
+      .mockResolvedValueOnce([])    // list_dir_cmd
+      .mockResolvedValueOnce([])    // git_status_cmd
+      .mockResolvedValueOnce('main') // git_current_branch_cmd
+      .mockResolvedValueOnce([])    // worktree_list_cmd
+      .mockResolvedValueOnce([]);   // list_recent_projects_cmd
     useGitStore.setState({ worktrees: [mainWorktree, featureWorktree] });
 
     render(<Worktrees />);
@@ -98,9 +105,10 @@ describe('Worktrees - 切换操作', () => {
     const switchBtn = screen.getByTitle('切换到 feature/new-ui');
     fireEvent.click(switchBtn);
 
+    // 应调用 open_project_cmd（而非 worktree_switch_cmd）完成全链路协调
     await waitFor(() => {
-      expect(mockInvoke).toHaveBeenCalledWith('worktree_switch_cmd', {
-        newCwd: '/proj-feature',
+      expect(mockInvoke).toHaveBeenCalledWith('open_project_cmd', {
+        path: '/proj-feature',
       });
     });
   });

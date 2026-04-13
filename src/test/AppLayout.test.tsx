@@ -9,6 +9,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { invoke } from '@tauri-apps/api/core';
 import AppLayout from '../layouts/AppLayout';
 import { useSidebarStore } from '../features/sidebar';
 import { useFileTreeStore } from '../features/sidebar';
@@ -28,6 +29,8 @@ beforeEach(() => {
   useSidebarStore.setState({ activeTab: 'files', visible: true });
   useFileTreeStore.setState({ tree: [], expandedPaths: new Set() });
   useProjectStore.setState({ currentProject: null, recentProjects: [] });
+  // 启动恢复 effect 会调用 list_recent_projects_cmd
+  vi.mocked(invoke).mockResolvedValue([]);
 });
 
 describe('AppLayout', () => {
