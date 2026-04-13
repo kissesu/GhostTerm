@@ -50,5 +50,12 @@ rand = "0.9"
 # 字符编码检测 - 用于非 UTF-8 文件检测
 chardetng = "0.1"
 
+# MIME 类型检测 - 通过文件魔数（magic bytes）识别二进制文件类型
+infer = "0.16"
+
 # E2E 测试支持 - tauri-webdriver + WebdriverIO 集成（PBI-6 使用）
 tauri-plugin-webdriver-automation = "0.1"
+
+[dev-dependencies]
+# 测试用临时目录 - 避免测试污染真实文件系统
+tempfile = "3"
