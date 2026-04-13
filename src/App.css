@@ -55,18 +55,13 @@ body {
   overflow: hidden;
 }
 
-/* 隐藏所有 webkit 滚动条（避免白色滚动条轨道透出） */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* 全局隐藏滚动条（消除任何白色滚动条轨道）
+   参考 Supremum：scrollbar-width: none + ::-webkit-scrollbar { width: 0 } */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: #27293d;
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #3b3d57;
+*::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }

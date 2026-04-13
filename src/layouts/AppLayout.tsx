@@ -117,8 +117,8 @@ export default function AppLayout() {
     <div
       data-active-panel={activePanel}
       style={{
-        width: '100vw',
-        height: '100vh',
+        width: '100%',
+        height: '100%',
         background: '#1a1b26',
         color: '#c0caf5',
         display: 'flex',
@@ -126,6 +126,18 @@ export default function AppLayout() {
         overflow: 'hidden',
       }}
     >
+      {/* macOS Overlay 标题栏拖拽区域（data-tauri-drag-region 启用窗口拖拽） */}
+      <div
+        data-tauri-drag-region
+        style={{
+          height: 28,
+          flexShrink: 0,
+          // 左侧留出 traffic lights 空间（macOS 红黄绿按钮约 78px）
+          paddingLeft: 78,
+          display: 'flex',
+          alignItems: 'center',
+        }}
+      />
       <PanelGroup direction="horizontal" style={{ flex: 1 }}>
         {/* 左侧面板 - PBI-3 Sidebar，根据 sidebarVisible 显隐 */}
         {sidebarVisible && (

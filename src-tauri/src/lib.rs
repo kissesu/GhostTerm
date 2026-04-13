@@ -44,37 +44,12 @@ pub fn run() {
         // CSS overscroll-behavior 在 WKWebView 上不可靠（wry#557、tauri#4309）
         // ============================================
         .setup(|app| {
-            // macOS: 禁用 WKWebView 弹性滚动 + 设置窗口深色背景
-            // CSS overscroll-behavior 在 WKWebView 上不可靠（wry#557、tauri#4309）
-            #[cfg(target_os = "macos")]
-            {
-                use tauri::Manager;
-                if let Some(main_window) = app.get_webview_window("main") {
-                    // 设置窗口背景色为深色（消除 webview 与窗口之间的白色间隙）
-                    let _ = main_window.with_webview(|webview| {
-                        unsafe {
-                            // 设置窗口背景色为深色（消除 webview 与窗口之间的白色间隙）
-                            let window: &objc2_app_kit::NSWindow = &*webview.ns_window().cast();
-                            let bg = objc2_app_kit::NSColor::colorWithDeviceRed_green_blue_alpha(
-                                0.102, 0.106, 0.149, 1.0, // #1a1b26
-                            );
-                            window.setBackgroundColor(Some(&bg));
-
-                            // 禁用 WKWebView 弹性滚动：
-                            // WKWebView 继承 NSView，通过 objc msg_send 调用 enclosingScrollView
-                            use objc2::msg_send;
-                            let wk_view: *mut objc2::runtime::AnyObject = webview.inner().cast();
-                            let scroll_view: *mut objc2::runtime::AnyObject =
-                                msg_send![wk_view, enclosingScrollView];
-                            if !scroll_view.is_null() {
-                                // NSScrollElasticityNone = 1
-                                let none: isize = 1;
-                                let _: () = msg_send![scroll_view, setHorizontalScrollElasticity: none];
-                                let _: () = msg_send![scroll_view, setVerticalScrollElasticity: none];
-                            }
-                        }
-                    });
-                }
+            // 设置窗口深色背景（消除 webview 与窗口之间的白色间隙）
+            // 参考 Supremum：使用 Tauri 原生 API set_background_color
+            use tauri::Manager;
+            if let Some(win) = app.get_webview_window("main") {
+                use tauri::window::Color;
+                let _ = win.set_background_color(Some(Color(26, 27, 38, 255))); // #1a1b26
             }
             Ok(())
         })

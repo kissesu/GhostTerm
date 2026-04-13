@@ -59,9 +59,6 @@ infer = "0.16"
 # E2E 测试支持 - tauri-webdriver + WebdriverIO 集成（PBI-6 使用）
 tauri-plugin-webdriver-automation = "0.1"
 tauri-plugin-dialog = "2.7.0"
-objc2 = "0.6.4"
-objc2-app-kit = { version = "0.3.2", features = ["NSView", "NSScrollView", "NSResponder"] }
-objc2-web-kit = { version = "0.3.2", features = ["WKWebView"] }
 
 [dev-dependencies]
 # 测试用临时目录 - 避免测试污染真实文件系统

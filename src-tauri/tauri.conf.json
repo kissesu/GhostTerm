@@ -12,12 +12,16 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "GhostTerm",
         "width": 1400,
         "height": 900,
         "minWidth": 800,
         "minHeight": 600,
-        "backgroundColor": "#1a1b26"
+        "backgroundColor": "#1a1b26",
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "acceptFirstMouse": true
       }
     ],
     "security": {
