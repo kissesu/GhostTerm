@@ -77,6 +77,8 @@ export interface OpenFile {
   mimeHint?: string;
   /** 错误信息 */
   errorMessage?: string;
+  /** 外部修改冲突标记：磁盘内容已变化但本地有未保存修改，需用户决策 */
+  hasConflict?: boolean;
 }
 
 /** 文件系统事件（从 Rust watcher 通过 Tauri Event 推送） */

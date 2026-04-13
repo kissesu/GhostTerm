@@ -19,6 +19,9 @@ use pty_manager::{spawn_pty_cmd, kill_pty_cmd, resize_pty_cmd, reconnect_pty_cmd
 // PBI-2 Commands
 use fs_backend::{read_file_cmd, write_file_cmd, list_dir_cmd, create_entry_cmd, delete_entry_cmd, rename_entry_cmd};
 
+// PBI-4 Commands - 文件系统实时监听
+use fs_backend::{start_watching_cmd, stop_watching_cmd};
+
 // PBI-3 Commands
 use project_manager::{list_recent_projects_cmd, open_project_cmd, close_project_cmd};
 
@@ -50,6 +53,9 @@ pub fn run() {
             list_recent_projects_cmd,
             open_project_cmd,
             close_project_cmd,
+            // PBI-4: 文件系统实时监听
+            start_watching_cmd,
+            stop_watching_cmd,
             // PBI-5: Git 操作（PBI-5 完成后添加）
         ])
         .run(tauri::generate_context!())

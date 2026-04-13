@@ -199,6 +199,73 @@ describe('editorStore', () => {
     });
   });
 
+  describe('handleExternalChange', () => {
+    it('文件未打开时不应有任何副作用', async () => {
+      const { useEditorStore } = await import('../editorStore');
+      // openFiles 为空，调用 handleExternalChange 不应报错也不应改变状态
+      await useEditorStore.getState().handleExternalChange('/nonexistent/file.ts');
+      expect(useEditorStore.getState().openFiles).toHaveLength(0);
+    });
+
+    it('isDirty=false 时静默更新 content 和 diskContent', async () => {
+      vi.mocked(invoke)
+        .mockResolvedValueOnce({ kind: 'text', content: 'original' }) // openFile
+        .mockResolvedValueOnce({ kind: 'text', content: 'new from disk' }); // handleExternalChange
+
+      const { useEditorStore } = await import('../editorStore');
+      await useEditorStore.getState().openFile('/src/a.ts');
+
+      // isDirty 初始为 false（内容与磁盘相同）
+      expect(useEditorStore.getState().openFiles[0].isDirty).toBe(false);
+
+      await useEditorStore.getState().handleExternalChange('/src/a.ts');
+
+      const file = useEditorStore.getState().openFiles[0];
+      // 内容和磁盘内容均更新为新值
+      expect(file.content).toBe('new from disk');
+      expect(file.diskContent).toBe('new from disk');
+      // 没有冲突标记
+      expect(file.hasConflict).toBe(false);
+    });
+
+    it('isDirty=true 时设置 hasConflict=true', async () => {
+      vi.mocked(invoke)
+        .mockResolvedValueOnce({ kind: 'text', content: 'original' }) // openFile
+        .mockResolvedValueOnce({ kind: 'text', content: 'new from disk' }); // handleExternalChange
+
+      const { useEditorStore } = await import('../editorStore');
+      await useEditorStore.getState().openFile('/src/a.ts');
+
+      // 用户编辑了内容，isDirty=true
+      useEditorStore.getState().updateContent('/src/a.ts', 'user edits');
+      expect(useEditorStore.getState().openFiles[0].isDirty).toBe(true);
+
+      await useEditorStore.getState().handleExternalChange('/src/a.ts');
+
+      const file = useEditorStore.getState().openFiles[0];
+      // 编辑器内容保留用户修改
+      expect(file.content).toBe('user edits');
+      // 冲突标记设置
+      expect(file.hasConflict).toBe(true);
+    });
+
+    it('非 text 类型文件（binary）不更新内容', async () => {
+      vi.mocked(invoke)
+        .mockResolvedValueOnce({ kind: 'binary', mime_hint: 'image/png' }) // openFile
+        .mockResolvedValueOnce({ kind: 'binary', mime_hint: 'image/png' }); // handleExternalChange
+
+      const { useEditorStore } = await import('../editorStore');
+      await useEditorStore.getState().openFile('/assets/logo.png');
+
+      const beforeCall = useEditorStore.getState().openFiles[0];
+      await useEditorStore.getState().handleExternalChange('/assets/logo.png');
+
+      // binary 文件不做任何更新
+      const afterCall = useEditorStore.getState().openFiles[0];
+      expect(afterCall).toStrictEqual(beforeCall);
+    });
+  });
+
   describe('updateContent', () => {
     it('更新内容后 isDirty 变为 true', async () => {
       vi.mocked(invoke).mockResolvedValue({ kind: 'text', content: 'original' });

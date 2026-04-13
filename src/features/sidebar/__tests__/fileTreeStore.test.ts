@@ -142,7 +142,7 @@ describe('fileTreeStore - toggleDir', () => {
   });
 });
 
-describe('fileTreeStore - applyFsEvent（骨架）', () => {
+describe('fileTreeStore - applyFsEvent（完整实现）', () => {
   it('applyFsEvent 不应抛出异常', () => {
     expect(() => {
       useFileTreeStore.getState().applyFsEvent({ type: 'created', path: '/proj/new.ts' });
@@ -163,5 +163,135 @@ describe('fileTreeStore - applyFsEvent（骨架）', () => {
         new_path: '/proj/b.ts',
       });
     }).not.toThrow();
+  });
+
+  describe('deleted 事件', () => {
+    beforeEach(async () => {
+      // 初始化树：根级有 src 目录和 README.md 文件
+      mockInvoke.mockResolvedValueOnce(sampleEntries);
+      await useFileTreeStore.getState().refreshFileTree('/proj');
+      vi.clearAllMocks();
+    });
+
+    it('deleted 事件应从树中移除对应节点', () => {
+      // README.md 在根级，删除它
+      useFileTreeStore.getState().applyFsEvent({ type: 'deleted', path: '/proj/README.md' });
+
+      const { tree } = useFileTreeStore.getState();
+      const found = tree.find((n) => n.entry.path === '/proj/README.md');
+      expect(found).toBeUndefined();
+    });
+
+    it('deleted 事件后树中其他节点保持不变', () => {
+      useFileTreeStore.getState().applyFsEvent({ type: 'deleted', path: '/proj/README.md' });
+
+      const { tree } = useFileTreeStore.getState();
+      // src 目录应还在
+      expect(tree.find((n) => n.entry.path === '/proj/src')).toBeDefined();
+    });
+
+    it('deleted 事件应移除嵌套节点', async () => {
+      // 先展开 src 目录，加载子节点
+      mockInvoke.mockResolvedValueOnce(srcChildren);
+      await useFileTreeStore.getState().toggleDir('/proj/src');
+      vi.clearAllMocks();
+
+      // 删除嵌套的 main.rs
+      useFileTreeStore.getState().applyFsEvent({ type: 'deleted', path: '/proj/src/main.rs' });
+
+      const { tree } = useFileTreeStore.getState();
+      const srcNode = tree.find((n) => n.entry.path === '/proj/src');
+      expect(srcNode?.children?.find((c) => c.entry.path === '/proj/src/main.rs')).toBeUndefined();
+    });
+  });
+
+  describe('modified 事件', () => {
+    beforeEach(async () => {
+      mockInvoke.mockResolvedValueOnce(sampleEntries);
+      await useFileTreeStore.getState().refreshFileTree('/proj');
+      vi.clearAllMocks();
+    });
+
+    it('modified 事件不应改变树结构', () => {
+      const treeBefore = useFileTreeStore.getState().tree;
+
+      useFileTreeStore.getState().applyFsEvent({ type: 'modified', path: '/proj/README.md' });
+
+      const treeAfter = useFileTreeStore.getState().tree;
+      // 树的引用（结构）不变
+      expect(treeAfter).toBe(treeBefore);
+    });
+  });
+
+  describe('created 事件', () => {
+    beforeEach(async () => {
+      // 加载树并展开 src 目录
+      mockInvoke.mockResolvedValueOnce(sampleEntries);
+      await useFileTreeStore.getState().refreshFileTree('/proj');
+      mockInvoke.mockResolvedValueOnce(srcChildren);
+      await useFileTreeStore.getState().toggleDir('/proj/src');
+      vi.clearAllMocks();
+    });
+
+    it('created 事件应调用 list_dir_cmd 刷新父目录', async () => {
+      // 模拟刷新父目录返回增加了新文件的列表
+      const updatedSrcChildren: FileEntry[] = [
+        ...srcChildren,
+        { name: 'new.rs', path: '/proj/src/new.rs', is_dir: false, size: 0, modified: undefined },
+      ];
+      mockInvoke.mockResolvedValueOnce(updatedSrcChildren);
+
+      useFileTreeStore.getState().applyFsEvent({ type: 'created', path: '/proj/src/new.rs' });
+
+      await vi.waitFor(() => {
+        expect(mockInvoke).toHaveBeenCalledWith('list_dir_cmd', { path: '/proj/src' });
+      });
+    });
+
+    it('created 事件后父目录 children 包含新节点', async () => {
+      const updatedSrcChildren: FileEntry[] = [
+        ...srcChildren,
+        { name: 'new.rs', path: '/proj/src/new.rs', is_dir: false, size: 0, modified: undefined },
+      ];
+      mockInvoke.mockResolvedValueOnce(updatedSrcChildren);
+
+      useFileTreeStore.getState().applyFsEvent({ type: 'created', path: '/proj/src/new.rs' });
+
+      await vi.waitFor(() => {
+        const { tree } = useFileTreeStore.getState();
+        const srcNode = tree.find((n) => n.entry.path === '/proj/src');
+        expect(srcNode?.children?.find((c) => c.entry.path === '/proj/src/new.rs')).toBeDefined();
+      });
+    });
+  });
+
+  describe('renamed 事件', () => {
+    beforeEach(async () => {
+      mockInvoke.mockResolvedValueOnce(sampleEntries);
+      await useFileTreeStore.getState().refreshFileTree('/proj');
+      mockInvoke.mockResolvedValueOnce(srcChildren);
+      await useFileTreeStore.getState().toggleDir('/proj/src');
+      vi.clearAllMocks();
+    });
+
+    it('renamed 事件应移除旧路径节点', async () => {
+      // 重命名后的父目录内容（旧文件消失，新文件出现）
+      const renamedChildren: FileEntry[] = [
+        { name: 'renamed.rs', path: '/proj/src/renamed.rs', is_dir: false, size: 200, modified: undefined },
+        { name: 'lib.rs', path: '/proj/src/lib.rs', is_dir: false, size: 300, modified: undefined },
+      ];
+      mockInvoke.mockResolvedValueOnce(renamedChildren);
+
+      useFileTreeStore.getState().applyFsEvent({
+        type: 'renamed',
+        old_path: '/proj/src/main.rs',
+        new_path: '/proj/src/renamed.rs',
+      });
+
+      // 旧节点立即移除（同步操作）
+      const { tree } = useFileTreeStore.getState();
+      const srcNode = tree.find((n) => n.entry.path === '/proj/src');
+      expect(srcNode?.children?.find((c) => c.entry.path === '/proj/src/main.rs')).toBeUndefined();
+    });
   });
 });
