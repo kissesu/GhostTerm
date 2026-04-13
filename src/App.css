@@ -25,24 +25,51 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+html {
+  /* 确保 html 元素也有深色背景，防止白色透出 */
+  background-color: #1a1b26;
+}
+
 html,
 body {
   margin: 0;
   padding: 0;
   border: none;
   outline: none;
-  min-width: 320px;
-  min-height: 100vh;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   /* 禁止 macOS 橡皮筋滚动效果（双指拖动页面晃动） */
   overscroll-behavior: none;
+  -webkit-overflow-scrolling: auto;
   /* 禁止用户选择文本（桌面应用行为，编辑器/终端各自管理选择） */
   user-select: none;
   -webkit-user-select: none;
+  /* 禁止触控板双指缩放 */
+  touch-action: none;
 }
 
 #root {
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
+  position: fixed;
+  top: 0;
+  left: 0;
+}
+
+/* 隐藏所有 webkit 滚动条（避免白色滚动条轨道透出） */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #27293d;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3b3d57;
 }

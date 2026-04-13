@@ -195,85 +195,83 @@ export default function Terminal({ cwd, className }: TerminalProps) {
   }, [ptyId]); // ptyId 建立后才开始监听
 
   // ============================================
-  // 等待项目打开：未指定 cwd 时显示提示
+  // 渲染：始终挂载 containerRef div（xterm 需要 DOM 元素才能初始化）
+  // 状态覆盖层浮于 xterm 之上，不阻止 xterm 实例创建
   // ============================================
-  if (!cwd && !connected) {
-    return (
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100%',
-          background: '#1a1b26',
-          color: '#565f89',
-          fontSize: '13px',
-          fontFamily: 'system-ui, sans-serif',
-        }}
-      >
-        打开项目后启动终端
-      </div>
-    );
-  }
-
-  // ============================================
-  // 错误 UI：PTY 启动失败或连接断开时显示
-  // ============================================
-  if (error && !connected) {
-    return (
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100%',
-          background: terminalTheme.background,
-          color: terminalTheme.foreground,
-          gap: '12px',
-          fontFamily: 'system-ui, sans-serif',
-        }}
-      >
-        <div style={{ color: '#f7768e', fontSize: '14px' }}>
-          终端连接失败: {error}
-        </div>
-        <button
-          onClick={() => {
-            if (!cwd) return;
-            setError(null);
-            spawn(cwd).catch((err: unknown) => {
-              const msg = err instanceof Error ? err.message : String(err);
-              setError(`PTY 启动失败: ${msg}`);
-            });
-          }}
-          style={{
-            padding: '6px 16px',
-            background: '#7aa2f7',
-            color: '#1a1b26',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '13px',
-          }}
-        >
-          重试
-        </button>
-      </div>
-    );
-  }
+  const showOverlay = (!cwd && !connected) || (error && !connected);
 
   return (
     <div
-      ref={containerRef}
       className={className}
       style={{
         width: '100%',
         height: '100%',
-        // xterm.js 需要 overflow hidden 防止滚动条干扰 FitAddon 计算
+        position: 'relative',
         overflow: 'hidden',
         background: terminalTheme.background as string,
       }}
       data-testid="terminal-container"
-    />
+    >
+      {/* xterm.js 挂载容器 - 始终存在 */}
+      <div
+        ref={containerRef}
+        style={{
+          width: '100%',
+          height: '100%',
+          overflow: 'hidden',
+        }}
+      />
+
+      {/* 状态覆盖层 */}
+      {showOverlay && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: terminalTheme.background as string,
+            gap: '12px',
+            fontFamily: 'system-ui, sans-serif',
+            zIndex: 10,
+          }}
+        >
+          {!cwd && !connected ? (
+            <div style={{ color: '#565f89', fontSize: '13px' }}>
+              打开项目后启动终端
+            </div>
+          ) : error ? (
+            <>
+              <div style={{ color: '#f7768e', fontSize: '14px' }}>
+                终端连接失败: {error}
+              </div>
+              <button
+                onClick={() => {
+                  if (!cwd) return;
+                  setError(null);
+                  spawn(cwd).catch((err: unknown) => {
+                    const msg = err instanceof Error ? err.message : String(err);
+                    setError(`PTY 启动失败: ${msg}`);
+                  });
+                }}
+                style={{
+                  padding: '6px 16px',
+                  background: '#7aa2f7',
+                  color: '#1a1b26',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                }}
+              >
+                重试
+              </button>
+            </>
+          ) : null}
+        </div>
+      )}
+    </div>
   );
 }

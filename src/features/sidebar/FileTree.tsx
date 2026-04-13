@@ -259,6 +259,7 @@ export default function FileTree() {
       <div
         role="tree"
         aria-label="文件树"
+        data-scrollable
         style={{ overflow: 'auto', height: '100%' }}
       >
         {tree.map((node) => (
