@@ -177,8 +177,41 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }));
   },
 
-  // PBI-4 时完整实现文件外部变化处理（当前为骨架）
-  handleExternalChange: async (_path: string) => {
-    // TODO: PBI-4 实现 - 从磁盘重新读取并更新 diskContent，若有冲突弹出提示
+  /**
+   * 处理文件被外部程序修改的情况
+   *
+   * 业务逻辑说明：
+   * 1. 若文件未在 openFiles 中打开，直接忽略（无需更新）
+   * 2. 重新从磁盘读取最新内容
+   * 3. 若 isDirty=false（用户无未保存修改）：静默更新 content 和 diskContent
+   * 4. 若 isDirty=true（用户有未保存修改）：设置 hasConflict=true，触发 ConflictDialog
+   */
+  handleExternalChange: async (path: string) => {
+    const { openFiles } = get();
+    const file = openFiles.find((f) => f.path === path);
+
+    // 文件未在编辑器中打开，无需处理
+    if (!file) return;
+
+    // 从磁盘重新读取最新内容
+    const result = await invoke<ReadFileResult>('read_file_cmd', { path });
+
+    // 仅对 text 类型的文件做内容刷新，binary/large/error 类型直接忽略
+    if (result.kind !== 'text') return;
+    const newContent = result.content;
+
+    set((state) => ({
+      openFiles: state.openFiles.map((f) => {
+        if (f.path !== path) return f;
+
+        if (!f.isDirty) {
+          // 用户无未保存修改：静默刷新内容（content + diskContent 同步更新）
+          return { ...f, content: newContent, diskContent: newContent, hasConflict: false };
+        } else {
+          // 用户有未保存修改：标记冲突，由 ConflictDialog 组件处理用户决策
+          return { ...f, diskContent: newContent, hasConflict: true };
+        }
+      }),
+    }));
   },
 }));
