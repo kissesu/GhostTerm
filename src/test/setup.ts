@@ -20,3 +20,11 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn().mockResolvedValue(() => {}),
   emit: vi.fn(),
 }));
+
+// Mock ResizeObserver - jsdom 不支持，xterm.js FitAddon 和 Terminal.tsx 使用
+// observe/disconnect 是空实现，测试不验证 resize 触发，只确保不报错
+global.ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
