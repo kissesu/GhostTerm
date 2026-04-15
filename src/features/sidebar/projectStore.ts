@@ -91,6 +91,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
     // 恢复新项目的标签页状态（无记录时等同于清空）
     useEditorStore.getState().restoreSession(path);
+    // 若恢复了持久化会话，主动重载活跃文件内容（占位文件 content 为空，需从磁盘读取）
+    // 其余标签页在用户点击时由 openFile 的占位判断自动触发重载
+    const activeFilePath = useEditorStore.getState().activeFilePath;
+    if (activeFilePath) {
+      useEditorStore.getState().openFile(activeFilePath).catch(() => {});
+    }
 
     // ============================================
     // 第五步：激活新项目终端（已有 PTY 则复用，无则 spawn）

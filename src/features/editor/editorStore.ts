@@ -139,21 +139,34 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   openFile: async (path: string) => {
     const { openFiles } = get();
 
-    // 文件已打开时仅切换 active，不重复读取
+    // 文件已打开时，判断是否为占位文件（content 和 diskContent 均为空且无脏标记）
+    // 占位文件由 loadPersistedSession 构造，需要重新从磁盘读取实际内容
+    // 真正的空文件重读也是安全的（读到 '' 后状态不变）
     const existing = openFiles.find((f) => f.path === path);
     if (existing) {
-      set({ activeFilePath: path });
-      return;
+      const isPlaceholder = existing.content === '' && existing.diskContent === '' && !existing.isDirty;
+      if (!isPlaceholder) {
+        // 已有内容的文件：仅切换 active，不重复读取
+        set({ activeFilePath: path });
+        return;
+      }
+      // 占位文件：不 return，继续向下从磁盘读取真实内容
     }
 
     // 通过 Tauri Command 读取文件
     const result = await invoke<ReadFileResult>('read_file_cmd', { path });
     const newFile = resultToOpenFile(path, result);
 
-    set((state) => ({
-      openFiles: [...state.openFiles, newFile],
-      activeFilePath: path,
-    }));
+    set((state) => {
+      // 若文件已在列表中（占位），替换原条目；否则追加
+      const alreadyInList = state.openFiles.some((f) => f.path === path);
+      return {
+        openFiles: alreadyInList
+          ? state.openFiles.map((f) => (f.path === path ? newFile : f))
+          : [...state.openFiles, newFile],
+        activeFilePath: path,
+      };
+    });
   },
 
   closeAll: () => {
