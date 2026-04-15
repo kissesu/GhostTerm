@@ -1,16 +1,23 @@
 /**
  * @file terminalStore - PTY 终端状态管理
- * @description 管理 PTY 进程生命周期（spawn/kill/reconnect/resize）和 WebSocket 连接状态。
- *              通过 Tauri invoke 调用 Rust 后端 PTY Commands，结果存储在 Zustand store 中。
- *              xterm.js AttachAddon 直接连接 WebSocket（ws://127.0.0.1:{wsPort}?token={wsToken}），
- *              不经过此 store，store 只管理连接元数据。
+ * @description 管理多项目 PTY 进程生命周期。每个项目独立维护一个 PTY 会话（sessions map），
+ *              切换项目时不销毁旧 PTY，仅改变 activeProjectPath。
+ *              Rust 后端 PTY_REGISTRY 原生支持多 PTY 并发（HashMap<pty_id, PtyState>）。
  * @author Atlas.oi
- * @date 2026-04-13
+ * @date 2026-04-15
  */
 
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import { useSettingsStore } from '../../shared/stores/settingsStore';
+
+/** 单个 PTY 会话信息 */
+export interface PtySession {
+  ptyId: string;
+  wsPort: number;
+  wsToken: string;
+  connected: boolean;
+}
 
 /** PTY 创建结果 - 与 Rust PtyInfo 对应 */
 interface PtyInfo {
@@ -21,52 +28,45 @@ interface PtyInfo {
 
 type DefaultShell = string;
 
-/** 终端状态接口 */
+/** 终端 store 状态接口 */
 export interface TerminalState {
-  /** PTY 唯一标识符，null 表示无活动 PTY */
-  ptyId: string | null;
-  /** WebSocket 服务器端口 */
-  wsPort: number | null;
-  /** 一次性认证 token */
-  wsToken: string | null;
-  /** WebSocket 是否已连接 */
-  connected: boolean;
-
-  // ============================================
-  // 业务操作
-  // ============================================
-
-  /** 启动 PTY 进程 */
-  spawn: (cwd: string) => Promise<void>;
-  /** 关闭 PTY 进程 */
-  kill: () => Promise<void>;
-  /** 重连：签发新 token，前端重建 WebSocket 连接 */
-  reconnect: () => Promise<void>;
-  /** 通知 Rust 后端 PTY 窗口尺寸变化 */
-  resize: (cols: number, rows: number) => Promise<void>;
-  /** 由 useTerminal hook 更新连接状态 */
-  setConnected: (v: boolean) => void;
-}
-
-/** terminalStore - PTY 终端全局状态 */
-export const useTerminalStore = create<TerminalState>((set, get) => ({
-  ptyId: null,
-  wsPort: null,
-  wsToken: null,
-  connected: false,
+  /** 所有已激活项目的 PTY 会话，key = projectPath */
+  sessions: Record<string, PtySession>;
+  /** 当前激活的项目路径 */
+  activeProjectPath: string | null;
 
   /**
-   * 启动 PTY 进程
-   *
-   * 调用 Rust spawn_pty_cmd，获取 WebSocket 连接信息存入 store。
-   * xterm.js Terminal 组件在拿到 wsPort/wsToken 后建立 WebSocket 连接。
+   * 为指定项目 spawn PTY（不 kill 其他项目）
+   * 若该项目已有 PTY，先 kill 旧的（重启场景），再创建新的
    */
-  spawn: async (cwd: string) => {
-    // kill 旧 PTY（避免切换项目时 PTY 泄漏）
-    const { ptyId: oldPtyId } = get();
-    if (oldPtyId) {
-      await invoke('kill_pty_cmd', { ptyId: oldPtyId }).catch(() => {
-        // 旧 PTY 可能已退出，忽略 kill 错误
+  spawnForProject: (projectPath: string, cwd: string) => Promise<void>;
+  /**
+   * 激活指定项目（切换终端焦点）
+   * 若项目尚无 PTY，调用 spawnForProject；已有则只更新 activeProjectPath
+   */
+  activateProject: (projectPath: string) => Promise<void>;
+  /** kill 指定项目的 PTY，从 sessions 中移除 */
+  killProject: (projectPath: string) => Promise<void>;
+  /** 重连指定项目 PTY（签发新 token） */
+  reconnect: (projectPath: string) => Promise<void>;
+  /** 通知 Rust 后端当前活跃 PTY 的窗口尺寸变化 */
+  resize: (cols: number, rows: number) => Promise<void>;
+  /** 由 useTerminal hook 更新指定项目的连接状态 */
+  setConnected: (projectPath: string, v: boolean) => void;
+}
+
+export const useTerminalStore = create<TerminalState>((set, get) => ({
+  sessions: {},
+  activeProjectPath: null,
+
+  spawnForProject: async (projectPath: string, cwd: string) => {
+    const { sessions } = get();
+
+    // 若该项目已有 PTY，先 kill（重启/重连场景），不影响其他项目
+    const existing = sessions[projectPath];
+    if (existing) {
+      await invoke('kill_pty_cmd', { ptyId: existing.ptyId }).catch(() => {
+        // 旧 PTY 可能已退出，忽略错误
       });
     }
 
@@ -80,56 +80,83 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
     }
 
     const info = await invoke<PtyInfo>('spawn_pty_cmd', { shell, cwd });
-    set({
-      ptyId: info.pty_id,
-      wsPort: info.ws_port,
-      wsToken: info.ws_token,
-      connected: false,
+
+    set((state) => ({
+      sessions: {
+        ...state.sessions,
+        [projectPath]: {
+          ptyId: info.pty_id,
+          wsPort: info.ws_port,
+          wsToken: info.ws_token,
+          connected: false,
+        },
+      },
+    }));
+  },
+
+  activateProject: async (projectPath: string) => {
+    // 更新活跃项目（Terminal 组件通过 display:none/block 切换）
+    set({ activeProjectPath: projectPath });
+
+    // 若项目尚无 PTY 会话，spawn 一个
+    if (!get().sessions[projectPath]) {
+      await get().spawnForProject(projectPath, projectPath);
+    }
+  },
+
+  killProject: async (projectPath: string) => {
+    const session = get().sessions[projectPath];
+    if (!session) return;
+
+    await invoke('kill_pty_cmd', { ptyId: session.ptyId }).catch(() => {});
+
+    set((state) => {
+      const next = { ...state.sessions };
+      delete next[projectPath];
+      return {
+        sessions: next,
+        activeProjectPath:
+          state.activeProjectPath === projectPath ? null : state.activeProjectPath,
+      };
     });
   },
 
-  /**
-   * 关闭 PTY 进程
-   *
-   * 调用 Rust kill_pty_cmd，清空 store 中的连接状态。
-   */
-  kill: async () => {
-    const { ptyId } = get();
-    if (!ptyId) return;
-    await invoke('kill_pty_cmd', { ptyId });
-    set({ ptyId: null, wsPort: null, wsToken: null, connected: false });
+  reconnect: async (projectPath: string) => {
+    const session = get().sessions[projectPath];
+    if (!session) return;
+
+    const info = await invoke<PtyInfo>('reconnect_pty_cmd', { ptyId: session.ptyId });
+
+    set((state) => ({
+      sessions: {
+        ...state.sessions,
+        [projectPath]: {
+          ...state.sessions[projectPath]!,
+          wsPort: info.ws_port,
+          wsToken: info.ws_token,
+          connected: false,
+        },
+      },
+    }));
   },
 
-  /**
-   * 重连 PTY
-   *
-   * 调用 Rust reconnect_pty_cmd 签发新 token，
-   * useTerminal hook 监听 wsToken 变化后重建 WebSocket 连接。
-   */
-  reconnect: async () => {
-    const { ptyId } = get();
-    if (!ptyId) return;
-    const info = await invoke<PtyInfo>('reconnect_pty_cmd', { ptyId });
-    set({
-      wsPort: info.ws_port,
-      wsToken: info.ws_token,
-      connected: false,
-    });
-  },
-
-  /**
-   * 通知后端 PTY 尺寸变化
-   *
-   * 由 Terminal.tsx 的 ResizeObserver 在容器尺寸变化时调用。
-   */
   resize: async (cols: number, rows: number) => {
-    const { ptyId } = get();
-    if (!ptyId) return;
-    await invoke('resize_pty_cmd', { ptyId, cols, rows });
+    const { sessions, activeProjectPath } = get();
+    if (!activeProjectPath) return;
+    const session = sessions[activeProjectPath];
+    if (!session) return;
+    await invoke('resize_pty_cmd', { ptyId: session.ptyId, cols, rows });
   },
 
-  /** 更新 WebSocket 连接状态（由 useTerminal hook 调用） */
-  setConnected: (v: boolean) => {
-    set({ connected: v });
+  setConnected: (projectPath: string, v: boolean) => {
+    set((state) => {
+      if (!state.sessions[projectPath]) return state;
+      return {
+        sessions: {
+          ...state.sessions,
+          [projectPath]: { ...state.sessions[projectPath]!, connected: v },
+        },
+      };
+    });
   },
 }));
