@@ -42,20 +42,29 @@ const INITIAL_STATE: UpdaterState = {
   error: null,
 };
 
-// 启动后延迟检测，避免阻塞首屏渲染（单位：毫秒）
+// 启动后延迟首次检测，避免阻塞首屏渲染（单位：毫秒）
 const CHECK_DELAY_MS = 3000;
+// 后续定期检测间隔：1 小时（端点为 GitHub Releases CDN 直接下载，无 API 频率限制）
+const CHECK_INTERVAL_MS = 60 * 60 * 1000;
 
 export function useUpdater(): [UpdaterState, UpdaterActions] {
   const [state, setState] = useState<UpdaterState>(INITIAL_STATE);
   // 缓存 Update 对象，applyUpdate 时复用（避免重复检测网络请求）
   const updateRef = useRef<Update | null>(null);
+  // 用 ref 访问最新 state，避免 interval 闭包捕获旧值
+  const stateRef = useRef<UpdaterState>(INITIAL_STATE);
+  stateRef.current = state;
 
   useEffect(() => {
     // ============================================
-    // 第一步：延迟检测，不影响启动性能
-    // check() 返回 null 表示无更新，否则返回 Update 对象
+    // 检测逻辑：check() 返回 null 表示无更新
+    // 正在安装时跳过（避免干扰安装流程）
+    // 已发现更新时跳过（Banner 已显示，无需重复查询）
     // ============================================
-    const timer = setTimeout(async () => {
+    const runCheck = async () => {
+      const { available, installing } = stateRef.current;
+      if (available || installing) return;
+
       try {
         const update = await check();
         if (update !== null) {
@@ -71,9 +80,17 @@ export function useUpdater(): [UpdaterState, UpdaterActions] {
         // 检测失败静默处理（网络不可用、私有仓库未授权等属正常情况）
         console.warn('[updater] 检测更新失败:', e);
       }
-    }, CHECK_DELAY_MS);
+    };
 
-    return () => clearTimeout(timer);
+    // 启动后延迟首次检测
+    const initialTimer = setTimeout(runCheck, CHECK_DELAY_MS);
+    // 定期检测：每 4 小时再次检查，确保长时间运行的程序也能收到更新通知
+    const intervalTimer = setInterval(runCheck, CHECK_INTERVAL_MS);
+
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(intervalTimer);
+    };
   }, []);
 
   const applyUpdate = useCallback(async () => {
