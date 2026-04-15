@@ -1,0 +1,15 @@
+{
+  "version": "0.3.0",
+  "notes": "本地 mock 更新测试：验证 UpdateBanner 出现逻辑",
+  "pub_date": "2026-04-15T00:00:00Z",
+  "platforms": {
+    "darwin-aarch64": {
+      "url": "http://localhost:8745/fake.tar.gz",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IEZBS0UKZmFrZXNpZ25hdHVyZQ=="
+    },
+    "darwin-x86_64": {
+      "url": "http://localhost:8745/fake.tar.gz",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IEZBS0UKZmFrZXNpZ25hdHVyZQ=="
+    }
+  }
+}

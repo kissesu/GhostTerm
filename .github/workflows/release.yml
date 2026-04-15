@@ -72,6 +72,18 @@ jobs:
       - name: 安装前端依赖
         run: pnpm install --frozen-lockfile
 
+      # 诊断：验证签名 Secret 已正确注入（仅打印长度，不暴露值）
+      - name: 验证签名 Secret 非空
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "ERROR: TAURI_SIGNING_PRIVATE_KEY is empty or not set!"
+            exit 1
+          else
+            echo "TAURI_SIGNING_PRIVATE_KEY length: ${#KEY}"
+          fi
+
       # Tauri 官方 Action：构建 + 上传到 GitHub Release
       - name: 构建并发布
         uses: tauri-apps/tauri-action@v0
@@ -132,6 +144,18 @@ jobs:
 
       - name: 安装前端依赖
         run: pnpm install --frozen-lockfile
+
+      - name: 验证签名 Secret 非空
+        shell: bash
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "ERROR: TAURI_SIGNING_PRIVATE_KEY is empty or not set!"
+            exit 1
+          else
+            echo "TAURI_SIGNING_PRIVATE_KEY length: ${#KEY}"
+          fi
 
       - name: 构建并发布
         uses: tauri-apps/tauri-action@v0
