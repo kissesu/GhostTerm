@@ -465,9 +465,16 @@ pub async fn get_default_shell_cmd() -> Result<String, String> {
 // ============================================
 
 /// Tauri Command：启动 PTY
+///
+/// 强制注入终端类型环境变量：
+/// - TERM=xterm-256color：Tauri GUI 进程不继承用户 shell 环境，若不设置程序会降级到无色输出
+/// - COLORTERM=truecolor：声明支持 24-bit 真彩色，Claude Code 等程序据此启用全色渲染
 #[tauri::command]
 pub async fn spawn_pty_cmd(shell: String, cwd: String) -> Result<PtyInfo, String> {
-    spawn_pty(&shell, &cwd, HashMap::new()).await
+    let mut env = HashMap::new();
+    env.insert("TERM".to_string(), "xterm-256color".to_string());
+    env.insert("COLORTERM".to_string(), "truecolor".to_string());
+    spawn_pty(&shell, &cwd, env).await
 }
 
 /// Tauri Command：关闭 PTY
