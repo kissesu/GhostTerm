@@ -125,6 +125,10 @@ interface EditorState {
    * 若该项目无会话记录，则清空（等同于 closeAll 的效果）
    */
   restoreSession: (projectPath: string) => void;
+  /** 从磁盘加载指定项目的历史会话，注入到 projectSessions */
+  loadPersistedSession: (projectPath: string) => Promise<void>;
+  /** 将当前项目的编辑器状态持久化到磁盘 */
+  persistSession: (projectPath: string) => Promise<void>;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -267,6 +271,55 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       // 无历史会话：清空，等效旧的 closeAll
       set({ openFiles: [], activeFilePath: null });
     }
+  },
+
+  loadPersistedSession: async (projectPath: string) => {
+    try {
+      const data = await invoke<{ open_file_paths: string[]; active_file_path: string | null }>(
+        'get_editor_session_cmd',
+        { projectPath }
+      );
+
+      // 无历史记录时跳过（首次打开新项目的正常情况）
+      if (data.open_file_paths.length === 0 && !data.active_file_path) return;
+
+      // 构造轻量占位 OpenFile（content 为空，实际打开时重新读磁盘）
+      const openFiles: OpenFile[] = data.open_file_paths.map((path) => ({
+        path,
+        content: '',
+        diskContent: '',
+        isDirty: false,
+        language: inferLanguage(path),
+        kind: 'text' as const,
+      }));
+
+      set((state) => ({
+        projectSessions: {
+          ...state.projectSessions,
+          [projectPath]: {
+            openFiles,
+            activeFilePath: data.active_file_path,
+          },
+        },
+      }));
+    } catch {
+      // 无历史记录或 Rust 端错误，静默忽略
+    }
+  },
+
+  persistSession: async (projectPath: string) => {
+    const { projectSessions } = get();
+    const session = projectSessions[projectPath];
+    if (!session) return;
+
+    await invoke('save_editor_session_cmd', {
+      projectPath,
+      openFilePaths: session.openFiles.map((f) => f.path),
+      activeFilePath: session.activeFilePath,
+    }).catch((e: unknown) => {
+      // 持久化失败不影响主流程，记录日志
+      console.error('[editor] 持久化会话失败', e);
+    });
   },
 
   /**

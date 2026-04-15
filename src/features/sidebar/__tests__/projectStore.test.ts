@@ -143,9 +143,20 @@ vi.mock('../gitStore', () => ({
   },
 }));
 
+const mockSaveSession = vi.fn();
+const mockRestoreSession = vi.fn();
+const mockPersistSession = vi.fn().mockResolvedValue(undefined);
+const mockLoadPersistedSession = vi.fn().mockResolvedValue(undefined);
+
 vi.mock('../../editor/editorStore', () => ({
   useEditorStore: {
-    getState: () => ({ closeAll: mockCloseAll }),
+    getState: () => ({
+      closeAll: mockCloseAll,
+      saveSession: mockSaveSession,
+      restoreSession: mockRestoreSession,
+      persistSession: mockPersistSession,
+      loadPersistedSession: mockLoadPersistedSession,
+    }),
   },
 }));
 

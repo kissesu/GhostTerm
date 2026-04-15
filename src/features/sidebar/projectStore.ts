@@ -86,6 +86,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     if (previousPath && previousPath !== path) {
       // 保存旧项目当前打开的标签页快照，供下次切换回来时恢复
       useEditorStore.getState().saveSession(previousPath);
+      // 将旧项目状态持久化到磁盘（异步，不阻塞切换流程）
+      useEditorStore.getState().persistSession(previousPath).catch(() => {});
     }
     // 恢复新项目的标签页状态（无记录时等同于清空）
     useEditorStore.getState().restoreSession(path);

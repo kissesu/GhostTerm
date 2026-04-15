@@ -82,6 +82,15 @@ export default function AppLayout() {
       const { loadRecentProjects, openProject } = useProjectStore.getState();
       await loadRecentProjects();
       const { recentProjects } = useProjectStore.getState();
+
+      // 预加载所有项目的持久化会话（并行，不阻塞）
+      const { useEditorStore } = await import('../features/editor/editorStore');
+      await Promise.all(
+        recentProjects.map((p) =>
+          useEditorStore.getState().loadPersistedSession(p.path).catch(() => {})
+        )
+      );
+
       if (recentProjects.length > 0) {
         try {
           await openProject(recentProjects[0].path);
