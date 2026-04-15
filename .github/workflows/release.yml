@@ -33,9 +33,9 @@ jobs:
           # Apple Silicon (arm64) - 使用 macos-latest（自动分配 M 系列 runner）
           - target: aarch64-apple-darwin
             runner: macos-latest
-          # Intel x86_64 - 使用固定 x86 runner
+          # Intel x86_64 - macos-13 runner 已退役，改用 macos-latest (arm64) 交叉编译
           - target: x86_64-apple-darwin
-            runner: macos-13
+            runner: macos-latest
 
     steps:
       - name: 检出代码
