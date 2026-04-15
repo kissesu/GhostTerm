@@ -52,6 +52,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
    * 在函数体内动态 import 确保各模块独立初始化后再建立依赖关系
    */
   openProject: async (path: string) => {
+    // 记录切换前的项目路径（用于 saveSession，必须在 set({ currentProject }) 之前记录）
+    const previousPath = get().currentProject?.path ?? null;
+
     // ============================================
     // 第一步：通知后端打开项目（协调 watcher + PTY）
     // ============================================
@@ -75,13 +78,26 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     ]);
 
     // ============================================
-    // 第四步：关闭所有编辑器文件（旧项目文件不应出现在新项目中）
+    // 第四步：保存旧项目编辑器状态，恢复新项目编辑器状态
+    // previousPath 在函数开头记录，此时仍有效
+    // 新项目无历史记录时 restoreSession 等同于 closeAll（清空标签页）
     // ============================================
     const { useEditorStore } = await import('../editor/editorStore');
-    useEditorStore.getState().closeAll();
+    if (previousPath && previousPath !== path) {
+      // 保存旧项目当前打开的标签页快照，供下次切换回来时恢复
+      useEditorStore.getState().saveSession(previousPath);
+    }
+    // 恢复新项目的标签页状态（无记录时等同于清空）
+    useEditorStore.getState().restoreSession(path);
 
     // ============================================
-    // 第五步：按需刷新最近项目列表
+    // 第五步：激活新项目终端（已有 PTY 则复用，无则 spawn）
+    // ============================================
+    const { useTerminalStore } = await import('../terminal/terminalStore');
+    await useTerminalStore.getState().activateProject(path);
+
+    // ============================================
+    // 第六步：按需刷新最近项目列表
     // 已在列表中的项目不重新加载，避免后端按 last_opened 排序导致项目跳到首位
     // 新项目（不在列表中）需要加载以显示在列表里
     // ============================================

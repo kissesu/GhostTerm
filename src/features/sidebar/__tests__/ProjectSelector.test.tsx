@@ -11,6 +11,22 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({
   open: vi.fn().mockResolvedValue(null),
 }));
 
+// 避免 openProject 触发真实 activateProject → spawn_pty_cmd 污染其他测试的 invoke mock
+// mockActivateProject 暴露给测试文件，用于验证调用
+const mockActivateProject = vi.fn().mockResolvedValue(undefined);
+vi.mock('../../terminal/terminalStore', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../terminal/terminalStore')>();
+  return {
+    ...actual,
+    useTerminalStore: Object.assign(Object.create(Object.getPrototypeOf(actual.useTerminalStore)), actual.useTerminalStore, {
+      getState: () => ({
+        ...actual.useTerminalStore.getState(),
+        activateProject: mockActivateProject,
+      }),
+    }),
+  };
+});
+
 const mockInvoke = vi.mocked(invoke);
 
 const projects: ProjectInfo[] = [
@@ -278,5 +294,57 @@ describe('ProjectSelector', () => {
     render(<ProjectSelector />);
 
     expect(screen.queryByRole('button', { name: '向分组添加项目 GhostTerm' })).not.toBeInTheDocument();
+  });
+
+  it('openProject 调用 saveSession 保存旧状态而非 closeAll', async () => {
+    const { useEditorStore } = await import('../../editor/editorStore');
+    const { useTerminalStore } = await import('../../terminal/terminalStore');
+    const { useFileTreeStore } = await import('../fileTreeStore');
+    const { useGitStore } = await import('../gitStore');
+
+    const saveSession = vi.fn();
+    const restoreSession = vi.fn();
+    // terminalStore 已被顶部 vi.mock 替换，直接从 getState() 取 activateProject mock 引用
+    const activateProject = useTerminalStore.getState().activateProject as ReturnType<typeof vi.fn>;
+
+    // spy 所有会调 invoke 的子系统，替换为 noop，确保 invoke mock 队列只用于验证
+    const fileTreeSpy = vi.spyOn(useFileTreeStore, 'getState').mockReturnValue({
+      ...useFileTreeStore.getState(),
+      refreshFileTree: vi.fn().mockResolvedValue(undefined),
+    });
+    const gitSpy = vi.spyOn(useGitStore, 'getState').mockReturnValue({
+      ...useGitStore.getState(),
+      refreshGitStatus: vi.fn().mockResolvedValue(undefined),
+      refreshWorktrees: vi.fn().mockResolvedValue(undefined),
+    });
+    const editorSpy = vi.spyOn(useEditorStore, 'getState').mockReturnValue({
+      ...useEditorStore.getState(),
+      saveSession,
+      restoreSession,
+    });
+
+    try {
+      // 只需 mock open_project_cmd，其余子系统已被 spy 替换
+      mockInvoke.mockResolvedValueOnce({ name: 'proj-b', path: '/proj-b', last_opened: 0 });
+
+      useProjectStore.setState({
+        currentProject: { name: 'proj-a', path: '/proj-a', last_opened: 0 },
+        recentProjects: [
+          { name: 'proj-a', path: '/proj-a', last_opened: 0 },
+          { name: 'proj-b', path: '/proj-b', last_opened: 0 },
+        ],
+      });
+
+      await useProjectStore.getState().openProject('/proj-b');
+
+      expect(saveSession).toHaveBeenCalledWith('/proj-a');
+      expect(restoreSession).toHaveBeenCalledWith('/proj-b');
+      expect(activateProject).toHaveBeenCalledWith('/proj-b');
+    } finally {
+      // 无论测试成败，恢复所有 spy，避免污染其他测试
+      editorSpy.mockRestore();
+      fileTreeSpy.mockRestore();
+      gitSpy.mockRestore();
+    }
   });
 });
