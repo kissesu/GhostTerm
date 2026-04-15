@@ -22,6 +22,10 @@ on:
       # 仅 v 开头的版本 tag 触发，例如 v0.1.0、v1.2.3
       - 'v[0-9]+.[0-9]+.[0-9]+'
 
+# tauri-action 需要 contents: write 权限才能创建 GitHub Release 并上传产物
+permissions:
+  contents: write
+
 jobs:
   build-macos:
     name: Build macOS (${{ matrix.target }})
