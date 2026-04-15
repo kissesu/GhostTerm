@@ -218,7 +218,7 @@ export default function AppLayout() {
           minSize={15}
           style={{ overflow: 'hidden', minWidth: 0, minHeight: 0 }}
         >
-          <Terminal cwd={currentProjectPath} />
+          {currentProjectPath && <Terminal projectPath={currentProjectPath} />}
         </Panel>
       </PanelGroup>
     </div>

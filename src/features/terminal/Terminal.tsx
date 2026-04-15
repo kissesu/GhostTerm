@@ -4,8 +4,9 @@
  *              通过 AttachAddon 将 xterm.js 直接连接到 PTY WebSocket server（二进制帧）。
  *              使用 ResizeObserver 监听容器尺寸变化，触发 FitAddon.fit() 和 PTY resize。
  *              连接失败时显示错误 UI 和重试按钮。
+ *              每个实例对应一个项目（per-project session），通过 projectPath 订阅独立会话状态。
  * @author Atlas.oi
- * @date 2026-04-13
+ * @date 2026-04-15
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -22,8 +23,8 @@ import '@xterm/xterm/css/xterm.css';
 
 /** Terminal 组件 Props */
 interface TerminalProps {
-  /** 初始工作目录，spawn PTY 时使用 */
-  cwd?: string;
+  /** 项目路径，同时作为 PTY 工作目录和 sessions map 的 key */
+  projectPath: string;
   /** 容器样式类名 */
   className?: string;
 }
@@ -36,12 +37,12 @@ interface TerminalProps {
  * 2. 加载 WebglAddon（失败时 fallback 到 Canvas2D）
  * 3. 加载 Unicode11Addon 支持中文/宽字符
  * 4. 加载 FitAddon 自适应容器尺寸
- * 5. terminalStore.spawn(cwd) 启动 PTY，获取 wsPort/wsToken
- * 6. useTerminal hook 建立 WebSocket 连接
+ * 5. terminalStore.spawnForProject(projectPath) 启动 PTY，获取 wsPort/wsToken
+ * 6. useTerminal(projectPath) hook 建立 WebSocket 连接
  * 7. 加载 AttachAddon(ws) 连接 WebSocket
  * 8. ResizeObserver 监听容器尺寸 -> fitAddon.fit() -> resize_pty
  */
-export default function Terminal({ cwd, className }: TerminalProps) {
+export default function Terminal({ projectPath, className }: TerminalProps) {
   // 终端 DOM 容器 ref
   const containerRef = useRef<HTMLDivElement>(null);
   // XTerm 实例 ref（在多个 effect 中共享）
@@ -54,13 +55,15 @@ export default function Terminal({ cwd, className }: TerminalProps) {
 
   const terminalSettings = useSettingsStore((s) => s.terminal);
   const terminalTheme = getTerminalThemeById(terminalSettings.theme);
-  const spawn = useTerminalStore((s) => s.spawn);
-  const connected = useTerminalStore((s) => s.connected);
-  const ptyId = useTerminalStore((s) => s.ptyId);
+
+  // 只订阅本项目的 session 状态（避免其他项目变化触发重渲染）
+  const session = useTerminalStore((s) => s.sessions[projectPath] ?? null);
+  const connected = session?.connected ?? false;
+  const spawnForProject = useTerminalStore((s) => s.spawnForProject);
   const resize = useTerminalStore((s) => s.resize);
 
   // 获取 WebSocket ref（由 useTerminal 管理连接生命周期）
-  const { wsRef } = useTerminal();
+  const { wsRef } = useTerminal(projectPath);
 
   const focusTerminal = () => {
     const input = containerRef.current?.querySelector('textarea');
@@ -138,16 +141,16 @@ export default function Terminal({ cwd, className }: TerminalProps) {
   }, []); // 仅挂载时执行一次
 
   // ============================================
-  // Effect 2：启动 PTY（cwd 变化时重启）
-  // 未打开项目时（cwd=undefined）不 spawn，等待项目打开
+  // Effect 2：启动 PTY（若无 session 则 spawn，已有 session 则跳过）
+  // 不依赖 session 对象（避免 spawn 后 session 出现触发再次 spawn）
   // ============================================
   useEffect(() => {
-    if (!cwd) return;
-    spawn(cwd).catch((err: unknown) => {
+    if (session) return;
+    spawnForProject(projectPath, projectPath).catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
       setError(`PTY 启动失败: ${msg}`);
     });
-  }, [cwd]); // cwd 变化时重新 spawn
+  }, [projectPath]); // projectPath 变化时重新检查（多项目切换场景）
 
   // ============================================
   // Effect 3：WebSocket 连接后加载 AttachAddon
@@ -186,12 +189,13 @@ export default function Terminal({ cwd, className }: TerminalProps) {
   // ============================================
   // Effect 5：ResizeObserver 监听容器尺寸变化
   // 容器尺寸变化时：fitAddon.fit() -> 计算 rows/cols -> 通知 Rust PTY resize
+  // resize() 内部依赖 activeProjectPath，Terminal 组件无需传 ptyId
   // ============================================
   useEffect(() => {
     if (!containerRef.current) return;
 
     const observer = new ResizeObserver(() => {
-      if (!fitAddonRef.current || !termRef.current || !ptyId) return;
+      if (!fitAddonRef.current || !termRef.current || !session) return;
       try {
         fitAddonRef.current.fit();
         const cols = termRef.current.cols;
@@ -207,13 +211,13 @@ export default function Terminal({ cwd, className }: TerminalProps) {
 
     observer.observe(containerRef.current);
     return () => observer.disconnect();
-  }, [ptyId]); // ptyId 建立后才开始监听
+  }, [session]); // session 建立后才开始监听（替代原来的 ptyId 依赖）
 
   // ============================================
   // 渲染：始终挂载 containerRef div（xterm 需要 DOM 元素才能初始化）
   // 状态覆盖层浮于 xterm 之上，不阻止 xterm 实例创建
   // ============================================
-  const showOverlay = (!cwd && !connected) || (error && !connected);
+  const showOverlay = (!session && !connected) || (!!error && !connected);
 
   return (
     <div
@@ -258,20 +262,15 @@ export default function Terminal({ cwd, className }: TerminalProps) {
             zIndex: 10,
           }}
         >
-          {!cwd && !connected ? (
-            <div style={{ color: '#565f89', fontSize: '13px' }}>
-              打开项目后启动终端
-            </div>
-          ) : error ? (
+          {error ? (
             <>
               <div style={{ color: '#f7768e', fontSize: '14px' }}>
                 终端连接失败: {error}
               </div>
               <button
                 onClick={() => {
-                  if (!cwd) return;
                   setError(null);
-                  spawn(cwd).catch((err: unknown) => {
+                  spawnForProject(projectPath, projectPath).catch((err: unknown) => {
                     const msg = err instanceof Error ? err.message : String(err);
                     setError(`PTY 启动失败: ${msg}`);
                   });
@@ -289,7 +288,11 @@ export default function Terminal({ cwd, className }: TerminalProps) {
                 重试
               </button>
             </>
-          ) : null}
+          ) : (
+            <div style={{ color: '#565f89', fontSize: '13px' }}>
+              正在启动终端...
+            </div>
+          )}
         </div>
       )}
     </div>

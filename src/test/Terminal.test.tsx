@@ -5,8 +5,9 @@
  *              - WebGL addon 加载（失败时降级）
  *              - AttachAddon 在 WebSocket 连接后加载
  *              - 错误 UI 显示和重试按钮
+ *              - per-project session 状态订阅（Task 10 补全）
  * @author Atlas.oi
- * @date 2026-04-13
+ * @date 2026-04-15
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -138,6 +139,9 @@ class MockWebSocket {
 
 const mockInvoke = vi.mocked(invoke);
 
+// 项目路径常量（用作 per-project session key）
+const TEST_PROJECT_PATH = '/tmp/test';
+
 describe('Terminal', () => {
   beforeEach(() => {
     MockWebSocket.instances = [];
@@ -150,12 +154,10 @@ describe('Terminal', () => {
       terminal: DEFAULT_TERMINAL_SETTINGS,
     });
 
-    // 重置 store
+    // 重置 store 为新 API：sessions map + activeProjectPath
     useTerminalStore.setState({
-      ptyId: null,
-      wsPort: null,
-      wsToken: null,
-      connected: false,
+      sessions: {},
+      activeProjectPath: null,
     });
 
     // 默认 spawn 成功
@@ -180,17 +182,17 @@ describe('Terminal', () => {
 
   describe('挂载时初始化 xterm.js', () => {
     it('应创建 XTerm 实例', async () => {
-      render(<Terminal cwd="/tmp" />);
+      render(<Terminal projectPath={TEST_PROJECT_PATH} />);
       expect(MockXTerm).toHaveBeenCalledTimes(1);
     });
 
     it('应调用 open 将终端挂载到 DOM 容器', async () => {
-      render(<Terminal cwd="/tmp" />);
+      render(<Terminal projectPath={TEST_PROJECT_PATH} />);
       expect(mockTermOpen).toHaveBeenCalledTimes(1);
     });
 
     it('应加载 WebglAddon', async () => {
-      render(<Terminal cwd="/tmp" />);
+      render(<Terminal projectPath={TEST_PROJECT_PATH} />);
       expect(MockWebglAddon).toHaveBeenCalledTimes(1);
     });
 
@@ -199,25 +201,25 @@ describe('Terminal', () => {
       MockWebglAddon.mockImplementationOnce(() => {
         throw new Error('WebGL 不支持');
       });
-      expect(() => render(<Terminal cwd="/tmp" />)).not.toThrow();
+      expect(() => render(<Terminal projectPath={TEST_PROJECT_PATH} />)).not.toThrow();
       // XTerm 实例仍应创建（降级到 Canvas2D）
       expect(MockXTerm).toHaveBeenCalledTimes(1);
     });
 
     it('应加载 Unicode11Addon 支持宽字符', async () => {
-      render(<Terminal cwd="/tmp" />);
+      render(<Terminal projectPath={TEST_PROJECT_PATH} />);
       expect(MockUnicode11Addon).toHaveBeenCalledTimes(1);
     });
 
     it('应加载 FitAddon', async () => {
-      render(<Terminal cwd="/tmp" />);
+      render(<Terminal projectPath={TEST_PROJECT_PATH} />);
       expect(MockFitAddon).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('PTY 生命周期', () => {
-    it('挂载时应调用 spawn PTY', async () => {
-      render(<Terminal cwd="/projects/test" />);
+    it('挂载时应调用 spawnForProject 启动 PTY', async () => {
+      render(<Terminal projectPath="/projects/test" />);
 
       await waitFor(() => {
         expect(mockInvoke).toHaveBeenNthCalledWith(1, 'get_default_shell_cmd');
@@ -236,7 +238,7 @@ describe('Terminal', () => {
         theme: 'ghostterm-light',
       });
 
-      render(<Terminal cwd="/tmp" />);
+      render(<Terminal projectPath={TEST_PROJECT_PATH} />);
 
       expect(MockXTerm).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -246,20 +248,45 @@ describe('Terminal', () => {
         }),
       );
     });
+
+    it('session 已存在时不应重复 spawn', async () => {
+      // 预先注入一个已有 session，模拟项目已打开的场景
+      useTerminalStore.setState({
+        sessions: {
+          [TEST_PROJECT_PATH]: {
+            ptyId: 'existing-pty',
+            wsPort: 9999,
+            wsToken: 'a'.repeat(64),
+            connected: false,
+          },
+        },
+        activeProjectPath: TEST_PROJECT_PATH,
+      });
+
+      render(<Terminal projectPath={TEST_PROJECT_PATH} />);
+
+      // 等待可能的异步操作
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+
+      // 不应调用 spawn_pty_cmd（session 已存在，跳过 spawn）
+      expect(mockInvoke).not.toHaveBeenCalledWith('spawn_pty_cmd', expect.anything());
+    });
   });
 
   describe('WebSocket 连接后 AttachAddon', () => {
     it('connected 变为 true 且有 WebSocket 实例时应加载 AttachAddon', async () => {
-      render(<Terminal cwd="/tmp" />);
+      render(<Terminal projectPath={TEST_PROJECT_PATH} />);
 
-      // 等待 spawn 完成，store 有了 wsPort/wsToken
+      // 等待 spawn 完成，store 有了 session
       await waitFor(() => {
-        expect(useTerminalStore.getState().wsPort).toBe(54321);
+        expect(useTerminalStore.getState().sessions[TEST_PROJECT_PATH]?.wsPort).toBe(54321);
       });
 
-      // 模拟 WebSocket 已创建（useTerminal hook 建立连接）
+      // 模拟 WebSocket 已创建并连接（useTerminal hook 建立连接）
       await act(async () => {
-        useTerminalStore.setState({ connected: true });
+        useTerminalStore.getState().setConnected(TEST_PROJECT_PATH, true);
       });
 
       await waitFor(() => {
@@ -268,14 +295,14 @@ describe('Terminal', () => {
     });
 
     it('connected 变为 true 后应聚焦终端以接收键盘输入', async () => {
-      render(<Terminal cwd="/tmp" />);
+      render(<Terminal projectPath={TEST_PROJECT_PATH} />);
 
       await waitFor(() => {
-        expect(useTerminalStore.getState().wsPort).toBe(54321);
+        expect(useTerminalStore.getState().sessions[TEST_PROJECT_PATH]?.wsPort).toBe(54321);
       });
 
       await act(async () => {
-        useTerminalStore.setState({ connected: true });
+        useTerminalStore.getState().setConnected(TEST_PROJECT_PATH, true);
       });
 
       await waitFor(() => {
@@ -287,7 +314,7 @@ describe('Terminal', () => {
   describe('终端交互焦点', () => {
     it('点击终端容器时应聚焦 xterm 实例', async () => {
       const user = userEvent.setup();
-      render(<Terminal cwd="/tmp" />);
+      render(<Terminal projectPath={TEST_PROJECT_PATH} />);
 
       await user.click(screen.getByTestId('terminal-container'));
 
@@ -297,7 +324,7 @@ describe('Terminal', () => {
 
   describe('卸载时清理', () => {
     it('卸载时应 dispose XTerm 实例', async () => {
-      const { unmount } = render(<Terminal cwd="/tmp" />);
+      const { unmount } = render(<Terminal projectPath={TEST_PROJECT_PATH} />);
       unmount();
       expect(mockTermDispose).toHaveBeenCalledTimes(1);
     });
@@ -309,7 +336,7 @@ describe('Terminal', () => {
         .mockResolvedValueOnce('/bin/zsh')
         .mockRejectedValueOnce(new Error('shell 不存在'));
 
-      render(<Terminal cwd="/tmp" />);
+      render(<Terminal projectPath={TEST_PROJECT_PATH} />);
 
       await waitFor(() => {
         expect(screen.getByText(/PTY 启动失败/)).toBeInTheDocument();
@@ -321,14 +348,14 @@ describe('Terminal', () => {
         .mockResolvedValueOnce('/bin/zsh')
         .mockRejectedValueOnce(new Error('连接超时'));
 
-      render(<Terminal cwd="/tmp" />);
+      render(<Terminal projectPath={TEST_PROJECT_PATH} />);
 
       await waitFor(() => {
         expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument();
       });
     });
 
-    it('点击重试按钮应重新调用 spawn', async () => {
+    it('点击重试按钮应重新调用 spawnForProject', async () => {
       // 第一次失败
       mockInvoke
         .mockResolvedValueOnce('/bin/zsh')
@@ -342,7 +369,7 @@ describe('Terminal', () => {
           ws_token: 'd'.repeat(64),
         });
 
-      render(<Terminal cwd="/tmp" />);
+      render(<Terminal projectPath={TEST_PROJECT_PATH} />);
 
       await waitFor(() => {
         expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument();
@@ -352,7 +379,7 @@ describe('Terminal', () => {
       await user.click(screen.getByRole('button', { name: '重试' }));
 
       await waitFor(() => {
-        // 每次 spawn 都会先取默认 shell，再调用 spawn_pty_cmd
+        // 每次 spawnForProject 都会先取默认 shell，再调用 spawn_pty_cmd
         expect(mockInvoke).toHaveBeenCalledTimes(4);
       });
     });
@@ -360,7 +387,7 @@ describe('Terminal', () => {
 
   describe('终端容器 DOM', () => {
     it('无错误时应渲染终端容器', async () => {
-      render(<Terminal cwd="/tmp" />);
+      render(<Terminal projectPath={TEST_PROJECT_PATH} />);
 
       // spawn 成功后应渲染终端容器（不显示错误 UI）
       await waitFor(() => {
