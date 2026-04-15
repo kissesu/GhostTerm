@@ -122,7 +122,29 @@ describe('Editor', () => {
     });
   });
 
-  it('binary 文件：显示二进制占位符文字', () => {
+  it('binary 文件（非图片）：显示二进制占位符文字', () => {
+    // 使用非图片 MIME 类型（如可执行文件）触发占位符分支
+    useEditorStore.setState({
+      openFiles: [{
+        path: '/bin/program',
+        content: '',
+        diskContent: '',
+        isDirty: false,
+        language: '',
+        kind: 'binary',
+        mimeHint: 'application/octet-stream',
+      }],
+      activeFilePath: '/bin/program',
+    });
+
+    render(<Editor />);
+    expect(screen.getByTestId('editor-binary')).toBeInTheDocument();
+    expect(screen.getByText(/二进制文件，无法编辑/)).toBeInTheDocument();
+  });
+
+  it('binary 文件（图片）：渲染 ImagePreview 加载状态', async () => {
+    // invoke mock 默认返回 undefined，ImagePreview 先显示"加载中..."
+    vi.mocked(invoke).mockResolvedValue('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ');
     useEditorStore.setState({
       openFiles: [{
         path: '/assets/logo.png',
@@ -137,8 +159,11 @@ describe('Editor', () => {
     });
 
     render(<Editor />);
-    expect(screen.getByTestId('editor-binary')).toBeInTheDocument();
-    expect(screen.getByText(/二进制文件，无法编辑/)).toBeInTheDocument();
+    // 图片加载完成后显示 img 标签
+    await waitFor(() => {
+      expect(screen.getByTestId('editor-image')).toBeInTheDocument();
+      expect(screen.getByRole('img')).toHaveAttribute('src', expect.stringContaining('data:image/png;base64,'));
+    });
   });
 
   it('large 文件：显示只读大文件提示', () => {

@@ -60,6 +60,13 @@ export default function ProjectSelector() {
     [groups, recentProjects, projectGroupMap, systemGroupNames],
   );
 
+  // 侧边栏导航：当"未分组"没有项目时隐藏，避免初始化时出现空的默认分组
+  // ProjectList 仍使用完整 visibleGroups（含 ungrouped），保留分配选项
+  const navGroups = useMemo(
+    () => visibleGroups.filter((g) => g.id !== 'ungrouped' || g.projectCount > 0),
+    [visibleGroups],
+  );
+
   const currentGroup = findCurrentGroup(selectedGroupId, visibleGroups);
   const filteredProjects = useMemo(
     () =>
@@ -259,7 +266,7 @@ export default function ProjectSelector() {
       {menuOpen && (
         <div ref={groupMenuRef}>
           <ProjectGroupMenu
-            groups={visibleGroups}
+            groups={navGroups}
             selectedGroupId={selectedGroupId}
             onSelectGroup={(groupId) => {
               selectGroup(groupId);

@@ -7,7 +7,8 @@
  * @date 2026-04-15
  */
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { EditorView } from '@codemirror/view';
 import { basicSetup } from 'codemirror';
 import { EditorState, Compartment } from '@codemirror/state';
@@ -56,6 +57,86 @@ const ghosttermLight = EditorView.theme({
   '.cm-activeLine': { backgroundColor: '#ede9e340' },
   '.cm-matchingBracket, .cm-nonmatchingBracket': { backgroundColor: '#9b6e0022' },
 }, { dark: false });
+
+/**
+ * 图片预览组件
+ *
+ * 业务逻辑：
+ * 1. 通过 invoke 读取图片原始字节（Base64）
+ * 2. 拼接 data URL 作为 <img> src，无需配置 asset 协议权限
+ * 3. 加载中/失败分别显示对应状态
+ */
+function ImagePreview({ path, mimeHint }: { path: string; mimeHint: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSrc(null);
+    setError(null);
+    invoke<string>('read_image_bytes_cmd', { path })
+      .then((b64) => setSrc(`data:${mimeHint};base64,${b64}`))
+      .catch((e) => setError(String(e)));
+  }, [path, mimeHint]);
+
+  if (error) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100%',
+          color: '#f7768e',
+          fontSize: '14px',
+        }}
+      >
+        {error}
+      </div>
+    );
+  }
+
+  if (!src) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100%',
+          color: '#565f89',
+          fontSize: '14px',
+        }}
+      >
+        加载中...
+      </div>
+    );
+  }
+
+  return (
+    <div
+      data-testid="editor-image"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100%',
+        overflow: 'auto',
+        padding: '16px',
+      }}
+    >
+      <img
+        src={src}
+        alt={path.split('/').pop()}
+        style={{
+          maxWidth: '100%',
+          maxHeight: '100%',
+          objectFit: 'contain',
+          borderRadius: '4px',
+        }}
+      />
+    </div>
+  );
+}
 
 export default function Editor() {
   const { openFiles, activeFilePath, saveFile, updateContent } = useEditorStore();
@@ -216,8 +297,14 @@ export default function Editor() {
     );
   }
 
-  // 二进制文件占位符
+  // 二进制文件：图片类型渲染预览，其他类型展示占位符
   if (activeFile.kind === 'binary') {
+    const isImage = activeFile.mimeHint?.startsWith('image/') ?? false;
+    if (isImage) {
+      return (
+        <ImagePreview path={activeFile.path} mimeHint={activeFile.mimeHint!} />
+      );
+    }
     return (
       <div
         data-testid="editor-binary"

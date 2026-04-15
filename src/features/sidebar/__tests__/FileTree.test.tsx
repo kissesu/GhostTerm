@@ -211,16 +211,22 @@ describe('FileTree - 右键菜单对话框', () => {
     });
   });
 
-  it('文件夹右键菜单的发送相对路径应写入相对路径到剪贴板', async () => {
+  it('文件夹右键菜单的发送相对路径应 dispatch ghostterm:terminal-input 事件', async () => {
     const user = userEvent.setup();
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
     render(<FileTree />);
 
     fireEvent.contextMenu(screen.getByTestId('tree-node-src'));
     await user.click(await screen.findByText('发送相对路径'));
 
     await waitFor(() => {
-      expect(navigator.clipboard.writeText).toHaveBeenCalledWith('src');
+      const dispatched = dispatchSpy.mock.calls.some(
+        ([e]) => e instanceof CustomEvent && e.type === 'ghostterm:terminal-input' && e.detail === 'src',
+      );
+      expect(dispatched).toBe(true);
     });
+
+    dispatchSpy.mockRestore();
   });
 
   it('新建文件应通过对话框调用 create_entry_cmd', async () => {

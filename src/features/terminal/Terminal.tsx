@@ -62,6 +62,8 @@ export default function Terminal({ projectPath, className }: TerminalProps) {
   const connected = session?.connected ?? false;
   const spawnForProject = useTerminalStore((s) => s.spawnForProject);
   const resize = useTerminalStore((s) => s.resize);
+  // 判断当前实例是否是活跃终端（多项目场景下仅活跃终端处理外部输入事件）
+  const isActiveTerminal = useTerminalStore((s) => s.activeProjectPath === projectPath);
 
   // 获取 WebSocket ref（由 useTerminal 管理连接生命周期）
   const { wsRef } = useTerminal(projectPath);
@@ -198,6 +200,25 @@ export default function Terminal({ projectPath, className }: TerminalProps) {
       fitAddonRef.current?.fit();
     }
   }, [terminalTheme, terminalSettings.fontFamily, terminalSettings.fontSize, terminalSettings.cursorStyle]);
+
+  // ============================================
+  // Effect 5b：监听文件树"发送路径到终端"事件（ghostterm:terminal-input）
+  // 多项目场景：仅当前活跃终端实例处理此事件，其余实例忽略。
+  // 文本通过 WebSocket 直接写入 PTY，相当于用户在终端中输入该路径。
+  // ============================================
+  useEffect(() => {
+    if (!isActiveTerminal) return;
+
+    const handler = (e: Event) => {
+      const text = (e as CustomEvent<string>).detail;
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(new TextEncoder().encode(text));
+      }
+    };
+
+    window.addEventListener('ghostterm:terminal-input', handler);
+    return () => window.removeEventListener('ghostterm:terminal-input', handler);
+  }, [isActiveTerminal]); // wsRef 是稳定的 ref 对象，在 handler 内读取 .current
 
   // ============================================
   // Effect 5：ResizeObserver 监听容器尺寸变化

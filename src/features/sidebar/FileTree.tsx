@@ -79,7 +79,24 @@ function FileTreeNode({ node, depth, gitStatusClass }: FileTreeNodeProps) {
     : node.entry.name;
 
   const copyToClipboard = async (value: string) => {
-    await navigator.clipboard.writeText(value);
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      // WebView2(Windows) 在上下文菜单关闭瞬间 clipboard API 可能失败
+      // 用 execCommand 回退，兼容所有平台
+      const el = document.createElement('textarea');
+      el.value = value;
+      Object.assign(el.style, { position: 'fixed', top: '-999px', left: '-999px', opacity: '0' });
+      document.body.appendChild(el);
+      el.focus();
+      el.select();
+      try { document.execCommand('copy'); } finally { document.body.removeChild(el); }
+    }
+  };
+
+  // 向活跃终端发送文本（通过 CustomEvent 桥接到 Terminal 组件的 WebSocket）
+  const sendToTerminal = (text: string) => {
+    window.dispatchEvent(new CustomEvent('ghostterm:terminal-input', { detail: text }));
   };
 
   const handleClick = async () => {
@@ -257,14 +274,14 @@ function FileTreeNode({ node, depth, gitStatusClass }: FileTreeNodeProps) {
             复制路径
           </ContextMenuItem>
           <ContextMenuItem
-            onSelect={() => { void copyToClipboard(node.entry.path); }}
+            onSelect={() => sendToTerminal(node.entry.path)}
             style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12, color: 'var(--c-fg)', borderRadius: 4, fontFamily: 'var(--font-ui)' }}
           >
             <Send size={12} aria-hidden />
             发送路径
           </ContextMenuItem>
           <ContextMenuItem
-            onSelect={() => { void copyToClipboard(relativePath); }}
+            onSelect={() => sendToTerminal(relativePath)}
             style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12, color: 'var(--c-fg)', borderRadius: 4, fontFamily: 'var(--font-ui)' }}
           >
             <Send size={12} aria-hidden />

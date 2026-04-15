@@ -23,7 +23,7 @@ function fieldLabelStyle(): CSSProperties {
     display: 'block',
     fontSize: 13,
     fontWeight: 600,
-    color: '#c0caf5',
+    color: 'var(--c-fg)',
     marginBottom: 8,
   };
 }
@@ -33,9 +33,9 @@ function inputStyle(): CSSProperties {
     width: '100%',
     padding: '10px 12px',
     borderRadius: 10,
-    border: '1px solid #353852',
-    background: '#16161e',
-    color: '#eef0ff',
+    border: '1px solid var(--c-border)',
+    background: 'var(--c-input)',
+    color: 'var(--c-fg)',
     fontSize: 13,
     outline: 'none',
     boxSizing: 'border-box',
@@ -57,6 +57,7 @@ export default function AddProjectDialog({ onClose }: AddProjectDialogProps) {
   const dialogGroupId = useSidebarUiStore((s) => s.addProjectDialogGroupId);
   const {
     groups,
+    systemGroupNames,
     projectGroupMap,
     createGroup,
     assignProjectToGroup,
@@ -67,9 +68,10 @@ export default function AddProjectDialog({ onClose }: AddProjectDialogProps) {
     dialogGroupId ?? (storeSelectedGroupId === 'all' ? 'ungrouped' : storeSelectedGroupId);
   const [selectedGroupId, setSelectedGroupId] = useState(defaultGroupId);
 
+  // 传入 systemGroupNames，使"未分组"重命名后在此弹窗中正确显示
   const allVisibleGroups = useMemo(
-    () => buildVisibleGroups(groups, [], projectGroupMap),
-    [groups, projectGroupMap],
+    () => buildVisibleGroups(groups, [], projectGroupMap, systemGroupNames),
+    [groups, projectGroupMap, systemGroupNames],
   );
   const selectableGroups = allVisibleGroups.filter((group) => group.id !== 'all');
   const selectedGroup = selectableGroups.find((group) => group.id === selectedGroupId) ?? selectableGroups[0];
@@ -94,8 +96,8 @@ export default function AddProjectDialog({ onClose }: AddProjectDialogProps) {
     cursor: 'pointer',
     fontSize: 13,
     fontWeight: 500,
-    color: activeTab === tabId ? '#eef0ff' : '#6f748f',
-    background: activeTab === tabId ? '#353852' : 'transparent',
+    color: activeTab === tabId ? 'var(--c-fg)' : 'var(--c-fg-muted)',
+    background: activeTab === tabId ? 'var(--c-overlay)' : 'transparent',
     border: 'none',
     outline: 'none',
     transition: 'background 0.15s, color 0.15s',
@@ -187,20 +189,20 @@ export default function AddProjectDialog({ onClose }: AddProjectDialogProps) {
         style={{
           width: 500,
           borderRadius: 16,
-          background: '#1e2030',
-          border: '1px solid #353852',
+          background: 'var(--c-raised)',
+          border: '1px solid var(--c-border)',
           padding: '28px 32px 24px',
           position: 'relative',
           boxSizing: 'border-box',
-          boxShadow: '0 22px 50px rgba(0,0,0,0.35)',
+          boxShadow: 'var(--shadow-lg)',
         }}
         data-testid="add-project-dialog"
       >
         <div style={{ marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
             <div>
-              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#eef0ff' }}>添加项目</h2>
-              <p style={{ margin: '6px 0 0', fontSize: 12, color: '#6f748f', lineHeight: 1.5 }}>
+              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--c-fg)' }}>添加项目</h2>
+              <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--c-fg-muted)', lineHeight: 1.5 }}>
                 打开本地仓库，或克隆一个新的 Git 仓库后自动加入当前侧边栏。
               </p>
             </div>
@@ -213,7 +215,7 @@ export default function AddProjectDialog({ onClose }: AddProjectDialogProps) {
                 background: 'none',
                 border: 'none',
                 cursor: submitting ? 'default' : 'pointer',
-                color: '#6f748f',
+                color: 'var(--c-fg-muted)',
                 padding: 4,
                 display: 'flex',
                 alignItems: 'center',
@@ -229,7 +231,7 @@ export default function AddProjectDialog({ onClose }: AddProjectDialogProps) {
           style={{
             display: 'inline-flex',
             borderRadius: 10,
-            border: '1px solid #353852',
+            border: '1px solid var(--c-border)',
             padding: 3,
             marginBottom: 20,
           }}
@@ -268,9 +270,9 @@ export default function AddProjectDialog({ onClose }: AddProjectDialogProps) {
                     style={{
                       padding: '10px 16px',
                       borderRadius: 10,
-                      border: '1px solid #353852',
-                      background: '#2b2e43',
-                      color: '#eef0ff',
+                      border: '1px solid var(--c-border)',
+                      background: 'var(--c-raised)',
+                      color: 'var(--c-fg)',
                       fontSize: 13,
                       fontWeight: 600,
                       cursor: 'pointer',
@@ -281,7 +283,7 @@ export default function AddProjectDialog({ onClose }: AddProjectDialogProps) {
                   </button>
                 </div>
               </div>
-              <p style={{ margin: 0, fontSize: 12, color: '#6f748f' }}>选择一个已经存在的本地 Git 仓库目录。</p>
+              <p style={{ margin: 0, fontSize: 12, color: 'var(--c-fg-muted)' }}>选择一个已经存在的本地 Git 仓库目录。</p>
             </>
           )}
 
@@ -315,9 +317,9 @@ export default function AddProjectDialog({ onClose }: AddProjectDialogProps) {
                     style={{
                       padding: '10px 16px',
                       borderRadius: 10,
-                      border: '1px solid #353852',
-                      background: '#2b2e43',
-                      color: '#eef0ff',
+                      border: '1px solid var(--c-border)',
+                      background: 'var(--c-raised)',
+                      color: 'var(--c-fg)',
                       fontSize: 13,
                       fontWeight: 600,
                       cursor: 'pointer',
@@ -328,7 +330,7 @@ export default function AddProjectDialog({ onClose }: AddProjectDialogProps) {
                   </button>
                 </div>
               </div>
-              <p style={{ margin: 0, fontSize: 12, color: '#6f748f' }}>支持 HTTPS 或任意 Git 可识别的远程地址。</p>
+              <p style={{ margin: 0, fontSize: 12, color: 'var(--c-fg-muted)' }}>支持 HTTPS 或任意 Git 可识别的远程地址。</p>
             </>
           )}
 
@@ -362,9 +364,9 @@ export default function AddProjectDialog({ onClose }: AddProjectDialogProps) {
                     style={{
                       padding: '10px 16px',
                       borderRadius: 10,
-                      border: '1px solid #353852',
-                      background: '#2b2e43',
-                      color: '#eef0ff',
+                      border: '1px solid var(--c-border)',
+                      background: 'var(--c-raised)',
+                      color: 'var(--c-fg)',
                       fontSize: 13,
                       fontWeight: 600,
                       cursor: 'pointer',
@@ -375,7 +377,7 @@ export default function AddProjectDialog({ onClose }: AddProjectDialogProps) {
                   </button>
                 </div>
               </div>
-              <p style={{ margin: 0, fontSize: 12, color: '#6f748f' }}>用于明确使用 SSH 地址克隆仓库。</p>
+              <p style={{ margin: 0, fontSize: 12, color: 'var(--c-fg-muted)' }}>用于明确使用 SSH 地址克隆仓库。</p>
             </>
           )}
         </div>
@@ -393,9 +395,9 @@ export default function AddProjectDialog({ onClose }: AddProjectDialogProps) {
                 gap: 8,
                 padding: '10px 12px',
                 borderRadius: 10,
-                border: '1px solid #353852',
-                background: '#2b2e43',
-                color: '#eef0ff',
+                border: '1px solid var(--c-border)',
+                background: 'var(--c-raised)',
+                color: 'var(--c-fg)',
                 fontSize: 13,
                 cursor: 'pointer',
                 textAlign: 'left',
@@ -427,9 +429,9 @@ export default function AddProjectDialog({ onClose }: AddProjectDialogProps) {
                 width: 40,
                 height: 40,
                 borderRadius: 10,
-                border: '1px solid #353852',
-                background: '#2b2e43',
-                color: '#eef0ff',
+                border: '1px solid var(--c-border)',
+                background: 'var(--c-raised)',
+                color: 'var(--c-fg)',
                 fontSize: 18,
                 cursor: 'pointer',
                 display: 'flex',
@@ -451,8 +453,8 @@ export default function AddProjectDialog({ onClose }: AddProjectDialogProps) {
                   right: 48,
                   marginBottom: 4,
                   borderRadius: 10,
-                  border: '1px solid #353852',
-                  background: '#1e2030',
+                  border: '1px solid var(--c-border)',
+                  background: 'var(--c-overlay)',
                   overflow: 'hidden',
                   zIndex: 100,
                 }}
@@ -471,9 +473,9 @@ export default function AddProjectDialog({ onClose }: AddProjectDialogProps) {
                       alignItems: 'center',
                       gap: 8,
                       padding: '9px 12px',
-                      background: group.id === selectedGroupId ? '#353852' : 'transparent',
+                      background: group.id === selectedGroupId ? 'var(--c-raised)' : 'transparent',
                       border: 'none',
-                      color: '#eef0ff',
+                      color: 'var(--c-fg)',
                       fontSize: 13,
                       cursor: 'pointer',
                       textAlign: 'left',
@@ -503,8 +505,8 @@ export default function AddProjectDialog({ onClose }: AddProjectDialogProps) {
               marginBottom: 16,
               padding: '10px 12px',
               borderRadius: 10,
-              background: 'rgba(247, 118, 142, 0.12)',
-              color: '#f29ba1',
+              background: 'var(--c-danger-dim)',
+              color: 'var(--c-danger)',
               fontSize: 12,
               lineHeight: 1.5,
             }}
@@ -522,9 +524,9 @@ export default function AddProjectDialog({ onClose }: AddProjectDialogProps) {
             style={{
               padding: '10px 24px',
               borderRadius: 10,
-              border: '1px solid #353852',
+              border: '1px solid var(--c-border)',
               background: 'transparent',
-              color: '#eef0ff',
+              color: 'var(--c-fg)',
               fontSize: 13,
               fontWeight: 500,
               cursor: submitting ? 'default' : 'pointer',
@@ -540,8 +542,8 @@ export default function AddProjectDialog({ onClose }: AddProjectDialogProps) {
               padding: '10px 24px',
               borderRadius: 10,
               border: 'none',
-              background: submitPayload && !submitting ? '#5b8def' : '#3d4263',
-              color: '#eef0ff',
+              background: submitPayload && !submitting ? 'var(--c-accent)' : 'var(--c-fg-subtle)',
+              color: submitPayload && !submitting ? 'var(--c-accent-text)' : 'var(--c-fg)',
               fontSize: 13,
               fontWeight: 600,
               cursor: submitPayload && !submitting ? 'pointer' : 'default',

@@ -80,20 +80,20 @@ jobs:
           VERSION="${{ github.ref_name }}"
           VERSION="${VERSION#v}"
           python3 -c "
-import json, re
-v = '$VERSION'
-with open('src-tauri/tauri.conf.json') as f:
-    data = json.load(f)
-data['version'] = v
-with open('src-tauri/tauri.conf.json', 'w') as f:
-    json.dump(data, f, indent=2, ensure_ascii=False)
-with open('src-tauri/Cargo.toml') as f:
-    ct = f.read()
-ct = re.sub(r'(?m)^version = \"[^\"]*\"', f'version = \"{v}\"', ct, count=1)
-with open('src-tauri/Cargo.toml', 'w') as f:
-    f.write(ct)
-print('version synced:', v)
-"
+          import json, re
+          v = '$VERSION'
+          with open('src-tauri/tauri.conf.json') as f:
+              data = json.load(f)
+          data['version'] = v
+          with open('src-tauri/tauri.conf.json', 'w') as f:
+              json.dump(data, f, indent=2, ensure_ascii=False)
+          with open('src-tauri/Cargo.toml') as f:
+              ct = f.read()
+          ct = re.sub(r'(?m)^version = \"[^\"]*\"', f'version = \"{v}\"', ct, count=1)
+          with open('src-tauri/Cargo.toml', 'w') as f:
+              f.write(ct)
+          print('version synced:', v)
+          "
 
       # 诊断：验证签名 Secret 已正确注入（仅打印长度，不暴露值）
       - name: 验证签名 Secret 非空
@@ -174,20 +174,20 @@ print('version synced:', v)
           VERSION="${{ github.ref_name }}"
           VERSION="${VERSION#v}"
           python3 -c "
-import json, re
-v = '$VERSION'
-with open('src-tauri/tauri.conf.json') as f:
-    data = json.load(f)
-data['version'] = v
-with open('src-tauri/tauri.conf.json', 'w') as f:
-    json.dump(data, f, indent=2, ensure_ascii=False)
-with open('src-tauri/Cargo.toml') as f:
-    ct = f.read()
-ct = re.sub(r'(?m)^version = \"[^\"]*\"', f'version = \"{v}\"', ct, count=1)
-with open('src-tauri/Cargo.toml', 'w') as f:
-    f.write(ct)
-print('version synced:', v)
-"
+          import json, re
+          v = '$VERSION'
+          with open('src-tauri/tauri.conf.json') as f:
+              data = json.load(f)
+          data['version'] = v
+          with open('src-tauri/tauri.conf.json', 'w') as f:
+              json.dump(data, f, indent=2, ensure_ascii=False)
+          with open('src-tauri/Cargo.toml') as f:
+              ct = f.read()
+          ct = re.sub(r'(?m)^version = \"[^\"]*\"', f'version = \"{v}\"', ct, count=1)
+          with open('src-tauri/Cargo.toml', 'w') as f:
+              f.write(ct)
+          print('version synced:', v)
+          "
 
       - name: 验证签名 Secret 非空
         shell: bash
