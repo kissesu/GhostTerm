@@ -17,6 +17,8 @@ use tokio::sync::Mutex as TokioMutex;
 use crate::types::ProjectInfo;
 use crate::fs_backend::watcher::{start_watching, stop_watching};
 use persistence::{load_projects, save_projects};
+use tauri::Manager;
+use session::{EditorSession, get_session, save_session};
 
 // 最多保留最近打开的项目数量（超出后删除最旧记录）
 const MAX_RECENT_PROJECTS: usize = 20;
@@ -274,9 +276,6 @@ pub async fn close_project_cmd() -> Result<(), String> {
 pub fn clone_repository_cmd(repository_url: String, destination_path: String) -> Result<(), String> {
     clone_repository(&repository_url, &destination_path)
 }
-
-use tauri::Manager;
-use session::{EditorSession, get_session, save_session};
 
 #[tauri::command]
 pub async fn get_editor_session_cmd(

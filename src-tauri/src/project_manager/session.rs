@@ -7,7 +7,11 @@
 
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::{Mutex, OnceLock};
 use serde::{Deserialize, Serialize};
+
+/// 进程级文件锁，序列化 save_session 的并发 read-modify-write 操作
+static SESSION_FILE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EditorSession {
@@ -47,6 +51,8 @@ pub fn get_session(path: &Path, project_path: &str) -> EditorSession {
 }
 
 pub fn save_session(path: &Path, project_path: &str, session: EditorSession) -> Result<(), String> {
+    let lock = SESSION_FILE_LOCK.get_or_init(|| Mutex::new(()));
+    let _guard = lock.lock().map_err(|_| "会话文件锁中毒".to_string())?;
     let mut sessions = load_sessions(path);
     sessions.insert(project_path.to_string(), session);
     save_sessions(path, &sessions)
