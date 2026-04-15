@@ -39,7 +39,9 @@ notify = "7"
 ignore = "0.4"
 
 # Git 操作 - 状态查询、暂存、Worktree 管理
-git2 = "0.20"
+# default-features = false 禁用 ssh/https/http2 网络 transport，移除 OpenSSL 依赖
+# GhostTerm 只做本地 git 操作（status/stage/worktree），不需要任何网络传输
+git2 = { version = "0.20", default-features = false }
 
 # 系统路径工具 - 用于定位配置目录 (~/.config/ghostterm 等)
 dirs = "6"
