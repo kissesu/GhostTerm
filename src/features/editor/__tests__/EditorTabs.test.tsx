@@ -204,3 +204,53 @@ describe('EditorTabs', () => {
     });
   });
 });
+
+describe('per-project session isolation', () => {
+  it('saveSession 保存当前 openFiles 到 projectSessions', () => {
+    const store = useEditorStore.getState();
+    useEditorStore.setState({
+      openFiles: [
+        { path: '/proj-a/src/main.ts', content: 'hello', diskContent: 'hello',
+          isDirty: false, language: 'ts', kind: 'text' },
+      ],
+      activeFilePath: '/proj-a/src/main.ts',
+    });
+    store.saveSession('/proj-a');
+    const sessions = useEditorStore.getState().projectSessions;
+    expect(sessions['/proj-a']?.openFiles).toHaveLength(1);
+    expect(sessions['/proj-a']?.activeFilePath).toBe('/proj-a/src/main.ts');
+  });
+
+  it('restoreSession 从 projectSessions 恢复状态（已有会话）', () => {
+    useEditorStore.setState({
+      projectSessions: {
+        '/proj-b': {
+          openFiles: [
+            { path: '/proj-b/index.ts', content: 'world', diskContent: 'world',
+              isDirty: false, language: 'ts', kind: 'text' },
+          ],
+          activeFilePath: '/proj-b/index.ts',
+        },
+      },
+    });
+    useEditorStore.getState().restoreSession('/proj-b');
+    const state = useEditorStore.getState();
+    expect(state.openFiles).toHaveLength(1);
+    expect(state.activeFilePath).toBe('/proj-b/index.ts');
+  });
+
+  it('restoreSession 对无记录项目清空状态', () => {
+    useEditorStore.setState({
+      openFiles: [
+        { path: '/old/file.ts', content: '', diskContent: '',
+          isDirty: false, language: 'ts', kind: 'text' },
+      ],
+      activeFilePath: '/old/file.ts',
+      projectSessions: {},
+    });
+    useEditorStore.getState().restoreSession('/new-project-no-session');
+    const state = useEditorStore.getState();
+    expect(state.openFiles).toHaveLength(0);
+    expect(state.activeFilePath).toBeNull();
+  });
+});

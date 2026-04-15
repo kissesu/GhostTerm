@@ -79,6 +79,12 @@ function resultToOpenFile(path: string, result: ReadFileResult): OpenFile {
   }
 }
 
+/** 单项目编辑器会话快照 */
+interface EditorSession {
+  openFiles: OpenFile[];
+  activeFilePath: string | null;
+}
+
 /** 编辑器状态接口 */
 interface EditorState {
   /** 当前所有已打开的文件 */
@@ -106,11 +112,24 @@ interface EditorState {
   updateContent: (path: string, content: string) => void;
   /** 处理外部文件变化（PBI-4 时完整实现，此处为骨架） */
   handleExternalChange: (path: string) => Promise<void>;
+  /** 所有已激活过的项目编辑器会话，key = projectPath */
+  projectSessions: Record<string, EditorSession>;
+  /**
+   * 将当前 openFiles/activeFilePath 快照保存到 projectSessions[projectPath]
+   * 在 openProject 切换前调用，防止状态丢失
+   */
+  saveSession: (projectPath: string) => void;
+  /**
+   * 从 projectSessions[projectPath] 恢复状态到 openFiles/activeFilePath
+   * 若该项目无会话记录，则清空（等同于 closeAll 的效果）
+   */
+  restoreSession: (projectPath: string) => void;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
   openFiles: [],
   activeFilePath: null,
+  projectSessions: {},
 
   openFile: async (path: string) => {
     const { openFiles } = get();
@@ -223,6 +242,29 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         return { ...f, content, isDirty };
       }),
     }));
+  },
+
+  saveSession: (projectPath: string) => {
+    const { openFiles, activeFilePath } = get();
+    // 只保存文件路径和激活状态，内容从磁盘重新读取（节省内存）
+    set((state) => ({
+      projectSessions: {
+        ...state.projectSessions,
+        [projectPath]: { openFiles, activeFilePath },
+      },
+    }));
+  },
+
+  restoreSession: (projectPath: string) => {
+    const { projectSessions } = get();
+    const session = projectSessions[projectPath];
+    if (session) {
+      // 恢复该项目上次的 openFiles 和激活文件
+      set({ openFiles: session.openFiles, activeFilePath: session.activeFilePath });
+    } else {
+      // 无历史会话：清空，等效旧的 closeAll
+      set({ openFiles: [], activeFilePath: null });
+    }
   },
 
   /**
