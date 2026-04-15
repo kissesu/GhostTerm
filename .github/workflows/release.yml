@@ -77,6 +77,12 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 自动更新签名私钥 - 在仓库 Settings > Secrets 添加 TAURI_SIGNING_PRIVATE_KEY
+          # 生成方法：pnpm dlx @tauri-apps/cli@latest signer generate
+          # 将输出的公钥填入 tauri.conf.json plugins.updater.pubkey
+          # 将输出的私钥存入此 Secret
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           # 代码签名（可选，当前未启用）
           # APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           # APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -131,6 +137,8 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: GhostTerm ${{ github.ref_name }}

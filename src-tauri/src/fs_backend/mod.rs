@@ -57,10 +57,16 @@ pub fn read_file(path: &str) -> ReadFileResult {
     };
 
     // 第三步：检测是否为二进制文件（通过 MIME 魔数）
+    // infer 同时覆盖二进制（image/png、application/pdf 等）和文本（text/html、text/xml）两类格式。
+    // GhostTerm 的 Binary 语义 = "用户无法在编辑器中编辑的文件"；
+    // text/* 类型（HTML/XML/SVG 等）的内容仍是可读 UTF-8 文本，应进入普通文本编辑路径。
     if let Some(kind) = infer::get(&bytes) {
-        return ReadFileResult::Binary {
-            mime_hint: kind.mime_type().to_string(),
-        };
+        if !kind.mime_type().starts_with("text/") {
+            return ReadFileResult::Binary {
+                mime_hint: kind.mime_type().to_string(),
+            };
+        }
+        // text/* 类型：跳过 Binary 判断，继续走 UTF-8 解码流程
     }
 
     // 第四步：尝试 UTF-8 解码
@@ -317,6 +323,17 @@ pub fn delete_entry_cmd(path: String) -> Result<(), String> {
 #[tauri::command]
 pub fn rename_entry_cmd(old_path: String, new_path: String) -> Result<(), String> {
     rename_entry(&old_path, &new_path)
+}
+
+/// Tauri Command: 读取文件原始字节并返回 Base64 编码字符串
+///
+/// 专用于前端图片预览：前端拼接 `data:<mimeHint>;base64,<返回值>` 作为 <img> src
+/// 不走 read_file 流程，直接读取字节避免 UTF-8 解码尝试
+#[tauri::command]
+pub fn read_image_bytes_cmd(path: String) -> Result<String, String> {
+    use base64::{Engine as _, engine::general_purpose};
+    let bytes = fs::read(&path).map_err(|e| format!("读取图片失败 {}: {}", path, e))?;
+    Ok(general_purpose::STANDARD.encode(&bytes))
 }
 
 #[cfg(test)]

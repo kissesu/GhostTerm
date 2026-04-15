@@ -17,6 +17,10 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-opener = "2"
+# 在线自动更新 - 启动时检测 GitHub Releases 最新版本，引导用户安装
+tauri-plugin-updater = "2"
+# 进程操作 - 用于自动更新安装完成后重启应用
+tauri-plugin-process = "2"
 
 # 序列化/反序列化 - 用于 Tauri Commands 数据传输和持久化
 serde = { version = "1", features = ["derive"] }
@@ -57,6 +61,9 @@ chardetng = "0.1"
 
 # MIME 类型检测 - 通过文件魔数（magic bytes）识别二进制文件类型
 infer = "0.16"
+
+# Base64 编码 - 用于图片文件读取后转为 data URL，供前端 <img> 直接渲染
+base64 = "0.22"
 
 # E2E 测试支持 - tauri-webdriver + WebdriverIO 集成（PBI-6 使用）
 tauri-plugin-webdriver-automation = "0.1"

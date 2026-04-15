@@ -17,7 +17,7 @@ pub mod project_manager;
 use pty_manager::{spawn_pty_cmd, kill_pty_cmd, resize_pty_cmd, reconnect_pty_cmd, get_default_shell_cmd};
 
 // PBI-2 Commands
-use fs_backend::{read_file_cmd, write_file_cmd, list_dir_cmd, create_entry_cmd, delete_entry_cmd, rename_entry_cmd};
+use fs_backend::{read_file_cmd, write_file_cmd, list_dir_cmd, create_entry_cmd, delete_entry_cmd, rename_entry_cmd, read_image_bytes_cmd};
 
 // PBI-4 Commands - 文件系统实时监听
 use fs_backend::{start_watching_cmd, stop_watching_cmd};
@@ -37,6 +37,10 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         // 文件对话框 - 用于项目选择器"打开文件夹"功能
         .plugin(tauri_plugin_dialog::init())
+        // 在线自动更新 - 启动时检测 GitHub Releases，引导用户安装新版本
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        // 进程管理 - 更新安装完成后重启应用
+        .plugin(tauri_plugin_process::init())
         // E2E 测试支持（PBI-6 使用）
         .plugin(tauri_plugin_webdriver_automation::init())
         // ============================================
@@ -77,6 +81,18 @@ pub fn run() {
                         }
                     }
                 }
+
+                // ============================================
+                // Windows：关闭原生窗口装饰（标题栏 + 按钮）
+                // titleBarStyle: "Overlay" 仅对 macOS 生效；
+                // Windows 需要显式禁用原生装饰，否则原生标题栏与前端
+                // WindowControls 会同时显示，造成双标题栏问题。
+                // 窗口边框/阴影由 WebView2 框架自行处理。
+                // ============================================
+                #[cfg(target_os = "windows")]
+                {
+                    let _ = win.set_decorations(false);
+                }
             }
             Ok(())
         })
@@ -94,6 +110,7 @@ pub fn run() {
             create_entry_cmd,
             delete_entry_cmd,
             rename_entry_cmd,
+            read_image_bytes_cmd,
             // PBI-3: 项目管理
             list_recent_projects_cmd,
             open_project_cmd,

@@ -11,10 +11,13 @@ import AppLayout from './layouts/AppLayout';
 import { SettingsPage } from './features/settings';
 import { useSettingsStore } from './shared/stores/settingsStore';
 import { syncTheme } from './shared/stores/themeStore';
+import { useUpdater } from './features/updater/useUpdater';
+import UpdateBanner from './features/updater/UpdateBanner';
 
 function App() {
   const appView  = useSettingsStore((s) => s.appView);
   const appTheme = useSettingsStore((s) => s.appTheme);
+  const [updateState, updateActions] = useUpdater();
 
   useEffect(() => {
     // 跟随系统偏好的 media query
@@ -54,6 +57,8 @@ function App() {
         <AppLayout />
       </div>
       {appView === 'settings' && <SettingsPage />}
+      {/* 更新提示横幅：有新版本时显示在窗口底部 */}
+      <UpdateBanner state={updateState} actions={updateActions} />
     </>
   );
 }
