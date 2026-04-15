@@ -1,10 +1,10 @@
 /**
- * @file useTerminal - WebSocket 连接生命周期管理 hook
- * @description 负责建立和维护 xterm.js 到 PTY WebSocket server 的连接。
- *              监听 terminalStore 中的 wsPort/wsToken 变化，自动重建 WebSocket 连接。
- *              连接断开时触发重连逻辑（延迟 1s 防止死循环），返回 WebSocket ref 给 Terminal.tsx。
+ * @file useTerminal - 单项目 WebSocket 连接生命周期管理 hook
+ * @description 接受 projectPath 参数，订阅 terminalStore.sessions[projectPath] 的
+ *              wsPort/wsToken 变化，建立并维护该项目的 PTY WebSocket 连接。
+ *              连接断开时触发重连，返回 WebSocket ref 给 Terminal.tsx。
  * @author Atlas.oi
- * @date 2026-04-13
+ * @date 2026-04-15
  */
 
 import { useEffect, useRef } from 'react';
@@ -17,18 +17,21 @@ export interface UseTerminalResult {
 }
 
 /**
- * useTerminal - 管理 PTY WebSocket 连接
+ * useTerminal - 管理指定项目的 PTY WebSocket 连接
  *
  * 业务逻辑：
- * 1. 监听 wsPort/wsToken 变化，有值时建立 WebSocket 连接
- * 2. onopen：setConnected(true)
- * 3. onclose：setConnected(false) + 延迟 1s 后调用 reconnect()
- * 4. 组件卸载时关闭 WebSocket
+ * 1. 从 sessions[projectPath] 读取 wsPort/wsToken
+ * 2. 有值时建立 WebSocket 连接
+ * 3. onopen：setConnected(projectPath, true)
+ * 4. onclose：setConnected(projectPath, false) + 延迟 1s 重连
+ * 5. 组件卸载（或项目切换）时关闭 WebSocket
  */
-export function useTerminal(): UseTerminalResult {
+export function useTerminal(projectPath: string): UseTerminalResult {
   const wsRef = useRef<WebSocket | null>(null);
-  const wsPort = useTerminalStore((s) => s.wsPort);
-  const wsToken = useTerminalStore((s) => s.wsToken);
+
+  // 只订阅当前项目的 wsPort/wsToken，避免其他项目变化触发重渲染
+  const wsPort = useTerminalStore((s) => s.sessions[projectPath]?.wsPort ?? null);
+  const wsToken = useTerminalStore((s) => s.sessions[projectPath]?.wsToken ?? null);
   const setConnected = useTerminalStore((s) => s.setConnected);
   const reconnect = useTerminalStore((s) => s.reconnect);
 
@@ -65,10 +68,6 @@ export function useTerminal(): UseTerminalResult {
     intentionalCloseRef.current = false;
 
     // 建立新连接
-    console.info('[terminal] 建立 WebSocket 连接', {
-      wsPort,
-      tokenPreview: wsToken.slice(0, 8),
-    });
     const ws = new WebSocket(`ws://127.0.0.1:${wsPort}?token=${wsToken}`);
     ws.binaryType = 'arraybuffer'; // xterm.js AttachAddon 需要 arraybuffer
     wsRef.current = ws;
@@ -79,31 +78,25 @@ export function useTerminal(): UseTerminalResult {
         ws.close();
         return;
       }
-      console.info('[terminal] WebSocket 已连接');
-      setConnected(true);
+      setConnected(projectPath, true);
     };
 
-    ws.onclose = (event) => {
+    ws.onclose = () => {
       if (aborted) return; // effect 已清理，不触发重连
-      console.warn('[terminal] WebSocket 已关闭', {
-        code: event.code,
-        intentional: intentionalCloseRef.current,
-      });
-      setConnected(false);
+      setConnected(projectPath, false);
       // 非主动关闭时，延迟 1s 重连（防止快速循环）
       if (!intentionalCloseRef.current) {
         reconnectTimerRef.current = setTimeout(() => {
-          console.info('[terminal] 尝试重连 PTY');
-          reconnect().catch(() => {
+          reconnect(projectPath).catch(() => {
             // PTY 已不存在，静默失败
-            console.error('[terminal] PTY 重连失败');
+            console.error(`[terminal] ${projectPath} PTY 重连失败`);
           });
         }, 1000);
       }
     };
 
     ws.onerror = () => {
-      console.error('[terminal] WebSocket 连接错误');
+      console.error(`[terminal] ${projectPath} WebSocket 连接错误`);
     };
 
     return () => {
@@ -117,16 +110,13 @@ export function useTerminal(): UseTerminalResult {
       // 可能先完成握手并消耗 token，导致新连接被静默拒绝。
       if (ws.readyState !== WebSocket.CLOSED) {
         try {
-          console.info('[terminal] 清理旧 WebSocket 连接', {
-            readyState: ws.readyState,
-          });
           ws.close();
         } catch {
           // 忽略浏览器对 CONNECTING 连接 close 的告警或异常
         }
       }
     };
-  }, [wsPort, wsToken]); // 依赖 wsPort/wsToken，reconnect 时会变化
+  }, [wsPort, wsToken, projectPath]); // 依赖 wsPort/wsToken/projectPath，任一变化重建连接
 
   return { wsRef };
 }

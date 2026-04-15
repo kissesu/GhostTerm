@@ -4,13 +4,16 @@
  *              onclose 触发 reconnect，WebSocket 实例正确创建。
  *              使用 vitest fake timers 控制重连延迟。
  * @author Atlas.oi
- * @date 2026-04-13
+ * @date 2026-04-15
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useTerminal } from '../features/terminal/useTerminal';
 import { useTerminalStore } from '../features/terminal/terminalStore';
+
+// 测试用项目路径常量
+const TEST_PATH = '/test-project';
 
 // 模拟 WebSocket
 class MockWebSocket {
@@ -65,12 +68,17 @@ describe('useTerminal', () => {
     vi.stubGlobal('WebSocket', MockWebSocket);
     vi.useFakeTimers();
 
-    // 重置 store 状态
+    // 重置 store 为 per-project sessions 格式
     useTerminalStore.setState({
-      ptyId: 'test-pty-id',
-      wsPort: 54321,
-      wsToken: 'a'.repeat(64),
-      connected: false,
+      sessions: {
+        [TEST_PATH]: {
+          ptyId: 'test-pty-id',
+          wsPort: 54321,
+          wsToken: 'a'.repeat(64),
+          connected: false,
+        },
+      },
+      activeProjectPath: TEST_PATH,
     });
 
     vi.clearAllMocks();
@@ -82,7 +90,7 @@ describe('useTerminal', () => {
   });
 
   it('wsPort/wsToken 有值时应创建 WebSocket 连接', () => {
-    renderHook(() => useTerminal());
+    renderHook(() => useTerminal(TEST_PATH));
 
     expect(MockWebSocket.instances.length).toBe(1);
     expect(MockWebSocket.instances[0].url).toBe(
@@ -91,15 +99,16 @@ describe('useTerminal', () => {
   });
 
   it('wsPort/wsToken 为 null 时不应创建 WebSocket', () => {
-    useTerminalStore.setState({ wsPort: null, wsToken: null });
+    // 项目无 session 时 sessions[path] 为 undefined，wsPort/wsToken 均为 null
+    useTerminalStore.setState({ sessions: {} });
 
-    renderHook(() => useTerminal());
+    renderHook(() => useTerminal(TEST_PATH));
 
     expect(MockWebSocket.instances.length).toBe(0);
   });
 
-  it('WebSocket onopen 后应调用 setConnected(true)', async () => {
-    renderHook(() => useTerminal());
+  it('WebSocket onopen 后应调用 setConnected(projectPath, true)', async () => {
+    renderHook(() => useTerminal(TEST_PATH));
 
     expect(MockWebSocket.instances.length).toBe(1);
     const ws = MockWebSocket.instances[0];
@@ -108,11 +117,11 @@ describe('useTerminal', () => {
       ws.triggerOpen();
     });
 
-    expect(useTerminalStore.getState().connected).toBe(true);
+    expect(useTerminalStore.getState().sessions[TEST_PATH]?.connected).toBe(true);
   });
 
   it('WebSocket onerror 时应输出连接错误日志', () => {
-    renderHook(() => useTerminal());
+    renderHook(() => useTerminal(TEST_PATH));
 
     const ws = MockWebSocket.instances[0];
 
@@ -123,7 +132,7 @@ describe('useTerminal', () => {
     expect(consoleErrorSpy).toHaveBeenCalled();
   });
 
-  it('WebSocket onclose 后应调用 setConnected(false)', async () => {
+  it('WebSocket onclose 后应调用 setConnected(projectPath, false)', async () => {
     const { invoke: mockInvoke } = await import('@tauri-apps/api/core');
     vi.mocked(mockInvoke).mockResolvedValue({
       pty_id: 'test-pty-id',
@@ -131,16 +140,16 @@ describe('useTerminal', () => {
       ws_token: 'b'.repeat(64),
     });
 
-    renderHook(() => useTerminal());
+    renderHook(() => useTerminal(TEST_PATH));
 
     const ws = MockWebSocket.instances[0];
     act(() => ws.triggerOpen());
 
-    expect(useTerminalStore.getState().connected).toBe(true);
+    expect(useTerminalStore.getState().sessions[TEST_PATH]?.connected).toBe(true);
 
     act(() => ws.triggerClose());
 
-    expect(useTerminalStore.getState().connected).toBe(false);
+    expect(useTerminalStore.getState().sessions[TEST_PATH]?.connected).toBe(false);
   });
 
   it('onclose 后应在 1s 延迟后触发 reconnect', async () => {
@@ -151,7 +160,7 @@ describe('useTerminal', () => {
       ws_token: 'b'.repeat(64),
     });
 
-    renderHook(() => useTerminal());
+    renderHook(() => useTerminal(TEST_PATH));
 
     const ws = MockWebSocket.instances[0];
     act(() => ws.triggerClose());
@@ -170,14 +179,19 @@ describe('useTerminal', () => {
   });
 
   it('wsToken 变化时应创建新的 WebSocket 连接', () => {
-    const { rerender } = renderHook(() => useTerminal());
+    const { rerender } = renderHook(() => useTerminal(TEST_PATH));
 
     // 初始连接
     expect(MockWebSocket.instances.length).toBe(1);
 
     // 更新 token（模拟 reconnect 后 token 变化）
     act(() => {
-      useTerminalStore.setState({ wsToken: 'b'.repeat(64) });
+      useTerminalStore.setState((state) => ({
+        sessions: {
+          ...state.sessions,
+          [TEST_PATH]: { ...state.sessions[TEST_PATH]!, wsToken: 'b'.repeat(64) },
+        },
+      }));
     });
     rerender();
 
@@ -186,14 +200,14 @@ describe('useTerminal', () => {
   });
 
   it('wsRef 应返回当前 WebSocket 实例', () => {
-    const { result } = renderHook(() => useTerminal());
+    const { result } = renderHook(() => useTerminal(TEST_PATH));
 
     // renderHook 执行后 wsRef 应指向创建的 WebSocket
     expect(result.current.wsRef.current).toBeInstanceOf(MockWebSocket);
   });
 
   it('组件卸载时应关闭仍处于 CONNECTING 的 WebSocket，避免一次性 token 被旧连接消耗', () => {
-    const { unmount } = renderHook(() => useTerminal());
+    const { unmount } = renderHook(() => useTerminal(TEST_PATH));
 
     const ws = MockWebSocket.instances[0];
     expect(ws.readyState).toBe(WebSocket.CONNECTING);
@@ -201,5 +215,11 @@ describe('useTerminal', () => {
     unmount();
 
     expect(ws.readyState).toBe(WebSocket.CLOSED);
+  });
+
+  it('useTerminal 接受 projectPath 并订阅对应 session', () => {
+    // 验证 hook 可用 projectPath 参数调用，不抛错，且返回 wsRef
+    const { result } = renderHook(() => useTerminal('/proj-a'));
+    expect(result.current.wsRef).toBeDefined();
   });
 });
