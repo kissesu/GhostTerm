@@ -14,7 +14,7 @@ pub mod git_backend;
 pub mod project_manager;
 
 // PBI-1 Commands
-use pty_manager::{spawn_pty_cmd, kill_pty_cmd, resize_pty_cmd, reconnect_pty_cmd};
+use pty_manager::{spawn_pty_cmd, kill_pty_cmd, resize_pty_cmd, reconnect_pty_cmd, get_default_shell_cmd};
 
 // PBI-2 Commands
 use fs_backend::{read_file_cmd, write_file_cmd, list_dir_cmd, create_entry_cmd, delete_entry_cmd, rename_entry_cmd};
@@ -23,7 +23,7 @@ use fs_backend::{read_file_cmd, write_file_cmd, list_dir_cmd, create_entry_cmd, 
 use fs_backend::{start_watching_cmd, stop_watching_cmd};
 
 // PBI-3 Commands
-use project_manager::{list_recent_projects_cmd, open_project_cmd, close_project_cmd};
+use project_manager::{list_recent_projects_cmd, open_project_cmd, close_project_cmd, remove_project_cmd, clone_repository_cmd};
 
 // PBI-5 Commands - Git 操作
 use git_backend::{git_status_cmd, git_stage_cmd, git_unstage_cmd, git_diff_cmd,
@@ -85,6 +85,7 @@ pub fn run() {
             kill_pty_cmd,
             resize_pty_cmd,
             reconnect_pty_cmd,
+            get_default_shell_cmd,
             // PBI-2: 文件系统操作
             read_file_cmd,
             write_file_cmd,
@@ -96,6 +97,8 @@ pub fn run() {
             list_recent_projects_cmd,
             open_project_cmd,
             close_project_cmd,
+            remove_project_cmd,
+            clone_repository_cmd,
             // PBI-4: 文件系统实时监听
             start_watching_cmd,
             stop_watching_cmd,

@@ -125,8 +125,6 @@ where
 mod tests {
     use super::*;
     use tokio::io::duplex;
-    use tokio_tungstenite::WebSocketStream;
-    use tokio_tungstenite::tungstenite::protocol::Role;
 
     /// 验证 PTY 写入器从 channel 正确接收数据
     #[tokio::test]

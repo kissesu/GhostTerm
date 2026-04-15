@@ -9,13 +9,14 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Sidebar } from '../features/sidebar';
 import { useSidebarStore } from '../features/sidebar';
 import { useProjectStore } from '../features/sidebar';
 import { Editor, EditorTabs } from '../features/editor';
 import { Terminal } from '../features/terminal';
 import { useKeyboardShortcuts } from '../shared/hooks/useKeyboardShortcuts';
+import WindowTitleBar from '../shared/components/WindowTitleBar';
+import { useSettingsStore } from '../shared/stores/settingsStore';
 
 // 侧边栏自动折叠阈值（px）：窗口宽度小于此值时自动隐藏侧边栏
 const SIDEBAR_AUTO_COLLAPSE_WIDTH = 800;
@@ -32,6 +33,7 @@ const SIDEBAR_AUTO_COLLAPSE_WIDTH = 800;
 export default function AppLayout() {
   const sidebarVisible = useSidebarStore((s) => s.visible);
   const currentProjectPath = useProjectStore((s) => s.currentProject?.path);
+  const openSettings = useSettingsStore((s) => s.openSettings);
 
   // 焦点面板状态：记录当前焦点在编辑器还是终端，供快捷键和 UI 使用
   const [activePanel, setActivePanel] = useState<'editor' | 'terminal'>('editor');
@@ -67,17 +69,6 @@ export default function AppLayout() {
   // 替换原先散落在各组件的 keydown 监听，统一管理
   // ============================================
   useKeyboardShortcuts(handleFocusToggle, handleSidebarToggle);
-
-  // ============================================
-  // 标题栏拖拽 — Tauri 官方推荐方式
-  // mousedown 左键直接调用 startDragging()，OS 接管后续拖拽
-  // 需要 capabilities 配置 core:window:allow-start-dragging 权限
-  // ============================================
-  const handleTitlebarMouseDown = useCallback((e: React.MouseEvent) => {
-    // 只响应左键
-    if (e.buttons !== 1) return;
-    getCurrentWindow().startDragging();
-  }, []);
 
   // ============================================
   // 启动时恢复上次打开的项目
@@ -139,19 +130,42 @@ export default function AppLayout() {
         overflow: 'hidden',
       }}
     >
-      {/* macOS Overlay 标题栏拖拽区域
-          使用 JS startDragging() 而非 data-tauri-drag-region
-          参照 Supremum：mousedown → 4px 阈值 → startDragging() */}
-      <div
-        onMouseDown={handleTitlebarMouseDown}
-        style={{
-          height: 28,
-          flexShrink: 0,
-          // 左侧留出 traffic lights 空间（macOS 红黄绿按钮约 78px）
-          paddingLeft: 78,
-          display: 'flex',
-          alignItems: 'center',
-        }}
+      <WindowTitleBar
+        right={
+          <button
+            type="button"
+            onClick={openSettings}
+            style={{
+              width: 28,
+              height: 28,
+              border: 'none',
+              background: 'transparent',
+              color: '#565f89',
+              cursor: 'pointer',
+              borderRadius: 6,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            aria-label="打开设置"
+            data-testid="open-settings-button"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M12 8.5a3.5 3.5 0 1 0 0 7a3.5 3.5 0 0 0 0-7Z"
+                stroke="currentColor"
+                strokeWidth="1.8"
+              />
+              <path
+                d="M19.4 15a1 1 0 0 0 .2 1.1l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1 1 0 0 0-1.1-.2a1 1 0 0 0-.6.9V20a2 2 0 0 1-4 0v-.2a1 1 0 0 0-.6-.9a1 1 0 0 0-1.1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1 1 0 0 0 .2-1.1a1 1 0 0 0-.9-.6H4a2 2 0 0 1 0-4h.2a1 1 0 0 0 .9-.6a1 1 0 0 0-.2-1.1l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1 1 0 0 0 1.1.2H9a1 1 0 0 0 .6-.9V4a2 2 0 0 1 4 0v.2a1 1 0 0 0 .6.9a1 1 0 0 0 1.1-.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1 1 0 0 0-.2 1.1V9c0 .4.2.8.6.9H20a2 2 0 0 1 0 4h-.2a1 1 0 0 0-.9.6Z"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        }
       />
       <PanelGroup direction="horizontal" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
         {/* 左侧面板 - PBI-3 Sidebar，根据 sidebarVisible 显隐 */}

@@ -56,11 +56,19 @@ export function useTerminal(): UseTerminalResult {
     // 关闭已有连接
     if (wsRef.current) {
       intentionalCloseRef.current = true;
-      wsRef.current.close();
+      try {
+        wsRef.current.close();
+      } catch {
+        // 忽略已失效连接的关闭错误
+      }
     }
     intentionalCloseRef.current = false;
 
     // 建立新连接
+    console.info('[terminal] 建立 WebSocket 连接', {
+      wsPort,
+      tokenPreview: wsToken.slice(0, 8),
+    });
     const ws = new WebSocket(`ws://127.0.0.1:${wsPort}?token=${wsToken}`);
     ws.binaryType = 'arraybuffer'; // xterm.js AttachAddon 需要 arraybuffer
     wsRef.current = ws;
@@ -71,24 +79,31 @@ export function useTerminal(): UseTerminalResult {
         ws.close();
         return;
       }
+      console.info('[terminal] WebSocket 已连接');
       setConnected(true);
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       if (aborted) return; // effect 已清理，不触发重连
+      console.warn('[terminal] WebSocket 已关闭', {
+        code: event.code,
+        intentional: intentionalCloseRef.current,
+      });
       setConnected(false);
       // 非主动关闭时，延迟 1s 重连（防止快速循环）
       if (!intentionalCloseRef.current) {
         reconnectTimerRef.current = setTimeout(() => {
+          console.info('[terminal] 尝试重连 PTY');
           reconnect().catch(() => {
             // PTY 已不存在，静默失败
+            console.error('[terminal] PTY 重连失败');
           });
         }, 1000);
       }
     };
 
     ws.onerror = () => {
-      // WebSocket 错误后 onclose 会被触发，错误处理在 onclose 统一处理
+      console.error('[terminal] WebSocket 连接错误');
     };
 
     return () => {
@@ -97,11 +112,18 @@ export function useTerminal(): UseTerminalResult {
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current);
       }
-      // 仅关闭已连接的 WebSocket
-      // CONNECTING 状态不主动 close（避免 "closed before established" 警告）
-      // 该连接最终会在 onopen 中通过 aborted 标记被关闭
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.close();
+      // 无论连接是否已建立，都必须立即关闭旧连接。
+      // 后端 token 为一次性消费，若保留 CONNECTING 连接，StrictMode 下旧连接
+      // 可能先完成握手并消耗 token，导致新连接被静默拒绝。
+      if (ws.readyState !== WebSocket.CLOSED) {
+        try {
+          console.info('[terminal] 清理旧 WebSocket 连接', {
+            readyState: ws.readyState,
+          });
+          ws.close();
+        } catch {
+          // 忽略浏览器对 CONNECTING 连接 close 的告警或异常
+        }
       }
     };
   }, [wsPort, wsToken]); // 依赖 wsPort/wsToken，reconnect 时会变化

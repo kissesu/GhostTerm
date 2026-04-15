@@ -10,6 +10,7 @@
 
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
+import { useSettingsStore } from '../../shared/stores/settingsStore';
 
 /** PTY 创建结果 - 与 Rust PtyInfo 对应 */
 interface PtyInfo {
@@ -17,6 +18,8 @@ interface PtyInfo {
   ws_port: number;
   ws_token: string;
 }
+
+type DefaultShell = string;
 
 /** 终端状态接口 */
 export interface TerminalState {
@@ -67,8 +70,15 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
       });
     }
 
-    // 使用系统默认 shell（macOS 默认 zsh，Linux 默认 bash）
-    const shell = '/bin/zsh';
+    const terminalSettings = useSettingsStore.getState().terminal;
+    const shell = terminalSettings.useSystemShell
+      ? await invoke<DefaultShell>('get_default_shell_cmd')
+      : terminalSettings.customShellPath.trim();
+
+    if (!shell) {
+      throw new Error('终端 shell 未配置');
+    }
+
     const info = await invoke<PtyInfo>('spawn_pty_cmd', { shell, cwd });
     set({
       ptyId: info.pty_id,

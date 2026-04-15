@@ -8,6 +8,19 @@
 use std::path::Path;
 use crate::types::ProjectInfo;
 
+fn sanitize_projects(projects: Vec<ProjectInfo>) -> Vec<ProjectInfo> {
+    let mut seen_paths = std::collections::HashSet::new();
+
+    projects
+        .into_iter()
+        .filter(|project| {
+            let path = Path::new(&project.path);
+            path.exists() && path.is_dir()
+        })
+        .filter(|project| seen_paths.insert(project.path.clone()))
+        .collect()
+}
+
 /// 从文件加载项目列表
 ///
 /// 业务逻辑：
@@ -31,7 +44,7 @@ pub fn load_projects(path: &Path) -> Vec<ProjectInfo> {
     };
 
     match serde_json::from_str::<Vec<ProjectInfo>>(&content) {
-        Ok(projects) => projects,
+        Ok(projects) => sanitize_projects(projects),
         Err(e) => {
             // JSON 解析失败，备份损坏文件并返回空列表
             eprintln!("[project_manager] 解析 projects.json 失败: {e}");
@@ -93,16 +106,21 @@ mod tests {
         tempfile::tempdir().expect("创建临时目录失败")
     }
 
-    fn sample_projects() -> Vec<ProjectInfo> {
+    fn sample_projects(tmp: &TempDir) -> Vec<ProjectInfo> {
+        let ghostterm = tmp.path().join("ghostterm");
+        let my_app = tmp.path().join("my-app");
+        std::fs::create_dir_all(&ghostterm).unwrap();
+        std::fs::create_dir_all(&my_app).unwrap();
+
         vec![
             ProjectInfo {
                 name: "ghostterm".to_string(),
-                path: "/Users/test/ghostterm".to_string(),
+                path: ghostterm.to_string_lossy().to_string(),
                 last_opened: 1713024000000,
             },
             ProjectInfo {
                 name: "my-app".to_string(),
-                path: "/Users/test/my-app".to_string(),
+                path: my_app.to_string_lossy().to_string(),
                 last_opened: 1713020000000,
             },
         ]
@@ -133,14 +151,14 @@ mod tests {
         // 序列化后再反序列化应得到相同数据
         let tmp = make_temp_dir();
         let path = tmp.path().join("projects.json");
-        let projects = sample_projects();
+        let projects = sample_projects(&tmp);
 
         save_projects(&path, &projects).expect("保存失败");
         let loaded = load_projects(&path);
 
         assert_eq!(loaded.len(), 2);
         assert_eq!(loaded[0].name, "ghostterm");
-        assert_eq!(loaded[0].path, "/Users/test/ghostterm");
+        assert_eq!(loaded[0].path, projects[0].path);
         assert_eq!(loaded[0].last_opened, 1713024000000);
         assert_eq!(loaded[1].name, "my-app");
     }
@@ -183,11 +201,47 @@ mod tests {
         let tmp = make_temp_dir();
         let path = tmp.path().join("config").join("ghostterm").join("projects.json");
 
-        let projects = sample_projects();
+        let projects = sample_projects(&tmp);
         save_projects(&path, &projects).expect("保存失败");
 
         assert!(path.exists(), "文件应已被创建");
         let loaded = load_projects(&path);
         assert_eq!(loaded.len(), 2);
+    }
+
+    #[test]
+    fn test_load_projects_filters_missing_and_duplicate_paths() {
+        let tmp = make_temp_dir();
+        let valid_project = tmp.path().join("ghostterm");
+        std::fs::create_dir_all(&valid_project).unwrap();
+
+        let path = tmp.path().join("projects.json");
+        let content = format!(
+            r#"[
+  {{
+    "name": "ghostterm",
+    "path": "{}",
+    "last_opened": 1713024000000
+  }},
+  {{
+    "name": "ghostterm-duplicate",
+    "path": "{}",
+    "last_opened": 1713023000000
+  }},
+  {{
+    "name": "missing-project",
+    "path": "/definitely/missing/project",
+    "last_opened": 1713022000000
+  }}
+]"#,
+            valid_project.display(),
+            valid_project.display()
+        );
+        std::fs::write(&path, content).unwrap();
+
+        let loaded = load_projects(&path);
+
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].path, valid_project.to_string_lossy());
     }
 }

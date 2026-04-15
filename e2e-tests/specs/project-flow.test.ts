@@ -40,48 +40,45 @@ describe('PBI-6 E2E: 打开项目全链路', () => {
     await tauriInvoke('open_project_cmd', { path: TEST_PROJECT_PATH });
 
     // 等待文件树加载（open_project → refreshFileTree → 前端渲染）
-    await browser.waitUntil(
-      async () => {
-        const items = await $$('[data-testid="file-tree-item"]');
-        return items.length > 0;
-      },
-      { timeout: 5000, timeoutMsg: '文件树未在 5s 内显示内容' },
-    );
+    await browser.waitUntil(async () => {
+      const items = await $$('[data-testid="file-tree-item"]');
+      return (await items.length) > 0;
+    }, { timeout: 5000, timeoutMsg: '文件树未在 5s 内显示内容' });
 
     // 断言项目名显示在 ProjectSelector
     const selector = await $('[data-testid="project-selector"]');
-    await expect(selector).toHaveTextContaining('ghostterm-e2e-project');
+    expect(await selector.getText()).toContain('ghostterm-e2e-project');
 
     // 断言文件树有内容（目录不为空）
     const items = await $$('[data-testid="file-tree-item"]');
-    expect(items.length).toBeGreaterThan(0);
+    expect(await items.length).toBeGreaterThan(0);
   });
 
   it.skip('切换项目后编辑器应清空旧文件标签', async () => {
     // Step 1: 打开项目 A，打开一个文件
     await tauriInvoke('open_project_cmd', { path: TEST_PROJECT_PATH });
-    await browser.waitUntil(
-      async () => (await $$('[data-testid="file-tree-item"]')).length > 0,
-      { timeout: 5000, timeoutMsg: '项目 A 文件树未加载' },
-    );
+    await browser.waitUntil(async () => {
+      const items = await $$('[data-testid="file-tree-item"]');
+      return (await items.length) > 0;
+    }, { timeout: 5000, timeoutMsg: '项目 A 文件树未加载' });
 
     const [firstFile] = await $$('[data-testid="file-tree-item"]');
     await firstFile.click();
 
     // 等待编辑器标签出现
-    await browser.waitUntil(
-      async () => (await $$('[data-testid="editor-tab"]')).length > 0,
-      { timeout: 3000, timeoutMsg: '编辑器标签未出现' },
-    );
+    await browser.waitUntil(async () => {
+      const tabs = await $$('[data-testid="editor-tab"]');
+      return (await tabs.length) > 0;
+    }, { timeout: 3000, timeoutMsg: '编辑器标签未出现' });
 
     // Step 2: 切换到项目 B
     await tauriInvoke('open_project_cmd', { path: ANOTHER_PROJECT_PATH });
 
     // Step 3: 断言编辑器标签已清空（projectStore.openProject 调用 editorStore.closeAll）
-    await browser.waitUntil(
-      async () => (await $$('[data-testid="editor-tab"]')).length === 0,
-      { timeout: 3000, timeoutMsg: '切换项目后编辑器标签未清空' },
-    );
+    await browser.waitUntil(async () => {
+      const tabs = await $$('[data-testid="editor-tab"]');
+      return (await tabs.length) === 0;
+    }, { timeout: 3000, timeoutMsg: '切换项目后编辑器标签未清空' });
   });
 
   it.skip('切换项目后 git 状态应反映新项目', async () => {
@@ -109,12 +106,13 @@ describe('PBI-6 E2E: 打开项目全链路', () => {
     // open_project_cmd 内部调用 start_watching，前端注册 fs:event 监听
     await tauriInvoke('open_project_cmd', { path: TEST_PROJECT_PATH });
 
-    await browser.waitUntil(
-      async () => (await $$('[data-testid="file-tree-item"]')).length > 0,
-      { timeout: 5000, timeoutMsg: '文件树未加载' },
-    );
+    await browser.waitUntil(async () => {
+      const items = await $$('[data-testid="file-tree-item"]');
+      return (await items.length) > 0;
+    }, { timeout: 5000, timeoutMsg: '文件树未加载' });
 
-    const initialCount = (await $$('[data-testid="file-tree-item"]')).length;
+    const initialItems = await $$('[data-testid="file-tree-item"]');
+    const initialCount = await initialItems.length;
 
     // 通过后端命令写入新文件（模拟 AI 创建文件）
     await tauriInvoke('write_file', {
@@ -123,10 +121,10 @@ describe('PBI-6 E2E: 打开项目全链路', () => {
     });
 
     // 等待 fs:event 触发文件树增量更新（applyFsEvent）
-    await browser.waitUntil(
-      async () => (await $$('[data-testid="file-tree-item"]')).length > initialCount,
-      { timeout: 3000, timeoutMsg: '文件树未响应 fs:event（文件监听未启动）' },
-    );
+    await browser.waitUntil(async () => {
+      const items = await $$('[data-testid="file-tree-item"]');
+      return (await items.length) > initialCount;
+    }, { timeout: 3000, timeoutMsg: '文件树未响应 fs:event（文件监听未启动）' });
 
     // 清理探针文件
     await tauriInvoke('delete_entry', { path: `${TEST_PROJECT_PATH}/_e2e_probe.txt` });

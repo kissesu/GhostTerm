@@ -27,8 +27,8 @@ const captureNextFsEvent = (timeoutMs = 2000): Promise<any> =>
   );
 
 // 在 webview 上下文中验证指定时间内没有 fs:event 触发
-const assertNoFsEvent = (waitMs = 300): Promise<boolean> =>
-  browser.execute(
+const assertNoFsEvent = async (waitMs = 300): Promise<boolean> =>
+  await browser.execute(
     (ms: number) =>
       new Promise<boolean>((resolve) => {
         let received = false;
@@ -44,7 +44,7 @@ const assertNoFsEvent = (waitMs = 300): Promise<boolean> =>
 const TMP_DIR = '/tmp/ghostterm-e2e-watcher';
 
 describe('PBI-6 E2E: 文件监听链路', () => {
-  beforeAll(async () => {
+  before(async () => {
     // 确保测试目录存在
     await tauriInvoke('create_entry', { path: TMP_DIR, is_dir: true });
   });

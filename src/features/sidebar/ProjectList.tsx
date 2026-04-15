@@ -5,7 +5,10 @@ import ProjectListItem from './ProjectListItem';
 interface ProjectListProps {
   projects: ProjectInfo[];
   currentProjectPath?: string;
+  /** 当前活跃项目的手风琴是否收起 */
+  accordionCollapsed: boolean;
   onSelect: (path: string) => void;
+  onRemove: (projectPath: string) => void;
   groups: VisibleProjectGroup[];
   projectGroupMap: Record<string, string>;
   openMenuProjectPath?: string;
@@ -16,7 +19,9 @@ interface ProjectListProps {
 export default function ProjectList({
   projects,
   currentProjectPath,
+  accordionCollapsed,
   onSelect,
+  onRemove,
   groups,
   projectGroupMap,
   openMenuProjectPath,
@@ -51,7 +56,9 @@ export default function ProjectList({
           key={project.path}
           project={project}
           active={currentProjectPath === project.path}
+          collapsed={currentProjectPath === project.path ? accordionCollapsed : false}
           onSelect={onSelect}
+          onRemove={onRemove}
           groups={groups}
           currentGroupId={projectGroupMap[project.path] ?? 'ungrouped'}
           menuOpen={openMenuProjectPath === project.path}

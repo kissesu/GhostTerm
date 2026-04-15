@@ -21,6 +21,32 @@ vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(),
 }));
 
+vi.mock('@tauri-apps/api/window', () => ({
+  getCurrentWindow: vi.fn(() => ({
+    startDragging: vi.fn(),
+    toggleMaximize: vi.fn(),
+    isMaximized: vi.fn().mockResolvedValue(false),
+  })),
+}));
+
+vi.mock('@tauri-apps/plugin-opener', () => ({
+  openPath: vi.fn().mockResolvedValue(undefined),
+}));
+
+if (!globalThis.navigator.clipboard) {
+  Object.defineProperty(globalThis.navigator, 'clipboard', {
+    value: {
+      writeText: vi.fn().mockResolvedValue(undefined),
+    },
+    configurable: true,
+  });
+} else {
+  Object.defineProperty(globalThis.navigator.clipboard, 'writeText', {
+    value: vi.fn().mockResolvedValue(undefined),
+    configurable: true,
+  });
+}
+
 // Mock ResizeObserver - jsdom 不支持，xterm.js FitAddon 和 Terminal.tsx 使用
 // observe/disconnect 是空实现，测试不验证 resize 触发，只确保不报错
 (globalThis as Record<string, unknown>).ResizeObserver = class ResizeObserver {

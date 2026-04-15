@@ -6,11 +6,102 @@
  * @date 2026-04-13
  */
 
+import type { CSSProperties, ReactNode } from 'react';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@radix-ui/react-context-menu';
+import { Copy, X } from 'lucide-react';
 import { useEditorStore } from '../editorStore';
 
 /** 从完整路径中提取文件名 */
 function getFileName(path: string): string {
   return path.split('/').pop() ?? path;
+}
+
+const menuItemStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  padding: '4px 12px',
+  cursor: 'pointer',
+  fontSize: 13,
+  color: '#c0caf5',
+};
+
+function TabContextMenu({
+  path,
+  index,
+  total,
+  children,
+}: {
+  path: string;
+  index: number;
+  total: number;
+  children: ReactNode;
+}) {
+  const { closeFile, closeAll, closeOthers, closeLeft, closeRight } = useEditorStore();
+
+  const copyToClipboard = async (value: string) => {
+    await navigator.clipboard.writeText(value);
+  };
+
+  const handleCopyPath = () => {
+    void copyToClipboard(path);
+  };
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent
+        style={{
+          background: '#1a1b26',
+          border: '1px solid #27293d',
+          borderRadius: 4,
+          padding: '4px 0',
+          minWidth: 160,
+          zIndex: 200,
+        }}
+      >
+        <ContextMenuItem onSelect={() => closeFile(path)} style={menuItemStyle}>
+          <X size={12} aria-hidden />
+          关闭标签
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => closeOthers(path)} style={menuItemStyle}>
+          <X size={12} aria-hidden />
+          关闭其他
+        </ContextMenuItem>
+        {index > 0 && (
+          <ContextMenuItem onSelect={() => closeLeft(path)} style={menuItemStyle}>
+            <X size={12} aria-hidden />
+            关闭左侧所有
+          </ContextMenuItem>
+        )}
+        {index < total - 1 && (
+          <ContextMenuItem onSelect={() => closeRight(path)} style={menuItemStyle}>
+            <X size={12} aria-hidden />
+            关闭右侧所有
+          </ContextMenuItem>
+        )}
+        <ContextMenuItem onSelect={closeAll} style={menuItemStyle}>
+          <X size={12} aria-hidden />
+          关闭所有
+        </ContextMenuItem>
+        <ContextMenuSeparator style={{ borderTop: '1px solid #27293d', margin: '2px 0' }} />
+        <ContextMenuItem
+          onClick={handleCopyPath}
+          onSelect={handleCopyPath}
+          style={menuItemStyle}
+        >
+          <Copy size={12} aria-hidden />
+          发送路径
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
 }
 
 export default function EditorTabs() {
@@ -32,98 +123,93 @@ export default function EditorTabs() {
         overflowX: 'auto',
         overflowY: 'hidden',
         flexShrink: 0,
-        // 隐藏滚动条
         scrollbarWidth: 'none',
       }}
     >
-      {openFiles.map((file) => {
+      {openFiles.map((file, index) => {
         const isActive = file.path === activeFilePath;
         const fileName = getFileName(file.path);
 
         return (
-          <div
-            key={file.path}
-            role="tab"
-            aria-selected={isActive}
-            data-active={isActive ? 'true' : 'false'}
-            onClick={() => setActive(file.path)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '0 12px',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              fontSize: '13px',
-              color: isActive ? '#c0caf5' : '#565f89',
-              backgroundColor: isActive ? '#1a1b26' : 'transparent',
-              // active 标签底部蓝色线条
-              borderBottom: isActive ? '2px solid #7aa2f7' : '2px solid transparent',
-              borderTop: '2px solid transparent',
-              transition: 'color 0.1s, border-bottom-color 0.1s',
-              position: 'relative',
-            }}
-          >
-            {/* 脏标记：使用 span 元素，不用 emoji */}
-            {file.isDirty && (
-              <span
-                data-testid="dirty-indicator"
-                style={{
-                  width: '6px',
-                  height: '6px',
-                  borderRadius: '50%',
-                  backgroundColor: '#7aa2f7',
-                  display: 'inline-block',
-                  flexShrink: 0,
-                }}
-              />
-            )}
-
-            {/* 文件名 */}
-            <span>{fileName}</span>
-
-            {/* 关闭按钮 */}
-            <button
-              aria-label={`关闭 ${fileName}`}
-              onClick={(e) => {
-                // 阻止冒泡，避免触发父级 setActive
-                e.stopPropagation();
-                closeFile(file.path);
-              }}
+          <TabContextMenu key={file.path} path={file.path} index={index} total={openFiles.length}>
+            <div
+              role="tab"
+              aria-selected={isActive}
+              data-active={isActive ? 'true' : 'false'}
+              data-testid={`editor-tab-${file.path}`}
+              onClick={() => setActive(file.path)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                width: '16px',
-                height: '16px',
-                borderRadius: '3px',
-                border: 'none',
-                background: 'transparent',
+                gap: '6px',
+                padding: '0 12px',
                 cursor: 'pointer',
-                color: '#565f89',
-                fontSize: '12px',
-                padding: 0,
-                lineHeight: 1,
-                flexShrink: 0,
+                whiteSpace: 'nowrap',
+                fontSize: '13px',
+                color: isActive ? '#c0caf5' : '#565f89',
+                backgroundColor: isActive ? '#1a1b26' : 'transparent',
+                borderBottom: isActive ? '2px solid #7aa2f7' : '2px solid transparent',
+                borderTop: '2px solid transparent',
+                transition: 'color 0.1s, border-bottom-color 0.1s',
+                position: 'relative',
               }}
             >
-              {/* 用 SVG 代替 X 字符，避免 emoji */}
-              <svg
-                width="10"
-                height="10"
-                viewBox="0 0 10 10"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M1 1L9 9M9 1L1 9"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
+              {file.isDirty && (
+                <span
+                  data-testid="dirty-indicator"
+                  style={{
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    backgroundColor: '#7aa2f7',
+                    display: 'inline-block',
+                    flexShrink: 0,
+                  }}
                 />
-              </svg>
-            </button>
-          </div>
+              )}
+
+              <span>{fileName}</span>
+
+              <button
+                aria-label={`关闭 ${fileName}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeFile(file.path);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '16px',
+                  height: '16px',
+                  borderRadius: '3px',
+                  border: 'none',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  color: '#565f89',
+                  fontSize: '12px',
+                  padding: 0,
+                  lineHeight: 1,
+                  flexShrink: 0,
+                }}
+              >
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 10 10"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M1 1L9 9M9 1L1 9"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
+            </div>
+          </TabContextMenu>
         );
       })}
     </div>

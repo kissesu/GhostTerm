@@ -5,7 +5,7 @@
     "moduleResolution": "Node16",
     "strict": true,
     "isolatedModules": true,
-    "types": ["@wdio/globals/types", "node"],
+    "types": ["@wdio/globals/types", "node", "mocha", "expect-webdriverio"],
     "esModuleInterop": true,
     "skipLibCheck": true
   },

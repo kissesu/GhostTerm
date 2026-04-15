@@ -11,7 +11,7 @@ pub mod auth;
 
 use std::collections::HashMap;
 use std::io::Write;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 use tokio::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
@@ -32,6 +32,8 @@ lazy_static::lazy_static! {
 pub struct PtyState {
     /// PTY master 端（可读写，与子进程通信）
     pub master: Box<dyn portable_pty::MasterPty + Send>,
+    /// 持久化保存 PTY writer；portable-pty writer 只能获取一次，且 drop 会发送 EOF
+    pub writer: Arc<StdMutex<Box<dyn std::io::Write + Send>>>,
     /// PTY 子进程句柄
     pub child: Box<dyn portable_pty::Child + Send + Sync>,
     /// 当前有效的认证 token
@@ -40,6 +42,8 @@ pub struct PtyState {
     pub ws_port: u16,
     /// 当前 PTY 尺寸
     pub size: PtySize,
+    /// 当前活跃 WebSocket 连接数
+    pub active_connections: usize,
 }
 
 /// PTY 创建结果 - 返回给前端的连接信息
@@ -66,6 +70,23 @@ fn gen_token_value() -> AuthToken {
     AuthToken::new()
 }
 
+fn fallback_shell() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "cmd.exe"
+    } else if cfg!(target_os = "macos") {
+        "/bin/zsh"
+    } else {
+        "/bin/bash"
+    }
+}
+
+fn resolve_default_shell_from_env(shell_env: Option<String>) -> String {
+    shell_env
+        .map(|shell| shell.trim().to_string())
+        .filter(|shell| !shell.is_empty())
+        .unwrap_or_else(|| fallback_shell().to_string())
+}
+
 /// 启动 PTY 进程并创建 WebSocket server
 ///
 /// 业务逻辑：
@@ -80,6 +101,7 @@ pub async fn spawn_pty(
     cwd: &str,
     env: HashMap<String, String>,
 ) -> Result<PtyInfo, String> {
+    eprintln!("[pty_manager] spawn_pty shell={} cwd={}", shell, cwd);
     // ============================================
     // 第一步：绑定 WebSocket server
     // 获取操作系统分配的随机端口
@@ -114,6 +136,10 @@ pub async fn spawn_pty(
         .slave
         .spawn_command(cmd)
         .map_err(|e| format!("Shell 启动失败: {}", e))?;
+    let writer = pair
+        .master
+        .take_writer()
+        .map_err(|e| format!("PTY writer 获取失败: {}", e))?;
 
     // ============================================
     // 第三步：生成 PTY ID 和认证 token，注册到全局状态表
@@ -124,6 +150,7 @@ pub async fn spawn_pty(
 
     let state = PtyState {
         master: pair.master,
+        writer: Arc::new(StdMutex::new(writer)),
         child,
         token,
         ws_port,
@@ -133,6 +160,7 @@ pub async fn spawn_pty(
             pixel_width: 0,
             pixel_height: 0,
         },
+        active_connections: 0,
     };
 
     {
@@ -166,7 +194,10 @@ async fn accept_ws_connections(server: WsServer, pty_id: String) {
     loop {
         // 接受 TCP 连接
         let tcp_stream = match server.listener.accept().await {
-            Ok((stream, _)) => stream,
+            Ok((stream, addr)) => {
+                eprintln!("[pty_manager] 收到 WebSocket TCP 连接 pty_id={} addr={}", pty_id, addr);
+                stream
+            }
             Err(_) => break,
         };
 
@@ -201,7 +232,10 @@ async fn accept_ws_connections(server: WsServer, pty_id: String) {
 
         let ws_stream = match accept_hdr_async(tcp_stream, callback).await {
             Ok(ws) => ws,
-            Err(_) => continue,
+            Err(err) => {
+                eprintln!("[pty_manager] WebSocket 握手失败 pty_id={} err={}", pty_id, err);
+                continue;
+            }
         };
 
         // 验证 token
@@ -216,7 +250,25 @@ async fn accept_ws_connections(server: WsServer, pty_id: String) {
 
         if !token_valid {
             // token 无效，关闭连接
+            eprintln!(
+                "[pty_manager] token 校验失败 pty_id={} token_preview={}",
+                pty_id,
+                extracted_token.chars().take(8).collect::<String>()
+            );
             continue;
+        }
+
+        eprintln!(
+            "[pty_manager] token 校验成功 pty_id={} token_preview={}",
+            pty_id,
+            extracted_token.chars().take(8).collect::<String>()
+        );
+
+        {
+            let mut registry = PTY_REGISTRY.lock().await;
+            if let Some(state) = registry.get_mut(&pty_id) {
+                state.active_connections += 1;
+            }
         }
 
         // 启动 PTY ↔ WebSocket 桥接
@@ -255,37 +307,93 @@ async fn accept_ws_connections(server: WsServer, pty_id: String) {
         // 启动 PTY 写入任务（WebSocket -> master）
         {
             let pty_id_write = pty_id.clone();
-            tokio::spawn(async move {
-                while let Some(data) = input_rx.recv().await {
-                    let registry = PTY_REGISTRY.lock().await;
-                    if let Some(state) = registry.get(&pty_id_write) {
-                        let mut writer = state.master.take_writer().ok();
-                        drop(registry);
-                        if let Some(ref mut w) = writer {
-                            let _ = w.write_all(&data);
+            let writer = {
+                let registry = PTY_REGISTRY.lock().await;
+                registry
+                    .get(&pty_id_write)
+                    .map(|state| Arc::clone(&state.writer))
+            };
+
+            if let Some(writer) = writer {
+                tokio::spawn(async move {
+                    while let Some(data) = input_rx.recv().await {
+                        eprintln!(
+                            "[pty_manager] 收到终端输入帧 pty_id={} bytes={}",
+                            pty_id_write,
+                            data.len()
+                        );
+                        let writer = Arc::clone(&writer);
+                        let pty_id_for_write = pty_id_write.clone();
+                        let write_result = tokio::task::spawn_blocking(move || {
+                            let mut writer = writer
+                                .lock()
+                                .map_err(|_| format!("PTY writer 锁已中毒 pty_id={}", pty_id_for_write))?;
+                            writer
+                                .write_all(&data)
+                                .map_err(|err| format!("写入 PTY stdin 失败 pty_id={} err={}", pty_id_for_write, err))?;
+                            writer
+                                .flush()
+                                .map_err(|err| format!("flush PTY stdin 失败 pty_id={} err={}", pty_id_for_write, err))?;
+                            Ok::<(), String>(())
+                        })
+                        .await;
+
+                        match write_result {
+                            Ok(Ok(())) => {}
+                            Ok(Err(err)) => {
+                                eprintln!("[pty_manager] {}", err);
+                                break;
+                            }
+                            Err(err) => {
+                                eprintln!(
+                                    "[pty_manager] PTY writer 阻塞任务失败 pty_id={} err={}",
+                                    pty_id_write,
+                                    err
+                                );
+                                break;
+                            }
                         }
-                    } else {
-                        break;
+                        eprintln!("[pty_manager] 写入 PTY stdin 成功 pty_id={}", pty_id_write);
                     }
-                }
-            });
+                });
+            } else {
+                eprintln!("[pty_manager] 获取 PTY writer 失败 pty_id={}", pty_id_write);
+            }
         }
 
         // 启动 WebSocket 桥接
-        tokio::spawn(bridge::run_bridge(ws_stream, output_rx, input_tx));
-
-        // 启动连接断开后的 5s kill 定时器
-        let pty_id_timer = pty_id.clone();
+        eprintln!("[pty_manager] 启动 PTY ↔ WebSocket 桥接 pty_id={}", pty_id);
+        let pty_id_bridge = pty_id.clone();
         tokio::spawn(async move {
-            // 等待 5s，若无新连接则 kill PTY
+            bridge::run_bridge(ws_stream, output_rx, input_tx).await;
+
+            let should_schedule_cleanup = {
+                let mut registry = PTY_REGISTRY.lock().await;
+                if let Some(state) = registry.get_mut(&pty_id_bridge) {
+                    if state.active_connections > 0 {
+                        state.active_connections -= 1;
+                    }
+                    state.active_connections == 0
+                } else {
+                    false
+                }
+            };
+
+            if !should_schedule_cleanup {
+                return;
+            }
+
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-            // 检查 PTY 是否还在注册表中（已 kill 则不在）
+
             let mut registry = PTY_REGISTRY.lock().await;
-            if let Some(state) = registry.get_mut(&pty_id_timer) {
-                // 如果 token 已被使用且无新连接，kill PTY
-                if state.token.used {
+            if let Some(state) = registry.get_mut(&pty_id_bridge) {
+                if state.active_connections == 0 {
+                    eprintln!(
+                        "[pty_manager] WebSocket 已断开超过 5 秒，自动回收 PTY pty_id={}",
+                        pty_id_bridge
+                    );
                     let _ = state.child.kill();
-                    registry.remove(&pty_id_timer);
+                    registry.remove(&pty_id_bridge);
                 }
             }
         });
@@ -345,6 +453,11 @@ pub async fn reconnect_pty(pty_id: &str) -> Result<PtyInfo, String> {
     }
 }
 
+#[tauri::command]
+pub async fn get_default_shell_cmd() -> Result<String, String> {
+    Ok(resolve_default_shell_from_env(std::env::var("SHELL").ok()))
+}
+
 // ============================================
 // Tauri Command 包装函数
 // 注意：这里只标注 #[tauri::command]，实际注册在 lib.rs 合并时完成
@@ -378,7 +491,9 @@ pub async fn reconnect_pty_cmd(pty_id: String) -> Result<PtyInfo, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{Read, Write};
     use std::time::Duration;
+    use tokio_tungstenite::connect_async;
 
     /// 测试 PTY ID 生成格式
     #[test]
@@ -506,5 +621,120 @@ mod tests {
         assert_eq!(new_info.pty_id, info.pty_id, "pty_id 不变");
 
         let _ = kill_pty(&info.pty_id).await;
+    }
+
+    /// 验证 PTY writer 能把命令真正写入 shell，并从 reader 读到输出
+    #[tokio::test]
+    async fn test_spawned_pty_accepts_stdin_and_produces_stdout() {
+        let shell = if cfg!(target_os = "macos") || cfg!(target_os = "linux") {
+            "/bin/sh"
+        } else {
+            "cmd.exe"
+        };
+
+        let info = spawn_pty(shell, "/tmp", HashMap::new())
+            .await
+            .expect("spawn_pty 失败");
+
+        let (mut reader, writer) = {
+            let registry = PTY_REGISTRY.lock().await;
+            let state = registry.get(&info.pty_id).expect("PTY 应存在于注册表");
+            let reader = state.master.try_clone_reader().expect("应能克隆 PTY reader");
+            let writer = Arc::clone(&state.writer);
+            (reader, writer)
+        };
+
+        {
+            let mut writer = writer.lock().expect("应能锁定 PTY writer");
+            writer
+                .write_all(b"printf 'ghostterm-stdin-ok\\n'\n")
+                .expect("写入 PTY stdin 应成功");
+            writer.flush().expect("flush PTY stdin 应成功");
+        }
+
+        let read_result = tokio::task::spawn_blocking(move || {
+            let mut buf = vec![0u8; 4096];
+            let mut output = Vec::new();
+            let deadline = std::time::Instant::now() + Duration::from_secs(3);
+
+            while std::time::Instant::now() < deadline {
+                match reader.read(&mut buf) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        output.extend_from_slice(&buf[..n]);
+                        if output.windows(b"ghostterm-stdin-ok".len()).any(|w| w == b"ghostterm-stdin-ok") {
+                            return Ok::<Vec<u8>, String>(output);
+                        }
+                    }
+                    Err(err) => return Err(format!("读取 PTY 输出失败: {}", err)),
+                }
+            }
+
+            Err(format!(
+                "超时未读到预期输出，当前输出={}",
+                String::from_utf8_lossy(&output)
+            ))
+        })
+        .await
+        .expect("PTY reader 任务应完成");
+
+        let output = read_result.expect("应能从 PTY 读到命令输出");
+        let output_text = String::from_utf8_lossy(&output);
+        assert!(
+            output_text.contains("ghostterm-stdin-ok"),
+            "PTY 输出应包含写入命令结果，实际输出={}",
+            output_text
+        );
+
+        let _ = kill_pty(&info.pty_id).await;
+    }
+
+    /// 已建立的活跃 WebSocket 连接不应在 5 秒定时器到期后把 PTY 误杀
+    #[tokio::test]
+    async fn test_active_websocket_connection_should_keep_pty_alive() {
+        let shell = if cfg!(target_os = "macos") || cfg!(target_os = "linux") {
+            "/bin/sh"
+        } else {
+            "cmd.exe"
+        };
+
+        let info = spawn_pty(shell, "/tmp", HashMap::new())
+            .await
+            .expect("spawn_pty 失败");
+
+        let ws_url = format!("ws://127.0.0.1:{}/?token={}", info.ws_port, info.ws_token);
+        let (mut ws_stream, _) = connect_async(&ws_url)
+            .await
+            .expect("应能建立 WebSocket 连接");
+
+        tokio::time::sleep(Duration::from_secs(6)).await;
+
+        let registry = PTY_REGISTRY.lock().await;
+        assert!(
+            registry.contains_key(&info.pty_id),
+            "活跃 WebSocket 连接期间，PTY 不应被 5 秒定时器移除"
+        );
+        drop(registry);
+
+        let _ = ws_stream.close(None).await;
+        let _ = kill_pty(&info.pty_id).await;
+    }
+
+    #[test]
+    fn test_resolve_default_shell_from_env_uses_env_value() {
+        let shell = resolve_default_shell_from_env(Some("/opt/homebrew/bin/fish".to_string()));
+        assert_eq!(shell, "/opt/homebrew/bin/fish");
+    }
+
+    #[test]
+    fn test_resolve_default_shell_from_env_falls_back_when_empty() {
+        let shell = resolve_default_shell_from_env(Some("   ".to_string()));
+        assert_eq!(shell, fallback_shell());
+    }
+
+    #[tokio::test]
+    async fn test_get_default_shell_cmd_returns_non_empty_shell() {
+        let shell = get_default_shell_cmd().await.expect("获取默认 shell 应成功");
+        assert!(!shell.trim().is_empty());
     }
 }

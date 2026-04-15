@@ -20,7 +20,7 @@ interface ProjectInfo {
 const TEST_PROJECT_PATH = '/tmp/ghostterm-e2e-lifecycle-project';
 
 describe('PBI-6 E2E: 应用生命周期', () => {
-  beforeAll(async () => {
+  before(async () => {
     // 等待应用完成启动（ProjectSelector 出现）
     await browser.waitUntil(
       async () => {
@@ -63,10 +63,10 @@ describe('PBI-6 E2E: 应用生命周期', () => {
     await tauriInvoke('open_project_cmd', { path: TEST_PROJECT_PATH });
 
     // 等待文件树显示（确认项目已打开）
-    await browser.waitUntil(
-      async () => (await $$('[data-testid="file-tree-item"]')).length > 0,
-      { timeout: 5000, timeoutMsg: '文件树未加载' },
-    );
+    await browser.waitUntil(async () => {
+      const items = await $$('[data-testid="file-tree-item"]');
+      return (await items.length) > 0;
+    }, { timeout: 5000, timeoutMsg: '文件树未加载' });
 
     // 关闭项目
     await tauriInvoke('close_project_cmd');
@@ -83,7 +83,7 @@ describe('PBI-6 E2E: 应用生命周期', () => {
 
     // 文件树应清空
     const items = await $$('[data-testid="file-tree-item"]');
-    expect(items.length).toBe(0);
+    expect(await items.length).toBe(0);
   });
 
   it.skip('最近项目列表最多保留 20 条', async () => {

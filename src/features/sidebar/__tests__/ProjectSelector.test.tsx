@@ -1,164 +1,282 @@
-/**
- * @file ProjectSelector.test.tsx
- * @description ProjectSelector 组件测试 - 验证项目显示和下拉切换行为
- * @author Atlas.oi
- * @date 2026-04-13
- */
-
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { invoke } from '@tauri-apps/api/core';
 import ProjectSelector from '../ProjectSelector';
 import { useProjectStore } from '../projectStore';
+import { useProjectGroupingStore } from '../projectGroupingStore';
 import type { ProjectInfo } from '../../../shared/types';
 
-// Mock Tauri dialog 插件 - 测试环境无原生对话框
 vi.mock('@tauri-apps/plugin-dialog', () => ({
   open: vi.fn().mockResolvedValue(null),
 }));
 
 const mockInvoke = vi.mocked(invoke);
 
-const currentProject: ProjectInfo = {
-  name: 'ghostterm',
-  path: '/Users/atlas/ghostterm',
-  last_opened: 1713024000000,
-};
-
-const recentProjects: ProjectInfo[] = [
-  currentProject,
+const projects: ProjectInfo[] = [
   {
-    name: 'my-app',
-    path: '/Users/atlas/my-app',
-    last_opened: 1713020000000,
+    name: 'GhostTerm',
+    path: '/Users/atlas/GhostTerm',
+    last_opened: 3,
+  },
+  {
+    name: '毕设-开封旅游',
+    path: '/Users/atlas/Projects/毕设-开封旅游',
+    last_opened: 2,
+  },
+  {
+    name: 'GhostCode',
+    path: '/Users/atlas/GhostCode',
+    last_opened: 1,
   },
 ];
 
 beforeEach(() => {
+  localStorage.clear();
   useProjectStore.setState({
-    currentProject: null,
-    recentProjects: [],
+    currentProject: projects[0],
+    recentProjects: projects,
+  });
+  useProjectGroupingStore.setState({
+    groups: [],
+    selectedGroupId: 'all',
+    projectGroupMap: {},
+    searchQuery: '',
   });
   vi.clearAllMocks();
 });
 
-describe('ProjectSelector - 无项目状态', () => {
-  it('未打开项目时应显示占位文字', () => {
+describe('ProjectSelector', () => {
+  it('默认应显示当前分组栏而不是最近项目下拉按钮', () => {
     render(<ProjectSelector />);
-    expect(screen.getByText('未打开项目')).toBeInTheDocument();
-  });
-});
 
-describe('ProjectSelector - 有项目状态', () => {
-  beforeEach(() => {
-    useProjectStore.setState({ currentProject, recentProjects });
+    expect(screen.getByTestId('project-group-header')).toBeInTheDocument();
+    expect(screen.getByText('全部')).toBeInTheDocument();
+    expect(screen.getByTestId('project-group-count')).toHaveTextContent('3');
   });
 
-  it('应显示当前项目名称', () => {
+  it('点击下拉按钮应展开分组面板', async () => {
+    const user = userEvent.setup();
     render(<ProjectSelector />);
-    expect(screen.getByTestId('current-project-name')).toHaveTextContent('ghostterm');
+
+    await user.click(screen.getByTestId('project-group-toggle'));
+
+    expect(screen.getByTestId('project-group-menu')).toBeInTheDocument();
+    expect(screen.getByText('未分组')).toBeInTheDocument();
+    expect(screen.getByText('新建分组')).toBeInTheDocument();
   });
 
-  it('应显示缩略路径', () => {
+  it('切换分组后应只显示该分组项目', async () => {
+    const user = userEvent.setup();
+    const group = useProjectGroupingStore.getState().createGroup('毕设');
+    useProjectGroupingStore.getState().assignProjectToGroup(projects[1].path, group.id);
+
     render(<ProjectSelector />);
-    const pathEl = screen.getByTestId('current-project-path');
-    // 路径包含项目名部分即可
-    expect(pathEl.textContent).toContain('ghostterm');
-  });
-});
 
-describe('ProjectSelector - 下拉列表', () => {
-  beforeEach(() => {
-    useProjectStore.setState({ currentProject, recentProjects });
+    await user.click(screen.getByTestId('project-group-toggle'));
+    await user.click(screen.getByRole('button', { name: '切换到毕设' }));
+
+    expect(screen.getByTestId('project-group-label')).toHaveTextContent('毕设');
+    expect(screen.getByText('毕设-开封旅游')).toBeInTheDocument();
+    expect(screen.queryByText('GhostCode')).not.toBeInTheDocument();
   });
 
-  it('初始状态下拉列表应隐藏', () => {
+  it('搜索应在当前分组范围内过滤项目', async () => {
+    const user = userEvent.setup();
     render(<ProjectSelector />);
-    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+
+    await user.type(screen.getByTestId('project-search-input'), 'ghost');
+
+    expect(screen.getByText('GhostTerm')).toBeInTheDocument();
+    expect(screen.getByText('GhostCode')).toBeInTheDocument();
+    expect(screen.queryByText('毕设-开封旅游')).not.toBeInTheDocument();
   });
 
-  it('点击按钮应展开下拉列表', () => {
-    render(<ProjectSelector />);
-    fireEvent.click(screen.getByRole('button', { name: '选择项目' }));
-    expect(screen.getByRole('listbox')).toBeInTheDocument();
-  });
-
-  it('下拉列表应渲染所有最近项目', () => {
-    render(<ProjectSelector />);
-    fireEvent.click(screen.getByRole('button', { name: '选择项目' }));
-
-    // 两个项目都应在下拉中出现
-    const options = screen.getAllByRole('option');
-    expect(options).toHaveLength(2);
-  });
-
-  it('应显示打开文件夹按钮', () => {
-    render(<ProjectSelector />);
-    fireEvent.click(screen.getByRole('button', { name: '选择项目' }));
-    expect(screen.getByTestId('open-folder-btn')).toBeInTheDocument();
-  });
-
-  it('点击最近项目应调用 switchProject', async () => {
-    // openProject 协调链路需要多个 invoke（共 6 次）：
-    // 1. open_project_cmd → 返回新项目信息
-    // 2. list_dir_cmd → refreshFileTree（返回空数组）
-    // 3. git_status_cmd → refreshGitStatus 之一（并行）
-    // 4. git_current_branch_cmd → refreshGitStatus 之二（并行）
-    // 5. worktree_list_cmd → refreshWorktrees（并行）
-    // 6. list_recent_projects_cmd → loadRecentProjects
+  it('点击项目卡片应调用项目切换链路', async () => {
     mockInvoke
-      .mockResolvedValueOnce(recentProjects[1])   // open_project_cmd
-      .mockResolvedValueOnce([])                  // list_dir_cmd
-      .mockResolvedValueOnce([])                  // git_status_cmd（并行）
-      .mockResolvedValueOnce('main')              // git_current_branch_cmd（并行）
-      .mockResolvedValueOnce([])                  // worktree_list_cmd（并行）
-      .mockResolvedValueOnce(recentProjects);      // list_recent_projects_cmd
+      .mockResolvedValueOnce(projects[1])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce('main')
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(projects);
 
+    const user = userEvent.setup();
     render(<ProjectSelector />);
-    fireEvent.click(screen.getByRole('button', { name: '选择项目' }));
 
-    // 点击 my-app 选项
-    const options = screen.getAllByRole('option');
-    fireEvent.click(options[1]);
+    await user.click(screen.getByRole('button', { name: '打开项目 毕设-开封旅游' }));
 
-    // 等待完整异步链路完成（6 次 invoke 调用全部结束）
-    // 避免异步操作在测试结束后继续执行导致 unhandled error
     await waitFor(() => {
-      expect(mockInvoke).toHaveBeenCalledTimes(6);
-    });
-
-    expect(mockInvoke).toHaveBeenCalledWith('open_project_cmd', {
-      path: '/Users/atlas/my-app',
+      expect(mockInvoke).toHaveBeenCalledWith('open_project_cmd', {
+        path: '/Users/atlas/Projects/毕设-开封旅游',
+      });
     });
   });
 
-  it('点击项目后下拉列表应关闭', async () => {
-    mockInvoke
-      .mockResolvedValueOnce(recentProjects[1])   // open_project_cmd
-      .mockResolvedValueOnce([])                  // list_dir_cmd
-      .mockResolvedValueOnce([])                  // git_status_cmd
-      .mockResolvedValueOnce('main')              // git_current_branch_cmd
-      .mockResolvedValueOnce([])                  // worktree_list_cmd
-      .mockResolvedValueOnce(recentProjects);      // list_recent_projects_cmd
-
+  it('点击当前项目不应重复触发项目切换', async () => {
+    const user = userEvent.setup();
     render(<ProjectSelector />);
-    fireEvent.click(screen.getByRole('button', { name: '选择项目' }));
-    const options = screen.getAllByRole('option');
-    fireEvent.click(options[1]);
 
-    // 等待完整异步链路完成后再断言 UI 状态
-    await waitFor(() => {
-      expect(mockInvoke).toHaveBeenCalledTimes(6);
-    });
-    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '打开项目 GhostTerm' }));
+
+    expect(mockInvoke).not.toHaveBeenCalled();
   });
-});
 
-describe('ProjectSelector - 空最近列表', () => {
-  it('无最近项目时应显示提示文字', () => {
-    useProjectStore.setState({ currentProject: null, recentProjects: [] });
+  it('点击项目展开后应保持原列表顺序与滚动位置', async () => {
+    useProjectStore.setState((state) => ({
+      ...state,
+      switchProject: async (path: string) => {
+        const nextProject = projects.find((project) => project.path === path) ?? null;
+        useProjectStore.setState({ currentProject: nextProject });
+      },
+    }));
+
+    const user = userEvent.setup();
     render(<ProjectSelector />);
-    fireEvent.click(screen.getByRole('button', { name: '选择项目' }));
-    expect(screen.getByText('暂无最近项目')).toBeInTheDocument();
+
+    const scrollContainer = screen.getByTestId('project-list-scroll-container');
+    Object.defineProperty(scrollContainer, 'scrollTop', {
+      value: 148,
+      writable: true,
+      configurable: true,
+    });
+
+    await user.click(screen.getByRole('button', { name: '打开项目 毕设-开封旅游' }));
+
+    await waitFor(() => {
+      expect(useProjectStore.getState().currentProject?.path).toBe('/Users/atlas/Projects/毕设-开封旅游');
+    });
+
+    await waitFor(() => {
+      expect(scrollContainer.scrollTop).toBe(148);
+    });
+
+    const projectButtons = screen
+      .getAllByRole('button', { name: /打开项目 / })
+      .map((button) => button.textContent?.replace(/\s+/g, '') ?? '');
+    expect(projectButtons).toEqual([
+      'GhostTerm.../GhostTerm',
+      '毕设-开封旅游.../Projects/毕设-开封旅游',
+      'GhostCode.../GhostCode',
+    ]);
+  });
+
+  it('项目卡片应支持把项目移动到指定分组', async () => {
+    const user = userEvent.setup();
+    const group = useProjectGroupingStore.getState().createGroup('毕设');
+
+    render(<ProjectSelector />);
+
+    await user.click(screen.getByRole('button', { name: '管理项目 GhostCode' }));
+    await user.click(screen.getByRole('menuitem', { name: '移动到分组 毕设' }));
+    await user.click(screen.getByTestId('project-group-toggle'));
+    await user.click(screen.getByRole('button', { name: '切换到毕设' }));
+
+    expect(screen.getByText('GhostCode')).toBeInTheDocument();
+    expect(screen.queryByText('GhostTerm')).not.toBeInTheDocument();
+    expect(useProjectGroupingStore.getState().projectGroupMap[projects[2].path]).toBe(group.id);
+  });
+
+  it('应通过对话框新建分组', async () => {
+    const user = userEvent.setup();
+    render(<ProjectSelector />);
+
+    await user.click(screen.getByTestId('project-group-toggle'));
+    await user.click(screen.getByText('新建分组'));
+
+    expect(screen.getByTestId('group-create-dialog')).toBeInTheDocument();
+    await user.type(screen.getByTestId('group-name-input'), '客户端');
+    await user.click(screen.getByTestId('group-create-confirm'));
+
+    expect(screen.queryByTestId('group-create-dialog')).not.toBeInTheDocument();
+    expect(useProjectGroupingStore.getState().groups.some((group) => group.name === '客户端')).toBe(true);
+  });
+
+  it('应通过对话框重命名当前分组', async () => {
+    const user = userEvent.setup();
+    const group = useProjectGroupingStore.getState().createGroup('旧分组');
+    useProjectGroupingStore.getState().selectGroup(group.id);
+
+    render(<ProjectSelector />);
+
+    await user.click(screen.getByRole('button', { name: '编辑分组' }));
+    await user.click(screen.getByText('重命名分组'));
+
+    const input = screen.getByTestId('group-rename-input');
+    expect(screen.getByTestId('group-rename-dialog')).toBeInTheDocument();
+    await user.clear(input);
+    await user.type(input, '新分组');
+    await user.click(screen.getByTestId('group-rename-confirm'));
+
+    expect(screen.queryByTestId('group-rename-dialog')).not.toBeInTheDocument();
+    expect(useProjectGroupingStore.getState().groups.find((item) => item.id === group.id)?.name).toBe('新分组');
+    expect(screen.getByTestId('project-group-label')).toHaveTextContent('新分组');
+  });
+
+  it('应通过确认对话框删除当前分组并把项目移回未分组', async () => {
+    const user = userEvent.setup();
+    const group = useProjectGroupingStore.getState().createGroup('临时分组');
+    useProjectGroupingStore.getState().assignProjectToGroup(projects[2].path, group.id);
+    useProjectGroupingStore.getState().selectGroup(group.id);
+
+    render(<ProjectSelector />);
+
+    await user.click(screen.getByRole('button', { name: '编辑分组' }));
+    await user.click(screen.getByText('删除分组'));
+
+    expect(screen.getByTestId('group-delete-dialog')).toBeInTheDocument();
+    await user.click(screen.getByTestId('group-delete-confirm'));
+
+    expect(screen.queryByTestId('group-delete-dialog')).not.toBeInTheDocument();
+    expect(useProjectGroupingStore.getState().groups.find((item) => item.id === group.id)).toBeUndefined();
+    expect(useProjectGroupingStore.getState().selectedGroupId).toBe('ungrouped');
+    expect(useProjectGroupingStore.getState().projectGroupMap[projects[2].path]).toBe('ungrouped');
+  });
+
+  it('项目卡片当前激活态应更明显并带有活跃标记', () => {
+    render(<ProjectSelector />);
+
+    const activeCard = screen.getByTestId(`project-card-${projects[0].name}`);
+    const inactiveCard = screen.getByTestId(`project-card-${projects[1].name}`);
+
+    expect(activeCard).toHaveAttribute('data-active', 'true');
+    expect(inactiveCard).toHaveAttribute('data-active', 'false');
+    expect(activeCard).toHaveStyle({
+      background: '#414868',
+      boxShadow: '0 0 0 1px rgba(122,162,247,0.38), 0 14px 30px rgba(15,17,26,0.32)',
+    });
+  });
+
+  it('自定义分组中的项目应支持移回未分组', async () => {
+    const user = userEvent.setup();
+    const group = useProjectGroupingStore.getState().createGroup('客户端');
+    useProjectGroupingStore.getState().assignProjectToGroup(projects[2].path, group.id);
+    useProjectGroupingStore.getState().selectGroup(group.id);
+
+    render(<ProjectSelector />);
+
+    await user.click(screen.getByRole('button', { name: '管理项目 GhostCode' }));
+    await user.click(screen.getByRole('menuitem', { name: '移动到分组 未分组' }));
+
+    expect(useProjectGroupingStore.getState().projectGroupMap[projects[2].path]).toBe('ungrouped');
+    expect(screen.queryByText('GhostCode')).not.toBeInTheDocument();
+  });
+
+  it('未分组也应允许打开重命名分组对话框', async () => {
+    const user = userEvent.setup();
+    useProjectGroupingStore.setState({ selectedGroupId: 'ungrouped' });
+    render(<ProjectSelector />);
+
+    await user.click(screen.getByRole('button', { name: '编辑分组' }));
+    await user.click(screen.getByText('重命名分组'));
+
+    expect(screen.getByTestId('group-rename-dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('group-rename-input')).toHaveValue('未分组');
+  });
+
+  it('项目卡片不应再渲染行内添加项目按钮', () => {
+    render(<ProjectSelector />);
+
+    expect(screen.queryByRole('button', { name: '向分组添加项目 GhostTerm' })).not.toBeInTheDocument();
   });
 });

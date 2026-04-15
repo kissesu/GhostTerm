@@ -14,6 +14,7 @@ import AppLayout from '../layouts/AppLayout';
 import { useSidebarStore } from '../features/sidebar';
 import { useFileTreeStore } from '../features/sidebar';
 import { useProjectStore } from '../features/sidebar';
+import { DEFAULT_TERMINAL_SETTINGS, useSettingsStore } from '../shared/stores/settingsStore';
 
 // AppLayout 测试只验证布局行为，特性组件 mock 为轻量占位
 // 避免 xterm.js/CodeMirror 依赖浏览器 API（matchMedia/WebGL）在 jsdom 中报错
@@ -29,6 +30,7 @@ beforeEach(() => {
   useSidebarStore.setState({ activeTab: 'files', visible: true });
   useFileTreeStore.setState({ tree: [], expandedPaths: new Set() });
   useProjectStore.setState({ currentProject: null, recentProjects: [] });
+  useSettingsStore.setState({ appView: 'main', terminal: DEFAULT_TERMINAL_SETTINGS });
   // 启动恢复 effect 会调用 list_recent_projects_cmd
   vi.mocked(invoke).mockResolvedValue([]);
 });
@@ -41,5 +43,6 @@ describe('AppLayout', () => {
     expect(screen.getByTestId('sidebar-root')).toBeInTheDocument();
     expect(screen.getByText(/编辑器/)).toBeInTheDocument();
     expect(screen.getByText(/终端/)).toBeInTheDocument();
+    expect(screen.getByTestId('open-settings-button')).toBeInTheDocument();
   });
 });

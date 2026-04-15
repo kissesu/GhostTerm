@@ -8,8 +8,10 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { useState } from 'react';
 import { useGitStore } from './gitStore';
 import { useProjectStore } from './projectStore';
+import SidebarDialog, { dialogButtonStyle, dialogInputStyle } from './SidebarDialog';
 import type { Worktree } from '../../shared/types';
 
 /** Worktree 面板根组件 */
@@ -17,6 +19,21 @@ export default function Worktrees() {
   const { worktrees, refreshWorktrees } = useGitStore();
   // 从当前项目获取仓库路径，未打开项目时为空字符串（此时操作会被 UI 禁用）
   const repoPath = useProjectStore((s) => s.currentProject?.path ?? '');
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createBranch, setCreateBranch] = useState('');
+  const [createPath, setCreatePath] = useState('');
+  const [removeTarget, setRemoveTarget] = useState<Worktree | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const showError = (message: string) => {
+    setErrorMessage(message);
+  };
+
+  const resetCreateDialog = () => {
+    setCreateDialogOpen(false);
+    setCreateBranch('');
+    setCreatePath('');
+  };
 
   /**
    * 切换到指定 worktree
@@ -31,27 +48,26 @@ export default function Worktrees() {
       await openProject(wt.path);
     } catch (err) {
       console.error('[Worktrees] 切换 worktree 失败:', err);
-      alert(`切换失败: ${err}`);
+      showError(`切换失败: ${err}`);
     }
   };
 
   /**
    * 创建新 worktree
-   * 通过 prompt 获取分支名和路径，调用 worktree_add_cmd
+   * 通过对话框获取分支名和路径，调用 worktree_add_cmd
    */
   const handleCreate = async () => {
-    const branch = window.prompt('新 worktree 分支名（不存在则自动创建）:');
-    if (!branch) return;
-
-    const path = window.prompt('新 worktree 目录路径（绝对路径）:');
-    if (!path) return;
+    const branch = createBranch.trim();
+    const path = createPath.trim();
+    if (!branch || !path || !repoPath) return;
 
     try {
       await invoke('worktree_add_cmd', { repoPath, path, branch });
       await refreshWorktrees(repoPath);
+      resetCreateDialog();
     } catch (err) {
       console.error('[Worktrees] 创建 worktree 失败:', err);
-      alert(`创建失败: ${err}`);
+      showError(`创建失败: ${err}`);
     }
   };
 
@@ -61,20 +77,24 @@ export default function Worktrees() {
    */
   const handleRemove = async (wt: Worktree) => {
     if (wt.is_current) {
-      alert('不能删除当前活跃的 worktree');
+      showError('不能删除当前活跃的 worktree');
       return;
     }
 
-    const confirmed = window.confirm(`确认删除 worktree "${wt.branch ?? wt.path}" ？\n路径: ${wt.path}`);
-    if (!confirmed) return;
+    setRemoveTarget(wt);
+  };
+
+  const confirmRemove = async () => {
+    if (!removeTarget || !repoPath) return;
 
     try {
       // 使用路径作为 worktree 标识符（git worktree remove 支持路径）
-      await invoke('worktree_remove_cmd', { repoPath, worktreeName: wt.path });
+      await invoke('worktree_remove_cmd', { repoPath, worktreeName: removeTarget.path });
       await refreshWorktrees(repoPath);
+      setRemoveTarget(null);
     } catch (err) {
       console.error('[Worktrees] 删除 worktree 失败:', err);
-      alert(`删除失败: ${err}`);
+      showError(`删除失败: ${err}`);
     }
   };
 
@@ -106,16 +126,17 @@ export default function Worktrees() {
           Worktrees ({worktrees.length})
         </span>
         <button
-          onClick={handleCreate}
+          onClick={() => setCreateDialogOpen(true)}
           title="新建 worktree"
+          disabled={!repoPath}
           style={{
             background: 'transparent',
             border: '1px solid #27293d',
             borderRadius: 3,
-            color: '#7aa2f7',
+            color: repoPath ? '#7aa2f7' : '#565f89',
             fontSize: 11,
             padding: '2px 8px',
-            cursor: 'pointer',
+            cursor: repoPath ? 'pointer' : 'not-allowed',
           }}
         >
           + 新建
@@ -136,6 +157,88 @@ export default function Worktrees() {
             onRemove={handleRemove}
           />
         ))
+      )}
+
+      {createDialogOpen && (
+        <SidebarDialog
+          title="新建 worktree"
+          description="输入分支名和新 worktree 的绝对路径，Git 会在需要时自动创建对应分支。"
+          onClose={resetCreateDialog}
+          footer={(
+            <>
+              <button type="button" onClick={resetCreateDialog} style={{ ...dialogButtonStyle(), padding: '9px 14px', borderRadius: 10 }}>
+                取消
+              </button>
+              <button type="button" onClick={handleCreate} disabled={!createBranch.trim() || !createPath.trim() || !repoPath} style={{ ...dialogButtonStyle('primary'), padding: '9px 14px', borderRadius: 10, opacity: createBranch.trim() && createPath.trim() && repoPath ? 1 : 0.55, cursor: createBranch.trim() && createPath.trim() && repoPath ? 'pointer' : 'not-allowed' }} data-testid="worktree-create-confirm">
+                创建
+              </button>
+            </>
+          )}
+          testId="worktree-create-dialog"
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#c0caf5', marginBottom: 8 }}>
+                分支名
+              </label>
+              <input
+                autoFocus
+                type="text"
+                value={createBranch}
+                onChange={(event) => setCreateBranch(event.target.value)}
+                placeholder="例如：feature/sidebar-polish"
+                style={dialogInputStyle()}
+                data-testid="worktree-create-branch-input"
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#c0caf5', marginBottom: 8 }}>
+                目录路径
+              </label>
+              <input
+                type="text"
+                value={createPath}
+                onChange={(event) => setCreatePath(event.target.value)}
+                placeholder="/absolute/path/to/worktree"
+                style={dialogInputStyle()}
+                data-testid="worktree-create-path-input"
+              />
+            </div>
+          </div>
+        </SidebarDialog>
+      )}
+
+      {removeTarget && (
+        <SidebarDialog
+          title="删除 worktree"
+          description={<>确认删除 worktree “{removeTarget.branch ?? removeTarget.path}”？<br />路径：{removeTarget.path}</>}
+          onClose={() => setRemoveTarget(null)}
+          footer={(
+            <>
+              <button type="button" onClick={() => setRemoveTarget(null)} style={{ ...dialogButtonStyle(), padding: '9px 14px', borderRadius: 10 }}>
+                取消
+              </button>
+              <button type="button" onClick={confirmRemove} style={{ ...dialogButtonStyle('danger'), padding: '9px 14px', borderRadius: 10 }} data-testid="worktree-remove-confirm">
+                删除
+              </button>
+            </>
+          )}
+          testId="worktree-remove-dialog"
+        />
+      )}
+
+      {errorMessage && (
+        <SidebarDialog
+          title="Worktree 操作失败"
+          description={errorMessage}
+          onClose={() => setErrorMessage(null)}
+          footer={
+            <button type="button" onClick={() => setErrorMessage(null)} style={{ ...dialogButtonStyle('primary'), padding: '9px 14px', borderRadius: 10 }}>
+              知道了
+            </button>
+          }
+          testId="worktree-error-dialog"
+        />
       )}
     </div>
   );

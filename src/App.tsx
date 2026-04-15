@@ -6,9 +6,13 @@
  */
 
 import AppLayout from './layouts/AppLayout';
+import { SettingsPage } from './features/settings';
+import { useSettingsStore } from './shared/stores/settingsStore';
 
 function App() {
-  return <AppLayout />;
+  const appView = useSettingsStore((s) => s.appView);
+
+  return appView === 'settings' ? <SettingsPage /> : <AppLayout />;
 }
 
 export default App;

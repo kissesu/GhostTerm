@@ -26,6 +26,8 @@ interface ProjectState {
   switchProject: (path: string) => Promise<void>;
   /** 关闭当前项目 */
   closeProject: () => Promise<void>;
+  /** 从面板移除指定项目（只删除记录，不删除本地文件） */
+  removeProject: (path: string) => Promise<void>;
   /** 从后端加载最近项目列表 */
   loadRecentProjects: () => Promise<void>;
 }
@@ -79,11 +81,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     useEditorStore.getState().closeAll();
 
     // ============================================
-    // 第五步：刷新最近项目列表（后端已更新排序）
-    // 注意：如果此处或上方步骤失败，currentProject 保持为已切换的新项目（与后端一致）
-    // 错误由调用方（handleSelect）捕获并记录，不清空 currentProject 以避免前后端分叉
+    // 第五步：按需刷新最近项目列表
+    // 已在列表中的项目不重新加载，避免后端按 last_opened 排序导致项目跳到首位
+    // 新项目（不在列表中）需要加载以显示在列表里
     // ============================================
-    await get().loadRecentProjects();
+    const alreadyInList = get().recentProjects.some((p) => p.path === path);
+    if (!alreadyInList) {
+      await get().loadRecentProjects();
+    }
   },
 
   /**
@@ -105,6 +110,23 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   closeProject: async () => {
     await invoke('close_project_cmd');
     set({ currentProject: null });
+  },
+
+  /**
+   * 从面板移除指定项目（只移除面板记录，不删除本地文件）
+   *
+   * 业务逻辑：
+   * 1. 调用后端 remove_project_cmd 从 projects.json 删除记录
+   * 2. 若移除的是当前项目，同时关闭当前项目
+   * 3. 刷新前端列表
+   */
+  removeProject: async (path: string) => {
+    await invoke('remove_project_cmd', { path });
+    // 若移除的是当前打开的项目，同步关闭
+    if (get().currentProject?.path === path) {
+      await get().closeProject();
+    }
+    await get().loadRecentProjects();
   },
 
   /**

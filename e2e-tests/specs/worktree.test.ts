@@ -24,7 +24,7 @@ const TEST_WORKTREE_PATH = '/tmp/ghostterm-e2e-worktree-branch';
 const TEST_BRANCH_NAME = 'e2e-test-branch';
 
 describe('PBI-6 E2E: Worktree 事务切换', () => {
-  beforeAll(async () => {
+  before(async () => {
     // 等待应用加载
     await browser.waitUntil(
       async () => {
@@ -73,13 +73,10 @@ describe('PBI-6 E2E: Worktree 事务切换', () => {
     const worktreeTab = await $('[data-testid="sidebar-tab-worktrees"]');
     await worktreeTab.click();
 
-    await browser.waitUntil(
-      async () => {
-        const items = await $$('[data-testid="worktree-item"]');
-        return items.length >= 2; // 主 worktree + 新增 worktree
-      },
-      { timeout: 3000, timeoutMsg: 'Worktrees 面板未显示新条目' },
-    );
+    await browser.waitUntil(async () => {
+      const items = await $$('[data-testid="worktree-item"]');
+      return (await items.length) >= 2; // 主 worktree + 新增 worktree
+    }, { timeout: 3000, timeoutMsg: 'Worktrees 面板未显示新条目' });
   });
 
   it.skip('切换 worktree 后文件树应更新为新 worktree 路径', async () => {
@@ -108,7 +105,7 @@ describe('PBI-6 E2E: Worktree 事务切换', () => {
 
     // 编辑器标签应已清空（切换时 editorStore.closeAll 被调用）
     const tabs = await $$('[data-testid="editor-tab"]');
-    expect(tabs.length).toBe(0);
+    expect(await tabs.length).toBe(0);
   });
 
   it.skip('删除 worktree 后列表应移除该条目', async () => {

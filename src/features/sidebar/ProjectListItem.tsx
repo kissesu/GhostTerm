@@ -5,7 +5,8 @@
  * @date 2026-04-13
  */
 
-import { FolderCode, Plus, SlidersHorizontal } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { FolderCode, SlidersHorizontal } from 'lucide-react';
 import type { ProjectInfo } from '../../shared/types';
 import Changes from './Changes';
 import FileTree from './FileTree';
@@ -17,7 +18,10 @@ import { useSidebarStore, type SidebarTab } from './sidebarStore';
 interface ProjectListItemProps {
   project: ProjectInfo;
   active: boolean;
+  /** 手风琴面板是否收起（点击当前项目名可切换） */
+  collapsed: boolean;
   onSelect: (path: string) => void;
+  onRemove: (projectPath: string) => void;
   groups: VisibleProjectGroup[];
   currentGroupId: string;
   menuOpen: boolean;
@@ -43,7 +47,9 @@ function shortenPath(fullPath: string) {
 export default function ProjectListItem({
   project,
   active,
+  collapsed,
   onSelect,
+  onRemove,
   groups,
   currentGroupId,
   menuOpen,
@@ -52,25 +58,57 @@ export default function ProjectListItem({
 }: ProjectListItemProps) {
   // 从全局侧边栏 store 获取当前激活标签和切换方法
   const { activeTab, setTab } = useSidebarStore();
+  const itemRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!itemRef.current?.contains(event.target as Node)) {
+        onToggleMenu(project.path);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onToggleMenu(project.path);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [menuOpen, onToggleMenu, project.path]);
 
   return (
     <div
+      ref={itemRef}
       style={{
         position: 'relative',
       }}
     >
       {/* 项目卡片：活跃时只保留上圆角，下圆角由手风琴区域接管 */}
       <div
+        data-testid={`project-card-${project.name}`}
+        data-active={active ? 'true' : 'false'}
         style={{
           width: '100%',
           border: 'none',
           borderRadius: active ? '18px 18px 0 0' : 18,
-          background: active ? '#373a52' : '#2b2e43',
+          background: active ? '#414868' : '#2b2e43',
           color: '#eef0ff',
           padding: '14px 16px',
           display: 'flex',
           alignItems: 'flex-start',
           gap: 12,
+          boxShadow: active
+            ? '0 0 0 1px rgba(122,162,247,0.38), 0 14px 30px rgba(15,17,26,0.32)'
+            : 'none',
         }}
       >
         <button
@@ -131,18 +169,6 @@ export default function ProjectListItem({
             flexShrink: 0,
           }}
         >
-          <span
-            style={{
-              width: 24,
-              height: 24,
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-            aria-hidden="true"
-          >
-            <Plus size={16} />
-          </span>
           <button
             type="button"
             aria-label={`管理项目 ${project.name}`}
@@ -165,8 +191,8 @@ export default function ProjectListItem({
         </span>
       </div>
 
-      {/* 手风琴展开区域：仅活跃项目展示，包含 Files/Changes/Worktrees 标签页 */}
-      {active && (
+      {/* 手风琴展开区域：仅活跃且未收起时展示，包含 Files/Changes/Worktrees 标签页 */}
+      {active && !collapsed && (
         <div
           data-testid={`accordion-panel-${project.name}`}
           style={{
@@ -208,8 +234,8 @@ export default function ProjectListItem({
             ))}
           </div>
 
-          {/* 标签页内容区域，限制最大高度并允许滚动 */}
-          <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+          {/* 标签页内容区域：高度自然增长，由外部侧边栏滚动容器统一管理滚动 */}
+          <div>
             {activeTab === 'files' && <FileTree />}
             {activeTab === 'changes' && <Changes />}
             {activeTab === 'worktrees' && <Worktrees />}
@@ -265,6 +291,28 @@ export default function ProjectListItem({
                 </span>
               </button>
             ))}
+          {/* 从面板移除：只删除记录，不删除本地文件 */}
+          <button
+            type="button"
+            role="menuitem"
+            aria-label={`从面板移除项目 ${project.name}`}
+            onClick={() => onRemove(project.path)}
+            style={{
+              width: '100%',
+              border: 'none',
+              borderTop: '1px solid rgba(255,255,255,0.05)',
+              background: 'transparent',
+              color: '#f29ba1',
+              padding: '11px 12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              textAlign: 'left',
+              cursor: 'pointer',
+            }}
+          >
+            <span style={{ flex: 1, minWidth: 0 }}>从面板移除</span>
+          </button>
         </div>
       )}
     </div>

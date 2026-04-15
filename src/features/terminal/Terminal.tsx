@@ -14,7 +14,8 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { AttachAddon } from '@xterm/addon-attach';
 import { FitAddon } from '@xterm/addon-fit';
-import { useThemeStore } from '../../shared/stores/themeStore';
+import { getTerminalThemeById } from '../../shared/stores/themeStore';
+import { useSettingsStore } from '../../shared/stores/settingsStore';
 import { useTerminalStore } from './terminalStore';
 import { useTerminal } from './useTerminal';
 import '@xterm/xterm/css/xterm.css';
@@ -51,7 +52,8 @@ export default function Terminal({ cwd, className }: TerminalProps) {
   // 错误状态：连接失败或 PTY 退出
   const [error, setError] = useState<string | null>(null);
 
-  const terminalTheme = useThemeStore((s) => s.terminalTheme);
+  const terminalSettings = useSettingsStore((s) => s.terminal);
+  const terminalTheme = getTerminalThemeById(terminalSettings.theme);
   const spawn = useTerminalStore((s) => s.spawn);
   const connected = useTerminalStore((s) => s.connected);
   const ptyId = useTerminalStore((s) => s.ptyId);
@@ -59,6 +61,14 @@ export default function Terminal({ cwd, className }: TerminalProps) {
 
   // 获取 WebSocket ref（由 useTerminal 管理连接生命周期）
   const { wsRef } = useTerminal();
+
+  const focusTerminal = () => {
+    const input = containerRef.current?.querySelector('textarea');
+    if (input instanceof HTMLTextAreaElement) {
+      input.focus();
+    }
+    termRef.current?.focus();
+  };
 
   // ============================================
   // Effect 1：初始化 XTerm 实例
@@ -69,11 +79,11 @@ export default function Terminal({ cwd, className }: TerminalProps) {
 
     const term = new XTerm({
       theme: terminalTheme,
-      // 字体配置：优先使用等宽字体，支持中文
-      fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
-      fontSize: 14,
+      fontFamily: terminalSettings.fontFamily,
+      fontSize: terminalSettings.fontSize,
       lineHeight: 1.2,
       cursorBlink: true,
+      cursorStyle: terminalSettings.cursorStyle,
       // 性能优化：减少不必要的渲染
       scrollback: 1000,
       // 允许透明背景（与编辑器面板视觉一致）
@@ -147,6 +157,7 @@ export default function Terminal({ cwd, className }: TerminalProps) {
     if (!connected || !wsRef.current || !termRef.current) return;
     // 清除之前的错误状态
     setError(null);
+    focusTerminal();
     // AttachAddon 将 xterm.js 直接绑定到 WebSocket
     // - xterm.js 输出写入 WebSocket（-> PTY stdin）
     // - WebSocket 接收数据写入 xterm.js（PTY stdout）
@@ -159,14 +170,18 @@ export default function Terminal({ cwd, className }: TerminalProps) {
   }, [connected, wsRef.current]); // connected 或 ws 变化时重新绑定
 
   // ============================================
-  // Effect 4：主题同步
-  // terminalTheme 变化时更新 xterm.js 配色
+  // Effect 4：终端外观同步
+  // 设置变化时更新 xterm.js 配色、字体、光标
   // ============================================
   useEffect(() => {
     if (termRef.current) {
       termRef.current.options.theme = terminalTheme;
+      termRef.current.options.fontSize = terminalSettings.fontSize;
+      termRef.current.options.fontFamily = terminalSettings.fontFamily;
+      termRef.current.options.cursorStyle = terminalSettings.cursorStyle;
+      fitAddonRef.current?.fit();
     }
-  }, [terminalTheme]);
+  }, [terminalTheme, terminalSettings.fontFamily, terminalSettings.fontSize, terminalSettings.cursorStyle]);
 
   // ============================================
   // Effect 5：ResizeObserver 监听容器尺寸变化
@@ -203,6 +218,7 @@ export default function Terminal({ cwd, className }: TerminalProps) {
   return (
     <div
       className={className}
+      onMouseDownCapture={focusTerminal}
       style={{
         width: '100%',
         height: '100%',

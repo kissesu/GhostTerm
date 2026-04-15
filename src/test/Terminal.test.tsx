@@ -21,6 +21,7 @@ import userEvent from '@testing-library/user-event';
 const {
   mockTermOpen,
   mockTermDispose,
+  mockTermFocus,
   mockTermLoadAddon: _mockTermLoadAddon,
   mockFitAddonFit: _mockFitAddonFit,
   mockAttachAddonDispose: _mockAttachAddonDispose,
@@ -33,6 +34,7 @@ const {
 } = vi.hoisted(() => {
   const mockTermOpen = vi.fn();
   const mockTermDispose = vi.fn();
+  const mockTermFocus = vi.fn();
   const mockTermLoadAddon = vi.fn();
   const mockFitAddonFit = vi.fn();
   const mockAttachAddonDispose = vi.fn();
@@ -41,6 +43,7 @@ const {
   const MockXTerm = vi.fn().mockImplementation(() => ({
     open: mockTermOpen,
     dispose: mockTermDispose,
+    focus: mockTermFocus,
     loadAddon: mockTermLoadAddon,
     cols: 80,
     rows: 24,
@@ -77,6 +80,7 @@ const {
   return {
     mockTermOpen,
     mockTermDispose,
+    mockTermFocus,
     mockTermLoadAddon,
     mockFitAddonFit,
     mockAttachAddonDispose,
@@ -103,15 +107,20 @@ vi.mock('@xterm/xterm/css/xterm.css', () => ({}));
 import Terminal from '../features/terminal/Terminal';
 import { useTerminalStore } from '../features/terminal/terminalStore';
 import { invoke } from '@tauri-apps/api/core';
+import { DEFAULT_TERMINAL_SETTINGS, useSettingsStore } from '../shared/stores/settingsStore';
 
 // ============================================
 // Mock WebSocket（jsdom 无原生 WebSocket 实现）
 // ============================================
 class MockWebSocket {
   static instances: MockWebSocket[] = [];
+  static CONNECTING = 0;
+  static OPEN = 1;
+  static CLOSING = 2;
+  static CLOSED = 3;
   url: string;
   binaryType: string = 'blob';
-  readyState: number = 1;
+  readyState: number = MockWebSocket.OPEN;
   onopen: (() => void) | null = null;
   onclose: ((e: { code: number }) => void) | null = null;
   onerror: (() => void) | null = null;
@@ -134,6 +143,12 @@ describe('Terminal', () => {
     MockWebSocket.instances = [];
     vi.stubGlobal('WebSocket', MockWebSocket);
     vi.clearAllMocks();
+    localStorage.clear();
+
+    useSettingsStore.setState({
+      appView: 'main',
+      terminal: DEFAULT_TERMINAL_SETTINGS,
+    });
 
     // 重置 store
     useTerminalStore.setState({
@@ -144,10 +159,18 @@ describe('Terminal', () => {
     });
 
     // 默认 spawn 成功
-    mockInvoke.mockResolvedValue({
-      pty_id: 'test-pty-12345678',
-      ws_port: 54321,
-      ws_token: 'c'.repeat(64),
+    mockInvoke.mockImplementation(async (command) => {
+      if (command === 'get_default_shell_cmd') {
+        return '/bin/zsh';
+      }
+      if (command === 'spawn_pty_cmd') {
+        return {
+          pty_id: 'test-pty-12345678',
+          ws_port: 54321,
+          ws_token: 'c'.repeat(64),
+        };
+      }
+      return undefined;
     });
   });
 
@@ -197,11 +220,31 @@ describe('Terminal', () => {
       render(<Terminal cwd="/projects/test" />);
 
       await waitFor(() => {
-        expect(mockInvoke).toHaveBeenCalledWith('spawn_pty_cmd', {
+        expect(mockInvoke).toHaveBeenNthCalledWith(1, 'get_default_shell_cmd');
+        expect(mockInvoke).toHaveBeenNthCalledWith(2, 'spawn_pty_cmd', {
           shell: '/bin/zsh',
           cwd: '/projects/test',
         });
       });
+    });
+
+    it('应把终端设置传给 xterm 实例', async () => {
+      useSettingsStore.getState().updateTerminalSettings({
+        fontSize: 15,
+        fontFamily: 'Fira Code, monospace',
+        cursorStyle: 'underline',
+        theme: 'ghostterm-light',
+      });
+
+      render(<Terminal cwd="/tmp" />);
+
+      expect(MockXTerm).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fontSize: 15,
+          fontFamily: 'Fira Code, monospace',
+          cursorStyle: 'underline',
+        }),
+      );
     });
   });
 
@@ -223,6 +266,33 @@ describe('Terminal', () => {
         expect(MockAttachAddon).toHaveBeenCalledTimes(1);
       });
     });
+
+    it('connected 变为 true 后应聚焦终端以接收键盘输入', async () => {
+      render(<Terminal cwd="/tmp" />);
+
+      await waitFor(() => {
+        expect(useTerminalStore.getState().wsPort).toBe(54321);
+      });
+
+      await act(async () => {
+        useTerminalStore.setState({ connected: true });
+      });
+
+      await waitFor(() => {
+        expect(mockTermFocus).toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('终端交互焦点', () => {
+    it('点击终端容器时应聚焦 xterm 实例', async () => {
+      const user = userEvent.setup();
+      render(<Terminal cwd="/tmp" />);
+
+      await user.click(screen.getByTestId('terminal-container'));
+
+      expect(mockTermFocus).toHaveBeenCalled();
+    });
   });
 
   describe('卸载时清理', () => {
@@ -235,7 +305,9 @@ describe('Terminal', () => {
 
   describe('错误 UI', () => {
     it('spawn 失败时应显示错误信息', async () => {
-      mockInvoke.mockRejectedValueOnce(new Error('shell 不存在'));
+      mockInvoke
+        .mockResolvedValueOnce('/bin/zsh')
+        .mockRejectedValueOnce(new Error('shell 不存在'));
 
       render(<Terminal cwd="/tmp" />);
 
@@ -245,7 +317,9 @@ describe('Terminal', () => {
     });
 
     it('spawn 失败时应显示重试按钮', async () => {
-      mockInvoke.mockRejectedValueOnce(new Error('连接超时'));
+      mockInvoke
+        .mockResolvedValueOnce('/bin/zsh')
+        .mockRejectedValueOnce(new Error('连接超时'));
 
       render(<Terminal cwd="/tmp" />);
 
@@ -256,13 +330,17 @@ describe('Terminal', () => {
 
     it('点击重试按钮应重新调用 spawn', async () => {
       // 第一次失败
-      mockInvoke.mockRejectedValueOnce(new Error('第一次失败'));
+      mockInvoke
+        .mockResolvedValueOnce('/bin/zsh')
+        .mockRejectedValueOnce(new Error('第一次失败'));
       // 第二次成功
-      mockInvoke.mockResolvedValueOnce({
-        pty_id: 'new-pty-id',
-        ws_port: 11111,
-        ws_token: 'd'.repeat(64),
-      });
+      mockInvoke
+        .mockResolvedValueOnce('/bin/zsh')
+        .mockResolvedValueOnce({
+          pty_id: 'new-pty-id',
+          ws_port: 11111,
+          ws_token: 'd'.repeat(64),
+        });
 
       render(<Terminal cwd="/tmp" />);
 
@@ -274,8 +352,8 @@ describe('Terminal', () => {
       await user.click(screen.getByRole('button', { name: '重试' }));
 
       await waitFor(() => {
-        // spawn 被调用了两次（初始 + 重试）
-        expect(mockInvoke).toHaveBeenCalledTimes(2);
+        // 每次 spawn 都会先取默认 shell，再调用 spawn_pty_cmd
+        expect(mockInvoke).toHaveBeenCalledTimes(4);
       });
     });
   });

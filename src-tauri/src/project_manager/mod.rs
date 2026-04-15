@@ -10,6 +10,7 @@
 pub mod persistence;
 
 use std::path::PathBuf;
+use std::process::Command;
 use std::sync::{Mutex, OnceLock};
 use tokio::sync::Mutex as TokioMutex;
 use crate::types::ProjectInfo;
@@ -52,7 +53,9 @@ fn projects_file_path() -> PathBuf {
 /// 3. 文件损坏则备份后返回空列表
 pub fn list_recent_projects() -> Vec<ProjectInfo> {
     let path = projects_file_path();
-    load_projects(&path)
+    let projects = load_projects(&path);
+    let _ = save_projects(&path, &projects);
+    projects
 }
 
 /// 打开项目的纯业务逻辑（不涉及 AppHandle，供测试直接调用）
@@ -64,7 +67,7 @@ pub fn list_recent_projects() -> Vec<ProjectInfo> {
 /// 4. 将项目添加到最近列表头部（去重后），最多保留 MAX_RECENT_PROJECTS 条
 /// 5. 持久化到 projects.json
 /// 6. 更新内存中的当前项目
-fn open_project_inner(path: &str) -> Result<ProjectInfo, String> {
+fn open_project_inner_with_store_path(path: &str, file_path: &std::path::Path) -> Result<ProjectInfo, String> {
     let project_path = std::path::Path::new(path);
 
     // 验证路径存在且为目录
@@ -95,8 +98,7 @@ fn open_project_inner(path: &str) -> Result<ProjectInfo, String> {
     };
 
     // 更新最近项目列表
-    let file_path = projects_file_path();
-    let mut projects = load_projects(&file_path);
+    let mut projects = load_projects(file_path);
 
     // 去掉已存在的相同路径记录，确保无重复
     projects.retain(|p| p.path != path);
@@ -109,13 +111,18 @@ fn open_project_inner(path: &str) -> Result<ProjectInfo, String> {
         projects.truncate(MAX_RECENT_PROJECTS);
     }
 
-    save_projects(&file_path, &projects)?;
+    save_projects(file_path, &projects)?;
 
     // 更新内存中的当前项目状态
     let mut current = CURRENT_PROJECT.lock().expect("获取项目锁失败");
     *current = Some(project.clone());
 
     Ok(project)
+}
+
+fn open_project_inner(path: &str) -> Result<ProjectInfo, String> {
+    let file_path = projects_file_path();
+    open_project_inner_with_store_path(path, &file_path)
 }
 
 /// 打开指定路径的项目（watcher 生命周期管理）
@@ -173,16 +180,79 @@ pub async fn close_project() -> Result<(), String> {
     Ok(())
 }
 
+pub fn clone_repository(repository_url: &str, destination_path: &str) -> Result<(), String> {
+    let destination = std::path::Path::new(destination_path);
+
+    if repository_url.trim().is_empty() {
+        return Err("仓库地址不能为空".to_string());
+    }
+
+    if destination_path.trim().is_empty() {
+        return Err("目标目录不能为空".to_string());
+    }
+
+    if destination.exists() {
+        return Err(format!("目标目录已存在: {destination_path}"));
+    }
+
+    if let Some(parent) = destination.parent() {
+        if !parent.as_os_str().is_empty() && !parent.exists() {
+            std::fs::create_dir_all(parent)
+                .map_err(|err| format!("创建父目录失败 {:?}: {}", parent, err))?;
+        }
+    }
+
+    let output = Command::new("git")
+        .arg("clone")
+        .arg(repository_url)
+        .arg(destination_path)
+        .output()
+        .map_err(|err| format!("启动 git clone 失败: {}", err))?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        Err(if !stderr.is_empty() {
+            format!("git clone 失败: {}", stderr)
+        } else if !stdout.is_empty() {
+            format!("git clone 失败: {}", stdout)
+        } else {
+            "git clone 失败：未知错误".to_string()
+        })
+    }
+}
+
 // ============================================
 // Tauri Commands - 暴露给前端调用
 // 命名规范：函数名后缀 _cmd 避免与内部函数冲突
 // 注意：不在 lib.rs 注册，由合并时统一处理
 // ============================================
 
+/// 从最近项目列表中移除指定路径的项目（不删除本地文件）
+///
+/// 业务逻辑：
+/// 1. 加载当前列表
+/// 2. 过滤掉指定路径
+/// 3. 持久化回 projects.json
+pub fn remove_project(path: &str) -> Result<(), String> {
+    let file_path = projects_file_path();
+    let mut projects = load_projects(&file_path);
+    projects.retain(|p| p.path != path);
+    save_projects(&file_path, &projects)
+}
+
 /// 列出最近项目 - Tauri Command
 #[tauri::command]
 pub fn list_recent_projects_cmd() -> Vec<ProjectInfo> {
     list_recent_projects()
+}
+
+/// 从面板移除项目 - Tauri Command（只移除记录，不删除本地文件）
+#[tauri::command]
+pub fn remove_project_cmd(path: String) -> Result<(), String> {
+    remove_project(&path)
 }
 
 /// 打开项目 - Tauri Command（async：内部需要 spawn_pty）
@@ -197,6 +267,11 @@ pub async fn open_project_cmd(app: tauri::AppHandle, path: String) -> Result<Pro
 #[tauri::command]
 pub async fn close_project_cmd() -> Result<(), String> {
     close_project().await
+}
+
+#[tauri::command]
+pub fn clone_repository_cmd(repository_url: String, destination_path: String) -> Result<(), String> {
+    clone_repository(&repository_url, &destination_path)
 }
 
 #[cfg(test)]
@@ -243,8 +318,9 @@ mod tests {
         let tmp = make_temp_dir();
         let project_dir = tmp.path().join("my-awesome-project");
         std::fs::create_dir(&project_dir).unwrap();
+        let projects_path = tmp.path().join("projects.json");
 
-        let result = open_project_inner(project_dir.to_str().unwrap());
+        let result = open_project_inner_with_store_path(project_dir.to_str().unwrap(), &projects_path);
         if let Ok(info) = result {
             assert_eq!(info.name, "my-awesome-project");
             assert_eq!(info.path, project_dir.to_str().unwrap());
@@ -277,11 +353,13 @@ mod tests {
         // 通过 persistence 模块验证序列化/反序列化完整流程
         let tmp = make_temp_dir();
         let path = tmp.path().join("projects.json");
+        let project_dir = tmp.path().join("proj-a");
+        std::fs::create_dir_all(&project_dir).unwrap();
 
         let projects = vec![
             ProjectInfo {
                 name: "proj-a".to_string(),
-                path: "/home/user/proj-a".to_string(),
+                path: project_dir.to_string_lossy().to_string(),
                 last_opened: 9000,
             },
         ];
@@ -291,5 +369,25 @@ mod tests {
 
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].name, "proj-a");
+    }
+
+    #[test]
+    fn test_open_project_inner_writes_to_provided_projects_file() {
+        let tmp = make_temp_dir();
+        let project_dir = tmp.path().join("demo-project");
+        std::fs::create_dir_all(&project_dir).unwrap();
+        let projects_path = tmp.path().join("nested").join("projects.json");
+
+        let info = open_project_inner_with_store_path(project_dir.to_str().unwrap(), &projects_path)
+            .expect("open_project_inner_with_store_path 应成功");
+
+        assert_eq!(info.name, "demo-project");
+        assert!(projects_path.exists(), "应写入测试专用 projects.json");
+
+        let loaded = persistence::load_projects(&projects_path);
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].path, project_dir.to_string_lossy());
+
+        *CURRENT_PROJECT.lock().unwrap() = None;
     }
 }

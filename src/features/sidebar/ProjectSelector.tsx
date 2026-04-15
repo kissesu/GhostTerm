@@ -1,230 +1,444 @@
 /**
  * @file ProjectSelector.tsx
- * @description 项目选择器组件 - 显示当前项目名称和路径，点击展开最近项目下拉列表。
- *              顶部紧凑布局，适合侧边栏窄宽度展示。
+ * @description 左侧项目区容器 - 以“分组后的项目列表”为中心，负责分组切换、搜索和项目列表。
+ *              不再使用旧的最近项目下拉模型。
  * @author Atlas.oi
  * @date 2026-04-13
  */
 
-import { useState } from 'react';
-import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import { ChevronDown, FolderOpen, Folder } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useProjectStore } from './projectStore';
+import ProjectGroupHeader from './ProjectGroupHeader';
+import ProjectGroupMenu from './ProjectGroupMenu';
+import ProjectList from './ProjectList';
+import ProjectSearchBar from './ProjectSearchBar';
+import SidebarDialog, { dialogButtonStyle, dialogInputStyle } from './SidebarDialog';
+import {
+  buildVisibleGroups,
+  filterProjectsByGrouping,
+  SYSTEM_GROUP_ALL,
+  useProjectGroupingStore,
+} from './projectGroupingStore';
 
-/**
- * 将完整路径缩略为可读短路径
- * 例：/Users/atlas/CodeCoding/ghostterm → ~/CodeCoding/ghostterm
- */
-function shortenPath(fullPath: string): string {
-  const home = '/Users/';
-  if (fullPath.startsWith(home)) {
-    return '~/' + fullPath.slice(home.indexOf('/') + 1 + fullPath.slice(home.length).split('/')[0].length + 1);
-  }
-  return fullPath;
+function findCurrentGroup(groupId: string, groups: ReturnType<typeof buildVisibleGroups>) {
+  return groups.find((group) => group.id === groupId) ?? { ...SYSTEM_GROUP_ALL, projectCount: 0 };
 }
 
-/** 项目选择器组件 */
-export default function ProjectSelector() {
-  const { currentProject, recentProjects, switchProject } = useProjectStore();
-  // 控制下拉列表显隐
-  const [open, setOpen] = useState(false);
+type GroupDialogMode = 'create' | 'rename' | 'delete' | null;
 
-  const handleSelect = async (path: string) => {
-    setOpen(false);
+export default function ProjectSelector() {
+  const { currentProject, recentProjects, switchProject, removeProject } = useProjectStore();
+  const {
+    groups,
+    systemGroupNames,
+    selectedGroupId,
+    projectGroupMap,
+    searchQuery,
+    selectGroup,
+    setSearchQuery,
+    createGroup,
+    renameGroup,
+    deleteGroup,
+    assignProjectToGroup,
+  } = useProjectGroupingStore();
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  // 当前活跃项目手风琴是否收起（点击已激活的项目名可切换）
+  const [accordionCollapsed, setAccordionCollapsed] = useState(false);
+  const [editMenuOpen, setEditMenuOpen] = useState(false);
+  const [projectMenuPath, setProjectMenuPath] = useState<string>();
+  const [groupDialogMode, setGroupDialogMode] = useState<GroupDialogMode>(null);
+  const [groupNameInput, setGroupNameInput] = useState('');
+  const rootRef = useRef<HTMLDivElement>(null);
+  const groupMenuRef = useRef<HTMLDivElement>(null);
+  const editMenuRef = useRef<HTMLDivElement>(null);
+  const listScrollRef = useRef<HTMLDivElement>(null);
+  const pendingScrollRestoreRef = useRef<{ offsetTop: number } | null>(null);
+
+  const visibleGroups = useMemo(
+    () => buildVisibleGroups(groups, recentProjects, projectGroupMap, systemGroupNames),
+    [groups, recentProjects, projectGroupMap, systemGroupNames],
+  );
+
+  const currentGroup = findCurrentGroup(selectedGroupId, visibleGroups);
+  const filteredProjects = useMemo(
+    () =>
+      filterProjectsByGrouping(recentProjects, {
+        selectedGroupId,
+        searchQuery,
+        projectGroupMap,
+      }),
+    [recentProjects, selectedGroupId, searchQuery, projectGroupMap],
+  );
+
+  const handleSelectProject = async (path: string) => {
+    if (path === currentProject?.path) {
+      // 点击当前已激活的项目：收缩/展开手风琴，不重新打开
+      setAccordionCollapsed((prev) => !prev);
+      setMenuOpen(false);
+      setEditMenuOpen(false);
+      setProjectMenuPath(undefined);
+      return;
+    }
+    // 切换到新项目时，默认展开手风琴
+    setAccordionCollapsed(false);
+
+    const nextProject = recentProjects.find((item) => item.path === path);
+    const container = listScrollRef.current;
+    const targetCard = nextProject
+      ? container?.querySelector<HTMLElement>(`[data-testid="project-card-${nextProject.name}"]`)
+      : null;
+    const containerRect = container?.getBoundingClientRect();
+    const targetRect = targetCard?.getBoundingClientRect();
+    pendingScrollRestoreRef.current =
+      container && containerRect && targetRect
+        ? {
+            offsetTop: targetRect.top - containerRect.top,
+          }
+        : null;
+    setMenuOpen(false);
+    setEditMenuOpen(false);
+    setProjectMenuPath(undefined);
     try {
       await switchProject(path);
     } catch (err) {
-      // 捕获防止 unhandled promise rejection
-      // currentProject 保持为已切换的项目（与后端一致），不清空
       console.error('[ProjectSelector] 切换项目失败:', err);
     }
   };
 
+  useEffect(() => {
+    const pendingRestore = pendingScrollRestoreRef.current;
+    const container = listScrollRef.current;
+    if (!pendingRestore || !container) {
+      return;
+    }
+
+    pendingScrollRestoreRef.current = null;
+
+    requestAnimationFrame(() => {
+      const targetCard = container.querySelector<HTMLElement>(`[data-testid="project-card-${currentProject?.name}"]`);
+      const containerRect = container.getBoundingClientRect();
+      const targetRect = targetCard?.getBoundingClientRect();
+      if (!targetRect) {
+        return;
+      }
+
+      const nextOffsetTop = targetRect.top - containerRect.top;
+      container.scrollTop += nextOffsetTop - pendingRestore.offsetTop;
+    });
+  }, [currentProject?.path, currentProject?.name]);
+
+  useEffect(() => {
+    if (!menuOpen && !editMenuOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      const clickedInsideRoot = rootRef.current?.contains(target) ?? false;
+      const clickedInsideGroupMenu = groupMenuRef.current?.contains(target) ?? false;
+      const clickedInsideEditMenu = editMenuRef.current?.contains(target) ?? false;
+
+      if (!clickedInsideRoot && !clickedInsideGroupMenu && !clickedInsideEditMenu) {
+        setMenuOpen(false);
+        setEditMenuOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMenuOpen(false);
+        setEditMenuOpen(false);
+        setProjectMenuPath(undefined);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [menuOpen, editMenuOpen]);
+
+  const handleAssignProjectGroup = (projectPath: string, groupId: string) => {
+    assignProjectToGroup(projectPath, groupId);
+    setProjectMenuPath(undefined);
+  };
+
+  const handleRemoveProject = async (projectPath: string) => {
+    setProjectMenuPath(undefined);
+    try {
+      await removeProject(projectPath);
+    } catch (err) {
+      console.error('[ProjectSelector] 移除项目失败:', err);
+    }
+  };
+
+  const closeGroupDialog = () => {
+    setGroupDialogMode(null);
+    setGroupNameInput('');
+  };
+
+  const openCreateGroupDialog = () => {
+    setMenuOpen(false);
+    setEditMenuOpen(false);
+    setProjectMenuPath(undefined);
+    setGroupNameInput('');
+    setGroupDialogMode('create');
+  };
+
+  const openRenameGroupDialog = () => {
+    if (currentGroup.id === 'all') return;
+    setEditMenuOpen(false);
+    setMenuOpen(false);
+    setProjectMenuPath(undefined);
+    setGroupNameInput(currentGroup.name);
+    setGroupDialogMode('rename');
+  };
+
+  const openDeleteGroupDialog = () => {
+    if (currentGroup.id === 'all' || currentGroup.id === 'ungrouped') return;
+    setEditMenuOpen(false);
+    setMenuOpen(false);
+    setProjectMenuPath(undefined);
+    setGroupDialogMode('delete');
+  };
+
+  const submitCreateGroup = () => {
+    const name = groupNameInput.trim();
+    if (!name) return;
+    createGroup(name);
+    closeGroupDialog();
+  };
+
+  const submitRenameGroup = () => {
+    const name = groupNameInput.trim();
+    if (!name || currentGroup.id === 'all') return;
+    renameGroup(currentGroup.id, name);
+    closeGroupDialog();
+  };
+
+  const submitDeleteGroup = () => {
+    if (currentGroup.id === 'all' || currentGroup.id === 'ungrouped') return;
+    deleteGroup(currentGroup.id);
+    closeGroupDialog();
+  };
+
   return (
-    <div style={{ position: 'relative', userSelect: 'none' }}>
-      {/* 当前项目展示按钮 */}
-      <button
-        onClick={() => setOpen((v) => !v)}
-        aria-label="选择项目"
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        style={{
-          width: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          padding: '8px 10px',
-          background: 'transparent',
-          border: 'none',
-          borderBottom: '1px solid #27293d',
-          cursor: 'pointer',
-          color: '#c0caf5',
-          textAlign: 'left',
-        }}
-      >
-        {/* 文件夹图标 */}
-        {currentProject ? (
-          <FolderOpen size={14} color="#7aa2f7" aria-hidden />
-        ) : (
-          <Folder size={14} color="#565f89" aria-hidden />
-        )}
-
-        {/* 项目名和路径 */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {currentProject ? (
-            <>
-              <div
-                style={{
-                  fontWeight: 600,
-                  fontSize: 13,
-                  color: '#c0caf5',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-                data-testid="current-project-name"
-              >
-                {currentProject.name}
-              </div>
-              <div
-                style={{
-                  fontSize: 11,
-                  color: '#565f89',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-                data-testid="current-project-path"
-              >
-                {shortenPath(currentProject.path)}
-              </div>
-            </>
-          ) : (
-            <div style={{ fontSize: 13, color: '#565f89' }}>未打开项目</div>
-          )}
-        </div>
-
-        <ChevronDown
-          size={12}
-          color="#565f89"
-          style={{
-            transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
-            transition: 'transform 0.15s',
-            flexShrink: 0,
+    <div
+      style={{
+        position: 'relative',
+        flex: 1,
+        minHeight: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        background: '#2b2e43',
+      }}
+    >
+      {/* 顶部固定区：分组头 + 搜索栏（flexShrink:0 确保不被压缩） */}
+      <div ref={rootRef}>
+        <ProjectGroupHeader
+          currentGroup={currentGroup}
+          menuOpen={menuOpen}
+          onToggleMenu={() => {
+            setMenuOpen((value) => !value);
+            setEditMenuOpen(false);
+            setProjectMenuPath(undefined);
           }}
-          aria-hidden
+          onToggleEditMenu={() => {
+            if (currentGroup.id === 'all') return;
+            setEditMenuOpen((value) => !value);
+            setMenuOpen(false);
+            setProjectMenuPath(undefined);
+          }}
+          canEdit={currentGroup.id !== 'all'}
         />
-      </button>
+      </div>
 
-      {/* 下拉列表 */}
-      {open && (
+      {menuOpen && (
+        <div ref={groupMenuRef}>
+          <ProjectGroupMenu
+            groups={visibleGroups}
+            selectedGroupId={selectedGroupId}
+            onSelectGroup={(groupId) => {
+              selectGroup(groupId);
+              setMenuOpen(false);
+              setProjectMenuPath(undefined);
+            }}
+            onCreateGroup={openCreateGroupDialog}
+          />
+        </div>
+      )}
+
+      {editMenuOpen && currentGroup.id !== 'all' && (
         <div
-          role="listbox"
-          aria-label="最近项目列表"
+          ref={editMenuRef}
           style={{
             position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            zIndex: 100,
-            background: '#1a1b26',
-            border: '1px solid #27293d',
-            borderTop: 'none',
-            maxHeight: 260,
-            overflowY: 'auto',
+            top: 54,
+            right: 8,
+            zIndex: 41,
+            width: 150,
+            borderRadius: 14,
+            border: '1px solid #4b4f67',
+            background: '#26293d',
+            boxShadow: '0 12px 24px rgba(0,0,0,0.26)',
+            overflow: 'hidden',
           }}
         >
-          {/* 最近项目列表 */}
-          {recentProjects.length > 0 ? (
-            recentProjects.map((project) => (
-              <button
-                key={project.path}
-                role="option"
-                aria-selected={currentProject?.path === project.path}
-                onClick={() => handleSelect(project.path)}
-                style={{
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '6px 10px',
-                  background:
-                    currentProject?.path === project.path ? '#1f2335' : 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: '#c0caf5',
-                  textAlign: 'left',
-                }}
-              >
-                <Folder size={12} color="#565f89" aria-hidden />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 500,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {project.name}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 10,
-                      color: '#565f89',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {shortenPath(project.path)}
-                  </div>
-                </div>
-              </button>
-            ))
-          ) : (
-            <div
-              style={{ padding: '8px 10px', fontSize: 12, color: '#565f89' }}
-            >
-              暂无最近项目
-            </div>
-          )}
-
-          {/* 分割线 + 打开文件夹选项 */}
-          <div style={{ borderTop: '1px solid #27293d', margin: '2px 0' }} />
           <button
-            onClick={async () => {
-              setOpen(false);
-              // 调用 Tauri 原生文件夹选择对话框
-              const selected = await openDialog({ directory: true, multiple: false });
-              if (selected) {
-                try {
-                  await switchProject(selected as string);
-                } catch (err) {
-                  console.error('[ProjectSelector] 打开项目失败:', err);
-                }
-              }
-            }}
+            type="button"
+            onClick={openRenameGroupDialog}
             style={{
               width: '100%',
-              padding: '6px 10px',
-              background: 'transparent',
               border: 'none',
-              cursor: 'pointer',
-              color: '#7aa2f7',
-              fontSize: 12,
+              background: 'transparent',
+              color: '#eef0ff',
               textAlign: 'left',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
+              padding: '12px 14px',
+              cursor: 'pointer',
             }}
-            data-testid="open-folder-btn"
           >
-            <FolderOpen size={12} aria-hidden />
-            打开文件夹...
+            重命名分组
           </button>
+          {currentGroup.id !== 'ungrouped' && (
+            <button
+              type="button"
+              onClick={openDeleteGroupDialog}
+              style={{
+                width: '100%',
+                border: 'none',
+                borderTop: '1px solid #3d425b',
+                background: 'transparent',
+                color: '#f29ba1',
+                textAlign: 'left',
+                padding: '12px 14px',
+                cursor: 'pointer',
+              }}
+            >
+              删除分组
+            </button>
+          )}
         </div>
+      )}
+
+      <ProjectSearchBar value={searchQuery} onChange={setSearchQuery} />
+
+      {/* 项目列表滚动区：flex:1 占满剩余空间，minHeight:0 允许收缩，overflowY:auto 独立滚动 */}
+      <div
+        ref={listScrollRef}
+        style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowAnchor: 'none' }}
+        data-testid="project-list-scroll-container"
+      >
+      <ProjectList
+        projects={filteredProjects}
+        currentProjectPath={currentProject?.path}
+        accordionCollapsed={accordionCollapsed}
+        onSelect={handleSelectProject}
+        onRemove={handleRemoveProject}
+        groups={visibleGroups}
+        projectGroupMap={projectGroupMap}
+        openMenuProjectPath={projectMenuPath}
+        onToggleMenu={(projectPath) => {
+          setMenuOpen(false);
+          setEditMenuOpen(false);
+          setProjectMenuPath((currentPath) => (currentPath === projectPath ? undefined : projectPath));
+        }}
+        onAssignGroup={handleAssignProjectGroup}
+      />
+      </div>
+
+      {groupDialogMode === 'create' && (
+        <SidebarDialog
+          title="新建分组"
+          description="创建一个新的项目分组，用于整理侧边栏中的项目列表。"
+          onClose={closeGroupDialog}
+          footer={(
+            <>
+              <button type="button" onClick={closeGroupDialog} style={{ ...dialogButtonStyle(), padding: '9px 14px', borderRadius: 10 }}>
+                取消
+              </button>
+              <button type="button" onClick={submitCreateGroup} disabled={!groupNameInput.trim()} style={{ ...dialogButtonStyle('primary'), padding: '9px 14px', borderRadius: 10, opacity: groupNameInput.trim() ? 1 : 0.55, cursor: groupNameInput.trim() ? 'pointer' : 'not-allowed' }} data-testid="group-create-confirm">
+                创建
+              </button>
+            </>
+          )}
+          testId="group-create-dialog"
+        >
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#c0caf5', marginBottom: 8 }}>
+            分组名称
+          </label>
+          <input
+            autoFocus
+            type="text"
+            value={groupNameInput}
+            onChange={(event) => setGroupNameInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && groupNameInput.trim()) {
+                submitCreateGroup();
+              }
+            }}
+            placeholder="例如：客户端 / 毕设 / 临时实验"
+            style={dialogInputStyle()}
+            data-testid="group-name-input"
+          />
+        </SidebarDialog>
+      )}
+
+      {groupDialogMode === 'rename' && currentGroup.id !== 'all' && (
+        <SidebarDialog
+          title="重命名分组"
+          description={`当前分组：${currentGroup.name}`}
+          onClose={closeGroupDialog}
+          footer={(
+            <>
+              <button type="button" onClick={closeGroupDialog} style={{ ...dialogButtonStyle(), padding: '9px 14px', borderRadius: 10 }}>
+                取消
+              </button>
+              <button type="button" onClick={submitRenameGroup} disabled={!groupNameInput.trim()} style={{ ...dialogButtonStyle('primary'), padding: '9px 14px', borderRadius: 10, opacity: groupNameInput.trim() ? 1 : 0.55, cursor: groupNameInput.trim() ? 'pointer' : 'not-allowed' }} data-testid="group-rename-confirm">
+                保存
+              </button>
+            </>
+          )}
+          testId="group-rename-dialog"
+        >
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#c0caf5', marginBottom: 8 }}>
+            新名称
+          </label>
+          <input
+            autoFocus
+            type="text"
+            value={groupNameInput}
+            onChange={(event) => setGroupNameInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && groupNameInput.trim()) {
+                submitRenameGroup();
+              }
+            }}
+            style={dialogInputStyle()}
+            data-testid="group-rename-input"
+          />
+        </SidebarDialog>
+      )}
+
+      {groupDialogMode === 'delete' && currentGroup.id !== 'all' && currentGroup.id !== 'ungrouped' && (
+        <SidebarDialog
+          title="删除分组"
+          description={<>确认删除分组 “{currentGroup.name}”？<br />该分组下的项目会回到“未分组”。</>}
+          onClose={closeGroupDialog}
+          footer={(
+            <>
+              <button type="button" onClick={closeGroupDialog} style={{ ...dialogButtonStyle(), padding: '9px 14px', borderRadius: 10 }}>
+                取消
+              </button>
+              <button type="button" onClick={submitDeleteGroup} style={{ ...dialogButtonStyle('danger'), padding: '9px 14px', borderRadius: 10 }} data-testid="group-delete-confirm">
+                删除
+              </button>
+            </>
+          )}
+          testId="group-delete-dialog"
+        />
       )}
     </div>
   );

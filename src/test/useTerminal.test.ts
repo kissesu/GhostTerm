@@ -15,6 +15,10 @@ import { useTerminalStore } from '../features/terminal/terminalStore';
 // 模拟 WebSocket
 class MockWebSocket {
   static instances: MockWebSocket[] = [];
+  static CONNECTING = 0;
+  static OPEN = 1;
+  static CLOSING = 2;
+  static CLOSED = 3;
   url: string;
   binaryType: string = 'blob';
   readyState: number = WebSocket.CONNECTING;
@@ -46,9 +50,15 @@ class MockWebSocket {
     this.readyState = WebSocket.CLOSED;
     if (this.onclose) this.onclose({ code });
   }
+
+  triggerError() {
+    if (this.onerror) this.onerror();
+  }
 }
 
 describe('useTerminal', () => {
+  const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
   beforeEach(() => {
     MockWebSocket.instances = [];
     // 替换全局 WebSocket
@@ -99,6 +109,18 @@ describe('useTerminal', () => {
     });
 
     expect(useTerminalStore.getState().connected).toBe(true);
+  });
+
+  it('WebSocket onerror 时应输出连接错误日志', () => {
+    renderHook(() => useTerminal());
+
+    const ws = MockWebSocket.instances[0];
+
+    act(() => {
+      ws.triggerError();
+    });
+
+    expect(consoleErrorSpy).toHaveBeenCalled();
   });
 
   it('WebSocket onclose 后应调用 setConnected(false)', async () => {
@@ -168,5 +190,16 @@ describe('useTerminal', () => {
 
     // renderHook 执行后 wsRef 应指向创建的 WebSocket
     expect(result.current.wsRef.current).toBeInstanceOf(MockWebSocket);
+  });
+
+  it('组件卸载时应关闭仍处于 CONNECTING 的 WebSocket，避免一次性 token 被旧连接消耗', () => {
+    const { unmount } = renderHook(() => useTerminal());
+
+    const ws = MockWebSocket.instances[0];
+    expect(ws.readyState).toBe(WebSocket.CONNECTING);
+
+    unmount();
+
+    expect(ws.readyState).toBe(WebSocket.CLOSED);
   });
 });

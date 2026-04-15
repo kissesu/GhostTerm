@@ -96,6 +96,12 @@ interface EditorState {
   saveFile: (path: string) => Promise<void>;
   /** 切换激活标签 */
   setActive: (path: string) => void;
+  /** 关闭其他标签，仅保留目标文件 */
+  closeOthers: (path: string) => void;
+  /** 关闭目标左侧所有标签 */
+  closeLeft: (path: string) => void;
+  /** 关闭目标右侧所有标签 */
+  closeRight: (path: string) => void;
   /** 更新编辑器内容，自动计算 isDirty */
   updateContent: (path: string, content: string) => void;
   /** 处理外部文件变化（PBI-4 时完整实现，此处为骨架） */
@@ -171,6 +177,41 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   setActive: (path: string) => {
     set({ activeFilePath: path });
+  },
+
+  closeOthers: (path: string) => {
+    set((state) => {
+      const target = state.openFiles.find((file) => file.path === path);
+      if (!target) return state;
+      return {
+        openFiles: [target],
+        activeFilePath: path,
+      };
+    });
+  },
+
+  closeLeft: (path: string) => {
+    set((state) => {
+      const targetIndex = state.openFiles.findIndex((file) => file.path === path);
+      if (targetIndex <= 0) return state;
+      return {
+        openFiles: state.openFiles.slice(targetIndex),
+        activeFilePath: state.activeFilePath === null ? path : state.activeFilePath,
+      };
+    });
+  },
+
+  closeRight: (path: string) => {
+    set((state) => {
+      const targetIndex = state.openFiles.findIndex((file) => file.path === path);
+      if (targetIndex < 0 || targetIndex === state.openFiles.length - 1) return state;
+      const nextOpenFiles = state.openFiles.slice(0, targetIndex + 1);
+      const activeStillOpen = nextOpenFiles.some((file) => file.path === state.activeFilePath);
+      return {
+        openFiles: nextOpenFiles,
+        activeFilePath: activeStillOpen ? state.activeFilePath : path,
+      };
+    });
   },
 
   updateContent: (path: string, content: string) => {

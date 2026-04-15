@@ -19,6 +19,10 @@ import {
   FolderPlus,
   Pencil,
   Trash2,
+  Copy,
+  Scissors,
+  ExternalLink,
+  Send,
 } from 'lucide-react';
 import {
   ContextMenu,
@@ -27,8 +31,13 @@ import {
   ContextMenuTrigger,
   ContextMenuSeparator,
 } from '@radix-ui/react-context-menu';
+import { useState } from 'react';
+import { openPath } from '@tauri-apps/plugin-opener';
 import { useFileTreeStore } from './fileTreeStore';
 import { useGitStore } from './gitStore';
+import { useProjectStore } from './projectStore';
+import { useEditorStore } from '../editor/editorStore';
+import SidebarDialog, { dialogButtonStyle, dialogInputStyle } from './SidebarDialog';
 import type { FileNode, StatusEntry } from '../../shared/types';
 
 /** FileTreeNode 组件的 Props */
@@ -45,45 +54,78 @@ interface FileTreeNodeProps {
 
 /** 单个文件树节点 */
 function FileTreeNode({ node, depth, gitStatusClass }: FileTreeNodeProps) {
-  const { expandedPaths, toggleDir } = useFileTreeStore();
+  const { expandedPaths, toggleDir, refreshFileTree } = useFileTreeStore();
+  const currentProjectPath = useProjectStore((s) => s.currentProject?.path);
+  const activeFilePath = useEditorStore((s) => s.activeFilePath);
   const isExpanded = expandedPaths.has(node.entry.path);
   const isDir = node.entry.is_dir;
+  const isActive = activeFilePath === node.entry.path;
+  const parentPath = isDir ? node.entry.path : node.entry.path.split('/').slice(0, -1).join('/');
+
+  const [createMode, setCreateMode] = useState<'file' | 'dir' | null>(null);
+  const [createName, setCreateName] = useState('');
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameName, setRenameName] = useState(node.entry.name);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
+  const refreshCurrentProjectTree = async () => {
+    if (currentProjectPath) {
+      await refreshFileTree(currentProjectPath);
+    }
+  };
+
+  const relativePath = currentProjectPath && node.entry.path.startsWith(`${currentProjectPath}/`)
+    ? node.entry.path.slice(currentProjectPath.length + 1)
+    : node.entry.name;
+
+  const copyToClipboard = async (value: string) => {
+    await navigator.clipboard.writeText(value);
+  };
 
   const handleClick = async () => {
     if (isDir) {
       await toggleDir(node.entry.path);
     } else {
-      // 点击文件：通过 editorStore 打开（内部调 read_file_cmd + 添加标签 + 设为 active）
-      const { useEditorStore } = await import('../../features/editor/editorStore');
       await useEditorStore.getState().openFile(node.entry.path);
     }
   };
 
-  const handleNewFile = async () => {
-    const name = window.prompt('新建文件名：');
-    if (!name) return;
-    const parentPath = isDir ? node.entry.path : node.entry.path.split('/').slice(0, -1).join('/');
-    await invoke('create_file_cmd', { path: `${parentPath}/${name}` });
+  const openCreateDialog = (mode: 'file' | 'dir') => {
+    setCreateMode(mode);
+    setCreateName('');
   };
 
-  const handleNewDir = async () => {
-    const name = window.prompt('新建文件夹名：');
+  const submitCreate = async () => {
+    const name = createName.trim();
     if (!name) return;
-    const parentPath = isDir ? node.entry.path : node.entry.path.split('/').slice(0, -1).join('/');
-    await invoke('create_dir_cmd', { path: `${parentPath}/${name}` });
+    await invoke('create_entry_cmd', { path: `${parentPath}/${name}`, isDir: createMode === 'dir' });
+    await refreshCurrentProjectTree();
+    setCreateMode(null);
+    setCreateName('');
   };
 
-  const handleRename = async () => {
-    const name = window.prompt('重命名为：', node.entry.name);
-    if (!name || name === node.entry.name) return;
-    const newPath = node.entry.path.split('/').slice(0, -1).join('/') + '/' + name;
+  const openRenameDialog = () => {
+    setRenameName(node.entry.name);
+    setRenameOpen(true);
+  };
+
+  const submitRename = async () => {
+    const name = renameName.trim();
+    if (!name || name === node.entry.name) {
+      setRenameOpen(false);
+      setRenameName(node.entry.name);
+      return;
+    }
+    const newPath = `${node.entry.path.split('/').slice(0, -1).join('/')}/${name}`;
     await invoke('rename_entry_cmd', { oldPath: node.entry.path, newPath });
+    await refreshCurrentProjectTree();
+    setRenameOpen(false);
   };
 
-  const handleDelete = async () => {
-    const confirmed = window.confirm(`确认删除 "${node.entry.name}" ？`);
-    if (!confirmed) return;
+  const submitDelete = async () => {
     await invoke('delete_entry_cmd', { path: node.entry.path });
+    await refreshCurrentProjectTree();
+    setDeleteOpen(false);
   };
 
   return (
@@ -95,16 +137,18 @@ function FileTreeNode({ node, depth, gitStatusClass }: FileTreeNodeProps) {
             data-testid={`tree-node-${node.entry.name}`}
             data-path={node.entry.path}
             data-is-dir={isDir}
+            data-active={isActive ? 'true' : 'false'}
             style={{
               width: '100%',
               display: 'flex',
               alignItems: 'center',
               gap: 4,
               padding: `2px 8px 2px ${8 + depth * 16}px`,
-              background: 'transparent',
+              background: isActive ? 'rgba(122, 162, 247, 0.18)' : 'transparent',
               border: 'none',
+              borderLeft: isActive ? '2px solid #7aa2f7' : '2px solid transparent',
               cursor: 'pointer',
-              color: '#c0caf5',
+              color: isActive ? '#ffffff' : '#c0caf5',
               textAlign: 'left',
               fontSize: 13,
             }}
@@ -158,25 +202,72 @@ function FileTreeNode({ node, depth, gitStatusClass }: FileTreeNodeProps) {
             zIndex: 200,
           }}
         >
+          {isDir && (
+            <>
+              <ContextMenuItem
+                onSelect={() => openCreateDialog('file')}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', cursor: 'pointer', fontSize: 13, color: '#c0caf5' }}
+                data-testid="ctx-new-file"
+              >
+                <FilePlus size={12} aria-hidden />
+                新建文件
+              </ContextMenuItem>
+              <ContextMenuItem
+                onSelect={() => openCreateDialog('dir')}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', cursor: 'pointer', fontSize: 13, color: '#c0caf5' }}
+                data-testid="ctx-new-dir"
+              >
+                <FolderPlus size={12} aria-hidden />
+                新建文件夹
+              </ContextMenuItem>
+              <ContextMenuSeparator style={{ borderTop: '1px solid #27293d', margin: '2px 0' }} />
+            </>
+          )}
           <ContextMenuItem
-            onSelect={handleNewFile}
+            onSelect={() => { void openPath(node.entry.path); }}
             style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', cursor: 'pointer', fontSize: 13, color: '#c0caf5' }}
-            data-testid="ctx-new-file"
           >
-            <FilePlus size={12} aria-hidden />
-            新建文件
+            <ExternalLink size={12} aria-hidden />
+            在 Finder 中显示
           </ContextMenuItem>
           <ContextMenuItem
-            onSelect={handleNewDir}
+            onSelect={() => { void copyToClipboard(node.entry.path); }}
             style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', cursor: 'pointer', fontSize: 13, color: '#c0caf5' }}
-            data-testid="ctx-new-dir"
           >
-            <FolderPlus size={12} aria-hidden />
-            新建文件夹
+            <Copy size={12} aria-hidden />
+            复制
+          </ContextMenuItem>
+          <ContextMenuItem
+            onSelect={() => { void copyToClipboard(node.entry.path); }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', cursor: 'pointer', fontSize: 13, color: '#c0caf5' }}
+          >
+            <Scissors size={12} aria-hidden />
+            剪切
+          </ContextMenuItem>
+          <ContextMenuItem
+            onSelect={() => { void copyToClipboard(node.entry.path); }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', cursor: 'pointer', fontSize: 13, color: '#c0caf5' }}
+          >
+            <Copy size={12} aria-hidden />
+            复制路径
+          </ContextMenuItem>
+          <ContextMenuItem
+            onSelect={() => { void copyToClipboard(node.entry.path); }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', cursor: 'pointer', fontSize: 13, color: '#c0caf5' }}
+          >
+            <Send size={12} aria-hidden />
+            发送路径
+          </ContextMenuItem>
+          <ContextMenuItem
+            onSelect={() => { void copyToClipboard(relativePath); }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', cursor: 'pointer', fontSize: 13, color: '#c0caf5' }}
+          >
+            <Send size={12} aria-hidden />
+            发送相对路径
           </ContextMenuItem>
           <ContextMenuSeparator style={{ borderTop: '1px solid #27293d', margin: '2px 0' }} />
           <ContextMenuItem
-            onSelect={handleRename}
+            onSelect={openRenameDialog}
             style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', cursor: 'pointer', fontSize: 13, color: '#c0caf5' }}
             data-testid="ctx-rename"
           >
@@ -184,7 +275,7 @@ function FileTreeNode({ node, depth, gitStatusClass }: FileTreeNodeProps) {
             重命名
           </ContextMenuItem>
           <ContextMenuItem
-            onSelect={handleDelete}
+            onSelect={() => setDeleteOpen(true)}
             style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', cursor: 'pointer', fontSize: 13, color: '#e06c75' }}
             data-testid="ctx-delete"
           >
@@ -193,6 +284,110 @@ function FileTreeNode({ node, depth, gitStatusClass }: FileTreeNodeProps) {
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
+
+      {createMode && (
+        <SidebarDialog
+          title={createMode === 'file' ? '新建文件' : '新建文件夹'}
+          description={`将在 ${parentPath} 下创建新的${createMode === 'file' ? '文件' : '文件夹'}。`}
+          onClose={() => {
+            setCreateMode(null);
+            setCreateName('');
+          }}
+          footer={(
+            <>
+              <button type="button" onClick={() => {
+                setCreateMode(null);
+                setCreateName('');
+              }} style={{ ...dialogButtonStyle(), padding: '9px 14px', borderRadius: 10 }}>
+                取消
+              </button>
+              <button type="button" onClick={submitCreate} disabled={!createName.trim()} style={{ ...dialogButtonStyle('primary'), padding: '9px 14px', borderRadius: 10, opacity: createName.trim() ? 1 : 0.55, cursor: createName.trim() ? 'pointer' : 'not-allowed' }}>
+                创建
+              </button>
+            </>
+          )}
+          testId="file-tree-create-dialog"
+        >
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#c0caf5', marginBottom: 8 }}>
+            名称
+          </label>
+          <input
+            autoFocus
+            type="text"
+            value={createName}
+            onChange={(event) => setCreateName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && createName.trim()) {
+                void submitCreate();
+              }
+            }}
+            placeholder={createMode === 'file' ? '例如：index.ts' : '例如：components'}
+            style={dialogInputStyle()}
+            data-testid="file-tree-create-input"
+          />
+        </SidebarDialog>
+      )}
+
+      {renameOpen && (
+        <SidebarDialog
+          title="重命名"
+          description={`将 ${node.entry.name} 重命名为新的名称。`}
+          onClose={() => {
+            setRenameOpen(false);
+            setRenameName(node.entry.name);
+          }}
+          footer={(
+            <>
+              <button type="button" onClick={() => {
+                setRenameOpen(false);
+                setRenameName(node.entry.name);
+              }} style={{ ...dialogButtonStyle(), padding: '9px 14px', borderRadius: 10 }}>
+                取消
+              </button>
+              <button type="button" onClick={submitRename} disabled={!renameName.trim()} style={{ ...dialogButtonStyle('primary'), padding: '9px 14px', borderRadius: 10, opacity: renameName.trim() ? 1 : 0.55, cursor: renameName.trim() ? 'pointer' : 'not-allowed' }}>
+                保存
+              </button>
+            </>
+          )}
+          testId="file-tree-rename-dialog"
+        >
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#c0caf5', marginBottom: 8 }}>
+            新名称
+          </label>
+          <input
+            autoFocus
+            type="text"
+            value={renameName}
+            onChange={(event) => setRenameName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && renameName.trim()) {
+                void submitRename();
+              }
+            }}
+            style={dialogInputStyle()}
+            data-testid="file-tree-rename-input"
+          />
+        </SidebarDialog>
+      )}
+
+      {deleteOpen && (
+        <SidebarDialog
+          title="确认删除"
+          description={<>删除后无法恢复。<br />目标：{node.entry.name}</>}
+          onClose={() => setDeleteOpen(false)}
+          footer={(
+            <>
+              <button type="button" onClick={() => setDeleteOpen(false)} style={{ ...dialogButtonStyle(), padding: '9px 14px', borderRadius: 10 }}>
+                取消
+              </button>
+              <button type="button" onClick={submitDelete} style={{ ...dialogButtonStyle('danger'), padding: '9px 14px', borderRadius: 10 }} data-testid="file-tree-delete-confirm">
+                删除
+              </button>
+            </>
+          )}
+          testId="file-tree-delete-dialog"
+        />
+      )}
 
       {/* 递归渲染子节点（仅当展开且 children 已加载时） */}
       {isDir && isExpanded && node.children && (

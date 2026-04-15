@@ -1,6 +1,6 @@
 /**
  * @file Sidebar.test.tsx
- * @description Sidebar 组件测试 - 验证三标签页容器和内容切换行为
+ * @description Sidebar 组件测试 - 验证手风琴式项目详情和添加项目按钮
  * @author Atlas.oi
  * @date 2026-04-13
  */
@@ -11,11 +11,24 @@ import Sidebar from '../Sidebar';
 import { useSidebarStore } from '../sidebarStore';
 import { useFileTreeStore } from '../fileTreeStore';
 import { useProjectStore } from '../projectStore';
+import { useProjectGroupingStore } from '../projectGroupingStore';
 
 beforeEach(() => {
   useSidebarStore.setState({ activeTab: 'files', visible: true });
   useFileTreeStore.setState({ tree: [], expandedPaths: new Set() });
-  useProjectStore.setState({ currentProject: null, recentProjects: [] });
+  useProjectStore.setState({
+    currentProject: { name: 'GhostTerm', path: '/Users/test/GhostTerm', last_opened: 1 },
+    recentProjects: [
+      { name: 'GhostTerm', path: '/Users/test/GhostTerm', last_opened: 1 },
+      { name: 'OtherProject', path: '/Users/test/OtherProject', last_opened: 0 },
+    ],
+  });
+  useProjectGroupingStore.setState({
+    groups: [],
+    selectedGroupId: 'all',
+    projectGroupMap: {},
+    searchQuery: '',
+  });
 });
 
 describe('Sidebar - 基础渲染', () => {
@@ -24,21 +37,36 @@ describe('Sidebar - 基础渲染', () => {
     expect(screen.getByTestId('sidebar-root')).toBeInTheDocument();
   });
 
-  it('应渲染三个标签页按钮', () => {
+  it('应渲染添加项目按钮', () => {
+    render(<Sidebar />);
+    expect(screen.getByTestId('add-project-btn')).toBeInTheDocument();
+    expect(screen.getByText('添加项目')).toBeInTheDocument();
+  });
+
+  it('应渲染项目分组头和搜索栏', () => {
+    render(<Sidebar />);
+    expect(screen.getByTestId('project-group-header')).toBeInTheDocument();
+    expect(screen.getByTestId('project-search-input')).toBeInTheDocument();
+  });
+});
+
+describe('Sidebar - 手风琴标签页', () => {
+  it('活跃项目应展开手风琴区域', () => {
+    render(<Sidebar />);
+    expect(screen.getByTestId('accordion-panel-GhostTerm')).toBeInTheDocument();
+  });
+
+  it('非活跃项目不应展开手风琴', () => {
+    render(<Sidebar />);
+    expect(screen.queryByTestId('accordion-panel-OtherProject')).not.toBeInTheDocument();
+  });
+
+  it('手风琴中应渲染三个标签页按钮', () => {
     render(<Sidebar />);
     const tabs = screen.getAllByRole('tab');
     expect(tabs).toHaveLength(3);
   });
 
-  it('应包含 Files、Changes、Worktrees 标签', () => {
-    render(<Sidebar />);
-    expect(screen.getByRole('tab', { name: 'Files' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Changes' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Worktrees' })).toBeInTheDocument();
-  });
-});
-
-describe('Sidebar - 标签页切换', () => {
   it('初始应激活 files 标签', () => {
     render(<Sidebar />);
     const filesTab = screen.getByRole('tab', { name: 'Files' });
@@ -59,41 +87,12 @@ describe('Sidebar - 标签页切换', () => {
 
     expect(screen.getByRole('tab', { name: 'Worktrees' })).toHaveAttribute('aria-selected', 'true');
   });
-
-  it('Files 面板在 changes 激活时应隐藏（hidden 属性）', () => {
-    render(<Sidebar />);
-    fireEvent.click(screen.getByRole('tab', { name: 'Changes' }));
-
-    // 通过 data-testid 查询（hidden 元素不影响 getByTestId 行为）
-    const filesPanel = screen.getByTestId('panel-files');
-    expect(filesPanel).toHaveAttribute('hidden');
-  });
-
-  it('Changes 面板在 changes 激活时应可见（不含 hidden 属性）', () => {
-    render(<Sidebar />);
-    fireEvent.click(screen.getByRole('tab', { name: 'Changes' }));
-
-    const changesPanel = screen.getByTestId('panel-changes');
-    expect(changesPanel).not.toHaveAttribute('hidden');
-  });
 });
 
-describe('Sidebar - 包含 ProjectSelector', () => {
-  it('应渲染项目选择器区域', () => {
+describe('Sidebar - 无活跃项目', () => {
+  it('无当前项目时不应显示任何标签页', () => {
+    useProjectStore.setState({ currentProject: null });
     render(<Sidebar />);
-    // ProjectSelector 渲染后存在"选择项目"按钮
-    expect(screen.getByRole('button', { name: '选择项目' })).toBeInTheDocument();
-  });
-});
-
-describe('Sidebar - 滚动结构', () => {
-  it('标签页内容层应允许收缩，避免撑开侧边栏根容器', () => {
-    render(<Sidebar />);
-
-    const contentShell = screen.getByTestId('panel-files').parentElement;
-    const filesPanel = screen.getByTestId('panel-files');
-
-    expect(contentShell).toHaveStyle({ minWidth: '0', minHeight: '0', overflow: 'hidden' });
-    expect(filesPanel).toHaveStyle({ height: '100%', minWidth: '0', minHeight: '0' });
+    expect(screen.queryAllByRole('tab')).toHaveLength(0);
   });
 });

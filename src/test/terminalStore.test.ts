@@ -9,6 +9,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { useTerminalStore } from '../features/terminal/terminalStore';
+import { DEFAULT_TERMINAL_SETTINGS, useSettingsStore } from '../shared/stores/settingsStore';
 
 // invoke 已在 setup.ts 中 mock
 const mockInvoke = vi.mocked(invoke);
@@ -30,6 +31,11 @@ const MOCK_RECONNECT_INFO = {
 describe('terminalStore', () => {
   // 每个测试前重置 store 到初始状态
   beforeEach(() => {
+    localStorage.clear();
+    useSettingsStore.setState({
+      appView: 'main',
+      terminal: DEFAULT_TERMINAL_SETTINGS,
+    });
     useTerminalStore.setState({
       ptyId: null,
       wsPort: null,
@@ -55,7 +61,9 @@ describe('terminalStore', () => {
 
   describe('spawn', () => {
     it('spawn 成功后应更新 ptyId/wsPort/wsToken', async () => {
-      mockInvoke.mockResolvedValueOnce(MOCK_PTY_INFO);
+      mockInvoke
+        .mockResolvedValueOnce('/bin/zsh')
+        .mockResolvedValueOnce(MOCK_PTY_INFO);
 
       await useTerminalStore.getState().spawn('/tmp');
 
@@ -66,20 +74,40 @@ describe('terminalStore', () => {
     });
 
     it('spawn 后 connected 应为 false（WebSocket 尚未建立）', async () => {
-      mockInvoke.mockResolvedValueOnce(MOCK_PTY_INFO);
+      mockInvoke
+        .mockResolvedValueOnce('/bin/zsh')
+        .mockResolvedValueOnce(MOCK_PTY_INFO);
 
       await useTerminalStore.getState().spawn('/tmp');
 
       expect(useTerminalStore.getState().connected).toBe(false);
     });
 
-    it('spawn 应调用正确的 Tauri Command', async () => {
+    it('使用系统默认 shell 时应先获取默认 shell 再调用 spawn_pty_cmd', async () => {
+      mockInvoke
+        .mockResolvedValueOnce('/opt/homebrew/bin/fish')
+        .mockResolvedValueOnce(MOCK_PTY_INFO);
+
+      await useTerminalStore.getState().spawn('/home/user');
+
+      expect(mockInvoke).toHaveBeenNthCalledWith(1, 'get_default_shell_cmd');
+      expect(mockInvoke).toHaveBeenNthCalledWith(2, 'spawn_pty_cmd', {
+        shell: '/opt/homebrew/bin/fish',
+        cwd: '/home/user',
+      });
+    });
+
+    it('关闭系统默认 shell 后应使用自定义路径', async () => {
+      useSettingsStore.getState().updateTerminalSettings({
+        useSystemShell: false,
+        customShellPath: '/opt/homebrew/bin/fish',
+      });
       mockInvoke.mockResolvedValueOnce(MOCK_PTY_INFO);
 
       await useTerminalStore.getState().spawn('/home/user');
 
       expect(mockInvoke).toHaveBeenCalledWith('spawn_pty_cmd', {
-        shell: '/bin/zsh',
+        shell: '/opt/homebrew/bin/fish',
         cwd: '/home/user',
       });
     });
@@ -94,7 +122,9 @@ describe('terminalStore', () => {
   describe('kill', () => {
     it('kill 后应重置所有状态为 null', async () => {
       // 先 spawn
-      mockInvoke.mockResolvedValueOnce(MOCK_PTY_INFO);
+      mockInvoke
+        .mockResolvedValueOnce('/bin/zsh')
+        .mockResolvedValueOnce(MOCK_PTY_INFO);
       await useTerminalStore.getState().spawn('/tmp');
 
       // 再 kill
@@ -117,7 +147,9 @@ describe('terminalStore', () => {
   describe('reconnect', () => {
     it('reconnect 应更新 wsToken（新 token）', async () => {
       // 先 spawn
-      mockInvoke.mockResolvedValueOnce(MOCK_PTY_INFO);
+      mockInvoke
+        .mockResolvedValueOnce('/bin/zsh')
+        .mockResolvedValueOnce(MOCK_PTY_INFO);
       await useTerminalStore.getState().spawn('/tmp');
 
       const oldToken = useTerminalStore.getState().wsToken;
@@ -133,7 +165,9 @@ describe('terminalStore', () => {
 
     it('reconnect 后 connected 应重置为 false', async () => {
       // spawn + 手动设置 connected = true
-      mockInvoke.mockResolvedValueOnce(MOCK_PTY_INFO);
+      mockInvoke
+        .mockResolvedValueOnce('/bin/zsh')
+        .mockResolvedValueOnce(MOCK_PTY_INFO);
       await useTerminalStore.getState().spawn('/tmp');
       useTerminalStore.getState().setConnected(true);
 
@@ -153,7 +187,9 @@ describe('terminalStore', () => {
   describe('resize', () => {
     it('resize 应调用 resize_pty_cmd 并传入正确参数', async () => {
       // 先 spawn
-      mockInvoke.mockResolvedValueOnce(MOCK_PTY_INFO);
+      mockInvoke
+        .mockResolvedValueOnce('/bin/zsh')
+        .mockResolvedValueOnce(MOCK_PTY_INFO);
       await useTerminalStore.getState().spawn('/tmp');
 
       // resize

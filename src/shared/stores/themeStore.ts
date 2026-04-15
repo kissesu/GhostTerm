@@ -36,6 +36,30 @@ export const DARK_TERMINAL_THEME: ITheme = {
   brightWhite: '#c0caf5',
 };
 
+export const LIGHT_TERMINAL_THEME: ITheme = {
+  background: '#f6f7fb',
+  foreground: '#243042',
+  cursor: '#243042',
+  cursorAccent: '#f6f7fb',
+  selectionBackground: '#d7def2',
+  black: '#1f2937',
+  red: '#dc2626',
+  green: '#15803d',
+  yellow: '#b45309',
+  blue: '#2563eb',
+  magenta: '#9333ea',
+  cyan: '#0f766e',
+  white: '#cbd5e1',
+  brightBlack: '#475569',
+  brightRed: '#ef4444',
+  brightGreen: '#22c55e',
+  brightYellow: '#f59e0b',
+  brightBlue: '#3b82f6',
+  brightMagenta: '#a855f7',
+  brightCyan: '#14b8a6',
+  brightWhite: '#e2e8f0',
+};
+
 /** 应用全局配色方案 */
 export interface AppColors {
   /** 主背景色 */
@@ -79,3 +103,7 @@ export const useThemeStore = create<ThemeState>(() => ({
   terminalTheme: DARK_TERMINAL_THEME,
   appColors: DARK_APP_COLORS,
 }));
+
+export function getTerminalThemeById(themeId: 'ghostterm-dark' | 'ghostterm-light'): ITheme {
+  return themeId === 'ghostterm-light' ? LIGHT_TERMINAL_THEME : DARK_TERMINAL_THEME;
+}
