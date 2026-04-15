@@ -123,11 +123,29 @@ pub fn write_file(path: &str, content: &str) -> Result<(), String> {
         .map_err(|e| format!("写入文件失败 {}: {}", target_path, e))
 }
 
+/// 判断目录项是否为隐藏文件
+///
+/// Unix/macOS：文件名以 . 开头即为隐藏
+/// Windows：通过 FILE_ATTRIBUTE_HIDDEN (0x2) 文件属性判断，不依赖文件名前缀
+#[cfg(target_os = "windows")]
+fn is_hidden_entry(entry: &std::fs::DirEntry, _name: &str) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    // FILE_ATTRIBUTE_HIDDEN = 0x00000002
+    entry.metadata()
+        .map(|m| m.file_attributes() & 0x2 != 0)
+        .unwrap_or(false)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn is_hidden_entry(_entry: &std::fs::DirEntry, name: &str) -> bool {
+    name.starts_with('.')
+}
+
 /// 列出目录内容
 ///
 /// 业务逻辑：
 /// 1. 读取目录项
-/// 2. 根据 show_hidden 过滤以 . 开头的隐藏文件
+/// 2. 根据 show_hidden 过滤隐藏文件（Unix: . 前缀；Windows: HIDDEN 属性）
 /// 3. 排序：目录在前，文件在后，各自按名称字母顺序排序
 pub fn list_dir(path: &str, show_hidden: bool) -> Result<Vec<FileEntry>, String> {
     let p = Path::new(path);
@@ -143,8 +161,8 @@ pub fn list_dir(path: &str, show_hidden: bool) -> Result<Vec<FileEntry>, String>
 
         let name = entry.file_name().to_string_lossy().to_string();
 
-        // 过滤隐藏文件（以 . 开头），除非 show_hidden=true
-        if !show_hidden && name.starts_with('.') {
+        // 过滤隐藏文件：Unix/macOS 用 . 前缀；Windows 用 FILE_ATTRIBUTE_HIDDEN 文件属性
+        if !show_hidden && is_hidden_entry(&entry, &name) {
             continue;
         }
 

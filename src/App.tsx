@@ -35,7 +35,27 @@ function App() {
     }
   }, [appTheme]);
 
-  return appView === 'settings' ? <SettingsPage /> : <AppLayout />;
+  // ============================================
+  // AppLayout 必须常驻挂载（不能卸载再重建），
+  // 否则 display:none 保留的 xterm 实例会随卸载销毁，
+  // 返回主页时终端显示空白。
+  // 进入设置页时用 display:none 隐藏 AppLayout，
+  // SettingsPage 条件渲染叠加在上层。
+  // ============================================
+  return (
+    <>
+      <div
+        style={{
+          display: appView === 'settings' ? 'none' : 'flex',
+          width: '100%',
+          height: '100%',
+        }}
+      >
+        <AppLayout />
+      </div>
+      {appView === 'settings' && <SettingsPage />}
+    </>
+  );
 }
 
 export default App;

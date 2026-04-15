@@ -6,9 +6,13 @@
  * @date 2026-04-13
  */
 
+import { useEffect } from 'react';
 import { useGitStore } from './gitStore';
 import { useProjectStore } from './projectStore';
 import type { StatusEntry } from '../../shared/types';
+
+// Changes 面板轮询间隔（ms）：终端执行 git 操作后能在 3 秒内反映到面板
+const POLL_INTERVAL_MS = 3000;
 
 /** 状态标记颜色映射 - 与 FileTree git 颜色规范一致 */
 const STATUS_COLORS: Record<string, string> = {
@@ -131,7 +135,22 @@ function SectionHeader({ title, count }: { title: string; count: number }) {
 
 /** Git 变更面板根组件 */
 export default function Changes() {
-  const { changes, stageFile, unstageFile } = useGitStore();
+  const { changes, stageFile, unstageFile, refreshGitStatus } = useGitStore();
+
+  // 从当前项目获取仓库路径
+  const repoPath = useProjectStore((s) => s.currentProject?.path ?? '');
+
+  // ============================================
+  // 轮询刷新：挂载时立即刷新一次，之后每 3 秒轮询
+  // 确保在终端执行 git commit/pull 等操作后能自动同步
+  // 组件随 tab 切换 unmount 时定时器自动清理，不后台空跑
+  // ============================================
+  useEffect(() => {
+    if (!repoPath) return;
+    refreshGitStatus(repoPath);
+    const timer = setInterval(() => refreshGitStatus(repoPath), POLL_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [repoPath, refreshGitStatus]);
 
   // 将 changes 分为 staged（有 staged 字段）和 unstaged（有 unstaged 字段）
   // 一个文件可同时出现在两个区域（部分暂存）
@@ -142,9 +161,6 @@ export default function Changes() {
   const unstagedEntries: Array<{ entry: StatusEntry; type: string }> = changes
     .filter((e) => e.unstaged != null)
     .map((e) => ({ entry: e, type: e.unstaged! }));
-
-  // 从当前项目获取仓库路径
-  const repoPath = useProjectStore((s) => s.currentProject?.path ?? '');
 
   return (
     <div

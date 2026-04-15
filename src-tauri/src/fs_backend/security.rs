@@ -17,8 +17,8 @@ pub struct PathCheckResult {
     pub reason: Option<String>,
 }
 
-/// macOS/Linux 系统敏感路径列表 - 误写会导致系统损坏
-/// 这些路径通常需要 root 权限，普通用户写入应弹出二次确认
+/// Unix/macOS 系统敏感路径列表 - 误写会导致系统损坏
+#[cfg(not(target_os = "windows"))]
 const SENSITIVE_PREFIXES: &[&str] = &[
     "/etc",
     "/usr",
@@ -27,6 +27,15 @@ const SENSITIVE_PREFIXES: &[&str] = &[
     "/System",   // macOS 系统目录
     "/Library",  // macOS 系统库（部分受保护）
     "/private",  // macOS 对 /etc /tmp /var 的实际存储位置
+];
+
+/// Windows 系统敏感路径列表 - 写入会影响系统稳定性
+#[cfg(target_os = "windows")]
+const SENSITIVE_PREFIXES: &[&str] = &[
+    "C:\\Windows",
+    "C:\\Program Files",
+    "C:\\Program Files (x86)",
+    "C:\\ProgramData\\Microsoft",
 ];
 
 /// 检查写路径安全性

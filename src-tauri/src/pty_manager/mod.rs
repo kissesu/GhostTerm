@@ -523,7 +523,7 @@ mod tests {
             "cmd.exe"
         };
 
-        let result = spawn_pty(shell, "/tmp", HashMap::new()).await;
+        let result = spawn_pty(shell, std::env::temp_dir().to_str().unwrap_or("/tmp"), HashMap::new()).await;
         assert!(result.is_ok(), "spawn_pty 应成功: {:?}", result.err());
 
         let info = result.unwrap();
@@ -552,7 +552,7 @@ mod tests {
             "cmd.exe"
         };
 
-        let info = spawn_pty(shell, "/tmp", HashMap::new())
+        let info = spawn_pty(shell, std::env::temp_dir().to_str().unwrap_or("/tmp"), HashMap::new())
             .await
             .expect("spawn_pty 失败");
         let pty_id = info.pty_id.clone();
@@ -582,7 +582,7 @@ mod tests {
             "cmd.exe"
         };
 
-        let info = spawn_pty(shell, "/tmp", HashMap::new())
+        let info = spawn_pty(shell, std::env::temp_dir().to_str().unwrap_or("/tmp"), HashMap::new())
             .await
             .expect("spawn_pty 失败");
 
@@ -609,7 +609,7 @@ mod tests {
             "cmd.exe"
         };
 
-        let info = spawn_pty(shell, "/tmp", HashMap::new())
+        let info = spawn_pty(shell, std::env::temp_dir().to_str().unwrap_or("/tmp"), HashMap::new())
             .await
             .expect("spawn_pty 失败");
         let old_token = info.ws_token.clone();
@@ -632,7 +632,7 @@ mod tests {
             "cmd.exe"
         };
 
-        let info = spawn_pty(shell, "/tmp", HashMap::new())
+        let info = spawn_pty(shell, std::env::temp_dir().to_str().unwrap_or("/tmp"), HashMap::new())
             .await
             .expect("spawn_pty 失败");
 
@@ -698,7 +698,7 @@ mod tests {
             "cmd.exe"
         };
 
-        let info = spawn_pty(shell, "/tmp", HashMap::new())
+        let info = spawn_pty(shell, std::env::temp_dir().to_str().unwrap_or("/tmp"), HashMap::new())
             .await
             .expect("spawn_pty 失败");
 

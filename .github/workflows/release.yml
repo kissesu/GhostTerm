@@ -1,0 +1,139 @@
+# 推送 v* tag 触发自动构建并发布 GitHub Release
+# 触发示例：git tag v0.2.0 && git push origin v0.2.0
+#
+# 构建产物：
+#   macOS:
+#     - GhostTerm_x.y.z_aarch64.dmg      (Apple Silicon)
+#     - GhostTerm_x.y.z_x64.dmg          (Intel)
+#   Windows:
+#     - GhostTerm_x.y.z_x64-setup.exe    (NSIS 安装包)
+#     - GhostTerm_x.y.z_x64.msi          (MSI 安装包)
+#
+# 代码签名：当前跳过 notarization（私有项目自用）
+# macOS 签名：在仓库 Settings > Secrets 添加：
+#   APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD,
+#   APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID
+
+name: Release
+
+on:
+  push:
+    tags:
+      # 仅 v 开头的版本 tag 触发，例如 v0.1.0、v1.2.3
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  build-macos:
+    name: Build macOS (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Apple Silicon (arm64) - 使用 macos-latest（自动分配 M 系列 runner）
+          - target: aarch64-apple-darwin
+            runner: macos-latest
+          # Intel x86_64 - 使用固定 x86 runner
+          - target: x86_64-apple-darwin
+            runner: macos-13
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      # Rust 工具链：stable + 目标平台
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      # 缓存 Rust 编译产物，加速后续构建
+      - name: 缓存 Rust 依赖
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      # pnpm 必须在 setup-node 前安装
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装前端依赖
+        run: pnpm install --frozen-lockfile
+
+      # Tauri 官方 Action：构建 + 上传到 GitHub Release
+      - name: 构建并发布
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 代码签名（可选，当前未启用）
+          # APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          # APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          # APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          # APPLE_ID: ${{ secrets.APPLE_ID }}
+          # APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: GhostTerm ${{ github.ref_name }}
+          releaseBody: |
+            ## GhostTerm ${{ github.ref_name }}
+
+            查看完整更新日志：https://github.com/${{ github.repository }}/commits/${{ github.ref_name }}
+          releaseDraft: false
+          prerelease: false
+          args: --target ${{ matrix.target }}
+
+  build-windows:
+    name: Build Windows (x86_64)
+    runs-on: windows-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: 缓存 Rust 依赖
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装前端依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 构建并发布
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: GhostTerm ${{ github.ref_name }}
+          releaseBody: |
+            ## GhostTerm ${{ github.ref_name }}
+
+            查看完整更新日志：https://github.com/${{ github.repository }}/commits/${{ github.ref_name }}
+          releaseDraft: false
+          prerelease: false
+          args: --target x86_64-pc-windows-msvc

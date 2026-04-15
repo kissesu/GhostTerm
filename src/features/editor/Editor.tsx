@@ -1,10 +1,10 @@
 /**
  * @file Editor.tsx - CodeMirror 6 编辑器组件
  * @description 多标签文件编辑器：根据 activeFilePath 渲染对应文件的 CodeMirror 6 实例
- *              支持语法高亮（Lezer 动态加载）、暗色主题、Cmd/Ctrl+S 保存快捷键
+ *              支持语法高亮（Lezer 动态加载）、暗/亮双主题（跟随 themeStore）、Cmd/Ctrl+S 保存快捷键
  *              对 binary/large/error 类型文件展示对应的占位状态
  * @author Atlas.oi
- * @date 2026-04-13
+ * @date 2026-04-15
  */
 
 import { useEffect, useRef, useCallback } from 'react';
@@ -14,6 +14,7 @@ import { EditorState, Compartment } from '@codemirror/state';
 import { oneDark } from '@codemirror/theme-one-dark';
 import type { LanguageSupport } from '@codemirror/language';
 import { useEditorStore } from './editorStore';
+import { useThemeStore } from '../../shared/stores/themeStore';
 
 /** 语言包动态映射表 - 按需 import 避免打包体积过大 */
 const LANG_MAP: Record<string, () => Promise<LanguageSupport>> = {
@@ -33,8 +34,33 @@ const LANG_MAP: Record<string, () => Promise<LanguageSupport>> = {
 /** 语言隔间 - 用于运行时动态切换语法高亮，无需重建整个编辑器状态 */
 const langCompartment = new Compartment();
 
+/**
+ * 主题隔间 - 用于运行时动态切换 dark/light 主题
+ * 通过 dispatch(themeCompartment.reconfigure(...)) 切换，不重建 editor，不丢失撤销历史
+ */
+const themeCompartment = new Compartment();
+
+/**
+ * GhostTerm 浅色主题 — 匹配 Obsidian Forge light 设计令牌
+ * 不使用第三方 light 主题包，手写令牌覆盖以匹配 var(--c-*) 体系
+ */
+const ghosttermLight = EditorView.theme({
+  '&': { backgroundColor: '#f7f4ef', color: '#1e2038' },
+  '.cm-content': { caretColor: '#9b6e00' },
+  '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#9b6e00' },
+  '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground': {
+    backgroundColor: '#9b6e0026',
+  },
+  '.cm-gutters': { backgroundColor: '#ede9e3', color: '#8090b0', border: 'none' },
+  '.cm-activeLineGutter': { backgroundColor: '#d4cfc7' },
+  '.cm-activeLine': { backgroundColor: '#ede9e340' },
+  '.cm-matchingBracket, .cm-nonmatchingBracket': { backgroundColor: '#9b6e0022' },
+}, { dark: false });
+
 export default function Editor() {
   const { openFiles, activeFilePath, saveFile, updateContent } = useEditorStore();
+  // 订阅已解析的主题模式（dark/light），驱动 CodeMirror 主题切换
+  const mode = useThemeStore((s) => s.mode);
 
   // CodeMirror 挂载 DOM 容器引用
   const editorContainerRef = useRef<HTMLDivElement>(null);
@@ -97,7 +123,8 @@ export default function Editor() {
       doc: activeFile.content,
       extensions: [
         basicSetup,
-        oneDark,
+        // 主题隔间：根据当前 mode 初始化，后续由独立 effect 热切换
+        themeCompartment.of(mode === 'dark' ? oneDark : ghosttermLight),
         // 语言隔间初始为空，异步加载后通过 dispatch 更新
         langCompartment.of([]),
         // 监听内容变化，更新 editorStore
@@ -140,6 +167,17 @@ export default function Editor() {
       // cleanup：组件卸载时销毁实例
     };
   }, [activeFilePath, activeFile?.kind]);
+
+  // ============================================
+  // 主题热切换：mode 变化时通过 Compartment.reconfigure 更新
+  // 不重建 editor，不丢失撤销历史
+  // ============================================
+  useEffect(() => {
+    if (!viewRef.current) return;
+    viewRef.current.dispatch({
+      effects: themeCompartment.reconfigure(mode === 'dark' ? oneDark : ghosttermLight),
+    });
+  }, [mode]);
 
   // ============================================
   // 组件卸载时销毁 CodeMirror 实例

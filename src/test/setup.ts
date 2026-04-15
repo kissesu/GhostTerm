@@ -54,3 +54,19 @@ if (!globalThis.navigator.clipboard) {
   unobserve() {}
   disconnect() {}
 };
+
+// Mock window.matchMedia - jsdom 未实现，App.tsx 用于 Obsidian Forge 主题检测
+// 默认返回 matches=false（浅色模式），addEventListenr/removeEventListener 为空操作
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: vi.fn((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })),
+});

@@ -13,12 +13,26 @@ describe('SettingsPage', () => {
     });
   });
 
-  it('应渲染终端设置导航和表单', () => {
+  it('应渲染外观和终端导航项，默认显示外观分区', () => {
     render(<SettingsPage />);
 
+    // 导航项始终可见
+    expect(screen.getByTestId('settings-nav-appearance')).toBeInTheDocument();
     expect(screen.getByTestId('settings-nav-terminal')).toBeInTheDocument();
+    // 默认分区是外观：主题选择卡片可见
+    expect(screen.getByTestId('app-theme-selector')).toBeInTheDocument();
+  });
+
+  it('点击终端导航后应渲染终端表单', async () => {
+    const user = userEvent.setup();
+    render(<SettingsPage />);
+
+    // 导航到终端分区
+    await user.click(screen.getByTestId('settings-nav-terminal'));
+
     expect(screen.getByTestId('terminal-use-system-shell')).toBeInTheDocument();
-    expect(screen.getByTestId('terminal-theme')).toBeInTheDocument();
+    expect(screen.getByTestId('terminal-custom-shell')).toBeInTheDocument();
+    expect(screen.getByTestId('terminal-font-size')).toBeInTheDocument();
   });
 
   it('点击返回按钮应切回主界面', async () => {
@@ -33,6 +47,9 @@ describe('SettingsPage', () => {
   it('关闭使用系统默认 shell 后应允许输入自定义 shell 路径', async () => {
     const user = userEvent.setup();
     render(<SettingsPage />);
+
+    // 终端表单在 terminal 分区，需先导航
+    await user.click(screen.getByTestId('settings-nav-terminal'));
 
     const useSystemShell = screen.getByTestId('terminal-use-system-shell');
     const customShell = screen.getByTestId('terminal-custom-shell') as HTMLInputElement;

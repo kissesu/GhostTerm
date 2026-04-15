@@ -12,10 +12,19 @@ import { useSidebarStore } from '../sidebarStore';
 import { useFileTreeStore } from '../fileTreeStore';
 import { useProjectStore } from '../projectStore';
 import { useProjectGroupingStore } from '../projectGroupingStore';
+import { useGitStore } from '../gitStore';
 
 beforeEach(() => {
   useSidebarStore.setState({ activeTab: 'files', visible: true });
   useFileTreeStore.setState({ tree: [], expandedPaths: new Set() });
+  // Changes 组件挂载时会触发 refreshGitStatus，
+  // 用 no-op 替代，防止 invoke mock 返回 undefined 污染 changes
+  useGitStore.setState({
+    changes: [],
+    currentBranch: '',
+    worktrees: [],
+    refreshGitStatus: async () => {},
+  });
   useProjectStore.setState({
     currentProject: { name: 'GhostTerm', path: '/Users/test/GhostTerm', last_opened: 1 },
     recentProjects: [

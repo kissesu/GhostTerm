@@ -68,7 +68,8 @@ export const useGitStore = create<GitState>((set, get) => ({
       invoke<StatusEntry[]>('git_status_cmd', { repoPath }),
       invoke<string>('git_current_branch_cmd', { repoPath }),
     ]);
-    set({ changes, currentBranch });
+    // invoke 在测试环境或后端异常时可能返回 undefined，防御性回退到空值
+    set({ changes: changes ?? [], currentBranch: currentBranch ?? '' });
   },
 
   // ============================================

@@ -257,10 +257,8 @@ describe('ProjectSelector', () => {
 
     expect(activeCard).toHaveAttribute('data-active', 'true');
     expect(inactiveCard).toHaveAttribute('data-active', 'false');
-    expect(activeCard).toHaveStyle({
-      background: '#414868',
-      boxShadow: '0 0 0 1px rgba(122,162,247,0.38), 0 14px 30px rgba(15,17,26,0.32)',
-    });
+    // 注：激活态背景使用 CSS 变量 var(--c-card-active)，jsdom 无法解析变量值，
+    // data-active 属性已足够验证激活状态，不重复断言视觉样式
   });
 
   it('自定义分组中的项目应支持移回未分组', async () => {

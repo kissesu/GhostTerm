@@ -69,12 +69,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     // ============================================
     // 第三步：并行刷新 git 状态 + worktree 列表
-    // 两者独立，可并行执行缩短等待时间
+    // 非 git 仓库目录（如纯终端工作目录）也是合法项目，
+    // git 刷新失败不应阻断打开流程，静默忽略即可
     // ============================================
     const { useGitStore } = await import('./gitStore');
     await Promise.all([
-      useGitStore.getState().refreshGitStatus(path),
-      useGitStore.getState().refreshWorktrees(path),
+      useGitStore.getState().refreshGitStatus(path).catch(() => {}),
+      useGitStore.getState().refreshWorktrees(path).catch(() => {}),
     ]);
 
     // ============================================
