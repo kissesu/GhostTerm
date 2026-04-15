@@ -8,6 +8,7 @@
 // @date: 2026-04-13
 
 pub mod persistence;
+pub mod session;
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -272,6 +273,38 @@ pub async fn close_project_cmd() -> Result<(), String> {
 #[tauri::command]
 pub fn clone_repository_cmd(repository_url: String, destination_path: String) -> Result<(), String> {
     clone_repository(&repository_url, &destination_path)
+}
+
+use tauri::Manager;
+use session::{EditorSession, get_session, save_session};
+
+#[tauri::command]
+pub async fn get_editor_session_cmd(
+    project_path: String,
+    app: tauri::AppHandle,
+) -> Result<EditorSession, String> {
+    let sessions_path = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| format!("获取配置目录失败: {e}"))?
+        .join("editor_sessions.json");
+    Ok(get_session(&sessions_path, &project_path))
+}
+
+#[tauri::command]
+pub async fn save_editor_session_cmd(
+    project_path: String,
+    open_file_paths: Vec<String>,
+    active_file_path: Option<String>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    let sessions_path = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| format!("获取配置目录失败: {e}"))?
+        .join("editor_sessions.json");
+    let session = EditorSession { open_file_paths, active_file_path };
+    save_session(&sessions_path, &project_path, session)
 }
 
 #[cfg(test)]

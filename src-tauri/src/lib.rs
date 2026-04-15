@@ -23,7 +23,8 @@ use fs_backend::{read_file_cmd, write_file_cmd, list_dir_cmd, create_entry_cmd, 
 use fs_backend::{start_watching_cmd, stop_watching_cmd};
 
 // PBI-3 Commands
-use project_manager::{list_recent_projects_cmd, open_project_cmd, close_project_cmd, remove_project_cmd, clone_repository_cmd};
+use project_manager::{list_recent_projects_cmd, open_project_cmd, close_project_cmd, remove_project_cmd, clone_repository_cmd,
+                      get_editor_session_cmd, save_editor_session_cmd};
 
 // PBI-5 Commands - Git 操作
 use git_backend::{git_status_cmd, git_stage_cmd, git_unstage_cmd, git_diff_cmd,
@@ -99,6 +100,9 @@ pub fn run() {
             close_project_cmd,
             remove_project_cmd,
             clone_repository_cmd,
+            // Task 8: 编辑器会话持久化
+            get_editor_session_cmd,
+            save_editor_session_cmd,
             // PBI-4: 文件系统实时监听
             start_watching_cmd,
             stop_watching_cmd,
