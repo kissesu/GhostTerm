@@ -13,7 +13,7 @@ import { Sidebar } from '../features/sidebar';
 import { useSidebarStore } from '../features/sidebar';
 import { useProjectStore } from '../features/sidebar';
 import { Editor, EditorTabs } from '../features/editor';
-import { Terminal } from '../features/terminal';
+import { Terminal, useTerminalStore } from '../features/terminal';
 import { useKeyboardShortcuts } from '../shared/hooks/useKeyboardShortcuts';
 import WindowTitleBar from '../shared/components/WindowTitleBar';
 import { useSettingsStore } from '../shared/stores/settingsStore';
@@ -32,8 +32,10 @@ const SIDEBAR_AUTO_COLLAPSE_WIDTH = 800;
  */
 export default function AppLayout() {
   const sidebarVisible = useSidebarStore((s) => s.visible);
-  const currentProjectPath = useProjectStore((s) => s.currentProject?.path);
+  const activeProjectPath = useProjectStore((s) => s.currentProject?.path ?? null);
   const openSettings = useSettingsStore((s) => s.openSettings);
+  const sessions = useTerminalStore((s) => s.sessions);
+  const activateProject = useTerminalStore((s) => s.activateProject);
 
   // 焦点面板状态：记录当前焦点在编辑器还是终端，供快捷键和 UI 使用
   const [activePanel, setActivePanel] = useState<'editor' | 'terminal'>('editor');
@@ -212,13 +214,64 @@ export default function AppLayout() {
           }}
         />
 
-        {/* 右侧面板 - PBI-1 终端 */}
+        {/* 右侧面板 - PBI-1 终端（多实例 display:none 保留 scrollback） */}
         <Panel
           defaultSize={30}
           minSize={15}
-          style={{ overflow: 'hidden', minWidth: 0, minHeight: 0 }}
+          style={{
+            overflow: 'hidden', minWidth: 0, minHeight: 0,
+            display: 'flex', flexDirection: 'column',
+          }}
         >
-          {currentProjectPath && <Terminal projectPath={currentProjectPath} />}
+          {/* 占位状态 1：无活跃项目 */}
+          {!activeProjectPath && (
+            <div
+              style={{
+                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#565f89', fontSize: '13px', background: '#1a1b26',
+              }}
+            >
+              打开项目后启动终端
+            </div>
+          )}
+
+          {/* 占位状态 2：有活跃项目，但该项目无 PTY session */}
+          {activeProjectPath && !sessions[activeProjectPath] && (
+            <div
+              style={{
+                flex: 1, display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center',
+                gap: 12, color: '#565f89', fontSize: '13px', background: '#1a1b26',
+              }}
+            >
+              <span>终端已关闭</span>
+              <button
+                onClick={() => activateProject(activeProjectPath)}
+                data-testid="start-terminal-button"
+                aria-label="启动终端"
+                style={{
+                  padding: '6px 16px', background: '#7aa2f7', color: '#1a1b26',
+                  border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: '13px',
+                }}
+              >
+                启动终端
+              </button>
+            </div>
+          )}
+
+          {/* 状态 3：有 PTY session 的所有项目（display:none/flex 切换保留 scrollback） */}
+          {Object.keys(sessions).map((path) => (
+            <div
+              key={path}
+              data-testid={`terminal-wrapper-${path}`}
+              style={{
+                display: path === activeProjectPath ? 'flex' : 'none',
+                flex: 1, minWidth: 0, minHeight: 0,
+              }}
+            >
+              <Terminal projectPath={path} />
+            </div>
+          ))}
         </Panel>
       </PanelGroup>
     </div>
