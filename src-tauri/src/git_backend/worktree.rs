@@ -60,15 +60,20 @@ fn parse_worktree_list_porcelain(output: &str, current_path: &str) -> Vec<Worktr
             // 新的 worktree 块开始
             if let Some(path) = current_wt_path.take() {
                 // 提交上一个 worktree
-                let canonical_wt = std::fs::canonicalize(&path)
-                    .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or_else(|_| path.clone());
+                // 目录已删除的 stale worktree 直接跳过，不加入列表
+                if Path::new(&path).exists() {
+                    let canonical_wt = std::fs::canonicalize(&path)
+                        .map(|p| p.to_string_lossy().to_string())
+                        .unwrap_or_else(|_| path.clone());
 
-                result.push(Worktree {
-                    path: path.clone(),
-                    branch: current_branch.take(),
-                    is_current: canonical_wt == canonical_current,
-                });
+                    result.push(Worktree {
+                        path: path.clone(),
+                        branch: current_branch.take(),
+                        is_current: canonical_wt == canonical_current,
+                    });
+                } else {
+                    current_branch = None;
+                }
             } else {
                 current_branch = None;
             }
@@ -91,17 +96,19 @@ fn parse_worktree_list_porcelain(output: &str, current_path: &str) -> Vec<Worktr
         // HEAD 行（commit hash）暂不使用
     }
 
-    // 提交最后一个 worktree
+    // 提交最后一个 worktree（同样过滤 stale 路径）
     if let Some(path) = current_wt_path {
-        let canonical_wt = std::fs::canonicalize(&path)
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_else(|_| path.clone());
+        if Path::new(&path).exists() {
+            let canonical_wt = std::fs::canonicalize(&path)
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| path.clone());
 
-        result.push(Worktree {
-            path: path.clone(),
-            branch: current_branch,
-            is_current: canonical_wt == canonical_current,
-        });
+            result.push(Worktree {
+                path: path.clone(),
+                branch: current_branch,
+                is_current: canonical_wt == canonical_current,
+            });
+        }
     }
 
     result
