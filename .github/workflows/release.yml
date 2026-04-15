@@ -82,15 +82,15 @@ jobs:
           python3 -c "
           import json, re
           v = '$VERSION'
-          with open('src-tauri/tauri.conf.json') as f:
+          with open('src-tauri/tauri.conf.json', encoding='utf-8') as f:
               data = json.load(f)
           data['version'] = v
-          with open('src-tauri/tauri.conf.json', 'w') as f:
+          with open('src-tauri/tauri.conf.json', 'w', encoding='utf-8') as f:
               json.dump(data, f, indent=2, ensure_ascii=False)
-          with open('src-tauri/Cargo.toml') as f:
+          with open('src-tauri/Cargo.toml', encoding='utf-8') as f:
               ct = f.read()
           ct = re.sub(r'(?m)^version = \"[^\"]*\"', f'version = \"{v}\"', ct, count=1)
-          with open('src-tauri/Cargo.toml', 'w') as f:
+          with open('src-tauri/Cargo.toml', 'w', encoding='utf-8') as f:
               f.write(ct)
           print('version synced:', v)
           "
@@ -176,15 +176,15 @@ jobs:
           python3 -c "
           import json, re
           v = '$VERSION'
-          with open('src-tauri/tauri.conf.json') as f:
+          with open('src-tauri/tauri.conf.json', encoding='utf-8') as f:
               data = json.load(f)
           data['version'] = v
-          with open('src-tauri/tauri.conf.json', 'w') as f:
+          with open('src-tauri/tauri.conf.json', 'w', encoding='utf-8') as f:
               json.dump(data, f, indent=2, ensure_ascii=False)
-          with open('src-tauri/Cargo.toml') as f:
+          with open('src-tauri/Cargo.toml', encoding='utf-8') as f:
               ct = f.read()
           ct = re.sub(r'(?m)^version = \"[^\"]*\"', f'version = \"{v}\"', ct, count=1)
-          with open('src-tauri/Cargo.toml', 'w') as f:
+          with open('src-tauri/Cargo.toml', 'w', encoding='utf-8') as f:
               f.write(ct)
           print('version synced:', v)
           "
