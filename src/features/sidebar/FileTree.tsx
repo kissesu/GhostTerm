@@ -144,15 +144,19 @@ function FileTreeNode({ node, depth, gitStatusClass }: FileTreeNodeProps) {
               alignItems: 'center',
               gap: 4,
               padding: `2px 8px 2px ${8 + depth * 16}px`,
-              background: isActive ? 'rgba(122, 162, 247, 0.18)' : 'transparent',
+              /* 活跃状态用 accent-dim 背景，与新主题保持一致；去掉左侧粗边框反模式 */
+              background: isActive ? 'var(--c-accent-dim)' : 'transparent',
               border: 'none',
-              borderLeft: isActive ? '2px solid #7aa2f7' : '2px solid transparent',
+              borderLeft: 'none',
               cursor: 'pointer',
-              color: isActive ? '#ffffff' : '#c0caf5',
+              color: isActive ? 'var(--c-accent)' : 'var(--c-fg-muted)',
               textAlign: 'left',
-              fontSize: 13,
+              fontSize: 12,
+              fontFamily: 'var(--font-ui)',
+              transition: 'background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out)',
             }}
-            className={gitStatusClass}
+            /* 活跃文件不叠加 git 状态颜色：活跃背景已足够说明状态，避免视觉冲突 */
+            className={isActive ? undefined : gitStatusClass}
           >
             {/* 展开/折叠箭头（仅目录显示） */}
             <span style={{ width: 14, flexShrink: 0 }} aria-hidden>
@@ -165,16 +169,16 @@ function FileTreeNode({ node, depth, gitStatusClass }: FileTreeNodeProps) {
               ) : null}
             </span>
 
-            {/* 文件/目录图标 */}
-            <span style={{ flexShrink: 0 }} aria-hidden>
+            {/* 文件/目录图标：活跃时用 accent 色，否则用 muted */}
+            <span style={{ flexShrink: 0, color: isActive ? 'var(--c-accent)' : 'var(--c-fg-subtle)' }} aria-hidden>
               {isDir ? (
                 isExpanded ? (
-                  <FolderOpen size={14} color="#7aa2f7" />
+                  <FolderOpen size={13} color="currentColor" />
                 ) : (
-                  <Folder size={14} color="#7aa2f7" />
+                  <Folder size={13} color="currentColor" />
                 )
               ) : (
-                <File size={14} color="#565f89" />
+                <File size={13} color="currentColor" />
               )}
             </span>
 
@@ -191,22 +195,23 @@ function FileTreeNode({ node, depth, gitStatusClass }: FileTreeNodeProps) {
           </button>
         </ContextMenuTrigger>
 
-        {/* 右键菜单 */}
+        {/* 右键菜单 — 使用 CSS token，跟随主题 */}
         <ContextMenuContent
           style={{
-            background: '#1a1b26',
-            border: '1px solid #27293d',
-            borderRadius: 4,
-            padding: '4px 0',
-            minWidth: 160,
+            background: 'var(--c-overlay)',
+            border: '1px solid var(--c-border)',
+            borderRadius: 'var(--r-md)',
+            padding: '4px',
+            minWidth: 168,
             zIndex: 200,
+            boxShadow: 'var(--shadow-menu)',
           }}
         >
           {isDir && (
             <>
               <ContextMenuItem
                 onSelect={() => openCreateDialog('file')}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', cursor: 'pointer', fontSize: 13, color: '#c0caf5' }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12, color: 'var(--c-fg)', borderRadius: 4, fontFamily: 'var(--font-ui)' }}
                 data-testid="ctx-new-file"
               >
                 <FilePlus size={12} aria-hidden />
@@ -214,61 +219,61 @@ function FileTreeNode({ node, depth, gitStatusClass }: FileTreeNodeProps) {
               </ContextMenuItem>
               <ContextMenuItem
                 onSelect={() => openCreateDialog('dir')}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', cursor: 'pointer', fontSize: 13, color: '#c0caf5' }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12, color: 'var(--c-fg)', borderRadius: 4, fontFamily: 'var(--font-ui)' }}
                 data-testid="ctx-new-dir"
               >
                 <FolderPlus size={12} aria-hidden />
                 新建文件夹
               </ContextMenuItem>
-              <ContextMenuSeparator style={{ borderTop: '1px solid #27293d', margin: '2px 0' }} />
+              <ContextMenuSeparator style={{ borderTop: '1px solid var(--c-border-sub)', margin: '4px 0' }} />
             </>
           )}
           <ContextMenuItem
             onSelect={() => { void openPath(node.entry.path); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', cursor: 'pointer', fontSize: 13, color: '#c0caf5' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12, color: 'var(--c-fg)', borderRadius: 4, fontFamily: 'var(--font-ui)' }}
           >
             <ExternalLink size={12} aria-hidden />
             在 Finder 中显示
           </ContextMenuItem>
           <ContextMenuItem
             onSelect={() => { void copyToClipboard(node.entry.path); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', cursor: 'pointer', fontSize: 13, color: '#c0caf5' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12, color: 'var(--c-fg)', borderRadius: 4, fontFamily: 'var(--font-ui)' }}
           >
             <Copy size={12} aria-hidden />
             复制
           </ContextMenuItem>
           <ContextMenuItem
             onSelect={() => { void copyToClipboard(node.entry.path); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', cursor: 'pointer', fontSize: 13, color: '#c0caf5' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12, color: 'var(--c-fg)', borderRadius: 4, fontFamily: 'var(--font-ui)' }}
           >
             <Scissors size={12} aria-hidden />
             剪切
           </ContextMenuItem>
           <ContextMenuItem
             onSelect={() => { void copyToClipboard(node.entry.path); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', cursor: 'pointer', fontSize: 13, color: '#c0caf5' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12, color: 'var(--c-fg)', borderRadius: 4, fontFamily: 'var(--font-ui)' }}
           >
             <Copy size={12} aria-hidden />
             复制路径
           </ContextMenuItem>
           <ContextMenuItem
             onSelect={() => { void copyToClipboard(node.entry.path); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', cursor: 'pointer', fontSize: 13, color: '#c0caf5' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12, color: 'var(--c-fg)', borderRadius: 4, fontFamily: 'var(--font-ui)' }}
           >
             <Send size={12} aria-hidden />
             发送路径
           </ContextMenuItem>
           <ContextMenuItem
             onSelect={() => { void copyToClipboard(relativePath); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', cursor: 'pointer', fontSize: 13, color: '#c0caf5' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12, color: 'var(--c-fg)', borderRadius: 4, fontFamily: 'var(--font-ui)' }}
           >
             <Send size={12} aria-hidden />
             发送相对路径
           </ContextMenuItem>
-          <ContextMenuSeparator style={{ borderTop: '1px solid #27293d', margin: '2px 0' }} />
+          <ContextMenuSeparator style={{ borderTop: '1px solid var(--c-border-sub)', margin: '4px 0' }} />
           <ContextMenuItem
             onSelect={openRenameDialog}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', cursor: 'pointer', fontSize: 13, color: '#c0caf5' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12, color: 'var(--c-fg)', borderRadius: 4, fontFamily: 'var(--font-ui)' }}
             data-testid="ctx-rename"
           >
             <Pencil size={12} aria-hidden />
@@ -276,7 +281,7 @@ function FileTreeNode({ node, depth, gitStatusClass }: FileTreeNodeProps) {
           </ContextMenuItem>
           <ContextMenuItem
             onSelect={() => setDeleteOpen(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', cursor: 'pointer', fontSize: 13, color: '#e06c75' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12, color: 'var(--c-danger)', borderRadius: 4, fontFamily: 'var(--font-ui)' }}
             data-testid="ctx-delete"
           >
             <Trash2 size={12} aria-hidden />
@@ -308,7 +313,7 @@ function FileTreeNode({ node, depth, gitStatusClass }: FileTreeNodeProps) {
           )}
           testId="file-tree-create-dialog"
         >
-          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#c0caf5', marginBottom: 8 }}>
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--c-fg)', marginBottom: 8 }}>
             名称
           </label>
           <input
@@ -351,7 +356,7 @@ function FileTreeNode({ node, depth, gitStatusClass }: FileTreeNodeProps) {
           )}
           testId="file-tree-rename-dialog"
         >
-          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#c0caf5', marginBottom: 8 }}>
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--c-fg)', marginBottom: 8 }}>
             新名称
           </label>
           <input
@@ -435,7 +440,7 @@ export default function FileTree() {
   if (tree.length === 0) {
     return (
       <div
-        style={{ padding: '16px 10px', fontSize: 12, color: '#565f89', textAlign: 'center' }}
+        style={{ padding: '16px 10px', fontSize: 12, color: 'var(--c-fg-subtle)', textAlign: 'center' }}
         data-testid="file-tree-empty"
       >
         暂无文件
@@ -446,10 +451,12 @@ export default function FileTree() {
   return (
     <>
       {/* Git 状态颜色样式（注入到 shadow DOM 外层） */}
+      {/* Git 状态颜色用 CSS token，跟随 dark/light 主题 */}
       <style>{`
-        .git-modified { color: #e0af68 !important; }
-        .git-untracked { color: #9ece6a !important; }
-        .git-deleted { color: #f7768e !important; }
+        .git-modified  { color: var(--c-warning) !important; }
+        .git-untracked { color: var(--c-success) !important; }
+        .git-deleted   { color: var(--c-danger)  !important; }
+        [data-active="false"]:hover { background: var(--c-hover) !important; }
       `}</style>
       <div
         role="tree"

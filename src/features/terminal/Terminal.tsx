@@ -15,7 +15,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { AttachAddon } from '@xterm/addon-attach';
 import { FitAddon } from '@xterm/addon-fit';
-import { getTerminalThemeById } from '../../shared/stores/themeStore';
+import { useThemeStore } from '../../shared/stores/themeStore';
 import { useSettingsStore } from '../../shared/stores/settingsStore';
 import { useTerminalStore } from './terminalStore';
 import { useTerminal } from './useTerminal';
@@ -54,7 +54,8 @@ export default function Terminal({ projectPath, className }: TerminalProps) {
   const [error, setError] = useState<string | null>(null);
 
   const terminalSettings = useSettingsStore((s) => s.terminal);
-  const terminalTheme = getTerminalThemeById(terminalSettings.theme);
+  // 终端配色从 themeStore 读取（由 App.tsx syncTheme 驱动，与 appTheme 保持同步）
+  const terminalTheme = useThemeStore((s) => s.terminalTheme);
 
   // 只订阅本项目的 session 状态（避免其他项目变化触发重渲染）
   const session = useTerminalStore((s) => s.sessions[projectPath] ?? null);
@@ -167,6 +168,18 @@ export default function Terminal({ projectPath, className }: TerminalProps) {
     const attachAddon = new AttachAddon(wsRef.current);
     termRef.current.loadAddon(attachAddon);
 
+    // PTY 默认以 80x24 启动；连接成功后立即同步 xterm.js 实际尺寸到 PTY
+    // 这是解决光标乱跑的关键：确保 PTY SIGWINCH 在用户开始输入前就已生效
+    // 使用 projectPath（而非 activeProjectPath）精确定位本项目的 PTY
+    if (fitAddonRef.current && termRef.current) {
+      try {
+        fitAddonRef.current.fit();
+        resize(termRef.current.cols, termRef.current.rows, projectPath).catch(() => {});
+      } catch {
+        // fit 可能因容器未就绪而抛出，忽略
+      }
+    }
+
     return () => {
       attachAddon.dispose();
     };
@@ -194,14 +207,21 @@ export default function Terminal({ projectPath, className }: TerminalProps) {
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const observer = new ResizeObserver(() => {
+    const observer = new ResizeObserver((entries) => {
+      // 容器尺寸为 0（display:none 隐藏状态）时跳过
+      // 多项目场景：被隐藏的 Terminal 容器变为 0x0 时不应触发 resize，
+      // 否则 resize(0,0) 会通过 activeProjectPath 把当前活跃 PTY 的尺寸清零，
+      // 导致终端光标位置完全错乱
+      const entry = entries[0];
+      if (!entry || entry.contentRect.width === 0 || entry.contentRect.height === 0) return;
+
       if (!fitAddonRef.current || !termRef.current || !session) return;
       try {
         fitAddonRef.current.fit();
         const cols = termRef.current.cols;
         const rows = termRef.current.rows;
-        // 通知后端 PTY 调整窗口尺寸（SIGWINCH）
-        resize(cols, rows).catch(() => {
+        // 通知后端 PTY 调整窗口尺寸（SIGWINCH），精确指定本项目 PTY
+        resize(cols, rows, projectPath).catch(() => {
           // resize 失败不阻塞渲染，静默处理
         });
       } catch {

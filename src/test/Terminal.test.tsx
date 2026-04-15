@@ -231,11 +231,11 @@ describe('Terminal', () => {
     });
 
     it('应把终端设置传给 xterm 实例', async () => {
+      // theme 字段已从 TerminalSettings 移除，现由 appTheme 统一控制整个应用配色
       useSettingsStore.getState().updateTerminalSettings({
         fontSize: 15,
         fontFamily: 'Fira Code, monospace',
         cursorStyle: 'underline',
-        theme: 'ghostterm-light',
       });
 
       render(<Terminal projectPath={TEST_PROJECT_PATH} />);

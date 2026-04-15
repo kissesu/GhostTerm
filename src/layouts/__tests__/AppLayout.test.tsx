@@ -17,9 +17,13 @@ const mockInvoke = vi.mocked(invoke);
 
 // AppLayout 测试只验证布局/键盘行为，特性组件 mock 为轻量占位
 // 避免 xterm.js/CodeMirror 依赖浏览器 API 在 jsdom 中报错
-vi.mock('../../features/terminal', () => ({
-  Terminal: () => <div data-testid="terminal-panel">终端</div>,
-}));
+vi.mock('../../features/terminal', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../features/terminal')>();
+  return {
+    ...actual,
+    Terminal: () => <div data-testid="terminal-panel">终端</div>,
+  };
+});
 vi.mock('../../features/editor', () => ({
   Editor: () => <div data-testid="editor-panel">编辑器</div>,
   EditorTabs: () => <div data-testid="editor-tabs" />,
@@ -181,10 +185,11 @@ describe('AppLayout - 面板滚动边界', () => {
 
     const group = screen.getByTestId('editor-tabs').parentElement?.parentElement;
     const editorPanel = screen.getByTestId('editor-panel').parentElement;
-    const terminalPanel = screen.getByTestId('terminal-panel').parentElement;
+    // 终端面板是 PanelGroup 的最后一个 Panel，包裹多个 Terminal 实例用 display:none 保留 scrollback
+    const terminalPanelRoot = screen.getByTestId('editor-tabs').parentElement?.parentElement?.parentElement?.lastElementChild;
 
     expect(group).toHaveStyle({ minWidth: '0', minHeight: '0' });
     expect(editorPanel).toHaveStyle({ minWidth: '0', minHeight: '0', overflow: 'hidden' });
-    expect(terminalPanel).toHaveStyle({ minWidth: '0', minHeight: '0', overflow: 'hidden' });
+    expect(terminalPanelRoot).toHaveStyle({ minWidth: '0', minHeight: '0', overflow: 'hidden' });
   });
 });

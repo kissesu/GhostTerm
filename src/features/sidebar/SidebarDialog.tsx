@@ -1,3 +1,11 @@
+/**
+ * @file SidebarDialog.tsx - 侧边栏通用对话框组件
+ * @description 半透明遮罩 + 居中弹窗，供新建/重命名/删除分组等场景使用。
+ *              样式全部使用 CSS 自定义属性适配主题。
+ * @author Atlas.oi
+ * @date 2026-04-15
+ */
+
 import { useEffect, type CSSProperties, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 
@@ -15,28 +23,26 @@ interface SidebarDialogProps {
 export function dialogButtonStyle(variant: 'secondary' | 'primary' | 'danger' = 'secondary'): CSSProperties {
   if (variant === 'primary') {
     return {
-      border: '1px solid #4b67c0',
-      background: '#4c6ef5',
-      color: '#eef0ff',
+      border: '1px solid var(--c-accent)',
+      background: 'var(--c-accent)',
+      color: 'var(--c-accent-text)',
       fontWeight: 600,
       cursor: 'pointer',
     };
   }
-
   if (variant === 'danger') {
     return {
-      border: '1px solid #763b46',
-      background: '#5a2b34',
-      color: '#ffd9dd',
+      border: '1px solid var(--c-danger)',
+      background: 'var(--c-danger-dim)',
+      color: 'var(--c-danger)',
       fontWeight: 600,
       cursor: 'pointer',
     };
   }
-
   return {
-    border: '1px solid #353852',
-    background: '#26293d',
-    color: '#c0caf5',
+    border: '1px solid var(--c-border)',
+    background: 'var(--c-raised)',
+    color: 'var(--c-fg)',
     fontWeight: 500,
     cursor: 'pointer',
   };
@@ -45,14 +51,15 @@ export function dialogButtonStyle(variant: 'secondary' | 'primary' | 'danger' = 
 export function dialogInputStyle(): CSSProperties {
   return {
     width: '100%',
-    padding: '10px 12px',
-    borderRadius: 10,
-    border: '1px solid #353852',
-    background: '#16161e',
-    color: '#eef0ff',
+    padding: '9px 12px',
+    borderRadius: 'var(--r-md)',
+    border: '1px solid var(--c-border)',
+    background: 'var(--c-input)',
+    color: 'var(--c-fg)',
     fontSize: 13,
     outline: 'none',
     boxSizing: 'border-box',
+    fontFamily: 'var(--font-ui)',
   };
 }
 
@@ -68,11 +75,8 @@ export default function SidebarDialog({
 }: SidebarDialogProps) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
+      if (event.key === 'Escape') onClose();
     };
-
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
@@ -83,7 +87,7 @@ export default function SidebarDialog({
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(0,0,0,0.56)',
+        background: 'oklch(0% 0 0 / 0.55)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -100,20 +104,25 @@ export default function SidebarDialog({
         style={{
           width: 'min(100%, 100%)',
           maxWidth: width,
-          borderRadius: 16,
-          border: '1px solid #353852',
-          background: '#1e2030',
-          boxShadow: '0 22px 50px rgba(0,0,0,0.35)',
-          padding: '24px 24px 20px',
+          borderRadius: 'var(--r-xl)',
+          border: '1px solid var(--c-border)',
+          background: 'var(--c-overlay)',
+          boxShadow: 'var(--shadow-lg)',
+          padding: '22px 22px 18px',
           boxSizing: 'border-box',
         }}
         data-testid={testId}
       >
+        {/* 标题行 */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#eef0ff' }}>{title}</h2>
+            <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--c-fg)' }}>
+              {title}
+            </h2>
             {description ? (
-              <div style={{ marginTop: 8, fontSize: 12, color: '#8f96b5', lineHeight: 1.55 }}>{description}</div>
+              <div style={{ marginTop: 6, fontSize: 12, color: 'var(--c-fg-muted)', lineHeight: 1.55 }}>
+                {description}
+              </div>
             ) : null}
           </div>
           <button
@@ -123,22 +132,25 @@ export default function SidebarDialog({
             style={{
               background: 'transparent',
               border: 'none',
-              color: '#6f748f',
+              color: 'var(--c-fg-subtle)',
               padding: 4,
               cursor: 'pointer',
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
+              borderRadius: 'var(--r-xs)',
             }}
           >
-            <X size={18} />
+            <X size={16} />
           </button>
         </div>
 
-        {children ? <div style={{ marginTop: 18 }}>{children}</div> : null}
+        {children ? <div style={{ marginTop: 16 }}>{children}</div> : null}
 
         {footer ? (
-          <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>{footer}</div>
+          <div style={{ marginTop: 18, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            {footer}
+          </div>
         ) : null}
       </div>
     </div>

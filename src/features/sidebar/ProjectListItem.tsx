@@ -1,8 +1,9 @@
 /**
- * @file ProjectListItem.tsx
- * @description 项目列表单项组件 - 展示单个项目卡片，活跃项目时向下展开 Files/Changes/Worktrees 手风琴区域。
+ * @file ProjectListItem.tsx - 项目列表单项组件
+ * @description 展示单个项目卡片，活跃项目时向下展开 Files/Changes/Worktrees 手风琴区域。
+ *              重设计：去掉"左侧粗边框"反模式（skill DON'T），改用暖色背景 tint + 全边框。
  * @author Atlas.oi
- * @date 2026-04-13
+ * @date 2026-04-15
  */
 
 import { useEffect, useRef } from 'react';
@@ -18,7 +19,6 @@ import { useSidebarStore, type SidebarTab } from './sidebarStore';
 interface ProjectListItemProps {
   project: ProjectInfo;
   active: boolean;
-  /** 手风琴面板是否收起（点击当前项目名可切换） */
   collapsed: boolean;
   onSelect: (path: string) => void;
   onRemove: (projectPath: string) => void;
@@ -29,7 +29,6 @@ interface ProjectListItemProps {
   onAssignGroup: (projectPath: string, groupId: string) => void;
 }
 
-// 手风琴中的标签页定义，key 与 SidebarTab 类型一一对应
 const TABS: { key: SidebarTab; label: string }[] = [
   { key: 'files', label: 'Files' },
   { key: 'changes', label: 'Changes' },
@@ -56,27 +55,17 @@ export default function ProjectListItem({
   onToggleMenu,
   onAssignGroup,
 }: ProjectListItemProps) {
-  // 从全局侧边栏 store 获取当前激活标签和切换方法
   const { activeTab, setTab } = useSidebarStore();
   const itemRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!menuOpen) {
-      return;
-    }
-
+    if (!menuOpen) return;
     const handlePointerDown = (event: MouseEvent) => {
-      if (!itemRef.current?.contains(event.target as Node)) {
-        onToggleMenu(project.path);
-      }
+      if (!itemRef.current?.contains(event.target as Node)) onToggleMenu(project.path);
     };
-
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onToggleMenu(project.path);
-      }
+      if (event.key === 'Escape') onToggleMenu(project.path);
     };
-
     document.addEventListener('mousedown', handlePointerDown);
     document.addEventListener('keydown', handleKeyDown);
     return () => {
@@ -86,29 +75,28 @@ export default function ProjectListItem({
   }, [menuOpen, onToggleMenu, project.path]);
 
   return (
-    <div
-      ref={itemRef}
-      style={{
-        position: 'relative',
-      }}
-    >
-      {/* 项目卡片：活跃时只保留上圆角，下圆角由手风琴区域接管 */}
+    <div ref={itemRef} style={{ position: 'relative', padding: '0 8px 5px' }}>
+      {/* =========================================
+          项目卡片
+          活跃状态：暖色 tint 背景 + accent 全边框（替代旧的左侧粗边框反模式）
+          非活跃状态：raised 背景，无边框，视觉上轻盈
+          ========================================= */}
       <div
         data-testid={`project-card-${project.name}`}
         data-active={active ? 'true' : 'false'}
         style={{
           width: '100%',
-          border: 'none',
-          borderRadius: active ? '18px 18px 0 0' : 18,
-          background: active ? '#414868' : '#2b2e43',
-          color: '#eef0ff',
-          padding: '14px 16px',
+          borderRadius: active ? 'var(--r-md) var(--r-md) 0 0' : 'var(--r-md)',
+          border: active
+            ? '1px solid var(--c-accent-dim)'
+            : '1px solid transparent',
+          background: active ? 'var(--c-card-active)' : 'var(--c-raised)',
+          color: 'var(--c-fg)',
+          padding: '9px 10px 9px 12px',
           display: 'flex',
           alignItems: 'flex-start',
-          gap: 12,
-          boxShadow: active
-            ? '0 0 0 1px rgba(122,162,247,0.38), 0 14px 30px rgba(15,17,26,0.32)'
-            : 'none',
+          gap: 9,
+          transition: 'border-color var(--dur-base) var(--ease-out), background var(--dur-base) var(--ease-out)',
         }}
       >
         <button
@@ -119,7 +107,7 @@ export default function ProjectListItem({
             minWidth: 0,
             display: 'flex',
             alignItems: 'flex-start',
-            gap: 12,
+            gap: 9,
             border: 'none',
             background: 'transparent',
             color: 'inherit',
@@ -129,84 +117,79 @@ export default function ProjectListItem({
           }}
           aria-label={`打开项目 ${project.name}`}
         >
-          <span style={{ color: '#d4d8f5', marginTop: 2 }}>
-            <FolderCode size={20} />
+          {/* 文件夹图标 — 活跃时用 accent 色 */}
+          <span style={{
+            color: active ? 'var(--c-accent)' : 'var(--c-fg-subtle)',
+            marginTop: 2,
+            flexShrink: 0,
+            transition: 'color var(--dur-base) var(--ease-out)',
+          }}>
+            <FolderCode size={16} />
           </span>
           <span style={{ flex: 1, minWidth: 0 }}>
-            <span
-              style={{
-                display: 'block',
-                fontSize: 16,
-                fontWeight: 700,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
+            <span style={{
+              display: 'block',
+              fontSize: 13,
+              fontWeight: active ? 600 : 500,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              color: active ? 'var(--c-fg)' : 'var(--c-fg-muted)',
+              transition: 'color var(--dur-base) var(--ease-out)',
+            }}>
               {project.name}
             </span>
-            <span
-              style={{
-                display: 'block',
-                marginTop: 6,
-                fontSize: 12,
-                color: '#a0a5be',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
+            <span style={{
+              display: 'block',
+              marginTop: 2,
+              fontSize: 10,
+              color: 'var(--c-fg-subtle)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              letterSpacing: '0.01em',
+            }}>
               {shortenPath(project.path)}
             </span>
           </span>
         </button>
-        <span
+
+        {/* 分组管理按钮 */}
+        <button
+          type="button"
+          aria-label={`管理项目 ${project.name}`}
+          onClick={() => onToggleMenu(project.path)}
+          className="btn-icon"
           style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 8,
-            color: '#c7cadb',
-            flexShrink: 0,
+            width: 24, height: 24,
+            background: menuOpen ? 'var(--c-active)' : 'transparent',
+            color: menuOpen ? 'var(--c-fg)' : undefined,
           }}
         >
-          <button
-            type="button"
-            aria-label={`管理项目 ${project.name}`}
-            onClick={() => onToggleMenu(project.path)}
-            style={{
-              width: 28,
-              height: 28,
-              border: 'none',
-              borderRadius: 999,
-              background: menuOpen ? '#464c69' : 'transparent',
-              color: '#c7cadb',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <SlidersHorizontal size={16} />
-          </button>
-        </span>
+          <SlidersHorizontal size={12} />
+        </button>
       </div>
 
-      {/* 手风琴展开区域：仅活跃且未收起时展示，包含 Files/Changes/Worktrees 标签页 */}
+      {/* =========================================
+          手风琴展开区域
+          ========================================= */}
       {active && !collapsed && (
         <div
           data-testid={`accordion-panel-${project.name}`}
           style={{
-            background: '#1e2030',
-            borderRadius: '0 0 18px 18px',
+            background: 'var(--c-bg)',
+            borderRadius: '0 0 var(--r-md) var(--r-md)',
+            border: '1px solid var(--c-accent-dim)',
+            borderTop: 'none',
             overflow: 'hidden',
           }}
         >
-          {/* 标签页导航栏 */}
+          {/* 标签页导航 */}
           <div
             role="tablist"
             style={{
               display: 'flex',
-              borderBottom: '1px solid rgba(255,255,255,0.06)',
+              borderBottom: '1px solid var(--c-border-sub)',
             }}
           >
             {TABS.map(({ key, label }) => (
@@ -221,12 +204,16 @@ export default function ProjectListItem({
                   padding: '6px 0',
                   background: 'transparent',
                   border: 'none',
-                  borderBottom: activeTab === key ? '2px solid #7aa2f7' : '2px solid transparent',
+                  borderBottom: activeTab === key
+                    ? '2px solid var(--c-accent)'
+                    : '2px solid transparent',
                   cursor: 'pointer',
-                  color: activeTab === key ? '#c0caf5' : '#565f89',
-                  fontSize: 11,
+                  color: activeTab === key ? 'var(--c-fg)' : 'var(--c-fg-subtle)',
+                  fontSize: 10,
                   fontWeight: activeTab === key ? 600 : 400,
-                  transition: 'color 0.15s, border-bottom-color 0.15s',
+                  letterSpacing: '0.02em',
+                  fontFamily: 'var(--font-ui)',
+                  transition: 'color var(--dur-fast) var(--ease-out), border-bottom-color var(--dur-fast) var(--ease-out)',
                 }}
               >
                 {label}
@@ -234,10 +221,9 @@ export default function ProjectListItem({
             ))}
           </div>
 
-          {/* 标签页内容区域：高度自然增长，由外部侧边栏滚动容器统一管理滚动 */}
           <div>
-            {activeTab === 'files' && <FileTree />}
-            {activeTab === 'changes' && <Changes />}
+            {activeTab === 'files'     && <FileTree />}
+            {activeTab === 'changes'   && <Changes />}
             {activeTab === 'worktrees' && <Worktrees />}
           </div>
         </div>
@@ -250,14 +236,14 @@ export default function ProjectListItem({
           aria-label={`${project.name} 分组菜单`}
           style={{
             position: 'absolute',
-            top: 62,
-            right: 10,
+            top: 46,
+            right: 18,
             zIndex: 20,
             minWidth: 188,
-            borderRadius: 14,
-            border: '1px solid #4b4f67',
-            background: '#26293d',
-            boxShadow: '0 12px 24px rgba(0,0,0,0.26)',
+            borderRadius: 'var(--r-lg)',
+            border: '1px solid var(--c-border)',
+            background: 'var(--c-overlay)',
+            boxShadow: 'var(--shadow-menu)',
             overflow: 'hidden',
           }}
         >
@@ -273,25 +259,29 @@ export default function ProjectListItem({
                 style={{
                   width: '100%',
                   border: 'none',
-                  borderTop: index === 0 ? 'none' : '1px solid rgba(255,255,255,0.05)',
+                  borderTop: index === 0 ? 'none' : '1px solid var(--c-border-sub)',
                   background: 'transparent',
-                  color: '#eef0ff',
-                  padding: '11px 12px',
+                  color: 'var(--c-fg)',
+                  padding: '9px 12px',
                   display: 'flex',
                   alignItems: 'center',
                   gap: 10,
                   textAlign: 'left',
                   cursor: 'pointer',
+                  fontSize: 12,
+                  fontFamily: 'var(--font-ui)',
+                  transition: 'background var(--dur-fast) var(--ease-out)',
                 }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--c-hover)'; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
               >
-                <ProjectGroupIcon icon={group.icon} size={16} color="#eef0ff" />
+                <ProjectGroupIcon icon={group.icon} size={13} color="var(--c-fg-muted)" />
                 <span style={{ flex: 1, minWidth: 0 }}>{group.name}</span>
-                <span style={{ color: currentGroupId === group.id ? '#8fc2ff' : '#6f748f' }}>
-                  {currentGroupId === group.id ? '当前' : ''}
-                </span>
+                {currentGroupId === group.id && (
+                  <span style={{ fontSize: 10, color: 'var(--c-accent)', fontWeight: 700 }}>当前</span>
+                )}
               </button>
             ))}
-          {/* 从面板移除：只删除记录，不删除本地文件 */}
           <button
             type="button"
             role="menuitem"
@@ -300,16 +290,21 @@ export default function ProjectListItem({
             style={{
               width: '100%',
               border: 'none',
-              borderTop: '1px solid rgba(255,255,255,0.05)',
+              borderTop: '1px solid var(--c-border-sub)',
               background: 'transparent',
-              color: '#f29ba1',
-              padding: '11px 12px',
+              color: 'var(--c-danger)',
+              padding: '9px 12px',
               display: 'flex',
               alignItems: 'center',
               gap: 10,
               textAlign: 'left',
               cursor: 'pointer',
+              fontSize: 12,
+              fontFamily: 'var(--font-ui)',
+              transition: 'background var(--dur-fast) var(--ease-out)',
             }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--c-danger-dim)'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
           >
             <span style={{ flex: 1, minWidth: 0 }}>从面板移除</span>
           </button>

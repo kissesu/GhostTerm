@@ -233,7 +233,7 @@ export default function ProjectSelector() {
         minHeight: 0,
         display: 'flex',
         flexDirection: 'column',
-        background: '#2b2e43',
+        background: 'var(--c-panel)',
       }}
     >
       {/* 顶部固定区：分组头 + 搜索栏（flexShrink:0 确保不被压缩） */}
@@ -280,10 +280,10 @@ export default function ProjectSelector() {
             right: 8,
             zIndex: 41,
             width: 150,
-            borderRadius: 14,
-            border: '1px solid #4b4f67',
-            background: '#26293d',
-            boxShadow: '0 12px 24px rgba(0,0,0,0.26)',
+            borderRadius: 'var(--r-lg)',
+            border: '1px solid var(--c-border)',
+            background: 'var(--c-overlay)',
+            boxShadow: 'var(--shadow-menu)',
             overflow: 'hidden',
           }}
         >
@@ -294,7 +294,7 @@ export default function ProjectSelector() {
               width: '100%',
               border: 'none',
               background: 'transparent',
-              color: '#eef0ff',
+              color: 'var(--c-fg)',
               textAlign: 'left',
               padding: '12px 14px',
               cursor: 'pointer',
@@ -309,9 +309,9 @@ export default function ProjectSelector() {
               style={{
                 width: '100%',
                 border: 'none',
-                borderTop: '1px solid #3d425b',
+                borderTop: '1px solid var(--c-border-sub)',
                 background: 'transparent',
-                color: '#f29ba1',
+                color: 'var(--c-danger)',
                 textAlign: 'left',
                 padding: '12px 14px',
                 cursor: 'pointer',
@@ -366,7 +366,7 @@ export default function ProjectSelector() {
           )}
           testId="group-create-dialog"
         >
-          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#c0caf5', marginBottom: 8 }}>
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--c-fg)', marginBottom: 8 }}>
             分组名称
           </label>
           <input
@@ -403,7 +403,7 @@ export default function ProjectSelector() {
           )}
           testId="group-rename-dialog"
         >
-          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#c0caf5', marginBottom: 8 }}>
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--c-fg)', marginBottom: 8 }}>
             新名称
           </label>
           <input

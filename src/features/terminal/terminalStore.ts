@@ -49,8 +49,11 @@ export interface TerminalState {
   killProject: (projectPath: string) => Promise<void>;
   /** 重连指定项目 PTY（签发新 token） */
   reconnect: (projectPath: string) => Promise<void>;
-  /** 通知 Rust 后端当前活跃 PTY 的窗口尺寸变化 */
-  resize: (cols: number, rows: number) => Promise<void>;
+  /**
+   * 通知 Rust 后端 PTY 的窗口尺寸变化
+   * @param projectPath 可选，指定目标项目路径；省略时使用 activeProjectPath
+   */
+  resize: (cols: number, rows: number, projectPath?: string) => Promise<void>;
   /** 由 useTerminal hook 更新指定项目的连接状态 */
   setConnected: (projectPath: string, v: boolean) => void;
 }
@@ -140,10 +143,13 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
     }));
   },
 
-  resize: async (cols: number, rows: number) => {
+  resize: async (cols: number, rows: number, projectPath?: string) => {
     const { sessions, activeProjectPath } = get();
-    if (!activeProjectPath) return;
-    const session = sessions[activeProjectPath];
+    // 优先使用显式传入的 projectPath，其次用活跃项目路径
+    // 多项目场景下，后台项目连接时需要精确 resize 自己的 PTY，而非活跃 PTY
+    const path = projectPath ?? activeProjectPath;
+    if (!path) return;
+    const session = sessions[path];
     if (!session) return;
     await invoke('resize_pty_cmd', { ptyId: session.ptyId, cols, rows });
   },

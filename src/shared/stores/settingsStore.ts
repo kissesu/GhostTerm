@@ -1,9 +1,10 @@
 /**
  * @file settingsStore - 应用设置状态管理
- * @description 管理应用视图切换与终端设置。终端设置持久化到本地存储，
- *              应用视图不持久化，避免重启后停留在设置页。
+ * @description 管理应用视图切换与全局设置。
+ *              appTheme 控制整个应用的外观（dark/light/system），不再局限于终端。
+ *              终端设置管理 shell、字体等，主题已上移至应用级别。
  * @author Atlas.oi
- * @date 2026-04-13
+ * @date 2026-04-15
  */
 
 import { create } from 'zustand';
@@ -11,7 +12,9 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 
 export type AppView = 'main' | 'settings';
 export type TerminalCursorStyle = 'block' | 'underline' | 'bar';
-export type TerminalThemeId = 'ghostterm-dark' | 'ghostterm-light';
+
+/** 应用级主题：dark / light / system（跟随系统） */
+export type AppTheme = 'dark' | 'light' | 'system';
 
 export interface TerminalSettings {
   useSystemShell: boolean;
@@ -19,10 +22,10 @@ export interface TerminalSettings {
   fontSize: number;
   fontFamily: string;
   cursorStyle: TerminalCursorStyle;
-  theme: TerminalThemeId;
 }
 
 interface PersistedSettingsState {
+  appTheme: AppTheme;
   terminal: TerminalSettings;
 }
 
@@ -31,6 +34,7 @@ interface SettingsState extends PersistedSettingsState {
   setAppView: (view: AppView) => void;
   openSettings: () => void;
   closeSettings: () => void;
+  updateAppTheme: (theme: AppTheme) => void;
   updateTerminalSettings: (patch: Partial<TerminalSettings>) => void;
 }
 
@@ -38,20 +42,21 @@ export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   useSystemShell: true,
   customShellPath: '',
   fontSize: 13,
-  fontFamily: "Menlo, Monaco, 'Courier New', monospace",
+  fontFamily: "JetBrains Mono, Fira Code, Cascadia Code, SF Mono, Menlo, monospace",
   cursorStyle: 'block',
-  theme: 'ghostterm-dark',
 };
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
       appView: 'main',
+      appTheme: 'dark',
       terminal: DEFAULT_TERMINAL_SETTINGS,
 
       setAppView: (view) => set({ appView: view }),
       openSettings: () => set({ appView: 'settings' }),
       closeSettings: () => set({ appView: 'main' }),
+      updateAppTheme: (appTheme) => set({ appTheme }),
       updateTerminalSettings: (patch) =>
         set((state) => ({
           terminal: {
@@ -64,6 +69,7 @@ export const useSettingsStore = create<SettingsState>()(
       name: 'ghostterm-settings',
       storage: createJSONStorage(() => localStorage),
       partialize: (state): PersistedSettingsState => ({
+        appTheme: state.appTheme,
         terminal: state.terminal,
       }),
     },
