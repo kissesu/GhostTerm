@@ -36,6 +36,7 @@ export default function AppLayout() {
   const openSettings = useSettingsStore((s) => s.openSettings);
   const sessions = useTerminalStore((s) => s.sessions);
   const activateProject = useTerminalStore((s) => s.activateProject);
+  const killProject = useTerminalStore((s) => s.killProject);
 
   // 焦点面板状态：记录当前焦点在编辑器还是终端，供快捷键和 UI 使用
   const [activePanel, setActivePanel] = useState<'editor' | 'terminal'>('editor');
@@ -232,6 +233,73 @@ export default function AppLayout() {
             display: 'flex', flexDirection: 'column',
           }}
         >
+          {/* 终端工具栏：操作当前活跃项目的 PTY */}
+          <div
+            style={{
+              height: 28,
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              padding: '0 8px',
+              background: '#16161e',
+              borderBottom: '1px solid #27293d',
+              gap: 4,
+            }}
+          >
+            <span style={{ flex: 1, fontSize: 11, color: '#565f89', userSelect: 'none' }}>
+              终端
+            </span>
+
+            {/* 重启按钮：仅当活跃项目有 session 时显示 */}
+            {activeProjectPath && sessions[activeProjectPath] && (
+              <button
+                onClick={() => {
+                  useTerminalStore.getState().spawnForProject(activeProjectPath, activeProjectPath)
+                    .catch(() => {});
+                }}
+                aria-label="重启终端"
+                title="重启终端"
+                style={{
+                  width: 20, height: 20, border: 'none', background: 'transparent',
+                  color: '#565f89', cursor: 'pointer', borderRadius: 3,
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  padding: 0,
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path
+                    d="M13.65 2.35A8 8 0 1 0 15 8h-2a6 6 0 1 1-1.1-3.45l-1.4 1.4V2h4v4l-1.85-1.65Z"
+                    fill="currentColor"
+                  />
+                </svg>
+              </button>
+            )}
+
+            {/* 关闭按钮：仅当活跃项目有 session 时显示 */}
+            {activeProjectPath && sessions[activeProjectPath] && (
+              <button
+                onClick={() => killProject(activeProjectPath)}
+                aria-label="关闭终端"
+                title="关闭终端"
+                style={{
+                  width: 20, height: 20, border: 'none', background: 'transparent',
+                  color: '#565f89', cursor: 'pointer', borderRadius: 3,
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  padding: 0,
+                }}
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                  <path
+                    d="M1 1l8 8M9 1L1 9"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
+            )}
+          </div>
+
           {/* 占位状态 1：无活跃项目 */}
           {!activeProjectPath && (
             <div

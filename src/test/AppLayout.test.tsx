@@ -9,6 +9,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { invoke } from '@tauri-apps/api/core';
 import AppLayout from '../layouts/AppLayout';
 import { useSidebarStore } from '../features/sidebar';
@@ -24,6 +25,8 @@ vi.mock('../features/terminal', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../features/terminal')>();
   return {
     ...actual,
+    // 必须导出 useTerminalStore，否则 AppLayout 中的导入会失败
+    useTerminalStore: actual.useTerminalStore,
     Terminal: ({ projectPath }: { projectPath: string }) => (
       <div data-testid={`terminal-panel-${projectPath}`}>终端</div>
     ),
@@ -85,5 +88,52 @@ describe('AppLayout', () => {
     render(<AppLayout />);
 
     expect(screen.getByRole('button', { name: '启动终端' })).toBeInTheDocument();
+  });
+
+  it('活跃项目有 session 时显示关闭终端按钮', () => {
+    useTerminalStore.setState({
+      sessions: {
+        '/proj-a': { ptyId: 'pty-a', wsPort: 9001, wsToken: 'tok-a', connected: true },
+      },
+      activeProjectPath: '/proj-a',
+    });
+    useProjectStore.setState({
+      currentProject: { name: 'proj-a', path: '/proj-a', last_opened: 0 },
+      recentProjects: [],
+    });
+
+    render(<AppLayout />);
+
+    expect(screen.getByRole('button', { name: '关闭终端' })).toBeInTheDocument();
+  });
+
+  it('点击关闭终端按钮调用 killProject', async () => {
+    const user = userEvent.setup();
+    const killProject = vi.fn().mockResolvedValue(undefined);
+    useTerminalStore.setState({
+      sessions: {
+        '/proj-a': { ptyId: 'pty-a', wsPort: 9001, wsToken: 'tok-a', connected: true },
+      },
+      activeProjectPath: '/proj-a',
+      killProject,
+    } as any);
+    useProjectStore.setState({
+      currentProject: { name: 'proj-a', path: '/proj-a', last_opened: 0 },
+      recentProjects: [],
+    });
+
+    render(<AppLayout />);
+    await user.click(screen.getByRole('button', { name: '关闭终端' }));
+
+    expect(killProject).toHaveBeenCalledWith('/proj-a');
+  });
+
+  it('无活跃项目时不显示关闭终端按钮', () => {
+    useTerminalStore.setState({ sessions: {}, activeProjectPath: null });
+    useProjectStore.setState({ currentProject: null, recentProjects: [] });
+
+    render(<AppLayout />);
+
+    expect(screen.queryByRole('button', { name: '关闭终端' })).not.toBeInTheDocument();
   });
 });
