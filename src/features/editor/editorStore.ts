@@ -115,7 +115,8 @@ interface EditorState {
   /** 所有已激活过的项目编辑器会话，key = projectPath */
   projectSessions: Record<string, EditorSession>;
   /**
-   * 将当前 openFiles/activeFilePath 快照保存到 projectSessions[projectPath]
+   * 将当前 openFiles/activeFilePath 完整快照保存到 projectSessions[projectPath]
+   * 包含文件内容和脏标记，切换项目时无需重新读磁盘
    * 在 openProject 切换前调用，防止状态丢失
    */
   saveSession: (projectPath: string) => void;
@@ -245,12 +246,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   saveSession: (projectPath: string) => {
-    const { openFiles, activeFilePath } = get();
-    // 只保存文件路径和激活状态，内容从磁盘重新读取（节省内存）
     set((state) => ({
       projectSessions: {
         ...state.projectSessions,
-        [projectPath]: { openFiles, activeFilePath },
+        [projectPath]: {
+          openFiles: state.openFiles,
+          activeFilePath: state.activeFilePath,
+        },
       },
     }));
   },

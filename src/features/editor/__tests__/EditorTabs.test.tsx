@@ -207,7 +207,6 @@ describe('EditorTabs', () => {
 
 describe('per-project session isolation', () => {
   it('saveSession 保存当前 openFiles 到 projectSessions', () => {
-    const store = useEditorStore.getState();
     useEditorStore.setState({
       openFiles: [
         { path: '/proj-a/src/main.ts', content: 'hello', diskContent: 'hello',
@@ -215,7 +214,7 @@ describe('per-project session isolation', () => {
       ],
       activeFilePath: '/proj-a/src/main.ts',
     });
-    store.saveSession('/proj-a');
+    useEditorStore.getState().saveSession('/proj-a');
     const sessions = useEditorStore.getState().projectSessions;
     expect(sessions['/proj-a']?.openFiles).toHaveLength(1);
     expect(sessions['/proj-a']?.activeFilePath).toBe('/proj-a/src/main.ts');
