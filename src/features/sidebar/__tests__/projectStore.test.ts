@@ -156,7 +156,18 @@ vi.mock('../../editor/editorStore', () => ({
       restoreSession: mockRestoreSession,
       persistSession: mockPersistSession,
       loadPersistedSession: mockLoadPersistedSession,
+      activeFilePath: null,
+      openFile: vi.fn().mockResolvedValue(undefined),
     }),
+  },
+}));
+
+// terminalStore mock —— openProject 第五步调用 activateProject
+const mockActivateProject = vi.fn().mockResolvedValue(undefined);
+
+vi.mock('../../terminal/terminalStore', () => ({
+  useTerminalStore: {
+    getState: () => ({ activateProject: mockActivateProject }),
   },
 }));
 
@@ -167,6 +178,9 @@ describe('projectStore - openProject（PBI-6.4 协调链路）', () => {
     mockRefreshGitStatus.mockClear();
     mockRefreshWorktrees.mockClear();
     mockCloseAll.mockClear();
+    mockSaveSession.mockClear();
+    mockRestoreSession.mockClear();
+    mockActivateProject.mockClear();
   });
 
   it('openProject 应更新 currentProject', async () => {
@@ -204,15 +218,15 @@ describe('projectStore - openProject（PBI-6.4 协调链路）', () => {
     expect(mockRefreshWorktrees).toHaveBeenCalledWith('/Users/test/ghostterm');
   });
 
-  it('openProject 应调用 editorStore.closeAll 清除旧文件', async () => {
+  it('openProject 应调用 editorStore.restoreSession 切换到新项目编辑器状态', async () => {
     mockInvoke
       .mockResolvedValueOnce(sampleProject)
       .mockResolvedValueOnce([sampleProject]);
 
     await useProjectStore.getState().openProject('/Users/test/ghostterm');
 
-    // 切换项目时应关闭所有已打开的编辑器文件
-    expect(mockCloseAll).toHaveBeenCalledTimes(1);
+    // 切换项目时应恢复新项目的编辑器会话（无记录时等同于清空所有标签页）
+    expect(mockRestoreSession).toHaveBeenCalledWith('/Users/test/ghostterm');
   });
 
   it('openProject 应刷新 recentProjects', async () => {
