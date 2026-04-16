@@ -1,6 +1,6 @@
 [package]
 name = "ghostterm"
-version = "0.2.8"
+version = "0.2.9"
 description = "GhostTerm - 轻量级代码编辑器 + 终端一体化工具，深度集成 Claude Code"
 authors = ["Atlas.oi"]
 edition = "2021"

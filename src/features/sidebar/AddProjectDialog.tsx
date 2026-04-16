@@ -119,9 +119,13 @@ export default function AddProjectDialog({ onClose }: AddProjectDialogProps) {
   const handleCreateGroup = () => {
     const name = window.prompt('请输入新分组名称');
     if (!name?.trim()) return;
-    const nextGroup = createGroup(name.trim());
-    setSelectedGroupId(nextGroup.id);
-    setGroupDropdownOpen(false);
+    try {
+      const nextGroup = createGroup(name.trim());
+      setSelectedGroupId(nextGroup.id);
+      setGroupDropdownOpen(false);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : String(err));
+    }
   };
 
   const getSubmitPayload = () => {

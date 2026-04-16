@@ -143,7 +143,7 @@ export function filterProjectsByGrouping(
 
 export const useProjectGroupingStore = create<ProjectGroupingState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       groups: [],
       systemGroupNames: {},
       selectedGroupId: 'all',
@@ -154,6 +154,18 @@ export const useProjectGroupingStore = create<ProjectGroupingState>()(
         const normalized = normalizeName(name);
         if (!normalized) {
           throw new Error('分组名称不能为空');
+        }
+
+        // 检查与已有自定义分组及重命名后的系统分组是否重名
+        const { groups: existingGroups, systemGroupNames: existingSysNames } = get();
+        const occupiedNames = new Set([
+          ...existingGroups.map((g) => g.name.toLowerCase()),
+          ...Object.values(existingSysNames)
+            .filter((n): n is string => !!n)
+            .map((n) => n.toLowerCase()),
+        ]);
+        if (occupiedNames.has(normalized.toLowerCase())) {
+          throw new Error(`分组名称"${normalized}"已存在`);
         }
 
         const group: ProjectGroup = {
@@ -174,6 +186,25 @@ export const useProjectGroupingStore = create<ProjectGroupingState>()(
       renameGroup: (groupId, name) => {
         const normalized = normalizeName(name);
         if (!normalized) return;
+        if (groupId === 'all') return;
+
+        // 检查重命名目标名称是否与其他分组重名（排除自身）
+        const { groups: existingGroups, systemGroupNames: existingSysNames } = get();
+        const occupiedNames = new Set([
+          // 所有自定义分组名（排除自身）
+          ...existingGroups
+            .filter((g) => g.id !== groupId)
+            .map((g) => g.name.toLowerCase()),
+          // 系统分组重命名（排除 ungrouped 自身）
+          ...Object.entries(existingSysNames)
+            .filter(([key]) => !(groupId === 'ungrouped' && key === 'ungrouped'))
+            .map(([, val]) => val?.toLowerCase())
+            .filter((n): n is string => !!n),
+        ]);
+        if (occupiedNames.has(normalized.toLowerCase())) {
+          throw new Error(`分组名称"${normalized}"已存在`);
+        }
+
         if (groupId === 'ungrouped') {
           set((state) => ({
             systemGroupNames: {
@@ -183,7 +214,6 @@ export const useProjectGroupingStore = create<ProjectGroupingState>()(
           }));
           return;
         }
-        if (groupId === 'all') return;
         set((state) => ({
           groups: state.groups.map((group) =>
             group.id === groupId ? { ...group, name: normalized } : group,

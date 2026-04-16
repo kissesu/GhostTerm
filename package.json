@@ -40,10 +40,12 @@
     "@xterm/addon-webgl": "^0.18",
     "@xterm/xterm": "^5",
     "codemirror": "^6.0.2",
+    "docx-preview": "^0.3.7",
     "lucide-react": "^0.511.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-resizable-panels": "^2",
+    "xlsx": "^0.18.5",
     "zustand": "^5"
   },
   "devDependencies": {

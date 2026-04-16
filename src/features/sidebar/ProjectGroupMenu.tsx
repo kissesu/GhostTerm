@@ -1,4 +1,4 @@
-import { Plus } from 'lucide-react';
+import { Plus, Check } from 'lucide-react';
 import ProjectGroupIcon from './ProjectGroupIcon';
 import type { VisibleProjectGroup } from './projectGroupingStore';
 
@@ -23,62 +23,75 @@ export default function ProjectGroupMenu({
         left: 8,
         right: 8,
         zIndex: 40,
-        background: '#26293d',
-        border: '1px solid #4b4f67',
-        borderRadius: 16,
-        padding: '10px 0',
-        boxShadow: '0 16px 32px rgba(0, 0, 0, 0.28)',
+        background: 'var(--c-overlay)',
+        border: '1px solid var(--c-border)',
+        borderRadius: 10,
+        padding: '4px 0',
+        boxShadow: 'var(--shadow-lg)',
       }}
       data-testid="project-group-menu"
     >
-      {groups.map((group, index) => (
-        <button
-          key={group.id}
-          type="button"
-          onClick={() => onSelectGroup(group.id)}
-          style={{
-            width: '100%',
-            border: 'none',
-            background: 'transparent',
-            color: '#eef0ff',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            padding: '12px 16px',
-            cursor: 'pointer',
-            borderTop: index === 0 ? 'none' : '1px solid rgba(255,255,255,0.04)',
-          }}
-          aria-label={`切换到${group.name}`}
-        >
-          <span
+      {groups.map((group) => {
+        const active = selectedGroupId === group.id;
+        return (
+          <button
+            key={group.id}
+            type="button"
+            onClick={() => onSelectGroup(group.id)}
             style={{
-              width: 24,
-              height: 24,
-              display: 'inline-flex',
+              width: '100%',
+              border: 'none',
+              background: active ? 'var(--c-active)' : 'transparent',
+              color: 'var(--c-fg)',
+              display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
+              gap: 8,
+              padding: '7px 12px',
+              cursor: 'pointer',
+              fontSize: 13,
+              fontFamily: 'var(--font-ui)',
+              transition: 'background var(--dur-fast) var(--ease-out)',
+            }}
+            aria-label={`切换到${group.name}`}
+            onMouseEnter={(e) => {
+              if (!active) (e.currentTarget as HTMLButtonElement).style.background = 'var(--c-hover)';
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.background = active ? 'var(--c-active)' : 'transparent';
             }}
           >
-            <ProjectGroupIcon icon={group.icon} size={18} color="#eef0ff" />
-          </span>
-          <span
-            style={{
-              width: 12,
-              height: 12,
-              borderRadius: 999,
-              background: group.color,
-              flexShrink: 0,
-            }}
-          />
-          <span style={{ flex: 1, minWidth: 0, textAlign: 'left', fontSize: 16 }}>{group.name}</span>
-          <span style={{ fontSize: 15, color: '#b9bdd2' }}>{group.projectCount}</span>
-          <span style={{ width: 18, textAlign: 'center', color: '#eef0ff' }}>
-            {selectedGroupId === group.id ? '✓' : ''}
-          </span>
-        </button>
-      ))}
-      <div style={{ borderTop: '1px solid #434762', marginTop: 8, paddingTop: 8 }}>
+            {/* 分组类型图标 */}
+            <span style={{ flexShrink: 0, color: 'var(--c-fg-muted)', display: 'flex' }}>
+              <ProjectGroupIcon icon={group.icon} size={13} color="currentColor" />
+            </span>
+            {/* 颜色标记点 */}
+            <span
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                background: group.color,
+                flexShrink: 0,
+              }}
+            />
+            {/* 分组名称 */}
+            <span style={{ flex: 1, minWidth: 0, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {group.name}
+            </span>
+            {/* 项目数 */}
+            <span style={{ fontSize: 11, color: 'var(--c-fg-subtle)', fontVariantNumeric: 'tabular-nums' }}>
+              {group.projectCount}
+            </span>
+            {/* 选中勾 */}
+            <span style={{ width: 14, display: 'flex', justifyContent: 'center', color: 'var(--c-accent)', flexShrink: 0 }}>
+              {active && <Check size={12} strokeWidth={2.5} />}
+            </span>
+          </button>
+        );
+      })}
+
+      {/* 新建分组 */}
+      <div style={{ borderTop: '1px solid var(--c-border-sub)', margin: '4px 0 0' }}>
         <button
           type="button"
           onClick={onCreateGroup}
@@ -86,16 +99,20 @@ export default function ProjectGroupMenu({
             width: '100%',
             border: 'none',
             background: 'transparent',
-            color: '#d7d9e8',
+            color: 'var(--c-fg-muted)',
             display: 'flex',
             alignItems: 'center',
-            gap: 12,
-            padding: '12px 16px',
+            gap: 8,
+            padding: '7px 12px',
             cursor: 'pointer',
-            fontSize: 16,
+            fontSize: 13,
+            fontFamily: 'var(--font-ui)',
+            transition: 'background var(--dur-fast) var(--ease-out)',
           }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--c-hover)'; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
         >
-          <Plus size={20} />
+          <Plus size={13} strokeWidth={2} />
           <span>新建分组</span>
         </button>
       </div>

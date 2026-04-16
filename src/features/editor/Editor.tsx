@@ -16,6 +16,13 @@ import { oneDark } from '@codemirror/theme-one-dark';
 import type { LanguageSupport } from '@codemirror/language';
 import { useEditorStore } from './editorStore';
 import { useThemeStore } from '../../shared/stores/themeStore';
+import { WordPreview } from './WordPreview';
+import { SpreadsheetPreview } from './SpreadsheetPreview';
+
+/** 根据文件路径后缀判断是否为 Word 文档 */
+const WORD_EXTS = new Set(['docx', 'doc']);
+/** 根据文件路径后缀判断是否为 Excel 表格 */
+const SHEET_EXTS = new Set(['xlsx', 'xls']);
 
 /** 语言包动态映射表 - 按需 import 避免打包体积过大 */
 const LANG_MAP: Record<string, () => Promise<LanguageSupport>> = {
@@ -297,9 +304,19 @@ export default function Editor() {
     );
   }
 
-  // 二进制文件：图片类型渲染预览，其他类型展示占位符
+  // 二进制文件：按扩展名路由到图片/Word/Excel 预览，其他类型展示占位符
   if (activeFile.kind === 'binary') {
+    const ext = activeFile.path.split('.').pop()?.toLowerCase() ?? '';
     const isImage = activeFile.mimeHint?.startsWith('image/') ?? false;
+
+    if (WORD_EXTS.has(ext)) {
+      return <WordPreview path={activeFile.path} />;
+    }
+
+    if (SHEET_EXTS.has(ext)) {
+      return <SpreadsheetPreview path={activeFile.path} />;
+    }
+
     if (isImage) {
       return (
         <ImagePreview path={activeFile.path} mimeHint={activeFile.mimeHint!} />

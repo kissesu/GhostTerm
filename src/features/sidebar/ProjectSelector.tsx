@@ -49,6 +49,7 @@ export default function ProjectSelector() {
   const [projectMenuPath, setProjectMenuPath] = useState<string>();
   const [groupDialogMode, setGroupDialogMode] = useState<GroupDialogMode>(null);
   const [groupNameInput, setGroupNameInput] = useState('');
+  const [groupNameError, setGroupNameError] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
   const groupMenuRef = useRef<HTMLDivElement>(null);
   const editMenuRef = useRef<HTMLDivElement>(null);
@@ -185,6 +186,7 @@ export default function ProjectSelector() {
   const closeGroupDialog = () => {
     setGroupDialogMode(null);
     setGroupNameInput('');
+    setGroupNameError('');
   };
 
   const openCreateGroupDialog = () => {
@@ -215,15 +217,23 @@ export default function ProjectSelector() {
   const submitCreateGroup = () => {
     const name = groupNameInput.trim();
     if (!name) return;
-    createGroup(name);
-    closeGroupDialog();
+    try {
+      createGroup(name);
+      closeGroupDialog();
+    } catch (err) {
+      setGroupNameError(String(err instanceof Error ? err.message : err));
+    }
   };
 
   const submitRenameGroup = () => {
     const name = groupNameInput.trim();
     if (!name || currentGroup.id === 'all') return;
-    renameGroup(currentGroup.id, name);
-    closeGroupDialog();
+    try {
+      renameGroup(currentGroup.id, name);
+      closeGroupDialog();
+    } catch (err) {
+      setGroupNameError(String(err instanceof Error ? err.message : err));
+    }
   };
 
   const submitDeleteGroup = () => {
@@ -380,7 +390,7 @@ export default function ProjectSelector() {
             autoFocus
             type="text"
             value={groupNameInput}
-            onChange={(event) => setGroupNameInput(event.target.value)}
+            onChange={(event) => { setGroupNameInput(event.target.value); setGroupNameError(''); }}
             onKeyDown={(event) => {
               if (event.key === 'Enter' && groupNameInput.trim()) {
                 submitCreateGroup();
@@ -390,6 +400,9 @@ export default function ProjectSelector() {
             style={dialogInputStyle()}
             data-testid="group-name-input"
           />
+          {groupNameError && (
+            <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--c-danger)' }}>{groupNameError}</p>
+          )}
         </SidebarDialog>
       )}
 
@@ -417,7 +430,7 @@ export default function ProjectSelector() {
             autoFocus
             type="text"
             value={groupNameInput}
-            onChange={(event) => setGroupNameInput(event.target.value)}
+            onChange={(event) => { setGroupNameInput(event.target.value); setGroupNameError(''); }}
             onKeyDown={(event) => {
               if (event.key === 'Enter' && groupNameInput.trim()) {
                 submitRenameGroup();
@@ -426,6 +439,9 @@ export default function ProjectSelector() {
             style={dialogInputStyle()}
             data-testid="group-rename-input"
           />
+          {groupNameError && (
+            <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--c-danger)' }}>{groupNameError}</p>
+          )}
         </SidebarDialog>
       )}
 
