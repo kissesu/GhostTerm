@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { FolderCode, SlidersHorizontal } from 'lucide-react';
+import { FolderCode, SlidersHorizontal, Search } from 'lucide-react';
 import { useSearchStore } from '../search';
 import type { ProjectInfo } from '../../shared/types';
 import Changes from './Changes';
@@ -167,7 +167,7 @@ export default function ProjectListItem({
             className="btn-icon"
             style={{ width: 24, height: 24, background: 'transparent' }}
           >
-            <i className="fa-solid fa-magnifying-glass" style={{ fontSize: 11 }} />
+            <Search size={12} />
           </button>
         )}
 

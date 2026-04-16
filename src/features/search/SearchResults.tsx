@@ -6,6 +6,7 @@
  */
 
 import React from 'react';
+import { FileCode } from 'lucide-react';
 import { useSearchStore } from './searchStore';
 
 /**
@@ -107,7 +108,7 @@ export default function SearchResults() {
               zIndex: 1,
             }}
           >
-            <i className="fa-solid fa-file-code" style={{ fontSize: 11 }} />
+            <FileCode size={12} style={{ flexShrink: 0 }} />
             <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {fileResult.filePath}
             </span>

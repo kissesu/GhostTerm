@@ -7,6 +7,7 @@
  */
 
 import { useEffect, type ReactNode } from 'react';
+import { Search } from 'lucide-react';
 import { useSearchStore } from './searchStore';
 import SearchResults from './SearchResults';
 import SearchPreview from './SearchPreview';
@@ -169,10 +170,7 @@ export default function SearchModal() {
             borderBottom: '1px solid var(--c-border)',
           }}
         >
-          <i
-            className="fa-solid fa-magnifying-glass"
-            style={{ color: 'var(--c-fg-subtle)', fontSize: 14 }}
-          />
+          <Search size={14} style={{ color: 'var(--c-fg-subtle)', flexShrink: 0 }} />
           <input
             autoFocus
             value={query}
