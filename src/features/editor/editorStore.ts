@@ -93,7 +93,7 @@ interface EditorState {
   activeFilePath: string | null;
 
   /** 打开文件：invoke read_file_cmd → 根据 kind 设置 OpenFile */
-  openFile: (path: string) => Promise<void>;
+  openFile: (path: string, lineNumber?: number) => Promise<void>;
   /** 关闭文件：从 openFiles 中移除，切换 activeFilePath */
   closeFile: (path: string) => void;
   /** 关闭所有文件：切换项目时清空编辑器状态 */
@@ -112,6 +112,10 @@ interface EditorState {
   updateContent: (path: string, content: string) => void;
   /** 处理外部文件变化（PBI-4 时完整实现，此处为骨架） */
   handleExternalChange: (path: string) => Promise<void>;
+  /** 待滚动行号 map，key = 文件绝对路径，value = 1-based 行号 */
+  pendingScrollLine: Record<string, number>;
+  /** 清除待滚动行号（Editor.tsx 滚动完成后调用） */
+  clearPendingScroll: (path: string) => void;
   /** 所有已激活过的项目编辑器会话，key = projectPath */
   projectSessions: Record<string, EditorSession>;
   /**
@@ -135,8 +139,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   openFiles: [],
   activeFilePath: null,
   projectSessions: {},
+  // 初始化为空 map，文件打开时按需写入
+  pendingScrollLine: {},
 
-  openFile: async (path: string) => {
+  openFile: async (path: string, lineNumber?: number) => {
     const { openFiles } = get();
 
     // 文件已打开时，判断是否为占位文件（content 和 diskContent 均为空且无脏标记）
@@ -148,6 +154,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       if (!isPlaceholder) {
         // 已有内容的文件：仅切换 active，不重复读取
         set({ activeFilePath: path });
+        // 若调用方指定了行号，记录待滚动位置
+        if (lineNumber != null) {
+          set((state) => ({
+            pendingScrollLine: { ...state.pendingScrollLine, [path]: lineNumber },
+          }));
+        }
         return;
       }
       // 占位文件：不 return，继续向下从磁盘读取真实内容
@@ -167,6 +179,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         activeFilePath: path,
       };
     });
+
+    // 新文件或占位文件加载完成后，若调用方指定了行号，记录待滚动位置
+    if (lineNumber != null) {
+      set((state) => ({
+        pendingScrollLine: { ...state.pendingScrollLine, [path]: lineNumber },
+      }));
+    }
   },
 
   closeAll: () => {
@@ -214,6 +233,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   setActive: (path: string) => {
     set({ activeFilePath: path });
+  },
+
+  clearPendingScroll: (path: string) => {
+    // Editor.tsx 滚动完成后调用，删除对应条目，避免重复滚动
+    set((state) => {
+      const next = { ...state.pendingScrollLine };
+      delete next[path];
+      return { pendingScrollLine: next };
+    });
   },
 
   closeOthers: (path: string) => {

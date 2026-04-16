@@ -21,6 +21,7 @@ describe('editorStore', () => {
     useEditorStore.setState({
       openFiles: [],
       activeFilePath: null,
+      pendingScrollLine: {},
     });
   });
 
@@ -263,6 +264,57 @@ describe('editorStore', () => {
       // binary 文件不做任何更新
       const afterCall = useEditorStore.getState().openFiles[0];
       expect(afterCall).toStrictEqual(beforeCall);
+    });
+  });
+
+  describe('openFile with line number', () => {
+    it('新文件打开时设置 pendingScrollLine', async () => {
+      vi.mocked(invoke).mockResolvedValue({ kind: 'text', content: 'const x = 1;' });
+
+      const { useEditorStore } = await import('../editorStore');
+      await useEditorStore.getState().openFile('/project/src/main.ts', 5);
+
+      const state = useEditorStore.getState();
+      expect(state.pendingScrollLine['/project/src/main.ts']).toBe(5);
+    });
+
+    it('已打开文件切换激活时设置 pendingScrollLine', async () => {
+      vi.mocked(invoke).mockResolvedValue({ kind: 'text', content: 'hello' });
+
+      const { useEditorStore } = await import('../editorStore');
+      // 先打开，使文件进入 openFiles（非占位）
+      await useEditorStore.getState().openFile('/src/a.ts');
+      // 再次打开同路径并带行号
+      await useEditorStore.getState().openFile('/src/a.ts', 10);
+
+      const state = useEditorStore.getState();
+      // openFiles 不重复，但 pendingScrollLine 已写入
+      expect(state.openFiles).toHaveLength(1);
+      expect(state.pendingScrollLine['/src/a.ts']).toBe(10);
+    });
+
+    it('clearPendingScroll 删除对应条目', async () => {
+      vi.mocked(invoke).mockResolvedValue({ kind: 'text', content: 'x' });
+
+      const { useEditorStore } = await import('../editorStore');
+      await useEditorStore.getState().openFile('/src/a.ts', 3);
+      // 确认写入
+      expect(useEditorStore.getState().pendingScrollLine['/src/a.ts']).toBe(3);
+
+      // Editor 滚动完成后调用清除
+      useEditorStore.getState().clearPendingScroll('/src/a.ts');
+
+      // key 应被删除
+      expect(useEditorStore.getState().pendingScrollLine['/src/a.ts']).toBeUndefined();
+    });
+
+    it('不传 lineNumber 时不设置 pendingScrollLine', async () => {
+      vi.mocked(invoke).mockResolvedValue({ kind: 'text', content: 'x' });
+
+      const { useEditorStore } = await import('../editorStore');
+      await useEditorStore.getState().openFile('/src/a.ts');
+
+      expect(useEditorStore.getState().pendingScrollLine).toEqual({});
     });
   });
 

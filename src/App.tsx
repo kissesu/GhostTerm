@@ -13,11 +13,16 @@ import { useSettingsStore } from './shared/stores/settingsStore';
 import { syncTheme } from './shared/stores/themeStore';
 import { useUpdater } from './features/updater/useUpdater';
 import UpdateBanner from './features/updater/UpdateBanner';
+import { useOpenWithFile } from './shared/hooks/useOpenWithFile';
+import SearchModal from './features/search/SearchModal';
 
 function App() {
   const appView  = useSettingsStore((s) => s.appView);
   const appTheme = useSettingsStore((s) => s.appTheme);
   const [updateState, updateActions] = useUpdater();
+
+  // 处理系统"打开方式"传入的文件（macOS Apple Event + Windows CLI 参数）
+  useOpenWithFile();
 
   useEffect(() => {
     // 跟随系统偏好的 media query
@@ -61,6 +66,8 @@ function App() {
       )}
       {/* 更新提示横幅：有新版本时显示在窗口底部 */}
       <UpdateBanner state={updateState} actions={updateActions} />
+      {/* 搜索弹窗：isOpen 为 false 时内部自行返回 null，不影响性能 */}
+      <SearchModal />
     </>
   );
 }

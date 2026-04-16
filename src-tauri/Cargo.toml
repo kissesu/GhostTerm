@@ -42,6 +42,9 @@ notify = "7"
 # 文件路径忽略规则 - .gitignore 等排除规则
 ignore = "0.4"
 
+# 正则表达式引擎 - 用于全文搜索匹配
+regex = "1"
+
 # Git 操作 - 状态查询、暂存、Worktree 管理
 # default-features = false 禁用 ssh/https/http2 网络 transport，移除 OpenSSL 依赖
 # GhostTerm 只做本地 git 操作（status/stage/worktree），不需要任何网络传输

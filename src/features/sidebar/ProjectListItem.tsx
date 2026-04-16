@@ -8,6 +8,7 @@
 
 import { useEffect, useRef } from 'react';
 import { FolderCode, SlidersHorizontal } from 'lucide-react';
+import { useSearchStore } from '../search';
 import type { ProjectInfo } from '../../shared/types';
 import Changes from './Changes';
 import FileTree from './FileTree';
@@ -153,6 +154,22 @@ export default function ProjectListItem({
             </span>
           </span>
         </button>
+
+        {/* 搜索按钮：仅活跃项目显示，点击打开项目内全文搜索弹窗 */}
+        {active && (
+          <button
+            type="button"
+            aria-label={`搜索项目 ${project.name}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              useSearchStore.getState().open(project.path);
+            }}
+            className="btn-icon"
+            style={{ width: 24, height: 24, background: 'transparent' }}
+          >
+            <i className="fa-solid fa-magnifying-glass" style={{ fontSize: 11 }} />
+          </button>
+        )}
 
         {/* 分组管理按钮 */}
         <button

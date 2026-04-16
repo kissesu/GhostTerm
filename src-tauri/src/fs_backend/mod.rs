@@ -6,9 +6,12 @@
 
 pub mod watcher;
 pub mod security;
+pub mod search;
 
 // 导出 watcher 的 Tauri Commands，供 lib.rs 注册
 pub use watcher::{start_watching_cmd, stop_watching_cmd};
+// 导出搜索 Command，供 lib.rs 注册
+pub use search::search_files_cmd;
 
 use crate::types::{FileEntry, ReadFileResult};
 use security::check_write_path;

@@ -146,7 +146,7 @@ function ImagePreview({ path, mimeHint }: { path: string; mimeHint: string }) {
 }
 
 export default function Editor() {
-  const { openFiles, activeFilePath, saveFile, updateContent } = useEditorStore();
+  const { openFiles, activeFilePath, saveFile, updateContent, pendingScrollLine, clearPendingScroll } = useEditorStore();
   // 订阅已解析的主题模式（dark/light），驱动 CodeMirror 主题切换
   const mode = useThemeStore((s) => s.mode);
 
@@ -266,6 +266,28 @@ export default function Editor() {
       effects: themeCompartment.reconfigure(mode === 'dark' ? oneDark : ghosttermLight),
     });
   }, [mode]);
+
+  // ============================================
+  // Effect：监听 pendingScrollLine，滚动编辑器到指定行
+  // 由 searchStore.confirmSelection() 写入 pendingScrollLine，
+  // Editor 检测到后滚动到对应行并清除记录
+  // ============================================
+  useEffect(() => {
+    if (!viewRef.current || !activeFilePath) return;
+    const line = pendingScrollLine[activeFilePath];
+    if (line == null) return;
+
+    const doc = viewRef.current.state.doc;
+    // line 是 1-based，CodeMirror doc.line() 也是 1-based
+    if (line < 1 || line > doc.lines) return;
+
+    const lineObj = doc.line(line);
+    viewRef.current.dispatch({
+      selection: { anchor: lineObj.from },
+      effects: EditorView.scrollIntoView(lineObj.from, { y: 'center' }),
+    });
+    clearPendingScroll(activeFilePath);
+  }, [pendingScrollLine, activeFilePath, clearPendingScroll]);
 
   // ============================================
   // 组件卸载时销毁 CodeMirror 实例

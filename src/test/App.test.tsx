@@ -11,6 +11,16 @@ vi.mock('../features/settings', () => ({
   SettingsPage: () => <div data-testid="settings-page">设置页</div>,
 }));
 
+// SearchModal 使用 searchStore，searchStore 内有 invoke 调用，mock 避免测试环境报错
+vi.mock('../features/search/SearchModal', () => ({
+  default: () => null,
+}));
+
+// useOpenWithFile 在 mount 时调用 Tauri invoke/listen，mock 为 no-op 避免测试环境报错
+vi.mock('../shared/hooks/useOpenWithFile', () => ({
+  useOpenWithFile: () => undefined,
+}));
+
 describe('App', () => {
   beforeEach(() => {
     localStorage.clear();

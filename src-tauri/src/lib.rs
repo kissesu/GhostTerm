@@ -4,6 +4,8 @@
 // @author: Atlas.oi
 // @date: 2026-04-13
 
+use std::sync::Mutex;
+
 // ============================================
 // 模块声明
 // ============================================
@@ -17,7 +19,7 @@ pub mod project_manager;
 use pty_manager::{spawn_pty_cmd, kill_pty_cmd, resize_pty_cmd, reconnect_pty_cmd, get_default_shell_cmd};
 
 // PBI-2 Commands
-use fs_backend::{read_file_cmd, write_file_cmd, list_dir_cmd, create_entry_cmd, delete_entry_cmd, rename_entry_cmd, read_image_bytes_cmd};
+use fs_backend::{read_file_cmd, write_file_cmd, list_dir_cmd, create_entry_cmd, delete_entry_cmd, rename_entry_cmd, read_image_bytes_cmd, search_files_cmd};
 
 // PBI-4 Commands - 文件系统实时监听
 use fs_backend::{start_watching_cmd, stop_watching_cmd};
@@ -31,6 +33,22 @@ use git_backend::{git_status_cmd, git_stage_cmd, git_unstage_cmd, git_diff_cmd,
                   git_current_branch_cmd, worktree_switch_cmd};
 use git_backend::worktree::{worktree_list_cmd, worktree_add_cmd, worktree_remove_cmd};
 
+// ============================================
+// "打开方式"启动时暂存的文件路径队列
+// 用于解决 Rust 拿到路径时前端 WebView 尚未就绪的时序问题：
+//   macOS: RunEvent::Opened 在 setup 之后，但可能早于 WebView DOMContentLoaded
+//   Windows: setup 中读 CLI 参数，此时前端必然未就绪
+// 前端 mount 后调用 get_startup_files_cmd 主动拉取并清空队列
+// ============================================
+pub struct PendingFiles(pub Mutex<Vec<String>>);
+
+/// 前端 mount 后调用，获取并清空通过"打开方式"传入的文件路径列表
+#[tauri::command]
+fn get_startup_files_cmd(state: tauri::State<PendingFiles>) -> Vec<String> {
+    let mut queue = state.0.lock().unwrap();
+    std::mem::take(&mut *queue)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -43,6 +61,8 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         // E2E 测试支持（PBI-6 使用）
         .plugin(tauri_plugin_webdriver_automation::init())
+        // 注册"打开方式"文件队列状态
+        .manage(PendingFiles(Mutex::new(Vec::new())))
         // ============================================
         // macOS: 禁用 WKWebView 弹性滚动 + 设置深色背景
         // 通过原生 NSScrollView API 设置 scrollElasticity = None
@@ -50,6 +70,29 @@ pub fn run() {
         // ============================================
         .setup(|app| {
             use tauri::Manager;
+
+            // ============================================
+            // Windows: 通过"打开方式"启动时，文件路径以 CLI 参数传入
+            // args[0] 是可执行文件自身路径，args[1] 起才是用户传入的文件
+            // 过滤掉不存在或非文件的路径，只保留合法的文件路径
+            // ============================================
+            #[cfg(target_os = "windows")]
+            {
+                let file_args: Vec<String> = std::env::args()
+                    .skip(1)
+                    .filter(|arg| {
+                        let p = std::path::Path::new(arg);
+                        p.exists() && p.is_file()
+                    })
+                    .collect();
+
+                if !file_args.is_empty() {
+                    let state = app.state::<PendingFiles>();
+                    let mut queue = state.0.lock().unwrap();
+                    queue.extend(file_args);
+                }
+            }
+
             if let Some(win) = app.get_webview_window("main") {
                 // 设置窗口深色背景（消除 webview 与窗口之间的白色间隙）
                 use tauri::window::Color;
@@ -111,6 +154,7 @@ pub fn run() {
             delete_entry_cmd,
             rename_entry_cmd,
             read_image_bytes_cmd,
+            search_files_cmd,
             // PBI-3: 项目管理
             list_recent_projects_cmd,
             open_project_cmd,
@@ -133,7 +177,47 @@ pub fn run() {
             worktree_add_cmd,
             worktree_remove_cmd,
             worktree_switch_cmd,
+            // 打开方式：获取启动时传入的文件路径
+            get_startup_files_cmd,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        // ============================================
+        // 改用 build().run() 以便在 RunEvent 回调中处理 macOS"打开方式"事件
+        // RunEvent::Opened 在 macOS 上接收 kAEOpenDocuments Apple Event，
+        // 文件路径以 file:// URL 形式传入；
+        // 应用已运行时（如用户在 Finder 中再次"打开方式"）也会触发此事件，
+        // 此时直接 emit 给前端即可，无需经过 PendingFiles 队列
+        // ============================================
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            if let tauri::RunEvent::Opened { urls } = &event {
+                use tauri::{Emitter, Manager};
+
+                let file_paths: Vec<String> = urls
+                    .iter()
+                    .filter(|u| u.scheme() == "file")
+                    .filter_map(|u| u.to_file_path().ok())
+                    .filter(|p| p.is_file())
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .collect();
+
+                // 同时存入队列（应对前端尚未就绪的情形）
+                {
+                    let state = app_handle.state::<PendingFiles>();
+                    let mut queue = state.0.lock().unwrap();
+                    for path in &file_paths {
+                        // 避免重复推入（应用已运行时 emit 直达，队列仅兜底）
+                        if !queue.contains(path) {
+                            queue.push(path.clone());
+                        }
+                    }
+                }
+
+                // 直接 emit 给已就绪的前端（应用已在运行的常见场景）
+                for path in &file_paths {
+                    app_handle.emit("ghostterm:open-with-file", path).ok();
+                }
+            }
+        });
 }
