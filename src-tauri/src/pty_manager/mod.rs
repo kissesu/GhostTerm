@@ -466,14 +466,45 @@ pub async fn get_default_shell_cmd() -> Result<String, String> {
 
 /// Tauri Command：启动 PTY
 ///
-/// 强制注入终端类型环境变量：
-/// - TERM=xterm-256color：Tauri GUI 进程不继承用户 shell 环境，若不设置程序会降级到无色输出
-/// - COLORTERM=truecolor：声明支持 24-bit 真彩色，Claude Code 等程序据此启用全色渲染
+/// 显式注入终端运行所需的环境变量：
+/// - TERM / COLORTERM：Tauri GUI 进程不继承用户 shell 环境；缺失时程序降级为无色输出
+/// - LANG / LC_ALL / LC_CTYPE：控制 shell 的字符编码模式；
+///   发布 .app 的 launchd 环境中 LANG 有时为 "en_US"（不含 .UTF-8 后缀）或完全缺失，
+///   导致 fish/zsh 退回单字节模式，中文路径每个 UTF-8 字节被单独输出 → Latin-1 乱码
 #[tauri::command]
 pub async fn spawn_pty_cmd(shell: String, cwd: String) -> Result<PtyInfo, String> {
     let mut env = HashMap::new();
     env.insert("TERM".to_string(), "xterm-256color".to_string());
     env.insert("COLORTERM".to_string(), "truecolor".to_string());
+
+    // 读取当前进程的 locale 设置并注入；若完全缺失则回退到 UTF-8 locale
+    let lang = std::env::var("LANG").unwrap_or_default();
+    let lc_all = std::env::var("LC_ALL").unwrap_or_default();
+
+    if !lc_all.is_empty() {
+        env.insert("LC_ALL".to_string(), lc_all);
+    }
+    if !lang.is_empty() {
+        // 若 LANG 存在但不含 UTF-8 后缀（如 "en_US"），强制补为 UTF-8 变体
+        let lang_utf8 = if lang.contains("UTF-8") || lang.contains("utf-8") {
+            lang
+        } else if lang.contains('.') {
+            // 已有编码后缀但不是 UTF-8，替换为 UTF-8
+            let base = lang.split('.').next().unwrap_or(&lang);
+            format!("{}.UTF-8", base)
+        } else {
+            format!("{}.UTF-8", lang)
+        };
+        env.insert("LANG".to_string(), lang_utf8);
+    } else {
+        // LANG 完全缺失：回退到英文 UTF-8，保证 shell 进入多字节模式
+        env.insert("LANG".to_string(), "en_US.UTF-8".to_string());
+    }
+
+    if let Ok(lc_ctype) = std::env::var("LC_CTYPE") {
+        env.insert("LC_CTYPE".to_string(), lc_ctype);
+    }
+
     spawn_pty(&shell, &cwd, env).await
 }
 

@@ -31,6 +31,8 @@ export interface UpdaterActions {
   applyUpdate: () => Promise<void>;
   /** 用户忽略：关闭更新提示 */
   dismiss: () => void;
+  /** 手动立即检测一次（用于设置页面按钮） */
+  checkNow: () => Promise<void>;
 }
 
 const INITIAL_STATE: UpdaterState = {
@@ -77,8 +79,10 @@ export function useUpdater(): [UpdaterState, UpdaterActions] {
           });
         }
       } catch (e) {
-        // 检测失败静默处理（网络不可用、私有仓库未授权等属正常情况）
-        console.warn('[updater] 检测更新失败:', e);
+        // 检测失败写入 error state，Banner 会展示原因，便于在线上环境排查问题
+        // 常见原因：网络不可用、latest.json 未生成（签名失败）、私有仓库未授权
+        const msg = e instanceof Error ? e.message : String(e);
+        setState((s) => ({ ...s, error: `检测更新失败: ${msg}` }));
       }
     };
 
@@ -144,5 +148,29 @@ export function useUpdater(): [UpdaterState, UpdaterActions] {
     updateRef.current = null;
   }, []);
 
-  return [state, { applyUpdate, dismiss }];
+  // 手动检测：重置状态后立即发起一次检测（供设置页"检查更新"按钮调用）
+  const checkNow = useCallback(async () => {
+    setState((s) => ({ ...INITIAL_STATE, installing: s.installing }));
+    updateRef.current = null;
+    try {
+      const update = await check();
+      if (update !== null) {
+        updateRef.current = update;
+        setState({
+          ...INITIAL_STATE,
+          available: true,
+          version: update.version,
+          notes: update.body ?? null,
+        });
+      } else {
+        // 明确没有更新，用 error 字段展示"已是最新版"提示
+        setState((s) => ({ ...s, error: '已是最新版本' }));
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setState((s) => ({ ...s, error: `检测更新失败: ${msg}` }));
+    }
+  }, []);
+
+  return [state, { applyUpdate, dismiss, checkNow }];
 }

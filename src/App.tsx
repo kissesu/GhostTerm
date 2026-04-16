@@ -56,7 +56,9 @@ function App() {
       >
         <AppLayout />
       </div>
-      {appView === 'settings' && <SettingsPage />}
+      {appView === 'settings' && (
+        <SettingsPage updateState={updateState} updateActions={updateActions} />
+      )}
       {/* 更新提示横幅：有新版本时显示在窗口底部 */}
       <UpdateBanner state={updateState} actions={updateActions} />
     </>

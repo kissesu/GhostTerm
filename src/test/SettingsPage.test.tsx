@@ -3,6 +3,18 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SettingsPage from '../features/settings/SettingsPage';
 import { DEFAULT_TERMINAL_SETTINGS, useSettingsStore } from '../shared/stores/settingsStore';
+import type { UpdaterState, UpdaterActions } from '../features/updater/useUpdater';
+
+// 测试用的 updater stub
+const stubState: UpdaterState = {
+  available: false, version: null, notes: null,
+  installing: false, progress: null, error: null,
+};
+const stubActions: UpdaterActions = {
+  applyUpdate: async () => {},
+  dismiss: () => {},
+  checkNow: async () => {},
+};
 
 describe('SettingsPage', () => {
   beforeEach(() => {
@@ -14,7 +26,7 @@ describe('SettingsPage', () => {
   });
 
   it('应渲染外观和终端导航项，默认显示外观分区', () => {
-    render(<SettingsPage />);
+    render(<SettingsPage updateState={stubState} updateActions={stubActions} />);
 
     // 导航项始终可见
     expect(screen.getByTestId('settings-nav-appearance')).toBeInTheDocument();
@@ -25,7 +37,7 @@ describe('SettingsPage', () => {
 
   it('点击终端导航后应渲染终端表单', async () => {
     const user = userEvent.setup();
-    render(<SettingsPage />);
+    render(<SettingsPage updateState={stubState} updateActions={stubActions} />);
 
     // 导航到终端分区
     await user.click(screen.getByTestId('settings-nav-terminal'));
@@ -37,7 +49,7 @@ describe('SettingsPage', () => {
 
   it('点击返回按钮应切回主界面', async () => {
     const user = userEvent.setup();
-    render(<SettingsPage />);
+    render(<SettingsPage updateState={stubState} updateActions={stubActions} />);
 
     await user.click(screen.getByTestId('settings-back-button'));
 
@@ -46,7 +58,7 @@ describe('SettingsPage', () => {
 
   it('关闭使用系统默认 shell 后应允许输入自定义 shell 路径', async () => {
     const user = userEvent.setup();
-    render(<SettingsPage />);
+    render(<SettingsPage updateState={stubState} updateActions={stubActions} />);
 
     // 终端表单在 terminal 分区，需先导航
     await user.click(screen.getByTestId('settings-nav-terminal'));

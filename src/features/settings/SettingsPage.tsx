@@ -8,9 +8,142 @@
  * @date 2026-04-15
  */
 
-import { type ChangeEvent, useState } from 'react';
+import { type ChangeEvent, useState, useEffect } from 'react';
+import { getVersion } from '@tauri-apps/api/app';
 import WindowTitleBar from '../../shared/components/WindowTitleBar';
 import { useSettingsStore, type AppTheme } from '../../shared/stores/settingsStore';
+import type { UpdaterState, UpdaterActions } from '../updater/useUpdater';
+
+/* ================================================================
+   组件：更新分区
+   ================================================================ */
+function UpdateSection({
+  state,
+  actions,
+}: {
+  state: UpdaterState;
+  actions: UpdaterActions;
+}) {
+  const [appVersion, setAppVersion] = useState<string>('...');
+  const [checking, setChecking] = useState(false);
+
+  useEffect(() => {
+    getVersion().then(setAppVersion).catch(() => setAppVersion('unknown'));
+  }, []);
+
+  const handleCheck = async () => {
+    setChecking(true);
+    await actions.checkNow();
+    setChecking(false);
+  };
+
+  const btnStyle: React.CSSProperties = {
+    height: 34,
+    padding: '0 16px',
+    borderRadius: 'var(--r-md)',
+    border: '1px solid var(--c-border)',
+    background: 'var(--c-raised)',
+    color: 'var(--c-fg)',
+    fontSize: 13,
+    fontFamily: 'var(--font-ui)',
+    cursor: checking || state.installing ? 'not-allowed' : 'pointer',
+    opacity: checking || state.installing ? 0.5 : 1,
+    transition: 'opacity var(--dur-fast)',
+    whiteSpace: 'nowrap' as const,
+  };
+
+  const primaryBtnStyle: React.CSSProperties = {
+    ...btnStyle,
+    background: 'var(--c-accent)',
+    border: '1px solid var(--c-accent)',
+    color: 'var(--c-bg)',
+    fontWeight: 600,
+    cursor: state.installing ? 'not-allowed' : 'pointer',
+    opacity: state.installing ? 0.5 : 1,
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* 当前版本行 */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '14px 16px',
+        borderRadius: 'var(--r-lg)',
+        border: '1px solid var(--c-border)',
+        background: 'var(--c-raised)',
+      }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--c-fg)' }}>
+            当前版本
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--c-fg-muted)', marginTop: 3, fontFamily: 'var(--font-mono)' }}>
+            v{appVersion}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={handleCheck}
+          disabled={checking || state.installing}
+          style={btnStyle}
+        >
+          {checking ? '检测中...' : '检查更新'}
+        </button>
+      </div>
+
+      {/* 状态提示区 */}
+      {state.available && (
+        <div style={{
+          padding: '16px',
+          borderRadius: 'var(--r-lg)',
+          border: '1px solid var(--c-accent)',
+          background: 'var(--c-card-active)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+        }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--c-accent)' }}>
+              发现新版本 v{state.version}
+            </div>
+            {state.notes && (
+              <div style={{ fontSize: 12, color: 'var(--c-fg-muted)', marginTop: 6, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                {state.notes}
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" onClick={actions.applyUpdate} disabled={state.installing} style={primaryBtnStyle}>
+              {state.installing
+                ? state.progress !== null && state.progress > 0
+                  ? `下载中 ${state.progress}%`
+                  : '准备中...'
+                : '立即安装'}
+            </button>
+            <button type="button" onClick={actions.dismiss} disabled={state.installing} style={btnStyle}>
+              稍后
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 无更新 / 错误提示 */}
+      {!state.available && state.error && (
+        <div style={{
+          fontSize: 12,
+          color: state.error === '已是最新版本' ? 'var(--c-fg-muted)' : 'var(--c-danger)',
+          padding: '10px 14px',
+          borderRadius: 'var(--r-md)',
+          background: 'var(--c-raised)',
+          border: '1px solid var(--c-border)',
+        }}>
+          {state.error}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /* ================================================================
    图标
@@ -182,7 +315,7 @@ function ThemeCard({ value, current, label, description, icon, onSelect }: Theme
 /* ================================================================
    侧边导航按钮（复用 sidebar-nav-item CSS 类）
    ================================================================ */
-type SettingSection = 'appearance' | 'terminal';
+type SettingSection = 'appearance' | 'terminal' | 'update';
 
 const NAV_ITEMS: { key: SettingSection; label: string; icon: React.ReactNode }[] = [
   {
@@ -204,12 +337,29 @@ const NAV_ITEMS: { key: SettingSection; label: string; icon: React.ReactNode }[]
       </svg>
     ),
   },
+  {
+    key: 'update',
+    label: '更新',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M21 2v6h-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M21 12a9 9 0 0 1-15 6.7L3 16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
 ];
 
 /* ================================================================
    主组件
    ================================================================ */
-export default function SettingsPage() {
+export default function SettingsPage({
+  updateState,
+  updateActions,
+}: {
+  updateState: UpdaterState;
+  updateActions: UpdaterActions;
+}) {
   const closeSettings          = useSettingsStore((s) => s.closeSettings);
   const appTheme               = useSettingsStore((s) => s.appTheme);
   const terminal               = useSettingsStore((s) => s.terminal);
@@ -345,6 +495,21 @@ export default function SettingsPage() {
                   <p style={{ fontSize: 11, color: 'var(--c-fg-subtle)', margin: 0, lineHeight: 1.55 }}>
                     主题影响整个应用界面：侧边栏、编辑器、终端及所有 UI 元素。
                   </p>
+                </Section>
+              </>
+            )}
+
+            {/* ===================== 更新分区 ===================== */}
+            {activeSection === 'update' && (
+              <>
+                <div>
+                  <h1 style={{ margin: 0, fontSize: 19, fontWeight: 700, letterSpacing: '-0.02em' }}>更新</h1>
+                  <p style={{ margin: '7px 0 0', color: 'var(--c-fg-muted)', fontSize: 13, lineHeight: 1.55 }}>
+                    检查并安装 GhostTerm 的最新版本，程序每小时自动检测一次。
+                  </p>
+                </div>
+                <Section title="版本管理">
+                  <UpdateSection state={updateState} actions={updateActions} />
                 </Section>
               </>
             )}
