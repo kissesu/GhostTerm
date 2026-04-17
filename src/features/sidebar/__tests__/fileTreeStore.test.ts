@@ -64,7 +64,7 @@ describe('fileTreeStore - refreshFileTree', () => {
     expect(fileNode?.children).toBeNull();
   });
 
-  it('refreshFileTree 应清空 expandedPaths', async () => {
+  it('refreshFileTree 应保留 expandedPaths（fix: 避免新建/重命名/删除后目录塌陷）', async () => {
     // 预设一个展开路径
     useFileTreeStore.setState({ expandedPaths: new Set(['/proj/src']) });
     mockInvoke.mockResolvedValueOnce(sampleEntries);
@@ -72,6 +72,21 @@ describe('fileTreeStore - refreshFileTree', () => {
     await useFileTreeStore.getState().refreshFileTree('/proj');
 
     const { expandedPaths } = useFileTreeStore.getState();
+    // 旧行为会清空 → 0；修复后保留原值
+    expect(expandedPaths.has('/proj/src')).toBe(true);
+    expect(expandedPaths.size).toBe(1);
+  });
+
+  it('resetState 应清空 tree 和 expandedPaths（切换项目场景）', () => {
+    useFileTreeStore.setState({
+      tree: [{ entry: sampleEntries[0]!, children: undefined }],
+      expandedPaths: new Set(['/proj/src', '/proj/docs']),
+    });
+
+    useFileTreeStore.getState().resetState();
+
+    const { tree, expandedPaths } = useFileTreeStore.getState();
+    expect(tree).toEqual([]);
     expect(expandedPaths.size).toBe(0);
   });
 });
@@ -188,6 +203,29 @@ describe('fileTreeStore - applyFsEvent（完整实现）', () => {
       const { tree } = useFileTreeStore.getState();
       // src 目录应还在
       expect(tree.find((n) => n.entry.path === '/proj/src')).toBeDefined();
+    });
+
+    it('deleted 事件不应清空 expandedPaths（fix: 避免操作后父目录塌陷）', () => {
+      useFileTreeStore.setState({ expandedPaths: new Set(['/proj/src']) });
+
+      useFileTreeStore.getState().applyFsEvent({ type: 'deleted', path: '/proj/README.md' });
+
+      const { expandedPaths } = useFileTreeStore.getState();
+      expect(expandedPaths.has('/proj/src')).toBe(true);
+    });
+
+    it('created/renamed 事件也不清空 expandedPaths', () => {
+      useFileTreeStore.setState({ expandedPaths: new Set(['/proj/src']) });
+
+      useFileTreeStore.getState().applyFsEvent({ type: 'created', path: '/proj/new.ts' });
+      expect(useFileTreeStore.getState().expandedPaths.has('/proj/src')).toBe(true);
+
+      useFileTreeStore.getState().applyFsEvent({
+        type: 'renamed',
+        old_path: '/proj/README.md',
+        new_path: '/proj/README2.md',
+      });
+      expect(useFileTreeStore.getState().expandedPaths.has('/proj/src')).toBe(true);
     });
 
     it('deleted 事件应移除嵌套节点', async () => {

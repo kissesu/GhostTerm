@@ -14,10 +14,16 @@ import { useProjectStore } from '../projectStore';
 import { useEditorStore } from '../../editor/editorStore';
 import type { FileNode } from '../../../shared/types';
 
+// Mock Tauri event listen (useFsEvents 内部调用)；返回空 unlisten
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: vi.fn().mockResolvedValue(() => {}),
+}));
+
 const mockInvoke = vi.mocked(invoke);
 const mockOpenPath = vi.mocked(openPath);
 
 const refreshFileTreeMock = vi.fn().mockResolvedValue(undefined);
+const applyFsEventMock = vi.fn();
 
 const sampleTree: FileNode[] = [
   {
@@ -47,6 +53,7 @@ beforeEach(() => {
     tree: [],
     expandedPaths: new Set(),
     refreshFileTree: refreshFileTreeMock,
+    applyFsEvent: applyFsEventMock,
   });
   useProjectStore.setState({
     currentProject: { name: 'proj', path: '/proj', last_opened: 1 },
@@ -57,6 +64,7 @@ beforeEach(() => {
     activeFilePath: null,
   });
   refreshFileTreeMock.mockClear();
+  applyFsEventMock.mockClear();
   mockOpenPath.mockClear();
   vi.clearAllMocks();
 });
@@ -245,7 +253,10 @@ describe('FileTree - 右键菜单对话框', () => {
       });
     });
 
-    expect(refreshFileTreeMock).toHaveBeenCalledWith('/proj');
+    expect(applyFsEventMock).toHaveBeenCalledWith({
+      type: 'created',
+      path: '/proj/src/new.txt',
+    });
     expect(screen.queryByTestId('file-tree-create-dialog')).not.toBeInTheDocument();
   });
 
@@ -268,7 +279,11 @@ describe('FileTree - 右键菜单对话框', () => {
       });
     });
 
-    expect(refreshFileTreeMock).toHaveBeenCalledWith('/proj');
+    expect(applyFsEventMock).toHaveBeenCalledWith({
+      type: 'renamed',
+      old_path: '/proj/README.md',
+      new_path: '/proj/README.zh-CN.md',
+    });
   });
 
   it('删除应通过确认对话框调用 delete_entry_cmd', async () => {
@@ -287,6 +302,9 @@ describe('FileTree - 右键菜单对话框', () => {
       });
     });
 
-    expect(refreshFileTreeMock).toHaveBeenCalledWith('/proj');
+    expect(applyFsEventMock).toHaveBeenCalledWith({
+      type: 'deleted',
+      path: '/proj/README.md',
+    });
   });
 });

@@ -31,14 +31,15 @@ import {
   ContextMenuTrigger,
   ContextMenuSeparator,
 } from '@radix-ui/react-context-menu';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { openPath } from '@tauri-apps/plugin-opener';
 import { useFileTreeStore } from './fileTreeStore';
 import { useGitStore } from './gitStore';
 import { useProjectStore } from './projectStore';
 import { useEditorStore } from '../editor/editorStore';
+import { useFsEvents } from '../../shared/hooks/useFsEvents';
 import SidebarDialog, { dialogButtonStyle, dialogInputStyle } from './SidebarDialog';
-import type { FileNode, StatusEntry } from '../../shared/types';
+import type { FileNode, StatusEntry, FsEvent } from '../../shared/types';
 
 /** FileTreeNode 组件的 Props */
 interface FileTreeNodeProps {
@@ -54,7 +55,7 @@ interface FileTreeNodeProps {
 
 /** 单个文件树节点 */
 function FileTreeNode({ node, depth, gitStatusClass }: FileTreeNodeProps) {
-  const { expandedPaths, toggleDir, refreshFileTree } = useFileTreeStore();
+  const { expandedPaths, toggleDir } = useFileTreeStore();
   const currentProjectPath = useProjectStore((s) => s.currentProject?.path);
   const activeFilePath = useEditorStore((s) => s.activeFilePath);
   const isExpanded = expandedPaths.has(node.entry.path);
@@ -67,12 +68,6 @@ function FileTreeNode({ node, depth, gitStatusClass }: FileTreeNodeProps) {
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameName, setRenameName] = useState(node.entry.name);
   const [deleteOpen, setDeleteOpen] = useState(false);
-
-  const refreshCurrentProjectTree = async () => {
-    if (currentProjectPath) {
-      await refreshFileTree(currentProjectPath);
-    }
-  };
 
   const relativePath = currentProjectPath && node.entry.path.startsWith(`${currentProjectPath}/`)
     ? node.entry.path.slice(currentProjectPath.length + 1)
@@ -115,8 +110,10 @@ function FileTreeNode({ node, depth, gitStatusClass }: FileTreeNodeProps) {
   const submitCreate = async () => {
     const name = createName.trim();
     if (!name) return;
-    await invoke('create_entry_cmd', { path: `${parentPath}/${name}`, isDir: createMode === 'dir' });
-    await refreshCurrentProjectTree();
+    const newPath = `${parentPath}/${name}`;
+    await invoke('create_entry_cmd', { path: newPath, isDir: createMode === 'dir' });
+    // 乐观更新：保留父目录的 expanded 状态（不走全量 refreshFileTree，避免 expandedPaths 被重置）
+    useFileTreeStore.getState().applyFsEvent({ type: 'created', path: newPath });
     setCreateMode(null);
     setCreateName('');
   };
@@ -133,15 +130,19 @@ function FileTreeNode({ node, depth, gitStatusClass }: FileTreeNodeProps) {
       setRenameName(node.entry.name);
       return;
     }
-    const newPath = `${node.entry.path.split('/').slice(0, -1).join('/')}/${name}`;
-    await invoke('rename_entry_cmd', { oldPath: node.entry.path, newPath });
-    await refreshCurrentProjectTree();
+    const oldPath = node.entry.path;
+    const newPath = `${oldPath.split('/').slice(0, -1).join('/')}/${name}`;
+    await invoke('rename_entry_cmd', { oldPath, newPath });
+    // 乐观更新：保留父目录的 expanded 状态
+    useFileTreeStore.getState().applyFsEvent({ type: 'renamed', old_path: oldPath, new_path: newPath });
     setRenameOpen(false);
   };
 
   const submitDelete = async () => {
-    await invoke('delete_entry_cmd', { path: node.entry.path });
-    await refreshCurrentProjectTree();
+    const path = node.entry.path;
+    await invoke('delete_entry_cmd', { path });
+    // 乐观更新：保留父目录的 expanded 状态
+    useFileTreeStore.getState().applyFsEvent({ type: 'deleted', path });
     setDeleteOpen(false);
   };
 
@@ -453,6 +454,13 @@ export default function FileTree() {
   const { tree } = useFileTreeStore();
   // 从 gitStore 获取变更列表，用于给文件着色
   const { changes } = useGitStore();
+
+  // 订阅 Rust watcher 推送的文件系统事件，驱动增量更新
+  // 用 getState() 拿 action 引用（稳定），避免 useEffect 重复订阅
+  const handleFsEvent = useCallback((event: FsEvent) => {
+    useFileTreeStore.getState().applyFsEvent(event);
+  }, []);
+  useFsEvents(handleFsEvent);
 
   if (tree.length === 0) {
     return (

@@ -17,11 +17,13 @@ interface FileTreeState {
   tree: FileNode[];
   /** 已展开的目录路径集合（用于控制 UI 展开/折叠状态） */
   expandedPaths: Set<string>;
-  /** 刷新指定根路径下的文件树 */
+  /** 刷新指定根路径下的文件树（保留 expandedPaths） */
   refreshFileTree: (rootPath: string) => Promise<void>;
+  /** 重置 store（切换项目时用；清空 tree + expandedPaths） */
+  resetState: () => void;
   /** 展开或折叠目录（懒加载子节点内容） */
   toggleDir: (path: string) => Promise<void>;
-  /** 应用文件系统事件进行增量更新（PBI-4 完善） */
+  /** 应用文件系统事件进行增量更新 */
   applyFsEvent: (event: FsEvent) => void;
 }
 
@@ -75,7 +77,8 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => ({
    * 1. 调用 list_dir_cmd 获取根目录内容（非递归，只加载第一层）
    * 2. 将目录节点的 children 设为 undefined（表示可展开但未加载）
    * 3. 文件节点的 children 保持 null（不可展开）
-   * 4. 清空展开状态（新项目重置展开记录）
+   * 4. **保留 expandedPaths**：过期路径在新 tree 中 has(path) 为 false 自然失效，
+   *    显式清空会让新建/重命名/删除文件后用户展开的目录塌陷（已修 bug）
    */
   refreshFileTree: async (rootPath: string) => {
     const entries = await invoke<FileEntry[]>('list_dir_cmd', { path: rootPath, showHidden: false });
@@ -88,8 +91,15 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => ({
       children: entry.is_dir ? undefined : null,
     }));
 
-    set({ tree, expandedPaths: new Set() });
+    // 只替换 tree，保留 expandedPaths
+    set({ tree });
   },
+
+  /**
+   * 重置 store 状态（切换项目时调用）
+   * 清空 tree + expandedPaths，避免上个项目的路径污染新项目的展开状态
+   */
+  resetState: () => set({ tree: [], expandedPaths: new Set() }),
 
   /**
    * 展开/折叠目录
