@@ -10,6 +10,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useSidebarStore, useProjectStore } from '../features/sidebar';
 import { useKeyboardShortcuts } from '../shared/hooks/useKeyboardShortcuts';
 import WindowTitleBar from '../shared/components/WindowTitleBar';
+import { TabNav } from '../shared/components/TabNav';
 import { useSettingsStore } from '../shared/stores/settingsStore';
 import { ProjectWorkspace } from './ProjectWorkspace';
 
@@ -106,6 +107,7 @@ export default function AppLayout() {
       }}
     >
       <WindowTitleBar
+        tabs={<TabNav />}
         right={
           <button
             type="button"

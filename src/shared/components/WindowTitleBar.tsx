@@ -151,9 +151,15 @@ interface WindowTitleBarProps {
   right?: ReactNode;
   /** 不传 center 时是否显示品牌标识，默认 true */
   showBrand?: boolean;
+  /**
+   * 传入后切换为"主窗口"布局：
+   * 品牌（左） → flex spacer → tabs（中） → right → Win32 controls（Windows）
+   * 传此 prop 时 left/center/showBrand 被忽略，新布局全权管理左侧区域
+   */
+  tabs?: ReactNode;
 }
 
-export default function WindowTitleBar({ left, center, right, showBrand = true }: WindowTitleBarProps) {
+export default function WindowTitleBar({ left, center, right, showBrand = true, tabs }: WindowTitleBarProps) {
   const handleDoubleClick = async (event: MouseEvent<HTMLDivElement>) => {
     if (isInteractiveTarget(event.target)) return;
 
@@ -181,24 +187,78 @@ export default function WindowTitleBar({ left, center, right, showBrand = true }
 
   const stopPropagation = (e: MouseEvent<HTMLElement>) => e.stopPropagation();
 
+  // 外层拖拽区域的公共样式
+  const outerStyle: React.CSSProperties = {
+    height: 38,
+    flexShrink: 0,
+    // macOS：为 traffic lights 留白 80px；Windows/Linux：普通 12px
+    paddingLeft: isMacOS ? 80 : 12,
+    // Windows 自渲染控件时右侧不加 padding（控件自带 margin）
+    paddingRight: isMacOS ? 12 : 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    userSelect: 'none',
+    borderBottom: '1px solid var(--c-border-sub)',
+    background: 'var(--c-bg)',
+  };
+
+  // ============================================================
+  // 主窗口布局（tabs 传入时）：
+  // 品牌 → flex spacer → tabs → 右侧按钮 → Win32 controls
+  // ============================================================
+  if (tabs) {
+    return (
+      <div
+        onDoubleClick={(event) => void handleDoubleClick(event)}
+        data-tauri-drag-region
+        style={outerStyle}
+        data-testid="window-titlebar"
+      >
+        {/* 1. 品牌区（左对齐，非拖拽） */}
+        <div
+          onMouseDown={stopPropagation}
+          onDoubleClick={stopPropagation}
+          style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}
+        >
+          <GhostTermBrand />
+        </div>
+
+        {/* 2. 弹性空白（可拖拽）：撑开品牌与 tabs 之间的间距 */}
+        <div data-tauri-drag-region style={{ flex: 1 }} />
+
+        {/* 3. tabs 区（居中，非拖拽） */}
+        <div
+          onMouseDown={stopPropagation}
+          onDoubleClick={stopPropagation}
+          style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}
+        >
+          {tabs}
+        </div>
+
+        {/* 4. 右侧按钮 + Windows 窗口控件（非拖拽） */}
+        <div
+          onMouseDown={stopPropagation}
+          onDoubleClick={stopPropagation}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}
+        >
+          {right}
+          {/* Windows/Linux 自渲染窗口控件 */}
+          {!isMacOS && <WindowControls />}
+        </div>
+      </div>
+    );
+  }
+
+  // ============================================================
+  // 旧版布局（兼容 SettingsPage 等消费者）：
+  // left | center/brand | right
+  // ============================================================
   return (
     <div
       onDoubleClick={(event) => void handleDoubleClick(event)}
       data-tauri-drag-region
-      style={{
-        height: 38,
-        flexShrink: 0,
-        // macOS：为 traffic lights 留白 80px；Windows/Linux：普通 12px
-        paddingLeft: isMacOS ? 80 : 12,
-        // Windows 自渲染控件时右侧不加 padding（控件自带 margin）
-        paddingRight: isMacOS ? 12 : 0,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        userSelect: 'none',
-        borderBottom: '1px solid var(--c-border-sub)',
-        background: 'var(--c-bg)',
-      }}
+      style={outerStyle}
       data-testid="window-titlebar"
     >
       <div
