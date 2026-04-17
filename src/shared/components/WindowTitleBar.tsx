@@ -188,13 +188,15 @@ export default function WindowTitleBar({ left, center, right, showBrand = true, 
   const stopPropagation = (e: MouseEvent<HTMLElement>) => e.stopPropagation();
 
   // 外层拖拽区域的公共样式
+  // paddingLeft 用 max(最小值, 百分比)：窄窗口保留红黄绿/基础留白，宽窗口按比例右移品牌
   const outerStyle: React.CSSProperties = {
     height: 38,
     flexShrink: 0,
-    // macOS：为 traffic lights 留白 80px；Windows/Linux：普通 12px
-    paddingLeft: isMacOS ? 80 : 12,
+    // macOS：红黄绿至少 80px，窗口 >1333px 后按 6% 扩大
+    // Windows/Linux：基础 12px，窗口较宽时按 3% 扩大
+    paddingLeft: isMacOS ? 'max(80px, 6%)' : 'max(12px, 3%)',
     // Windows 自渲染控件时右侧不加 padding（控件自带 margin）
-    paddingRight: isMacOS ? 12 : 0,
+    paddingRight: isMacOS ? 'max(12px, 2%)' : 0,
     display: 'flex',
     alignItems: 'center',
     gap: 8,
@@ -224,11 +226,11 @@ export default function WindowTitleBar({ left, center, right, showBrand = true, 
           <GhostTermBrand />
         </div>
 
-        {/* 2. tabs 区（紧挨品牌右侧，非拖拽） */}
+        {/* 2. tabs 区（紧挨品牌右侧，非拖拽）；marginLeft 撑出 brand↔tabs 视觉间距 */}
         <div
           onMouseDown={stopPropagation}
           onDoubleClick={stopPropagation}
-          style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}
+          style={{ display: 'flex', alignItems: 'center', flexShrink: 0, marginLeft: 16 }}
         >
           {tabs}
         </div>
