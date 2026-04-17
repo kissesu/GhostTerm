@@ -14,6 +14,7 @@ pub mod pty_manager;
 pub mod fs_backend;
 pub mod git_backend;
 pub mod project_manager;
+pub mod sidecar;
 
 // PBI-1 Commands
 use pty_manager::{spawn_pty_cmd, kill_pty_cmd, resize_pty_cmd, reconnect_pty_cmd, get_default_shell_cmd};
@@ -59,10 +60,14 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         // 进程管理 - 更新安装完成后重启应用
         .plugin(tauri_plugin_process::init())
+        // Sidecar 管理 - spawn Python 工具进程（ghostterm-thesis）并 NDJSON 通信
+        .plugin(tauri_plugin_shell::init())
         // E2E 测试支持（PBI-6 使用）
         .plugin(tauri_plugin_webdriver_automation::init())
         // 注册"打开方式"文件队列状态
         .manage(PendingFiles(Mutex::new(Vec::new())))
+        // 注册 sidecar 状态（lazy init，首次 invoke 时才 spawn 进程）
+        .manage(sidecar::SidecarState::default())
         // ============================================
         // macOS: 禁用 WKWebView 弹性滚动 + 设置深色背景
         // 通过原生 NSScrollView API 设置 scrollElasticity = None
@@ -179,6 +184,9 @@ pub fn run() {
             worktree_switch_cmd,
             // 打开方式：获取启动时传入的文件路径
             get_startup_files_cmd,
+            // P2: Sidecar NDJSON 通信
+            sidecar::tools_sidecar_invoke,
+            sidecar::tools_sidecar_restart,
         ])
         // ============================================
         // 改用 build().run() 以便在 RunEvent 回调中处理 macOS"打开方式"事件

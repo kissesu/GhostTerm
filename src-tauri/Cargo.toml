@@ -21,6 +21,8 @@ tauri-plugin-opener = "2"
 tauri-plugin-updater = "2"
 # 进程操作 - 用于自动更新安装完成后重启应用
 tauri-plugin-process = "2"
+# Sidecar 管理 - spawn Python 工具进程（ghostterm-thesis）+ NDJSON 通信
+tauri-plugin-shell = "2"
 
 # 序列化/反序列化 - 用于 Tauri Commands 数据传输和持久化
 serde = { version = "1", features = ["derive"] }
