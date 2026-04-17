@@ -124,6 +124,10 @@ pub async fn tools_sidecar_invoke(
     let (tx, rx) = oneshot::channel::<Value>();
 
     {
+        // 锁顺序约定：inner → pending
+        // - 主调路径（本函数）：先拿 inner lock，在 inner scope 内拿 pending lock
+        // - 后台 stdout 消费任务：仅拿 pending lock，不触及 inner
+        // 两者锁顺序一致，不会死锁。未来如需修改，保持此顺序
         let mut guard = state.inner.lock().await;
         let inner = guard.as_mut().ok_or("sidecar not running")?;
 
