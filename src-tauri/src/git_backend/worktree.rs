@@ -28,12 +28,13 @@ pub fn worktree_list(repo_path: &str) -> Result<Vec<Worktree>, String> {
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let worktrees = parse_worktree_list_porcelain(&stdout, repo_path);
+    // 解析后过滤 stale（目录已删除）worktree
+    let worktrees = filter_stale_worktrees(parse_worktree_list_porcelain(&stdout, repo_path));
 
     Ok(worktrees)
 }
 
-/// 解析 `git worktree list --porcelain` 的输出
+/// 解析 `git worktree list --porcelain` 的输出（纯文本解析，不做 I/O）
 ///
 /// 格式示例（text 非代码，标记为 no_run 避免 doctest 解析）：
 /// ```text
@@ -45,35 +46,36 @@ pub fn worktree_list(repo_path: &str) -> Result<Vec<Worktree>, String> {
 /// HEAD def456
 /// branch refs/heads/feature
 /// ```
+///
+/// 返回未经过滤的原始列表，由调用方决定是否过滤 stale 路径。
+/// `current_path` 仅用于标记 `is_current`；规范化失败时退化为字符串比较。
 fn parse_worktree_list_porcelain(output: &str, current_path: &str) -> Vec<Worktree> {
     let mut result: Vec<Worktree> = Vec::new();
     let mut current_wt_path: Option<String> = None;
     let mut current_branch: Option<String> = None;
 
-    // 规范化 current_path 用于比较（解析 canonical path）
+    // 规范化 current_path 用于比较；路径不存在时退化为原始字符串
     let canonical_current = std::fs::canonicalize(current_path)
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|_| current_path.to_string());
 
+    // 将已积累的 (path, branch) 推入结果；不检查路径是否存在（由调用方过滤）
+    let flush = |path: String, branch: Option<String>, canonical_cur: &str, res: &mut Vec<Worktree>| {
+        let canonical_wt = std::fs::canonicalize(&path)
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|_| path.clone());
+        res.push(Worktree {
+            path,
+            branch,
+            is_current: canonical_wt == canonical_cur,
+        });
+    };
+
     for line in output.lines() {
         if line.starts_with("worktree ") {
-            // 新的 worktree 块开始
+            // 新的 worktree 块开始，提交上一个（如果有）
             if let Some(path) = current_wt_path.take() {
-                // 提交上一个 worktree
-                // 目录已删除的 stale worktree 直接跳过，不加入列表
-                if Path::new(&path).exists() {
-                    let canonical_wt = std::fs::canonicalize(&path)
-                        .map(|p| p.to_string_lossy().to_string())
-                        .unwrap_or_else(|_| path.clone());
-
-                    result.push(Worktree {
-                        path: path.clone(),
-                        branch: current_branch.take(),
-                        is_current: canonical_wt == canonical_current,
-                    });
-                } else {
-                    current_branch = None;
-                }
+                flush(path, current_branch.take(), &canonical_current, &mut result);
             } else {
                 current_branch = None;
             }
@@ -96,22 +98,17 @@ fn parse_worktree_list_porcelain(output: &str, current_path: &str) -> Vec<Worktr
         // HEAD 行（commit hash）暂不使用
     }
 
-    // 提交最后一个 worktree（同样过滤 stale 路径）
+    // 提交最后一个 worktree
     if let Some(path) = current_wt_path {
-        if Path::new(&path).exists() {
-            let canonical_wt = std::fs::canonicalize(&path)
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_else(|_| path.clone());
-
-            result.push(Worktree {
-                path: path.clone(),
-                branch: current_branch,
-                is_current: canonical_wt == canonical_current,
-            });
-        }
+        flush(path, current_branch, &canonical_current, &mut result);
     }
 
     result
+}
+
+/// 从 parse_worktree_list_porcelain 的结果中过滤掉 stale（目录已删除）的 worktree
+fn filter_stale_worktrees(worktrees: Vec<Worktree>) -> Vec<Worktree> {
+    worktrees.into_iter().filter(|w| Path::new(&w.path).exists()).collect()
 }
 
 /// 创建新的 git worktree
