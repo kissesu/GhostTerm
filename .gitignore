@@ -71,3 +71,9 @@ src-python/.venv/
 src-python/dist/
 src-python/build/
 src-python/__pycache__/
+
+# ============================================
+# Tauri sidecar binaries
+# ============================================
+# CI 在每次 release 重新构建，本地产物不入库
+src-tauri/binaries/
