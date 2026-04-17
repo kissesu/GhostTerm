@@ -205,7 +205,7 @@ export default function WindowTitleBar({ left, center, right, showBrand = true, 
 
   // ============================================================
   // 主窗口布局（tabs 传入时）：
-  // 品牌 → flex spacer → tabs → 右侧按钮 → Win32 controls
+  // 品牌 → tabs → flex spacer → 右侧按钮 → Win32 controls
   // ============================================================
   if (tabs) {
     return (
@@ -224,10 +224,7 @@ export default function WindowTitleBar({ left, center, right, showBrand = true, 
           <GhostTermBrand />
         </div>
 
-        {/* 2. 弹性空白（可拖拽）：撑开品牌与 tabs 之间的间距 */}
-        <div data-tauri-drag-region style={{ flex: 1 }} />
-
-        {/* 3. tabs 区（居中，非拖拽） */}
+        {/* 2. tabs 区（紧挨品牌右侧，非拖拽） */}
         <div
           onMouseDown={stopPropagation}
           onDoubleClick={stopPropagation}
@@ -235,6 +232,9 @@ export default function WindowTitleBar({ left, center, right, showBrand = true, 
         >
           {tabs}
         </div>
+
+        {/* 3. 弹性空白（可拖拽）：把右侧按钮推到最右 */}
+        <div data-tauri-drag-region style={{ flex: 1 }} />
 
         {/* 4. 右侧按钮 + Windows 窗口控件（非拖拽） */}
         <div
