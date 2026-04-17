@@ -82,7 +82,7 @@ export function SpreadsheetPreview({ path }: SpreadsheetPreviewProps) {
           alignItems: 'center',
           justifyContent: 'center',
           height: '100%',
-          color: 'var(--c-error, #f7768e)',
+          color: 'var(--c-danger)',
           fontSize: '14px',
         }}
       >
@@ -99,7 +99,7 @@ export function SpreadsheetPreview({ path }: SpreadsheetPreviewProps) {
           alignItems: 'center',
           justifyContent: 'center',
           height: '100%',
-          color: 'var(--c-text-muted, #565f89)',
+          color: 'var(--c-fg-muted)',
           fontSize: '14px',
         }}
       >
@@ -117,7 +117,7 @@ export function SpreadsheetPreview({ path }: SpreadsheetPreviewProps) {
             display: 'flex',
             gap: '2px',
             padding: '4px 8px 0',
-            borderBottom: '1px solid var(--c-border, #2a2d3e)',
+            borderBottom: '1px solid var(--c-border)',
             flexShrink: 0,
             overflowX: 'auto',
           }}
@@ -133,11 +133,11 @@ export function SpreadsheetPreview({ path }: SpreadsheetPreviewProps) {
                 borderRadius: '4px 4px 0 0',
                 cursor: 'pointer',
                 background: name === activeSheet
-                  ? 'var(--c-surface-2, #1e2030)'
+                  ? 'var(--c-raised)'
                   : 'transparent',
                 color: name === activeSheet
-                  ? 'var(--c-text, #c0caf5)'
-                  : 'var(--c-text-muted, #565f89)',
+                  ? 'var(--c-fg)'
+                  : 'var(--c-fg-muted)',
                 whiteSpace: 'nowrap',
               }}
             >
@@ -163,13 +163,13 @@ export function SpreadsheetPreview({ path }: SpreadsheetPreviewProps) {
             font-family: 'JetBrains Mono', Menlo, monospace;
           }
           .ghostterm-sheet td, .ghostterm-sheet th {
-            border: 1px solid var(--c-border, #2a2d3e);
+            border: 1px solid var(--c-border);
             padding: 4px 8px;
             white-space: nowrap;
-            color: var(--c-text, #c0caf5);
+            color: var(--c-fg);
           }
           .ghostterm-sheet th {
-            background: var(--c-surface-2, #1e2030);
+            background: var(--c-raised);
             font-weight: 600;
           }
         `}</style>

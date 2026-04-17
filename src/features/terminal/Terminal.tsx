@@ -305,7 +305,7 @@ export default function Terminal({ projectPath, className }: TerminalProps) {
         >
           {error ? (
             <>
-              <div style={{ color: '#f7768e', fontSize: '14px' }}>
+              <div style={{ color: 'var(--c-danger)', fontSize: '14px' }}>
                 终端连接失败: {error}
               </div>
               <button
@@ -318,8 +318,8 @@ export default function Terminal({ projectPath, className }: TerminalProps) {
                 }}
                 style={{
                   padding: '6px 16px',
-                  background: '#7aa2f7',
-                  color: '#1a1b26',
+                  background: 'var(--c-accent)',
+                  color: 'var(--c-accent-text)',
                   border: 'none',
                   borderRadius: '4px',
                   cursor: 'pointer',
@@ -330,7 +330,7 @@ export default function Terminal({ projectPath, className }: TerminalProps) {
               </button>
             </>
           ) : (
-            <div style={{ color: '#565f89', fontSize: '13px' }}>
+            <div style={{ color: 'var(--c-fg-subtle)', fontSize: '13px' }}>
               正在启动终端...
             </div>
           )}

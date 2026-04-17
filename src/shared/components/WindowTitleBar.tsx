@@ -197,7 +197,7 @@ export default function WindowTitleBar({ left, center, right, showBrand = true }
         gap: 8,
         userSelect: 'none',
         borderBottom: '1px solid var(--c-border-sub)',
-        background: 'var(--c-panel)',
+        background: 'var(--c-bg)',
       }}
       data-testid="window-titlebar"
     >

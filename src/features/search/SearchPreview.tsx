@@ -109,7 +109,7 @@ export default function SearchPreview() {
                 gap: 8,
                 padding: '1px 4px',
                 borderRadius: 3,
-                background: isActive ? 'var(--c-accent-muted)' : 'transparent',
+                background: isActive ? 'var(--c-selection)' : 'transparent',
                 fontSize: 12,
                 fontFamily: 'monospace',
                 color: isActive ? 'var(--c-fg)' : 'var(--c-fg-muted)',

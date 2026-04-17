@@ -91,7 +91,7 @@ export default function ProjectListItem({
           border: active
             ? '1px solid var(--c-accent-dim)'
             : '1px solid transparent',
-          background: active ? 'var(--c-card-active)' : 'var(--c-raised)',
+          background: active ? 'var(--c-card-active)' : 'transparent',
           color: 'var(--c-fg)',
           padding: '9px 10px 9px 12px',
           display: 'flex',
@@ -143,7 +143,7 @@ export default function ProjectListItem({
             <span style={{
               display: 'block',
               marginTop: 2,
-              fontSize: 10,
+              fontSize: 11,
               color: 'var(--c-fg-subtle)',
               whiteSpace: 'nowrap',
               overflow: 'hidden',
@@ -226,7 +226,7 @@ export default function ProjectListItem({
                     : '2px solid transparent',
                   cursor: 'pointer',
                   color: activeTab === key ? 'var(--c-fg)' : 'var(--c-fg-subtle)',
-                  fontSize: 10,
+                  fontSize: 11,
                   fontWeight: activeTab === key ? 600 : 400,
                   letterSpacing: '0.02em',
                   fontFamily: 'var(--font-ui)',
@@ -295,7 +295,7 @@ export default function ProjectListItem({
                 <ProjectGroupIcon icon={group.icon} size={13} color="var(--c-fg-muted)" />
                 <span style={{ flex: 1, minWidth: 0 }}>{group.name}</span>
                 {currentGroupId === group.id && (
-                  <span style={{ fontSize: 10, color: 'var(--c-accent)', fontWeight: 700 }}>当前</span>
+                  <span style={{ fontSize: 11, color: 'var(--c-accent)', fontWeight: 700 }}>当前</span>
                 )}
               </button>
             ))}

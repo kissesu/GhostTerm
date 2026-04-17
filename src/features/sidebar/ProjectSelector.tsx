@@ -250,7 +250,7 @@ export default function ProjectSelector() {
         minHeight: 0,
         display: 'flex',
         flexDirection: 'column',
-        background: 'var(--c-panel)',
+        background: 'var(--c-bg)',
       }}
     >
       {/* 顶部固定区：分组头 + 搜索栏（flexShrink:0 确保不被压缩） */}

@@ -166,7 +166,7 @@ export default function AppLayout() {
               defaultSize={20}
               minSize={10}
               maxSize={40}
-              style={{ background: 'var(--c-panel)', overflow: 'hidden', minWidth: 0, minHeight: 0 }}
+              style={{ background: 'var(--c-bg)', overflow: 'hidden', minWidth: 0, minHeight: 0 }}
             >
               <Sidebar />
             </Panel>
@@ -206,7 +206,7 @@ export default function AppLayout() {
               display: 'flex',
               alignItems: 'center',
               padding: '0 10px',
-              background: 'var(--c-panel)',
+              background: 'var(--c-bg)',
               borderBottom: '1px solid var(--c-border-sub)',
               gap: 6,
             }}

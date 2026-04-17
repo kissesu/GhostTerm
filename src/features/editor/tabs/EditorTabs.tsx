@@ -112,7 +112,7 @@ export default function EditorTabs() {
         display: 'flex',
         alignItems: 'stretch',
         height: 36,
-        backgroundColor: 'var(--c-panel)',
+        backgroundColor: 'var(--c-bg)',
         borderBottom: '1px solid var(--c-border-sub)',
         overflowX: 'auto',
         overflowY: 'hidden',

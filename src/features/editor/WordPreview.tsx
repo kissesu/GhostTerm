@@ -67,7 +67,7 @@ export function WordPreview({ path }: WordPreviewProps) {
           alignItems: 'center',
           justifyContent: 'center',
           height: '100%',
-          color: 'var(--c-error, #f7768e)',
+          color: 'var(--c-danger)',
           fontSize: '14px',
         }}
       >
@@ -86,7 +86,7 @@ export function WordPreview({ path }: WordPreviewProps) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: 'var(--c-text-muted, #565f89)',
+            color: 'var(--c-fg-muted)',
             fontSize: '14px',
             zIndex: 1,
           }}
@@ -100,7 +100,7 @@ export function WordPreview({ path }: WordPreviewProps) {
           padding: '24px',
           minHeight: '100%',
           // docx-preview 渲染出的 HTML 背景默认白色，这里让外层容器适配主题
-          background: 'var(--c-surface-1, #ffffff)',
+          background: 'var(--c-bg)',
         }}
       />
     </div>

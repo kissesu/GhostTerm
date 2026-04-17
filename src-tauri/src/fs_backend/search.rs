@@ -14,7 +14,9 @@ const MAX_FILES: usize = 200;
 const MAX_FILE_SIZE: u64 = 5 * 1024 * 1024;
 
 /// 单条匹配结果，对应文件中某一行的某段文本
+/// rename_all = "camelCase"：前端 TS 接口用 camelCase（lineNumber/lineContent/...）
 #[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchMatch {
     /// 行号，1-based；文件名搜索模式下置 0
     pub line_number: u32,
@@ -27,7 +29,9 @@ pub struct SearchMatch {
 }
 
 /// 单个文件的搜索结果
+/// rename_all = "camelCase"：前端 TS 接口用 camelCase（filePath/absPath）
 #[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchFileResult {
     /// 相对 root_path 的路径（供 UI 显示用）
     pub file_path: String,
@@ -49,7 +53,10 @@ pub struct SearchResult {
 }
 
 /// 前端传入的搜索参数
+/// rename_all = "camelCase"：前端 JS 用 camelCase（rootPath/caseSensitive/...），
+/// serde 自动映射到 Rust snake_case 字段名
 #[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchParams {
     /// 项目根目录路径
     pub root_path: String,

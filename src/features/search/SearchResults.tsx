@@ -24,7 +24,7 @@ function highlightMatch(content: string, colStart: number, colEnd: number): Reac
       {before}
       <mark
         style={{
-          background: 'var(--c-accent-muted)',
+          background: 'var(--c-selection)',
           color: 'var(--c-fg)',
           borderRadius: 2,
         }}
@@ -99,7 +99,7 @@ export default function SearchResults() {
               padding: '6px 12px',
               fontSize: 12,
               color: 'var(--c-fg-subtle)',
-              background: 'var(--c-surface-1)',
+              background: 'var(--c-panel)',
               position: 'sticky',
               top: 0,
               display: 'flex',
@@ -117,7 +117,7 @@ export default function SearchResults() {
               style={{
                 padding: '1px 6px',
                 borderRadius: 10,
-                background: 'var(--c-surface-3)',
+                background: 'var(--c-active)',
                 fontSize: 11,
                 flexShrink: 0,
               }}
@@ -144,7 +144,7 @@ export default function SearchResults() {
                   cursor: 'pointer',
                   fontSize: 13,
                   fontFamily: 'monospace',
-                  background: isActive ? 'var(--c-surface-3)' : 'transparent',
+                  background: isActive ? 'var(--c-active)' : 'transparent',
                   alignItems: 'baseline',
                   gap: 8,
                 }}

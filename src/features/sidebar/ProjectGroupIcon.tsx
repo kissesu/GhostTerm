@@ -10,7 +10,7 @@ interface ProjectGroupIconProps {
 export default function ProjectGroupIcon({
   icon,
   size = 18,
-  color = '#eef0ff',
+  color = 'currentColor',
 }: ProjectGroupIconProps) {
   if (icon === 'folders') {
     return <Folders size={size} color={color} />;

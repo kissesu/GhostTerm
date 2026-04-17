@@ -122,7 +122,7 @@ export default function Worktrees() {
           padding: '2px 8px 6px',
         }}
       >
-        <span style={{ fontSize: 11, color: '#565f89', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+        <span style={{ fontSize: 12, color: 'var(--c-fg-subtle)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
           Worktrees ({worktrees.length})
         </span>
         <button
@@ -131,10 +131,10 @@ export default function Worktrees() {
           disabled={!repoPath}
           style={{
             background: 'transparent',
-            border: '1px solid #27293d',
+            border: '1px solid var(--c-border-sub)',
             borderRadius: 3,
-            color: repoPath ? '#7aa2f7' : '#565f89',
-            fontSize: 11,
+            color: repoPath ? 'var(--c-accent)' : 'var(--c-fg-subtle)',
+            fontSize: 12,
             padding: '2px 8px',
             cursor: repoPath ? 'pointer' : 'not-allowed',
           }}
@@ -145,7 +145,7 @@ export default function Worktrees() {
 
       {/* Worktree 列表 */}
       {worktrees.length === 0 ? (
-        <div style={{ padding: '8px', fontSize: 12, color: '#565f89', textAlign: 'center' }}>
+        <div style={{ padding: '8px', fontSize: 12, color: 'var(--c-fg-subtle)', textAlign: 'center' }}>
           暂无 worktree 数据
         </div>
       ) : (
@@ -178,7 +178,7 @@ export default function Worktrees() {
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#c0caf5', marginBottom: 8 }}>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--c-fg)', marginBottom: 8 }}>
                 分支名
               </label>
               <input
@@ -192,7 +192,7 @@ export default function Worktrees() {
               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#c0caf5', marginBottom: 8 }}>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--c-fg)', marginBottom: 8 }}>
                 目录路径
               </label>
               <input
@@ -254,8 +254,8 @@ interface WorktreeItemProps {
 /** 单个 Worktree 条目组件 */
 function WorktreeItem({ wt, onSwitch, onRemove }: WorktreeItemProps) {
   // 当前活跃 worktree 使用高亮背景
-  const bgColor = wt.is_current ? '#1e2030' : 'transparent';
-  const borderColor = wt.is_current ? '#7aa2f7' : 'transparent';
+  const bgColor = wt.is_current ? 'var(--c-card-active)' : 'transparent';
+  const borderColor = wt.is_current ? 'var(--c-accent)' : 'transparent';
 
   // 取路径最后一段作为显示名称
   const displayName = wt.branch ?? wt.path.split('/').pop() ?? wt.path;
@@ -278,20 +278,20 @@ function WorktreeItem({ wt, onSwitch, onRemove }: WorktreeItemProps) {
       {/* 分支名 + 当前标记 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         {/* 分支图标（Unicode 符号，无 emoji） */}
-        <span style={{ color: '#7aa2f7', fontSize: 11, fontFamily: 'monospace' }}>
+        <span style={{ color: 'var(--c-accent)', fontSize: 12, fontFamily: 'monospace' }}>
           {wt.branch ? '[branch]' : '[detached]'}
         </span>
-        <span style={{ color: '#c0caf5', fontSize: 12, fontWeight: wt.is_current ? 600 : 400 }}>
+        <span style={{ color: 'var(--c-fg)', fontSize: 12, fontWeight: wt.is_current ? 600 : 400 }}>
           {displayName}
         </span>
         {wt.is_current && (
-          <span style={{ fontSize: 10, color: '#7aa2f7', marginLeft: 'auto' }}>当前</span>
+          <span style={{ fontSize: 11, color: 'var(--c-accent)', marginLeft: 'auto' }}>当前</span>
         )}
       </div>
 
       {/* 路径 */}
       <div
-        style={{ fontSize: 10, color: '#565f89', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+        style={{ fontSize: 11, color: 'var(--c-fg-subtle)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
         title={wt.path}
       >
         {shortPath}
@@ -305,10 +305,10 @@ function WorktreeItem({ wt, onSwitch, onRemove }: WorktreeItemProps) {
             title={`切换到 ${displayName}`}
             style={{
               background: 'transparent',
-              border: '1px solid #27293d',
+              border: '1px solid var(--c-border-sub)',
               borderRadius: 3,
-              color: '#7aa2f7',
-              fontSize: 10,
+              color: 'var(--c-accent)',
+              fontSize: 11,
               padding: '1px 6px',
               cursor: 'pointer',
             }}
@@ -322,10 +322,10 @@ function WorktreeItem({ wt, onSwitch, onRemove }: WorktreeItemProps) {
             title={`删除 ${displayName}`}
             style={{
               background: 'transparent',
-              border: '1px solid #27293d',
+              border: '1px solid var(--c-border-sub)',
               borderRadius: 3,
-              color: '#f7768e',
-              fontSize: 10,
+              color: 'var(--c-danger)',
+              fontSize: 11,
               padding: '1px 6px',
               cursor: 'pointer',
             }}

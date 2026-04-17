@@ -26,14 +26,14 @@ export default function UpdateBanner({ state, actions }: UpdateBannerProps) {
         right: 0,
         zIndex: 9999,
         // 使用设计令牌：深色背景 + 黄铜 accent 边框
-        background: 'var(--c-bg-2, #1f2035)',
-        borderTop: '1px solid var(--c-accent, #9b6e00)',
+        background: 'var(--c-panel)',
+        borderTop: '1px solid var(--c-accent)',
         padding: '10px 16px',
         display: 'flex',
         alignItems: 'center',
         gap: '12px',
         fontSize: '13px',
-        color: 'var(--c-fg-1, #c0caf5)',
+        color: 'var(--c-fg)',
       }}
     >
       {/* 版本信息文字 */}
@@ -52,7 +52,7 @@ export default function UpdateBanner({ state, actions }: UpdateBannerProps) {
           style={{
             width: '120px',
             height: '4px',
-            background: 'var(--c-bg-3, #2a2c43)',
+            background: 'var(--c-raised)',
             borderRadius: '2px',
             overflow: 'hidden',
           }}
@@ -61,7 +61,7 @@ export default function UpdateBanner({ state, actions }: UpdateBannerProps) {
             style={{
               height: '100%',
               width: state.progress !== null ? `${state.progress}%` : '0%',
-              background: 'var(--c-accent, #9b6e00)',
+              background: 'var(--c-accent)',
               borderRadius: '2px',
               transition: 'width 0.2s ease',
             }}
@@ -71,7 +71,7 @@ export default function UpdateBanner({ state, actions }: UpdateBannerProps) {
 
       {/* 错误提示 */}
       {state.error && (
-        <span style={{ color: '#f7768e', fontSize: '12px' }}>{state.error}</span>
+        <span style={{ color: 'var(--c-danger)', fontSize: '12px' }}>{state.error}</span>
       )}
 
       {/* 操作按钮 */}
@@ -81,9 +81,9 @@ export default function UpdateBanner({ state, actions }: UpdateBannerProps) {
         style={{
           padding: '4px 12px',
           borderRadius: '4px',
-          border: '1px solid var(--c-accent, #9b6e00)',
-          background: state.installing ? 'transparent' : 'var(--c-accent, #9b6e00)',
-          color: state.installing ? 'var(--c-accent, #9b6e00)' : '#fff',
+          border: '1px solid var(--c-accent)',
+          background: state.installing ? 'transparent' : 'var(--c-accent)',
+          color: state.installing ? 'var(--c-accent)' : 'var(--c-accent-text)',
           cursor: state.installing ? 'not-allowed' : 'pointer',
           fontSize: '12px',
           opacity: state.installing ? 0.6 : 1,
@@ -105,7 +105,7 @@ export default function UpdateBanner({ state, actions }: UpdateBannerProps) {
             borderRadius: '4px',
             border: '1px solid transparent',
             background: 'transparent',
-            color: 'var(--c-fg-2, #565f89)',
+            color: 'var(--c-fg-muted)',
             cursor: 'pointer',
             fontSize: '12px',
           }}

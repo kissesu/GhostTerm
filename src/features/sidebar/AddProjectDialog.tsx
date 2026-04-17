@@ -180,7 +180,7 @@ export default function AddProjectDialog({ onClose }: AddProjectDialogProps) {
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(0,0,0,0.5)',
+        background: 'var(--c-overlay-backdrop)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

@@ -33,7 +33,7 @@ export default function ProjectGroupHeader({
         gap: 7,
         padding: '9px 10px 9px 12px',
         borderBottom: '1px solid var(--c-border-sub)',
-        background: 'var(--c-panel)',
+        background: 'var(--c-bg)',
       }}
       data-testid="project-group-header"
     >
@@ -75,7 +75,7 @@ export default function ProjectGroupHeader({
           background: 'var(--c-accent-glow)',
           border: '1px solid var(--c-accent-dim)',
           color: 'var(--c-accent)',
-          fontSize: 10,
+          fontSize: 11,
           fontWeight: 700,
           display: 'inline-flex',
           alignItems: 'center',

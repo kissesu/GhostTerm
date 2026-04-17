@@ -17,7 +17,7 @@ export default function Sidebar() {
         minHeight: 0,
         display: 'flex',
         flexDirection: 'column',
-        background: 'var(--c-panel)',
+        background: 'var(--c-bg)',
         overflow: 'hidden',
       }}
       data-testid="sidebar-root"

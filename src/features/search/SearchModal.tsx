@@ -135,7 +135,7 @@ export default function SearchModal() {
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(0,0,0,0.5)',
+        background: 'var(--c-overlay-backdrop)',
         backdropFilter: 'blur(8px)',
         zIndex: 1000,
         display: 'flex',
@@ -149,7 +149,7 @@ export default function SearchModal() {
         style={{
           width: 680,
           maxHeight: '70vh',
-          background: 'var(--c-surface-2)',
+          background: 'var(--c-raised)',
           border: '1px solid var(--c-border)',
           borderRadius: 'var(--radius-lg)',
           display: 'flex',

@@ -426,10 +426,10 @@ function FileTreeNode({ node, depth, gitStatusClass }: FileTreeNodeProps) {
 /**
  * 根据 git 状态确定节点的 CSS class 名称
  *
- * 颜色规则（与 Changes 面板状态颜色保持一致）：
- * - M（修改）→ git-modified（黄色 #e0af68）
- * - A（新增）/ ?（未跟踪）→ git-untracked（绿色 #9ece6a）
- * - D（删除）→ git-deleted（红色 #f7768e）
+ * 颜色规则（与 Changes 面板状态颜色保持一致，色值由 --c-git-* CSS 变量控制）：
+ * - M（修改）→ git-modified
+ * - A（新增）/ ?（未跟踪）→ git-untracked
+ * - D（删除）→ git-deleted
  */
 function resolveGitStatusClass(path: string, changes: StatusEntry[]): string | undefined {
   // 取文件名匹配（git status 返回相对路径，FileTree 使用绝对路径）
@@ -470,9 +470,11 @@ export default function FileTree() {
       {/* Git 状态颜色样式（注入到 shadow DOM 外层） */}
       {/* Git 状态颜色用 CSS token，跟随 dark/light 主题 */}
       <style>{`
-        .git-modified  { color: var(--c-warning) !important; }
-        .git-untracked { color: var(--c-success) !important; }
-        .git-deleted   { color: var(--c-danger)  !important; }
+        .git-modified  { color: var(--c-git-modified)  !important; }
+        .git-added     { color: var(--c-git-added)     !important; }
+        .git-deleted   { color: var(--c-git-deleted)   !important; }
+        .git-renamed   { color: var(--c-git-renamed)   !important; }
+        .git-untracked { color: var(--c-git-untracked) !important; }
         [data-active="false"]:hover { background: var(--c-hover) !important; }
       `}</style>
       <div

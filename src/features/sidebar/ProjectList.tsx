@@ -33,7 +33,7 @@ export default function ProjectList({
       <div
         style={{
           padding: '12px 14px 16px',
-          color: '#8e93ad',
+          color: 'var(--c-fg-subtle)',
           fontSize: 13,
         }}
       >

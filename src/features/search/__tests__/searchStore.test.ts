@@ -38,11 +38,14 @@ describe('searchStore', () => {
   });
 
   describe('open', () => {
-    it('设置 isOpen=true、projectPath，清空 results', async () => {
+    it('设置 isOpen=true、projectPath，清空 results 和 query', async () => {
       const { useSearchStore } = await import('../searchStore');
 
-      // 先放入一些旧结果
-      useSearchStore.setState({ results: [{ filePath: 'old.ts', absPath: '/old.ts', matches: [], truncated: false }] });
+      // 先放入旧结果和旧 query
+      useSearchStore.setState({
+        results: [{ filePath: 'old.ts', absPath: '/old.ts', matches: [], truncated: false }],
+        query: 'old query',
+      });
 
       useSearchStore.getState().open('/project/myapp');
 
@@ -50,8 +53,22 @@ describe('searchStore', () => {
       expect(state.isOpen).toBe(true);
       expect(state.projectPath).toBe('/project/myapp');
       expect(state.results).toHaveLength(0);
+      // 每次打开都重置 query，不残留上次的关键词
+      expect(state.query).toBe('');
       expect(state.selectedFileIdx).toBe(0);
       expect(state.selectedMatchIdx).toBe(0);
+    });
+
+    it('打开时不触发 invoke（query 已被重置为空）', async () => {
+      vi.useFakeTimers();
+      const { useSearchStore } = await import('../searchStore');
+
+      useSearchStore.setState({ query: 'fp' });
+      useSearchStore.getState().open('/project/myapp');
+
+      // query 被重置为空，不应触发搜索
+      expect(invoke).not.toHaveBeenCalled();
+      vi.useRealTimers();
     });
   });
 

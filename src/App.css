@@ -1,9 +1,9 @@
 /**
  * @file App.css — GhostTerm 全局样式与设计令牌
  * @description OKLCH 色彩令牌系统，dark/light 双主题。Obsidian Forge 美学：
- *              深色工坊 + 黄铜 Accent，Outfit 字体替代 Inter，增强层次对比度。
+ *              深色工坊 + 森青 Forge Jade Accent，色相 270 蓝紫对齐终端锚点，增强层次对比度。
  * @author Atlas.oi
- * @date 2026-04-15
+ * @date 2026-04-17
  */
 
 /* ============================================================
@@ -19,89 +19,117 @@
 
 /* ============================================================
    设计令牌 — Dark 主题（默认）Obsidian Forge
-   层次：bg(9.5%) < panel(13.5%) < raised(16.5%) < overlay(19%)
-   相比旧版(12.5/15/18.5/20)层次更分明，bg 更深，对比度更清晰
+   层次：bg(17%) < panel(20%) < raised(24%) < overlay(28%)
+   色相 270 蓝紫对齐终端锚点（#0d0e1a），chroma 0.032-0.045 恢复色相感知
    ============================================================ */
 :root,
 [data-theme="dark"] {
-  /* 背景层次：base → panel → raised → overlay（由深到浅） */
-  --c-bg:            oklch(9.5%  0.016 262);   /* 主背景 — 近黑蓝调 */
-  --c-panel:         oklch(13.5% 0.020 260);   /* 侧边栏 / 面板 */
-  --c-raised:        oklch(16.5% 0.022 262);   /* 卡片 / 弹出层 */
-  --c-overlay:       oklch(19%   0.024 264);   /* 下拉菜单 / modal */
-  --c-input:         oklch(8.5%  0.014 262);   /* 输入框背景 */
+  /* 背景层次 — 主平面 bg 直接用终端 HEX 锚点保证三区 pixel-perfect 一致，
+     其余层基于 bg 递增亮度形成浮起感 */
+  --c-bg:            #0d0e1a;                   /* = 终端 xterm background */
+  --c-panel:         oklch(21%   0.038 270);
+  --c-raised:        oklch(25%   0.042 270);
+  --c-overlay:       oklch(29%   0.045 270);
+  --c-input:         oklch(14%   0.032 270);
 
-  /* 边框 — 比旧版更可见 */
-  --c-border:        oklch(26%   0.024 263);
-  --c-border-sub:    oklch(19%   0.018 263);
+  /* 边框 */
+  --c-border:        oklch(30%   0.042 270);
+  --c-border-sub:    oklch(22%   0.035 270);
 
-  /* 文字 */
-  --c-fg:            oklch(90%   0.010 265);   /* 主文字 */
-  --c-fg-muted:      oklch(52%   0.020 265);   /* 次要文字 */
-  --c-fg-subtle:     oklch(32%   0.012 265);   /* 禁用 / 占位 */
+  /* 文字 — 色相 270，chroma 0.025-0.030 带冷光 */
+  --c-fg:            oklch(92%   0.028 270);
+  --c-fg-muted:      oklch(66%   0.030 270);
+  --c-fg-subtle:     oklch(45%   0.025 270);
 
-  /* 黄铜 Accent — 区别于 AI 默认青紫配色 */
-  --c-accent:        oklch(74%   0.18  56);    /* 主 Accent */
-  --c-accent-dim:    oklch(74%   0.18  56 / 0.15);
-  --c-accent-glow:   oklch(74%   0.18  56 / 0.07);  /* 环境光晕 */
-  --c-accent-text:   oklch(12%   0.014 262);   /* Accent 背景上的文字 */
+  /* 森青 Forge Jade Accent */
+  --c-accent:        oklch(72%   0.11  175);
+  --c-accent-dim:    oklch(72%   0.11  175 / 0.18);
+  --c-accent-glow:   oklch(72%   0.11  175 / 0.08);
+  --c-accent-text:   oklch(14%   0.02  175);
 
-  /* 活跃卡片背景 — 微暖色调，替代"左侧粗边框"反模式 */
-  --c-card-active:   oklch(16.5% 0.038 60);
+  /* 活跃卡片 — accent 色相的低亮度版本 */
+  --c-card-active:   oklch(22%   0.045 175);
 
   /* 状态色 */
   --c-danger:        oklch(65%   0.19  22);
   --c-danger-dim:    oklch(65%   0.19  22 / 0.14);
   --c-success:       oklch(68%   0.16  147);
-  /* warning 色相推到 100（黄绿），与 accent 黄铜(56) 相差 44°，避免 git 状态和活跃文件视觉混淆 */
-  --c-warning:       oklch(78%   0.15  100);
+  --c-warning:       oklch(78%   0.15  85);
 
   /* 选中 / hover */
-  --c-selection:     oklch(74%   0.18  56 / 0.20);
-  --c-hover:         oklch(100%  0     0  / 0.05);
-  --c-active:        oklch(100%  0     0  / 0.09);
+  --c-selection:     oklch(72%   0.11  175 / 0.22);
+  --c-hover:         oklch(100%  0     0  / 0.06);
+  --c-active:        oklch(100%  0     0  / 0.10);
+
+  /* Modal 遮罩 */
+  --c-overlay-backdrop: oklch(0% 0 0 / 0.55);
+
+  /* Git 状态语义色 */
+  --c-git-modified:   oklch(75% 0.15 80);
+  --c-git-added:      oklch(72% 0.16 147);
+  --c-git-deleted:    oklch(68% 0.19 22);
+  --c-git-renamed:    oklch(75% 0.12 200);
+  --c-git-untracked:  oklch(52% 0.025 270);
 }
 
 /* ============================================================
-   设计令牌 — Light 主题：暖纸调，不是冷白
+   设计令牌 — Light 主题：冷浅灰白，对齐色相 270
    ============================================================ */
 [data-theme="light"] {
-  --c-bg:            oklch(97%   0.007 88);    /* 暖米白 */
-  --c-panel:         oklch(92%   0.012 88);
-  --c-raised:        oklch(99%   0.003 88);
+  /* 背景 — 暖米白系，bg 直接 HEX 对齐 light 终端锚点 #f7f4ef；
+     panel/raised/overlay 色相 88（暖）保持协调 */
+  --c-bg:            #f7f4ef;                   /* = light 终端 background */
+  --c-panel:         oklch(93%   0.012 88);
+  --c-raised:        oklch(99%   0.004 88);
   --c-overlay:       oklch(100%  0     0);
-  --c-input:         oklch(94%   0.010 88);
+  --c-input:         oklch(95%   0.010 88);
 
-  --c-border:        oklch(82%   0.014 88);
-  --c-border-sub:    oklch(88%   0.009 88);
+  /* 边框 */
+  --c-border:        oklch(80%   0.020 270);
+  --c-border-sub:    oklch(88%   0.012 270);
 
-  --c-fg:            oklch(20%   0.022 264);
-  --c-fg-muted:      oklch(48%   0.020 264);
-  --c-fg-subtle:     oklch(66%   0.012 264);
+  /* 文字 — 色相 270，chroma 0.020-0.030 */
+  --c-fg:            oklch(22%   0.030 270);
+  --c-fg-muted:      oklch(48%   0.028 270);
+  --c-fg-subtle:     oklch(65%   0.020 270);
 
-  --c-accent:        oklch(52%   0.19  56);
-  --c-accent-dim:    oklch(52%   0.19  56 / 0.12);
-  --c-accent-glow:   oklch(52%   0.19  56 / 0.06);
+  /* 森青 Forge Jade Accent — 降亮度版（light 底显色） */
+  --c-accent:        oklch(48%   0.13  175);
+  --c-accent-dim:    oklch(48%   0.13  175 / 0.14);
+  --c-accent-glow:   oklch(48%   0.13  175 / 0.06);
   --c-accent-text:   oklch(100%  0     0);
 
-  --c-card-active:   oklch(96%   0.022 80);
+  /* 活跃卡片 */
+  --c-card-active:   oklch(94%   0.030 175);
 
+  /* 状态色 */
   --c-danger:        oklch(50%   0.19  22);
   --c-danger-dim:    oklch(50%   0.19  22 / 0.12);
   --c-success:       oklch(50%   0.16  147);
-  --c-warning:       oklch(60%   0.15  100);
+  --c-warning:       oklch(58%   0.15  85);
 
-  --c-selection:     oklch(52%   0.19  56 / 0.15);
+  /* 选中 / hover */
+  --c-selection:     oklch(48%   0.13  175 / 0.18);
   --c-hover:         oklch(0%    0     0  / 0.04);
   --c-active:        oklch(0%    0     0  / 0.08);
+
+  /* Modal 遮罩 */
+  --c-overlay-backdrop: oklch(0% 0 0 / 0.30);
+
+  /* Git 状态语义色 */
+  --c-git-modified:   oklch(55% 0.18 80);
+  --c-git-added:      oklch(48% 0.17 147);
+  --c-git-deleted:    oklch(50% 0.19 22);
+  --c-git-renamed:    oklch(50% 0.15 200);
+  --c-git-untracked:  oklch(62% 0.020 270);
 }
 
 /* ============================================================
    排版令牌
    ============================================================ */
 :root {
-  /* UI 字体：Outfit — 几何感强，有个性，不是 AI 惯用的 Inter */
-  --font-ui:   "Outfit", -apple-system, BlinkMacSystemFont, "SF Pro Text",
+  /* UI 字体：Geist Sans — Vercel 开发，专为 UI 小字号优化，hinting 优秀 */
+  --font-ui:   "Geist", -apple-system, BlinkMacSystemFont, "SF Pro Text",
                "Helvetica Neue", system-ui, sans-serif;
   /* 代码 / 终端专用等宽字体 */
   --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code",
@@ -146,8 +174,9 @@
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  /* 不设 -webkit-font-smoothing：让 WebView 使用默认 subpixel-antialiased
+     子像素抗锯齿在标清屏提供 3× 水平分辨率，避免小字号像素感；
+     Retina 屏无感知差异。如需强制灰度抗锯齿，可在 Retina-only 条件下恢复。 */
 }
 
 [data-theme="light"] {
@@ -272,4 +301,22 @@ textarea {
   background: var(--c-accent-dim);
   color: var(--c-accent);
   font-weight: 600;
+}
+
+/* ============================================================
+   CodeMirror 编辑区背景覆盖
+   oneDark 内置 #282c34（亮度约 30%）与 App 主背景 --c-bg(17%) 差 13%，
+   造成编辑区与侧边栏/终端三区割裂。此处强制覆盖对齐终端锚点。
+   用 !important 赢 CodeMirror 运行时动态注入的 theme CSS。
+   ============================================================ */
+html[data-theme="dark"] .cm-editor,
+html[data-theme="dark"] .cm-editor .cm-gutters,
+html[data-theme="dark"] .cm-editor .cm-scroller {
+  background-color: var(--c-bg) !important;
+}
+html[data-theme="dark"] .cm-editor .cm-gutters {
+  border-right: none !important;
+}
+html[data-theme="dark"] .cm-editor .cm-activeLineGutter {
+  background-color: var(--c-card-active) !important;
 }

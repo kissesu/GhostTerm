@@ -79,7 +79,7 @@ export default function ProjectGroupMenu({
               {group.name}
             </span>
             {/* 项目数 */}
-            <span style={{ fontSize: 11, color: 'var(--c-fg-subtle)', fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ fontSize: 12, color: 'var(--c-fg-subtle)', fontVariantNumeric: 'tabular-nums' }}>
               {group.projectCount}
             </span>
             {/* 选中勾 */}

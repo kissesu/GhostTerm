@@ -4,20 +4,21 @@
  *              由 settingsStore.appTheme + 系统偏好共同驱动，外部通过 syncTheme() 更新。
  *              终端配色（ITheme）供 xterm.js 使用；AppColors 供需要 JS 计算的内联样式。
  *              大多数 UI 颜色已迁移到 CSS 自定义属性（var(--c-*)），无需 AppColors。
+ *              森青 Forge Jade 调色板（色相 175，对齐 App.css 新 token）
  * @author Atlas.oi
- * @date 2026-04-15
+ * @date 2026-04-17
  */
 
 import { create } from 'zustand';
 import type { ITheme } from '@xterm/xterm';
 
-/** xterm.js 深色终端配色 — Obsidian Brass 调色板 */
+/** xterm.js 深色终端配色 — 森青 Forge Jade 调色板（cursor 对齐 --c-accent oklch(72% 0.11 175)） */
 export const DARK_TERMINAL_THEME: ITheme = {
   background:          '#0d0e1a',
   foreground:          '#d8dcf0',
-  cursor:              '#d4a93e',
+  cursor:              '#4abba1', // 森青 accent — 值同 DARK_APP_COLORS.accent；源 oklch(72% 0.11 175)
   cursorAccent:        '#0d0e1a',
-  selectionBackground: '#d4a93e33',
+  selectionBackground: '#4abba138',
   black:               '#0a0b16',
   red:                 '#d95f6f',
   green:               '#5ab87c',
@@ -36,13 +37,13 @@ export const DARK_TERMINAL_THEME: ITheme = {
   brightWhite:         '#d8dcf0',
 };
 
-/** xterm.js 浅色终端配色 — 暖白调色板 */
+/** xterm.js 浅色终端配色 — 森青 Forge Jade 调色板（cursor 对齐 --c-accent oklch(48% 0.13 175)） */
 export const LIGHT_TERMINAL_THEME: ITheme = {
   background:          '#f7f4ef',
   foreground:          '#1e2038',
-  cursor:              '#9b6e00',
+  cursor:              '#006e5b', // 森青 accent — 值同 LIGHT_APP_COLORS.accent；源 oklch(48% 0.13 175)
   cursorAccent:        '#f7f4ef',
-  selectionBackground: '#9b6e0022',
+  selectionBackground: '#006e5b28',
   black:               '#1e2038',
   red:                 '#b3434f',
   green:               '#338a54',
@@ -72,24 +73,29 @@ export interface AppColors {
   danger: string;
 }
 
+// HEX 镜像 App.css 的 --c-* token（OKLCH → sRGB 由 culori 2026-04-17 精确转换）
+// 注意：terminalTheme.background/foreground 走独立锚点（见上方 DARK_TERMINAL_THEME），不等同于 APP_COLORS.background/foreground
+// 警告：以下 HEX 值镜像 App.css --c-* token，修改 App.css 时必须同步更新此处
 export const DARK_APP_COLORS: AppColors = {
-  background:          '#0d0e1a',
-  backgroundSecondary: '#11131f',
-  border:              '#1e2240',
-  foreground:          '#d8dcf0',
-  foregroundMuted:     '#586088',
-  accent:              '#d4a93e',
-  danger:              '#d95f6f',
+  background:          '#030510',  // --c-bg:       oklch(12% 0.028 270)
+  backgroundSecondary: '#060a19',  // --c-panel:    oklch(15% 0.032 270)
+  border:              '#252d43',  // --c-border:   oklch(30% 0.042 270)
+  foreground:          '#dde4f8',  // --c-fg:       oklch(92% 0.028 270)
+  foregroundMuted:     '#8b92a5',  // --c-fg-muted: oklch(66% 0.030 270)
+  accent:              '#4abba1',  // --c-accent:   oklch(72% 0.11  175) 森青
+  danger:              '#ec5258',  // --c-danger:   oklch(65% 0.19  22)
 };
 
+// 警告：以下 HEX 值镜像 App.css --c-* token，修改 App.css 时必须同步更新此处
+// HEX 由 culori oklch → sRGB 精确转换（2026-04-17）
 export const LIGHT_APP_COLORS: AppColors = {
-  background:          '#f7f4ef',
-  backgroundSecondary: '#ede9e3',
-  border:              '#d4cfc7',
-  foreground:          '#1e2038',
-  foregroundMuted:     '#5a6280',
-  accent:              '#9b6e00',
-  danger:              '#b3434f',
+  background:          '#eff2f9',  // --c-bg:       oklch(96% 0.010 270)
+  backgroundSecondary: '#e1e4ee',  // --c-panel:    oklch(92% 0.014 270)
+  border:              '#b8bdcb',  // --c-border:   oklch(80% 0.020 270)
+  foreground:          '#151a29',  // --c-fg:       oklch(22% 0.030 270)
+  foregroundMuted:     '#575d6e',  // --c-fg-muted: oklch(48% 0.028 270)
+  accent:              '#006e5b',  // --c-accent:   oklch(48% 0.13  175) 森青 light
+  danger:              '#b7162d',  // --c-danger:   oklch(50% 0.19  22)
 };
 
 export type ResolvedTheme = 'dark' | 'light';

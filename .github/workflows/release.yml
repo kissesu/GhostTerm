@@ -26,6 +26,11 @@ on:
 permissions:
   contents: write
 
+# 提前启用 Node.js 24 运行时，避免 actions 在 2026-06-02 强制迁移后意外中断
+# 参考：https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build-macos:
     name: Build macOS (${{ matrix.target }})

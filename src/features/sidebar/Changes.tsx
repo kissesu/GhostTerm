@@ -14,13 +14,13 @@ import type { StatusEntry } from '../../shared/types';
 // Changes 面板轮询间隔（ms）：终端执行 git 操作后能在 3 秒内反映到面板
 const POLL_INTERVAL_MS = 3000;
 
-/** 状态标记颜色映射 - 与 FileTree git 颜色规范一致 */
+/** 状态标记颜色映射 - 使用设计系统 --c-git-* 语义 token，跟随主题 */
 const STATUS_COLORS: Record<string, string> = {
-  M: '#e0af68', // 修改 - 黄色
-  A: '#9ece6a', // 新增 - 绿色
-  D: '#f7768e', // 删除 - 红色
-  R: '#7dcfff', // 重命名 - 浅蓝
-  '?': '#565f89', // 未跟踪 - 灰色
+  M: 'var(--c-git-modified)',
+  A: 'var(--c-git-added)',
+  D: 'var(--c-git-deleted)',
+  R: 'var(--c-git-renamed)',
+  '?': 'var(--c-git-untracked)',
 };
 
 /** 状态标记文字提示 */
@@ -47,7 +47,7 @@ interface FileItemProps {
 
 /** 单个文件变更条目 */
 function FileItem({ entry, statusType, actionLabel, onAction }: FileItemProps) {
-  const color = STATUS_COLORS[statusType] ?? '#c0caf5';
+  const color = STATUS_COLORS[statusType] ?? 'var(--c-fg)';
   const label = STATUS_LABELS[statusType] ?? statusType;
 
   // 取文件名（最后一段路径）用于展示，完整路径作为 title
@@ -87,7 +87,7 @@ function FileItem({ entry, statusType, actionLabel, onAction }: FileItemProps) {
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
-          color: '#c0caf5',
+          color: 'var(--c-fg)',
         }}
         title={entry.path}
       >
@@ -100,10 +100,10 @@ function FileItem({ entry, statusType, actionLabel, onAction }: FileItemProps) {
         title={`${actionLabel} ${entry.path}`}
         style={{
           background: 'transparent',
-          border: '1px solid #27293d',
+          border: '1px solid var(--c-border-sub)',
           borderRadius: 3,
-          color: '#565f89',
-          fontSize: 10,
+          color: 'var(--c-fg-subtle)',
+          fontSize: 11,
           padding: '1px 5px',
           cursor: 'pointer',
           flexShrink: 0,
@@ -121,8 +121,8 @@ function SectionHeader({ title, count }: { title: string; count: number }) {
     <div
       style={{
         padding: '4px 8px 2px',
-        fontSize: 11,
-        color: '#565f89',
+        fontSize: 12,
+        color: 'var(--c-fg-subtle)',
         fontWeight: 600,
         letterSpacing: 0.5,
         textTransform: 'uppercase',
@@ -181,7 +181,7 @@ export default function Changes() {
       <div>
         <SectionHeader title="Staged" count={stagedEntries.length} />
         {stagedEntries.length === 0 ? (
-          <div style={{ padding: '4px 8px', fontSize: 11, color: '#565f89' }}>
+          <div style={{ padding: '4px 8px', fontSize: 12, color: 'var(--c-fg-subtle)' }}>
             无暂存文件
           </div>
         ) : (
@@ -199,13 +199,13 @@ export default function Changes() {
       </div>
 
       {/* 分隔线 */}
-      <div style={{ borderTop: '1px solid #27293d', margin: '2px 0' }} />
+      <div style={{ borderTop: '1px solid var(--c-border-sub)', margin: '2px 0' }} />
 
       {/* Unstaged 分区 */}
       <div>
         <SectionHeader title="Unstaged" count={unstagedEntries.length} />
         {unstagedEntries.length === 0 ? (
-          <div style={{ padding: '4px 8px', fontSize: 11, color: '#565f89' }}>
+          <div style={{ padding: '4px 8px', fontSize: 12, color: 'var(--c-fg-subtle)' }}>
             无未暂存文件
           </div>
         ) : (

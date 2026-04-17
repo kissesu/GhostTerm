@@ -93,7 +93,7 @@ function ImagePreview({ path, mimeHint }: { path: string; mimeHint: string }) {
           alignItems: 'center',
           justifyContent: 'center',
           height: '100%',
-          color: '#f7768e',
+          color: 'var(--c-danger)',
           fontSize: '14px',
         }}
       >
@@ -110,7 +110,7 @@ function ImagePreview({ path, mimeHint }: { path: string; mimeHint: string }) {
           alignItems: 'center',
           justifyContent: 'center',
           height: '100%',
-          color: '#565f89',
+          color: 'var(--c-fg-subtle)',
           fontSize: '14px',
         }}
       >
@@ -212,6 +212,7 @@ export default function Editor() {
       extensions: [
         basicSetup,
         // 主题隔间：根据当前 mode 初始化，后续由独立 effect 热切换
+        // dark 模式叠加 bgOverride 覆盖 oneDark 背景色，对齐终端锚点
         themeCompartment.of(mode === 'dark' ? oneDark : ghosttermLight),
         // 语言隔间初始为空，异步加载后通过 dispatch 更新
         langCompartment.of([]),
@@ -263,6 +264,7 @@ export default function Editor() {
   useEffect(() => {
     if (!viewRef.current) return;
     viewRef.current.dispatch({
+      // dark 模式叠加 bgOverride，对齐终端锚点；light 模式用独立主题
       effects: themeCompartment.reconfigure(mode === 'dark' ? oneDark : ghosttermLight),
     });
   }, [mode]);
@@ -315,7 +317,7 @@ export default function Editor() {
           alignItems: 'center',
           justifyContent: 'center',
           height: '100%',
-          color: '#565f89',
+          color: 'var(--c-fg-subtle)',
           fontSize: '14px',
           flexDirection: 'column',
           gap: '8px',
@@ -352,7 +354,7 @@ export default function Editor() {
           alignItems: 'center',
           justifyContent: 'center',
           height: '100%',
-          color: '#565f89',
+          color: 'var(--c-fg-subtle)',
           fontSize: '14px',
           flexDirection: 'column',
           gap: '8px',
@@ -376,14 +378,14 @@ export default function Editor() {
           alignItems: 'center',
           justifyContent: 'center',
           height: '100%',
-          color: '#e0af68',
+          color: 'var(--c-warning)',
           fontSize: '14px',
           flexDirection: 'column',
           gap: '8px',
         }}
       >
         <span>文件过大，无法在编辑器中打开</span>
-        <span style={{ fontSize: '12px', color: '#565f89' }}>
+        <span style={{ fontSize: '12px', color: 'var(--c-fg-subtle)' }}>
           建议使用系统默认程序打开
         </span>
       </div>
@@ -401,7 +403,7 @@ export default function Editor() {
           alignItems: 'center',
           justifyContent: 'center',
           height: '100%',
-          color: '#f7768e',
+          color: 'var(--c-danger)',
           fontSize: '14px',
           flexDirection: 'column',
           gap: '12px',
@@ -413,9 +415,9 @@ export default function Editor() {
             style={{
               padding: '6px 16px',
               borderRadius: '4px',
-              border: '1px solid #565f89',
+              border: '1px solid var(--c-border-sub)',
               background: 'transparent',
-              color: '#c0caf5',
+              color: 'var(--c-fg)',
               cursor: 'pointer',
               fontSize: '13px',
             }}

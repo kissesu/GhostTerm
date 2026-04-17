@@ -43,7 +43,7 @@ export default function ConflictDialog({
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        backgroundColor: 'var(--c-overlay-backdrop)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -53,13 +53,13 @@ export default function ConflictDialog({
       {/* 对话框容器 */}
       <div
         style={{
-          backgroundColor: '#1e1e2e',
-          border: '1px solid #45475a',
+          backgroundColor: 'var(--c-overlay)',
+          border: '1px solid var(--c-border)',
           borderRadius: '8px',
           padding: '24px',
           minWidth: '360px',
           maxWidth: '480px',
-          color: '#cdd6f4',
+          color: 'var(--c-fg)',
           fontFamily: 'system-ui, sans-serif',
         }}
       >
@@ -69,18 +69,18 @@ export default function ConflictDialog({
             margin: '0 0 12px 0',
             fontSize: '16px',
             fontWeight: 600,
-            color: '#f38ba8',
+            color: 'var(--c-danger)',
           }}
         >
           文件冲突
         </h3>
 
         {/* 说明文本 */}
-        <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#bac2de' }}>
-          文件 <strong style={{ color: '#cba6f7' }}>{fileName}</strong> 已被外部程序修改，
+        <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: 'var(--c-fg-muted)' }}>
+          文件 <strong style={{ color: 'var(--c-accent)' }}>{fileName}</strong> 已被外部程序修改，
           但你有未保存的本地修改。
         </p>
-        <p style={{ margin: '0 0 20px 0', fontSize: '12px', color: '#6c7086' }}>
+        <p style={{ margin: '0 0 20px 0', fontSize: '12px', color: 'var(--c-fg-subtle)' }}>
           路径：{path}
         </p>
 
@@ -97,9 +97,9 @@ export default function ConflictDialog({
             onClick={onKeep}
             style={{
               padding: '8px 16px',
-              backgroundColor: '#313244',
-              color: '#cdd6f4',
-              border: '1px solid #45475a',
+              backgroundColor: 'var(--c-raised)',
+              color: 'var(--c-fg)',
+              border: '1px solid var(--c-border)',
               borderRadius: '6px',
               fontSize: '13px',
               cursor: 'pointer',
@@ -113,9 +113,9 @@ export default function ConflictDialog({
             onClick={onDiff}
             style={{
               padding: '8px 16px',
-              backgroundColor: '#313244',
-              color: '#89b4fa',
-              border: '1px solid #89b4fa',
+              backgroundColor: 'var(--c-raised)',
+              color: 'var(--c-accent)',
+              border: '1px solid var(--c-accent)',
               borderRadius: '6px',
               fontSize: '13px',
               cursor: 'pointer',
@@ -129,8 +129,8 @@ export default function ConflictDialog({
             onClick={onLoad}
             style={{
               padding: '8px 16px',
-              backgroundColor: '#89b4fa',
-              color: '#1e1e2e',
+              backgroundColor: 'var(--c-accent)',
+              color: 'var(--c-accent-text)',
               border: 'none',
               borderRadius: '6px',
               fontSize: '13px',

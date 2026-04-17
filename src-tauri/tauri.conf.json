@@ -33,6 +33,27 @@
     "active": true,
     "targets": "all",
     "createUpdaterArtifacts": true,
+    "fileAssociations": [
+      {
+        "name": "Text File",
+        "description": "Text and markup files",
+        "ext": ["txt", "md", "markdown", "rst", "log"]
+      },
+      {
+        "name": "Source Code",
+        "description": "Source code files",
+        "ext": ["js", "ts", "jsx", "tsx", "mjs", "cjs", "vue", "svelte",
+                "rs", "py", "go", "java", "kt", "swift", "c", "cpp", "h", "hpp",
+                "cs", "rb", "php", "lua", "r", "dart", "zig"]
+      },
+      {
+        "name": "Config File",
+        "description": "Configuration and data files",
+        "ext": ["json", "jsonc", "toml", "yaml", "yml", "xml", "ini",
+                "sh", "bash", "zsh", "fish", "ps1",
+                "css", "scss", "less", "html", "htm", "svg"]
+      }
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

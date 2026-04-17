@@ -112,8 +112,10 @@ const _runSearch = async (
       selectedFileIdx: 0,
       selectedMatchIdx: 0,
     });
-  } catch {
-    // invoke 失败（如后端超时）静默清空，不向上传递异常
+  } catch (err) {
+    // invoke 失败时暴露错误，用空结果让 UI 退出 loading 状态
+    // 不能静默吞错——用户需要知道搜索失败的原因（控制台输出供调试）
+    console.error('[searchStore] search_files_cmd 失败:', err);
     set({ isSearching: false, results: [] });
   }
 };
@@ -140,15 +142,18 @@ export const useSearchStore = create<SearchState>((set, get) => ({
 
   /**
    * 打开搜索弹窗，绑定当前项目路径
-   * 每次打开重置结果和选中位置，但保留上次的 query 方便用户继续搜索
+   * 每次打开完全重置状态：query、结果、选中位置一律清空
+   * 用户希望每次打开都是干净的初始状态，不残留上次的关键词
    */
   open: (projectPath) => {
     set({
       isOpen: true,
       projectPath,
+      query: '',
       results: [],
       selectedFileIdx: 0,
       selectedMatchIdx: 0,
+      isSearching: false,
       truncated: false,
     });
   },
