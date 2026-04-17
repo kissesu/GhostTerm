@@ -12,7 +12,7 @@ import { useKeyboardShortcuts } from '../shared/hooks/useKeyboardShortcuts';
 import WindowTitleBar from '../shared/components/WindowTitleBar';
 import { TabNav } from '../shared/components/TabNav';
 import { useSettingsStore } from '../shared/stores/settingsStore';
-import { ProjectWorkspace } from './ProjectWorkspace';
+import { WorkspaceRouter } from './WorkspaceRouter';
 
 // 侧边栏自动折叠阈值（px）：窗口宽度小于此值时自动隐藏侧边栏
 const SIDEBAR_AUTO_COLLAPSE_WIDTH = 800;
@@ -125,7 +125,7 @@ export default function AppLayout() {
           </button>
         }
       />
-      <ProjectWorkspace sidebarVisible={sidebarVisible} />
+      <WorkspaceRouter sidebarVisible={sidebarVisible} />
     </div>
   );
 }
