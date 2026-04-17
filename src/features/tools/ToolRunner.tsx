@@ -7,11 +7,11 @@
  */
 import { useState } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
-import { sidecarInvoke, SidecarError, type IssueDict, sidecarRestart } from './toolsSidecarClient';
+import { sidecarInvoke, SidecarError, type IssueDict, sidecarRestart, type TemplateJson } from './toolsSidecarClient';
 import { ErrorModal } from './ErrorModal';
 
 // P2 写死最小模板：只启用 cjk_ascii_space
-const P2_TEMPLATE = {
+const P2_TEMPLATE: TemplateJson = {
   rules: {
     cjk_ascii_space: { enabled: true, value: { allowed: false } },
   },
@@ -42,12 +42,16 @@ export function ToolRunner() {
       const result = await sidecarInvoke<{ issues: IssueDict[] }>({
         cmd: 'detect',
         file,
-        template: P2_TEMPLATE as any,
+        template: P2_TEMPLATE,
       });
       setIssues(result.issues);
     } catch (e) {
-      if (e instanceof SidecarError) setError(e);
-      else throw e;
+      if (e instanceof SidecarError) {
+        setError(e);
+      } else {
+        console.error('[ToolRunner] unexpected error', e);
+        throw e;
+      }
     } finally {
       setRunning(false);
     }
