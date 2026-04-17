@@ -63,3 +63,9 @@ Thumbs.db
 *.local
 *.log
 RESEARCH.md
+
+# Python sidecar
+src-python/.venv/
+src-python/dist/
+src-python/build/
+src-python/__pycache__/
