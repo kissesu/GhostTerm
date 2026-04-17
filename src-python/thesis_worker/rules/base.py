@@ -5,7 +5,7 @@
 @author: Atlas.oi
 @date: 2026-04-17
 """
-from typing import Protocol, Any, Optional
+from typing import Protocol, Any
 from docx.document import Document
 from ..models import Issue, FixResult
 

@@ -4,9 +4,10 @@
 @author: Atlas.oi
 @date: 2026-04-17
 """
+from .base import Rule
 from .cjk_ascii_space import CjkAsciiSpaceRule
 
-REGISTRY: dict = {
+REGISTRY: dict[str, type[Rule]] = {
     'cjk_ascii_space': CjkAsciiSpaceRule,
     # P4 追加其余 10 条
 }
