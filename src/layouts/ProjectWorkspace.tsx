@@ -7,8 +7,7 @@
 
 import React from 'react';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
-import { Sidebar } from '../features/sidebar';
-import { useProjectStore } from '../features/sidebar';
+import { Sidebar, useProjectStore } from '../features/sidebar';
 import { Editor, EditorTabs } from '../features/editor';
 import { Terminal, useTerminalStore } from '../features/terminal';
 
