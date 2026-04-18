@@ -210,11 +210,14 @@ def _handle_extract_from_selection(req_id: str, req: dict) -> dict:
     file = req['file']
     para_indices = req['para_indices']
     field_id = req['field_id']
+    # Task 4 新增：前端按 Shift 选句时携带 selected_text，此处透传给 pipeline
+    # 未传则 None，pipeline 内部回退为全段提取
+    selected_text: str | None = req.get('selected_text')
     if not Path(file).exists():
         return {'id': req_id, 'ok': False, 'error': f'file not found: {file}', 'code': 'ENOENT'}
     try:
         from .extractor.pipeline import extract_from_selection
-        result = extract_from_selection(file, para_indices, field_id)
+        result = extract_from_selection(file, para_indices, field_id, selected_text)
         return {'id': req_id, 'ok': True, 'result': result}
     except PackageNotFoundError:
         return {'id': req_id, 'ok': False, 'error': f'docx malformed: {file}', 'code': 'PARSE_ERROR'}
