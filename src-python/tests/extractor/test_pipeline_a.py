@@ -98,3 +98,38 @@ class TestExtractFromSelectionWithSelectedText:
         # 段落级属性（行距/对齐等）应仍被抽取（来自 _extract_para_level_attrs）
         # p1 = 摘要标题行，居中对齐
         assert result['value'].get('para.align') == 'center'
+
+    def test_extract_from_selection_with_selected_text_isolates_run(self, tmp_path):
+        """构造 2-run 段落：run0 加粗，run1 不加粗；selected_text 只命中 run1。
+
+        验证返回 value 中 font.bold 缺席（而非 True）——证明 run 隔离生效。
+        若该测试通过，说明 _read_run_list_style_attrs 确实只读了匹配 run 的样式。
+
+        注意：run 文本刻意用中性词（"标题："/"内容文本"），
+        避免触发 _extract_attributes_from_text 的关键词识别污染断言。
+        """
+        from docx import Document
+        doc = Document()
+        para = doc.add_paragraph()
+        # run 0：加粗"标题："
+        run_bold = para.add_run('标题：')
+        run_bold.bold = True
+        # run 1：不加粗"内容文本"
+        para.add_run('内容文本')
+        # run_plain.bold 保持默认 None（未设）
+
+        docx_path = tmp_path / 'two_run.docx'
+        doc.save(str(docx_path))
+
+        # selected_text 只匹配 run1 的文字
+        result = extract_from_selection(
+            str(docx_path),
+            para_indices=[0],
+            field_id='body_para',
+            selected_text='内容文本',
+        )
+
+        # 关键断言：font.bold 不应出现（因 selected_text 只覆盖 run1，run1 无 bold）
+        assert 'font.bold' not in result['value'], (
+            f"run 隔离失败：font.bold 不应被报告，但实际 value={result['value']}"
+        )
