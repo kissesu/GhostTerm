@@ -11,10 +11,14 @@ import { ToolRunner } from './ToolRunner';
 import { useToolsStore } from './toolsStore';
 import { TemplateSelector } from './templates/TemplateSelector';
 import { TemplateManager } from './templates/TemplateManager';
+import { ToolBoxGrid } from './ToolBoxGrid';
 
 export function ToolsWorkspace() {
   // 控制 TemplateManager modal 的显示状态
   const [managerOpen, setManagerOpen] = useState(false);
+
+  // activeToolId: null = 显示分类卡片入口；非 null = 显示对应工具运行器
+  const { activeToolId, setActiveTool } = useToolsStore();
 
   // Cmd+Z（macOS）/ Ctrl+Z（Windows/Linux）触发 undo
   useEffect(() => {
@@ -35,7 +39,12 @@ export function ToolsWorkspace() {
     <div data-testid="tools-workspace" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
       {/* TemplateSelector 固定在工具面板顶部，onManage 打开管理 modal */}
       <TemplateSelector onManage={() => setManagerOpen(true)} />
-      <ToolRunner />
+      {/* activeToolId 为 null 时展示分类卡片入口，非 null 时展示 ToolRunner */}
+      {activeToolId === null ? (
+        <ToolBoxGrid onSelectTool={(tb) => setActiveTool(tb.id)} />
+      ) : (
+        <ToolRunner />
+      )}
       {/* 模板管理 modal（isOpen=false 时不渲染任何 DOM） */}
       <TemplateManager isOpen={managerOpen} onClose={() => setManagerOpen(false)} />
     </div>

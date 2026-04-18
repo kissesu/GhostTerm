@@ -11,6 +11,7 @@ import { sidecarInvoke, SidecarError, type IssueDict, sidecarRestart, type Templ
 // IssueDict 仅用于 setIssues 类型推断
 import { ErrorModal } from './ErrorModal';
 import { IssueList } from './IssueList';
+import { useToolsStore } from './toolsStore';
 
 // P2 写死最小模板：只启用 cjk_ascii_space
 const P2_TEMPLATE: TemplateJson = {
@@ -26,6 +27,9 @@ const P2_RULE_VALUES: Record<string, Record<string, unknown> | boolean | null> =
 );
 
 export function ToolRunner() {
+  // 返回工具卡片入口：setActiveTool(null) 回到 ToolBoxGrid
+  const { activeToolId, setActiveTool } = useToolsStore();
+
   const [file, setFile] = useState<string | null>(null);
   const [issues, setIssues] = useState<IssueDict[] | null>(null);
   const [running, setRunning] = useState(false);
@@ -89,6 +93,25 @@ export function ToolRunner() {
       color: 'var(--c-fg)',
       overflow: 'auto',
     }}>
+      {/* activeToolId 非 null 时显示返回按钮，让用户回到工具卡片入口 */}
+      {activeToolId && (
+        <button
+          onClick={() => setActiveTool(null)}
+          style={{
+            alignSelf: 'flex-start',
+            padding: '4px 10px',
+            background: 'var(--c-raised)',
+            color: 'var(--c-fg-muted)',
+            border: '1px solid var(--c-border)',
+            borderRadius: 'var(--r-sm)',
+            fontSize: 12,
+            cursor: 'pointer',
+          }}
+        >
+          &larr; 返回工具箱
+        </button>
+      )}
+
       <h2 style={{ fontSize: 18, fontWeight: 600 }}>工具箱（P2：中英空格检测）</h2>
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
