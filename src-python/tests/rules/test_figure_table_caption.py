@@ -11,7 +11,6 @@ import io
 import pytest
 from docx import Document
 from docx.shared import Inches
-from lxml import etree
 
 from thesis_worker.rules.figure_table_caption import (
     FigureCaptionPosRule,
