@@ -5,6 +5,7 @@
  * @date 2026-04-18
  */
 import { MapPin, SkipForward, Check, AlertCircle, Circle, MinusCircle } from 'lucide-react';
+import { formatFieldValue } from './formatFieldValue';
 
 // 字段状态类型：done=已填写，partial=部分填写，empty=待填写，skipped=已跳过
 export interface FieldStatus {
@@ -87,6 +88,10 @@ export function FieldList({ fields, currentFieldId, onJump, onSkip }: Props) {
           const isCurrent = f.id === currentFieldId;
           const color = statusColor(f.status, f.confidence);
 
+          // 抓取到的格式规则约束摘要（如"宋体 · 14pt · 加粗"）
+          // 只有在 value 非空时才展示，避免 empty/skipped 字段下多出一行空白
+          const valueSummary = formatFieldValue(f.value);
+
           return (
             <li
               key={f.id}
@@ -101,26 +106,48 @@ export function FieldList({ fields, currentFieldId, onJump, onSkip }: Props) {
                   : '3px solid transparent',
                 borderRadius: 'var(--r-sm)',
                 color,
-                display: 'flex',
+                display: 'grid',
+                // 三列：状态图标 | 主内容(label+摘要) | 操作按钮组
+                gridTemplateColumns: 'auto 1fr auto',
                 alignItems: 'center',
-                gap: 8,
+                columnGap: 8,
               }}
             >
               <StatusIcon status={f.status} />
 
-              <span style={{ flex: 1 }}>
-                {f.label}
-                {/* 置信度辅助显示，帮助用户判断识别可信度 */}
-                {f.confidence !== undefined && (
-                  <span style={{
-                    color: 'var(--c-fg-muted)',
-                    marginLeft: 4,
-                    fontSize: 11,
-                  }}>
-                    ({f.confidence.toFixed(2)})
+              <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                <span style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                  {f.label}
+                  {/* 置信度辅助显示，帮助用户判断识别可信度 */}
+                  {f.confidence !== undefined && (
+                    <span style={{
+                      color: 'var(--c-fg-muted)',
+                      fontSize: 11,
+                    }}>
+                      ({f.confidence.toFixed(2)})
+                    </span>
+                  )}
+                </span>
+                {/* 抓取到的具体约束：在 label 下方以 subtle 文字展示；
+                    title 冗余提供完整文本，方便超长截断时 hover 查看 */}
+                {valueSummary && (
+                  <span
+                    title={valueSummary}
+                    style={{
+                      color: 'var(--c-fg-muted)',
+                      fontSize: 11,
+                      marginTop: 2,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {valueSummary}
                   </span>
                 )}
               </span>
+
+              <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
 
               {/* 定位按钮：将 DocxPreview 滚动到此字段的段落位置 */}
               <button
@@ -159,6 +186,7 @@ export function FieldList({ fields, currentFieldId, onJump, onSkip }: Props) {
               >
                 <SkipForward size={12} />
               </button>
+              </span>
             </li>
           );
         })}

@@ -408,11 +408,20 @@ export function TemplateManager({ isOpen, onClose }: Props) {
       onCancel={() => setNamePrompt(null)}
     />
 
-    {/* RuleTemplateWorkspace：P4 全屏工作台，从 docx 逐字段确认后保存为模板 */}
+    {/* RuleTemplateWorkspace：P4 全屏工作台，从 docx 逐字段确认后保存为模板
+        top: 38 避开 WindowTitleBar（高度 38px），保留窗口拖拽和关闭控件的可见性 */}
     {workspaceOpen && (
       <div
         data-testid="workspace-overlay"
-        style={{ position: 'fixed', inset: 0, background: 'var(--c-bg)', zIndex: 1100 }}
+        style={{
+          position: 'fixed',
+          top: 38,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'var(--c-bg)',
+          zIndex: 1100,
+        }}
       >
         <RuleTemplateWorkspace
           docxPath={workspaceOpen.docxPath}
