@@ -10,6 +10,7 @@ from .citation_format import CitationFormatRule
 from .font_body import FontBodyRule
 from .font_h1 import FontH1Rule
 from .paragraph_indent import ParagraphIndentRule
+from .figure_table_caption import FigureCaptionPosRule, TableCaptionPosRule
 
 REGISTRY: dict[str, type[Rule]] = {
     'cjk_ascii_space': CjkAsciiSpaceRule,
@@ -17,5 +18,7 @@ REGISTRY: dict[str, type[Rule]] = {
     'font.body': FontBodyRule,
     'font.h1': FontH1Rule,
     'paragraph.indent': ParagraphIndentRule,
+    'figure.caption_pos': FigureCaptionPosRule,
+    'table.caption_pos': TableCaptionPosRule,
     # P4 追加其余规则
 }
