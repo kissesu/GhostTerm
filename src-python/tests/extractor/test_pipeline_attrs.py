@@ -52,16 +52,29 @@ def test_letter_spacing_chars_from_space_placeholder():
 
 
 def test_xml_spacing_wins_over_placeholder():
-    """XML 字间距优先于空格占位 fallback"""
+    """XML 字间距优先于空格占位 fallback（两路径结果必须不同才有判别力）"""
     doc = Document()
-    para = doc.add_paragraph('摘  要')  # 文本有 2 空格占位
+    para = doc.add_paragraph('摘  要')  # 文本有 2 空格占位（fallback 若命中会算出 2）
     run = para.runs[0]
     rpr = run._element.get_or_add_rPr()
-    spacing = rpr.makeelement(qn('w:spacing'), {qn('w:val'): '480'})  # 2 字宽
+    # 720 twips = 3 字宽 @ 12pt，与 fallback 的 2 明确错开，才能证明 XML 路径先命中
+    spacing = rpr.makeelement(qn('w:spacing'), {qn('w:val'): '720'})
     rpr.append(spacing)
     attrs = _read_paragraph_style_attrs(para)
-    # XML 说 2.0 字宽（480/240=2.0），fallback 也是 2，但命中路径必须是 XML
-    assert attrs.get('para.letter_spacing_chars') == 2.0
+    # XML 路径先命中 → 3.0；若 fallback 抢先则会是 2
+    assert attrs.get('para.letter_spacing_chars') == 3.0
+
+
+def test_letter_spacing_chars_from_fullwidth_space_placeholder():
+    """段落文本 "摘　要"（1 个全角空格 U+3000）→ letter_spacing_chars=1
+
+    真实 Word 模板大量使用全角空格做字间距占位，fallback 正则必须同时接受
+    半角 \\s 和全角 U+3000。
+    """
+    doc = Document()
+    para = doc.add_paragraph('摘\u3000要')
+    attrs = _read_paragraph_style_attrs(para)
+    assert attrs.get('para.letter_spacing_chars') == 1
 
 
 def test_no_attrs_when_not_set():

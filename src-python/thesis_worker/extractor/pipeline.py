@@ -142,11 +142,12 @@ def _read_paragraph_style_attrs(para) -> dict[str, Any]:
     if sa is not None:
         attrs['para.space_after_lines'] = round(sa.pt / 12, 1)
 
-    # 若 XML 未设 w:spacing，尝试识别空格占位字间距风格（如"摘  要"、"目  录"）
+    # 若 XML 未设 w:spacing，尝试识别空格占位字间距风格（如"摘  要"、"目　录"）
+    # 同时接受半角空格（\s）和全角空格（U+3000），真实 Word 模板常用全角空格做字间距占位
     # 仅匹配 {单个非空字符}+{连续空格}+{单个非空字符} 的短标题模式，避免误匹配正文句子
     if 'para.letter_spacing_chars' not in attrs:
         stripped = para.text.strip()
-        m = re.match(r'^(\S)(\s+)(\S)$', stripped)
+        m = re.match(r'^(\S)([\s\u3000]+)(\S)$', stripped)
         if m:
             attrs['para.letter_spacing_chars'] = len(m.group(2))
 
