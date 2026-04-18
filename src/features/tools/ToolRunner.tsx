@@ -1,14 +1,16 @@
 /**
  * @file ToolRunner.tsx
  * @description P2 最小 UI：选 docx → 点"检测"（仅 cjk_ascii_space） → 列 issues
- *              P3 接入模板下拉；P4 加工具箱分类 + 修复按钮
+ *              P3 接入 IssueList 组件，支持单条修复闭环
  * @author Atlas.oi
- * @date 2026-04-17
+ * @date 2026-04-18
  */
 import { useState } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { sidecarInvoke, SidecarError, type IssueDict, sidecarRestart, type TemplateJson } from './toolsSidecarClient';
+// IssueDict 仅用于 setIssues 类型推断
 import { ErrorModal } from './ErrorModal';
+import { IssueList } from './IssueList';
 
 // P2 写死最小模板：只启用 cjk_ascii_space
 const P2_TEMPLATE: TemplateJson = {
@@ -16,6 +18,12 @@ const P2_TEMPLATE: TemplateJson = {
     cjk_ascii_space: { enabled: true, value: { allowed: false } },
   },
 };
+
+// 从模板提取 ruleValues 映射，传给 IssueList 按 rule_id 取对应修复 value
+// 这样 fix/fix_preview 和 detect 使用的 value 保持一致，不会因 P2_TEMPLATE 修改而产生分叉
+const P2_RULE_VALUES: Record<string, Record<string, unknown> | boolean | null> = Object.fromEntries(
+  Object.entries(P2_TEMPLATE.rules).map(([id, rule]) => [id, rule.value as Record<string, unknown> | boolean | null]),
+);
 
 export function ToolRunner() {
   const [file, setFile] = useState<string | null>(null);
@@ -121,60 +129,15 @@ export function ToolRunner() {
         {running ? '检测中…' : '运行检测（cjk_ascii_space）'}
       </button>
 
+      {/* issues 列表：P3 替换为 IssueList 组件，支持单条修复闭环 */}
       {issues && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ fontSize: 13, color: 'var(--c-fg-muted)' }}>
-            共 {issues.length} 处违规
-          </div>
-          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-            {issues.map((i) => (
-              <li
-                key={i.issue_id}
-                style={{
-                  padding: '10px 12px',
-                  background: 'var(--c-raised)',
-                  borderRadius: 'var(--r-sm)',
-                  marginBottom: 6,
-                  fontSize: 12,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 6,
-                }}
-              >
-                <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-                  <code
-                    style={{
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 13,
-                      color: 'var(--c-fg)',
-                      background: 'var(--c-bg)',
-                      padding: '2px 6px',
-                      borderRadius: 'var(--r-sm)',
-                    }}
-                  >
-                    {i.snippet}
-                  </code>
-                  <span style={{ color: 'var(--c-fg-muted)' }}>→</span>
-                  <code
-                    style={{
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 13,
-                      color: 'var(--c-accent)',
-                      background: 'var(--c-bg)',
-                      padding: '2px 6px',
-                      borderRadius: 'var(--r-sm)',
-                    }}
-                  >
-                    {i.snippet.replace(/ +/g, '')}
-                  </code>
-                </div>
-                <div style={{ color: 'var(--c-fg-muted)', fontSize: 11 }}>
-                  所在段落：{i.context}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <IssueList
+          file={file!}
+          issues={issues}
+          ruleValues={P2_RULE_VALUES}
+          onChanged={handleDetect}
+          onError={setError}
+        />
       )}
 
       <ErrorModal
