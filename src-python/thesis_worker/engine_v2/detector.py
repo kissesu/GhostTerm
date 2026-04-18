@@ -11,6 +11,7 @@ from docx import Document
 
 from .field_defs import get_field
 from .checkers import CHECKER_MAP, DOC_LEVEL_KEYS
+from .fixer import FIXABLE_ATTRS
 
 
 def _find_paragraphs_for_field(doc, field_id: str) -> list[int]:
@@ -108,7 +109,7 @@ def detect_v2(file: str, template: dict[str, Any]) -> list[dict]:
                 'message': f'{field_id}.{attr_key}: actual={result["actual"]} expected={expected}',
                 'loc': {'para': -1, 'run': 0},
                 'current': result['actual'],
-                'fix_available': True,
+                'fix_available': (attr_key in FIXABLE_ATTRS),
                 'snippet': '',
                 'context': f'文档级属性 {attr_key}',
             })
@@ -142,7 +143,7 @@ def detect_v2(file: str, template: dict[str, Any]) -> list[dict]:
                     'message': f'{field_id}.{attr_key}: actual={result["actual"]} expected={expected}',
                     'loc': {'para': para_idx, 'run': 0},
                     'current': result['actual'],
-                    'fix_available': True,
+                    'fix_available': (attr_key in FIXABLE_ATTRS),
                     'snippet': snippet,
                     'context': context,
                 })

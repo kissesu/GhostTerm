@@ -99,78 +99,92 @@ def _handle_detect(req_id: str, req: dict) -> dict:
 
 
 def _handle_fix(req_id: str, req: dict) -> dict:
-    # P2 简化：fix 接受完整 issue payload（后续 P4 可能改为按 issue_id 查库）
+    """v2 fix：按 issue.attr + value 修改 docx 段落属性，成功后蓝色标记
+
+    业务逻辑：
+    1. ENOENT / PARSE_ERROR / EPERM 前置检查
+    2. 调用 fix_v2 执行修改并写回文件
+    3. 返回 {diff, applied, xml_changed}
+    """
+    from .engine_v2.fixer import fix_v2
     file = req['file']
-    issue_dict = req['issue']
-    rule_id = issue_dict['rule_id']
-    value = req.get('value', {})
+    issue = req['issue']
+    value = req['value']
 
     if not Path(file).exists():
         return {'id': req_id, 'ok': False, 'error': f'file not found: {file}', 'code': 'ENOENT'}
-
     try:
-        doc = Document(file)
+        Document(file)
     except PackageNotFoundError:
         return {'id': req_id, 'ok': False, 'error': f'docx malformed: {file}', 'code': 'PARSE_ERROR'}
+    except PermissionError as e:
+        return {'id': req_id, 'ok': False, 'error': str(e), 'code': 'EPERM'}
 
-    rule = REGISTRY.get(rule_id)
-    if rule is None:
-        return {'id': req_id, 'ok': False, 'error': f'unknown rule: {rule_id}', 'code': 'UNKNOWN_RULE'}
+    try:
+        result = fix_v2(file, issue, value)
+    except Exception as e:
+        return {
+            'id': req_id, 'ok': False,
+            'error': f'fix_v2 raised: {type(e).__name__}: {e}\n{traceback.format_exc()}',
+            'code': 'RULE_ERROR',
+        }
 
-    # 把 dict 手动还原成 Issue，loc 用 Location(**) 展开字段
-    from .models import Issue, Location
-    issue = Issue(
-        rule_id=rule_id,
-        loc=Location(**issue_dict['loc']),
-        message=issue_dict['message'],
-        current=issue_dict['current'],
-        expected=issue_dict['expected'],
-        fix_available=issue_dict['fix_available'],
-        issue_id=issue_dict.get('issue_id', ''),
-    )
-
-    result = rule.fix(doc, issue, value)
-    doc.save(file)
-
-    return {'id': req_id, 'ok': True, 'result': result.to_dict()}
+    return {'id': req_id, 'ok': True, 'result': result}
 
 
 def _handle_fix_preview(req_id: str, req: dict) -> dict:
-    """预览模式：执行修复逻辑但不写回文件，返回 diff 供前端展示"""
+    """v2 fix_preview：在临时副本上执行修复，返回 diff，原文件不动
+
+    业务逻辑：
+    1. ENOENT / PARSE_ERROR / EPERM 前置检查
+    2. 复制文件到临时路径，在副本上调用 fix_v2
+    3. 取出 diff 后删除临时文件，applied 标记置 False
+    """
+    from .engine_v2.fixer import fix_v2
+    import shutil
+    import os
+    import tempfile
     file = req['file']
-    issue_dict = req['issue']
+    issue = req['issue']
+    value = req['value']
 
     if not Path(file).exists():
         return {'id': req_id, 'ok': False, 'error': f'file not found: {file}', 'code': 'ENOENT'}
-
-    rule_id = issue_dict['rule_id']
-    value = req.get('value', {})
-
     try:
-        doc = Document(file)
+        Document(file)
     except PackageNotFoundError:
         return {'id': req_id, 'ok': False, 'error': f'docx malformed: {file}', 'code': 'PARSE_ERROR'}
+    except PermissionError as e:
+        return {'id': req_id, 'ok': False, 'error': str(e), 'code': 'EPERM'}
 
-    rule = REGISTRY.get(rule_id)
-    if rule is None:
-        return {'id': req_id, 'ok': False, 'error': f'unknown rule: {rule_id}', 'code': 'UNKNOWN_RULE'}
-
-    from .models import Issue, Location
-    issue = Issue(
-        rule_id=rule_id,
-        loc=Location(**issue_dict['loc']),
-        message=issue_dict['message'],
-        current=issue_dict['current'],
-        expected=issue_dict['expected'],
-        fix_available=issue_dict['fix_available'],
-        issue_id=issue_dict.get('issue_id', ''),
-    )
-
-    result = rule.fix(doc, issue, value)
-    # 预览模式：不调 doc.save()，并将 applied 标记为 False
-    result.applied = False
-
-    return {'id': req_id, 'ok': True, 'result': result.to_dict()}
+    # 复制到临时文件上执行 fix，diff 回读后删除，原文件不动
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix='.docx')
+    os.close(tmp_fd)
+    try:
+        shutil.copy(file, tmp_path)
+        try:
+            result = fix_v2(tmp_path, issue, value)
+        except Exception as e:
+            return {
+                'id': req_id, 'ok': False,
+                'error': f'fix_v2 raised: {type(e).__name__}: {e}\n{traceback.format_exc()}',
+                'code': 'RULE_ERROR',
+            }
+        # 预览模式：applied 回写为 False，diff 保留
+        return {
+            'id': req_id,
+            'ok': True,
+            'result': {
+                'diff': result['diff'],
+                'applied': False,
+                'xml_changed': result['xml_changed'],
+            },
+        }
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
 
 
 def _handle_extract_template(req_id: str, req: dict) -> dict:
