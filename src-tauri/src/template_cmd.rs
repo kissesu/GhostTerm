@@ -72,6 +72,22 @@ fn templates_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     crate::backup_cmd::ghostterm_dir(app).map(|d| d.join("templates"))
 }
 
+/// 校验模板 id 合法性，防 path traversal 攻击
+///
+/// 业务背景：
+/// - 前端虽可信，但 import_template 读取的外部 JSON 文件 id 字段是非可信源
+/// - 攻击者可构造 id="../../../etc/passwd" 让 dir.join() 跳出 templates 目录
+/// - 拒绝空字符串、路径分隔符（/ \）以及任意 ".." 出现
+fn validate_id(id: &str) -> Result<(), String> {
+    if id.is_empty() {
+        return Err("模板 id 不能为空".to_string());
+    }
+    if id.contains('/') || id.contains('\\') || id.contains("..") {
+        return Err(format!("非法模板 id: {id}（不能含 / \\ ..）"));
+    }
+    Ok(())
+}
+
 // ============================================
 // 核心 lib 函数（不依赖 AppHandle，供集成测试直接调用）
 // ============================================
@@ -125,6 +141,7 @@ pub fn list_templates(dir: &Path) -> Result<Vec<TemplateJson>, String> {
 
 /// 读取单个模板
 pub fn get_template(dir: &Path, id: &str) -> Result<TemplateJson, String> {
+    validate_id(id)?;
     let path = dir.join(format!("{id}.json"));
     let content = fs::read_to_string(&path)
         .map_err(|e| format!("读取模板 {id} 失败: {e}"))?;
@@ -134,6 +151,8 @@ pub fn get_template(dir: &Path, id: &str) -> Result<TemplateJson, String> {
 
 /// 写入/覆盖模板到目录（id 对应文件名）
 pub fn save_template(dir: &Path, tpl: TemplateJson) -> Result<(), String> {
+    // 先校验 id 再上锁，避免无效请求持有锁
+    validate_id(&tpl.id)?;
     // write 操作加锁，防止并发覆盖
     let _guard = template_lock().lock().map_err(|_| "模板锁中毒".to_string())?;
     fs::create_dir_all(dir).map_err(|e| format!("创建模板目录失败: {e}"))?;
@@ -145,6 +164,7 @@ pub fn save_template(dir: &Path, tpl: TemplateJson) -> Result<(), String> {
 
 /// 删除模板；若删除的是内置模板，自动重建
 pub fn delete_template(dir: &Path, id: &str) -> Result<(), String> {
+    validate_id(id)?;
     let _guard = template_lock().lock().map_err(|_| "模板锁中毒".to_string())?;
     let path = dir.join(format!("{id}.json"));
     if path.exists() {
@@ -160,6 +180,10 @@ pub fn delete_template(dir: &Path, id: &str) -> Result<(), String> {
 
 /// 从外部 JSON 文件导入模板，生成新 id（避免与现有模板冲突）
 /// 新 id 格式：{原id}-imported-{Unix毫秒时间戳}
+///
+/// 安全：原 JSON 的 id 字段是非可信源，可能含 path traversal 字符。
+/// 若原 id 非法（含 / \ ..），用 fallback "imported" 替代再拼时间戳。
+/// 最终 id 仍会经 validate_id 二次校验，防 fallback 也意外含非法字符。
 pub fn import_template(dir: &Path, json_path: &str) -> Result<TemplateJson, String> {
     let _guard = template_lock().lock().map_err(|_| "模板锁中毒".to_string())?;
     let content = fs::read_to_string(json_path)
@@ -167,12 +191,22 @@ pub fn import_template(dir: &Path, json_path: &str) -> Result<TemplateJson, Stri
     let mut tpl: TemplateJson = serde_json::from_str(&content)
         .map_err(|e| format!("解析导入文件失败: {e}"))?;
 
+    // 原 id 来自外部文件，不可信 — 非法时降级为 "imported" 前缀
+    let safe_base = if validate_id(&tpl.id).is_ok() {
+        tpl.id.clone()
+    } else {
+        "imported".to_string()
+    };
+
     // 生成新 id 避免冲突
     let ts = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis();
-    tpl.id = format!("{}-imported-{}", tpl.id, ts);
+    tpl.id = format!("{}-imported-{}", safe_base, ts);
+
+    // 二次校验：保证最终 id 100% 安全（防 safe_base 被未来改动引入非法字符）
+    validate_id(&tpl.id)?;
 
     let dest = dir.join(format!("{}.json", tpl.id));
     let out = serde_json::to_string_pretty(&tpl)
@@ -183,7 +217,9 @@ pub fn import_template(dir: &Path, json_path: &str) -> Result<TemplateJson, Stri
 }
 
 /// 导出模板到用户指定路径
+/// 注意：dest_path 由用户通过对话框选择，是可信路径；只需校验来源 id
 pub fn export_template(dir: &Path, id: &str, dest_path: &str) -> Result<(), String> {
+    // get_template 内部已 validate_id，此处不再重复
     let tpl = get_template(dir, id)?;
     let content = serde_json::to_string_pretty(&tpl)
         .map_err(|e| format!("序列化模板失败: {e}"))?;

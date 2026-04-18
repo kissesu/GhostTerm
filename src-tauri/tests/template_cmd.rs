@@ -4,8 +4,8 @@
 // @date: 2026-04-18
 
 use ghostterm_lib::template_cmd::{
-    delete_template, ensure_builtin_in_dir, export_template, import_template, list_templates,
-    save_template, TemplateJson, TemplateSource,
+    delete_template, ensure_builtin_in_dir, export_template, get_template, import_template,
+    list_templates, save_template, TemplateJson, TemplateSource,
 };
 use serde_json::json;
 use std::fs;
@@ -152,4 +152,36 @@ fn test_export_writes_to_dest() {
     let content = fs::read_to_string(&dest).unwrap();
     let parsed: TemplateJson = serde_json::from_str(&content).unwrap();
     assert_eq!(parsed.id, "export-me");
+}
+
+// ============================================
+// 测试 6: get_template 拒绝 path traversal id
+// ============================================
+#[test]
+fn test_get_template_rejects_path_traversal() {
+    let tmp = TempDir::new().unwrap();
+    let dir = tmp.path().to_path_buf();
+
+    // 各种 traversal 形式都应被拒绝
+    assert!(get_template(&dir, "../../etc/passwd").is_err(), "../ 应被拒绝");
+    assert!(get_template(&dir, "..\\..\\windows\\system32").is_err(), "..\\ 应被拒绝");
+    assert!(get_template(&dir, "sub/dir/template").is_err(), "/ 应被拒绝");
+    assert!(get_template(&dir, "").is_err(), "空 id 应被拒绝");
+}
+
+// ============================================
+// 测试 7: save_template 拒绝非法 id
+// ============================================
+#[test]
+fn test_save_template_rejects_invalid_id() {
+    let tmp = TempDir::new().unwrap();
+    let dir = tmp.path().to_path_buf();
+
+    let bad = make_template("../malicious", "恶意模板");
+    let result = save_template(&dir, bad);
+    assert!(result.is_err(), "save 含 .. 的 id 应失败");
+
+    // 验证未写入文件（防御实际生效）
+    let leaked = tmp.path().parent().unwrap().join("malicious.json");
+    assert!(!leaked.exists(), "非法 id 不应导致跳出目录写入");
 }
