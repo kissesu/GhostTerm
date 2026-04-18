@@ -23,7 +23,7 @@ export interface TemplateSource {
 }
 
 export interface TemplateJson {
-  schema_version: number;
+  schema_version: 2;
   id: string;
   name: string;
   source: TemplateSource;
@@ -169,7 +169,7 @@ export const useTemplateStore = create<TemplateStoreState>((set, get) => ({
     // ============================================
     const newId = slugify(name) + '-' + Date.now().toString(36);
     const newTpl: TemplateJson = {
-      schema_version: 1,
+      schema_version: 2,
       id: newId,
       name,
       source: { type: 'manual' },

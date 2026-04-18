@@ -43,7 +43,7 @@ import type { TemplateJson } from '../templates/TemplateStore';
 // ─── 测试用模板 fixture ───────────────────────
 
 const builtinTpl: TemplateJson = {
-  schema_version: 1,
+  schema_version: 2,
   id: '_builtin-gbt7714',
   name: 'GB/T 7714 内置',
   source: { type: 'builtin' },
@@ -57,7 +57,7 @@ const builtinTpl: TemplateJson = {
 };
 
 const userTpl: TemplateJson = {
-  schema_version: 1,
+  schema_version: 2,
   id: 'user-apa',
   name: 'APA 用户模板',
   source: { type: 'manual' },

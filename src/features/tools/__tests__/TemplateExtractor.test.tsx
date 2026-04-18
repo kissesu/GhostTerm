@@ -70,7 +70,7 @@ const mockExtractResult = { rules: mockRules, evidence: mockEvidence };
 
 // 内置模板（store.create 需要它）
 const builtinTpl: TemplateJson = {
-  schema_version: 1,
+  schema_version: 2,
   id: '_builtin-gbt7714',
   name: 'GB/T 7714 内置',
   source: { type: 'builtin' },

@@ -48,7 +48,7 @@ import type { TemplateJson } from '../templates/TemplateStore';
 // 测试用模板（涵盖多个规则类别）
 // ----------------------------------------------------------------
 const MOCK_TEMPLATE: TemplateJson = {
-  schema_version: 1,
+  schema_version: 2,
   id: 'test-tpl',
   name: '测试模板',
   source: { type: 'manual' },

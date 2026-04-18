@@ -32,7 +32,7 @@ const mockedSidecarInvoke = vi.mocked(sidecarInvoke);
 
 // ─── 测试用内置模板 fixture ───────────────────
 const builtinTemplate: TemplateJson = {
-  schema_version: 1,
+  schema_version: 2,
   id: '_builtin-gbt7714',
   name: 'GB/T 7714 内置',
   source: { type: 'builtin' },
@@ -116,6 +116,23 @@ describe('create', () => {
       'Builtin template missing',
     );
   });
+
+  it('创建模板 schema_version 固定为 2', async () => {
+    // 加载内置模板后调 create，捕获写入磁盘的 template 对象
+    mockedInvoke.mockResolvedValueOnce([builtinTemplate]);
+    await useTemplateStore.getState().load();
+
+    let capturedVersion: number | undefined;
+    mockedInvoke.mockImplementationOnce(async (_cmd, args) => {
+      capturedVersion = (args as { template: TemplateJson }).template.schema_version;
+      return undefined;
+    });
+    mockedInvoke.mockResolvedValueOnce([builtinTemplate]); // reload
+
+    await useTemplateStore.getState().create('version check');
+
+    expect(capturedVersion).toBe(2);
+  });
 });
 
 // ─────────────────────────────────────────────
@@ -154,7 +171,7 @@ describe('migrateNewRules', () => {
   it('为所有模板追加缺失的新规则（disabled + null）', async () => {
     // 先填充 store（两个模板）
     const userTemplate: TemplateJson = {
-      schema_version: 1,
+      schema_version: 2,
       id: 'user-tpl-abc',
       name: '我的模板',
       source: { type: 'manual' },
