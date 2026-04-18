@@ -6,9 +6,9 @@
  *   3. TemplateManager 点击"编辑" → TemplateEditor 出现
  *   4. RuleValueEditor font shape 渲染 family + size_pt 输入框
  *   5. RuleValueEditor allowed shape 渲染 toggle
- *   6. Task 10 — 新建模板 prompt + store.create
- *   7. Task 10 — 导入 JSON → invoke template_import_cmd
- *   8. Task 10 — 从 docx 创建 → 仅显示 Phase D 占位 alert，不调 store.create
+ *   6. 新建模板：点击按钮 → NamePromptModal 弹出 → 输入名称 → store.create
+ *   7. 导入 JSON → invoke template_import_cmd
+ *   8. 从 docx 创建：选文件 → NamePromptModal 弹出 → 输入名称 → TemplateExtractor
  * @author Atlas.oi
  * @date 2026-04-18
  */
@@ -217,9 +217,9 @@ describe('TemplateManager', () => {
     alertSpy.mockRestore();
   });
 
-  // ─── Task 10 新增测试 ────────────────────────
+  // ─── Task 10 / Bug Fix 新增测试 ────────────────────────
 
-  it('点击「新建模板」prompt 输入名称 → store.create 被调用', async () => {
+  it('点击「新建模板」→ NamePromptModal 弹出 → 输入名称 → store.create 被调用', async () => {
     const createMock = vi.fn().mockResolvedValue('new-tpl-id');
     useTemplateStore.setState({
       templates: [builtinTpl, userTpl],
@@ -230,18 +230,25 @@ describe('TemplateManager', () => {
       restoreBuiltin: vi.fn().mockResolvedValue(undefined),
       create: createMock,
     });
-    // 模拟 prompt 返回用户输入的模板名
-    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('我的新模板');
 
     render(<TemplateManager isOpen onClose={vi.fn()} />);
 
+    // 点击「新建模板」→ NamePromptModal 应出现
     fireEvent.click(screen.getByTestId('create-template-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('name-prompt-modal')).toBeTruthy();
+    });
+
+    // 在输入框输入名称
+    const input = screen.getByTestId('name-prompt-input') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '我的新模板' } });
+
+    // 点击确定
+    fireEvent.click(screen.getByTestId('name-prompt-submit'));
 
     await waitFor(() => {
       expect(createMock).toHaveBeenCalledWith('我的新模板');
     });
-
-    promptSpy.mockRestore();
   });
 
   it('点击「导入 JSON」选择文件 → invoke template_import_cmd 被调用', async () => {
@@ -272,7 +279,7 @@ describe('TemplateManager', () => {
     });
   });
 
-  it('点击「从 docx 创建」选文件 + prompt → 打开 TemplateExtractor modal', async () => {
+  it('点击「从 docx 创建」选文件 → NamePromptModal 弹出 → 输入名称 → 打开 TemplateExtractor modal', async () => {
     // sidecarInvoke 在 TemplateExtractor mount 时会被调，mock 返回空结果
     const { sidecarInvoke: si } = await import('../toolsSidecarClient');
     vi.mocked(si).mockResolvedValue({ rules: {}, evidence: [] });
@@ -288,19 +295,28 @@ describe('TemplateManager', () => {
     });
     // 模拟选中 docx 文件路径
     vi.mocked(dialog.open).mockResolvedValue('/docs/thesis.docx');
-    // 模拟 prompt 输入模板名
-    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('论文模板');
 
     render(<TemplateManager isOpen onClose={vi.fn()} />);
 
     fireEvent.click(screen.getByTestId('create-from-docx-btn'));
 
+    // 先等 NamePromptModal 弹出（选文件是异步的）
+    await waitFor(() => {
+      expect(screen.getByTestId('name-prompt-modal')).toBeTruthy();
+    });
+
+    // defaultValue 应预填去扩展名的文件名 "thesis"
+    const input = screen.getByTestId('name-prompt-input') as HTMLInputElement;
+    expect(input.value).toBe('thesis');
+
+    // 输入模板名后确认
+    fireEvent.change(input, { target: { value: '论文模板' } });
+    fireEvent.click(screen.getByTestId('name-prompt-submit'));
+
     // TemplateExtractor modal 应弹出
     await waitFor(() => {
       expect(screen.getByTestId('template-extractor')).toBeTruthy();
     });
-
-    promptSpy.mockRestore();
   });
 });
 

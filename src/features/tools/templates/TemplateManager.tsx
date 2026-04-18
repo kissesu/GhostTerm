@@ -15,6 +15,7 @@ import { useTemplateStore } from './TemplateStore';
 import type { TemplateJson } from './TemplateStore';
 import { TemplateEditor } from './TemplateEditor';
 import { TemplateExtractor } from './TemplateExtractor';
+import { NamePromptModal } from './NamePromptModal';
 
 // 从文件路径中提取文件名（兼容 macOS / Windows 路径分隔符）
 function basename(p: string): string {
@@ -36,12 +37,19 @@ const SOURCE_LABELS: Record<string, string> = {
   extracted: '从 docx 提取',
 };
 
+// namePrompt state 类型：null 表示关闭，非 null 记录当前触发模式
+type NamePromptState =
+  | { mode: 'blank' }
+  | { mode: 'fromDocx'; docxPath: string; defaultName: string };
+
 export function TemplateManager({ isOpen, onClose }: Props) {
   const { templates, remove, restoreBuiltin, update, create, load } = useTemplateStore();
   // null = 列表视图；非 null = 编辑视图
   const [editing, setEditing] = useState<TemplateJson | null>(null);
   // 非 null = TemplateExtractor modal 打开状态（含 docxPath + 预填名称）
   const [extractorOpen, setExtractorOpen] = useState<{ docxPath: string; name: string } | null>(null);
+  // 非 null = NamePromptModal 打开状态
+  const [namePrompt, setNamePrompt] = useState<NamePromptState | null>(null);
 
   if (!isOpen) return null;
 
@@ -82,24 +90,18 @@ export function TemplateManager({ isOpen, onClose }: Props) {
   };
 
   // ============================================
-  // 新建空白模板：prompt 输入名称 → store.create 深拷贝内置
+  // 新建空白模板：打开 NamePromptModal 输入名称 → store.create 深拷贝内置
+  // Tauri 2 WebView 禁用 window.prompt()，调用恒返回 null，改用自定义 modal
   // ============================================
-  const handleNewBlank = async () => {
-    const name = window.prompt('请输入模板名称');
-    if (!name?.trim()) return;
-    try {
-      await create(name.trim());
-    } catch (e) {
-      console.error('[TemplateManager] create failed', e);
-      alert(`新建失败：${String(e)}`);
-    }
+  const handleNewBlank = () => {
+    setNamePrompt({ mode: 'blank' });
   };
 
   // ============================================
   // 从 docx 创建模板：
   //   1. 选 docx 文件
-  //   2. prompt 输入模板名称（预填去扩展名的文件名）
-  //   3. 打开 TemplateExtractor modal（Task 22 实现）
+  //   2. 打开 NamePromptModal 输入名称（预填去扩展名的文件名）
+  //   3. NamePromptModal 确认后打开 TemplateExtractor modal
   // ============================================
   const handleNewFromDocx = async () => {
     const docx = await open({
@@ -107,9 +109,32 @@ export function TemplateManager({ isOpen, onClose }: Props) {
       filters: [{ name: 'Word', extensions: ['docx'] }],
     });
     if (typeof docx !== 'string') return;
-    const name = window.prompt('请输入模板名称', basename(docx).replace(/\.docx$/i, ''));
-    if (!name?.trim()) return;
-    setExtractorOpen({ docxPath: docx, name: name.trim() });
+    setNamePrompt({
+      mode: 'fromDocx',
+      docxPath: docx,
+      defaultName: basename(docx).replace(/\.docx$/i, ''),
+    });
+  };
+
+  // ============================================
+  // NamePromptModal 确认回调：按 mode 分支执行
+  // ============================================
+  const handleNamePromptSubmit = async (name: string) => {
+    if (!namePrompt) return;
+    if (namePrompt.mode === 'blank') {
+      // 先关闭 modal，再异步 create（避免 modal 遮挡后续 alert）
+      setNamePrompt(null);
+      try {
+        await create(name);
+      } catch (e) {
+        console.error('[TemplateManager] create failed', e);
+        alert(`新建失败：${String(e)}`);
+      }
+    } else {
+      // fromDocx：打开 TemplateExtractor modal
+      setExtractorOpen({ docxPath: namePrompt.docxPath, name });
+      setNamePrompt(null);
+    }
   };
 
   // ============================================
@@ -127,7 +152,12 @@ export function TemplateManager({ isOpen, onClose }: Props) {
       await load();
     } catch (e) {
       console.error('[TemplateManager] import failed', e);
-      alert(`导入失败：${String(e)}`);
+      // 提供用户友好提示，说明必填字段（id / name / rules）
+      alert(
+        `导入失败：${String(e)}\n\n` +
+        `请检查 JSON 文件格式——必须包含 id、name、rules 三个字段。\n` +
+        `schema_version / source / updated_at 字段可省略，会自动补全。`
+      );
     }
   };
 
@@ -333,16 +363,16 @@ export function TemplateManager({ isOpen, onClose }: Props) {
               flexShrink: 0,
             }}
           >
-            {/* 新建空白模板：prompt 输入名称 → store.create */}
+            {/* 新建空白模板：NamePromptModal 输入名称 → store.create */}
             <button
               data-testid="create-template-btn"
-              onClick={() => { void handleNewBlank(); }}
+              onClick={handleNewBlank}
               style={actionBtnStyle}
             >
               新建模板
             </button>
 
-            {/* 从 docx 创建：Phase D Task 22 脚手架，暂显示占位提示 */}
+            {/* 从 docx 创建：选文件 → NamePromptModal 输入名称 → TemplateExtractor */}
             <button
               data-testid="create-from-docx-btn"
               onClick={() => { void handleNewFromDocx(); }}
@@ -363,6 +393,20 @@ export function TemplateManager({ isOpen, onClose }: Props) {
         )}
       </div>
     </div>
+
+    {/* NamePromptModal：替代 window.prompt，用于新建空白/从 docx 创建时输入模板名 */}
+    <NamePromptModal
+      isOpen={!!namePrompt}
+      title={
+        namePrompt?.mode === 'fromDocx'
+          ? `从 ${basename(namePrompt.docxPath)} 创建模板`
+          : '新建空白模板'
+      }
+      defaultValue={namePrompt?.mode === 'fromDocx' ? namePrompt.defaultName : ''}
+      placeholder="请输入模板名称"
+      onSubmit={(name) => { void handleNamePromptSubmit(name); }}
+      onCancel={() => setNamePrompt(null)}
+    />
 
     {/* TemplateExtractor modal（从 docx 提取 review，Task 22） */}
     {extractorOpen && (
