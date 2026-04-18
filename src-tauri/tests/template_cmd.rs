@@ -185,3 +185,41 @@ fn test_save_template_rejects_invalid_id() {
     let leaked = tmp.path().parent().unwrap().join("malicious.json");
     assert!(!leaked.exists(), "非法 id 不应导致跳出目录写入");
 }
+
+// ============================================
+// 测试 8: import 缺 schema_version / source / updated_at 的精简 JSON
+//   → serde defaults 补全，id/name 保留，schema_version 默认 1
+// ============================================
+#[test]
+fn test_import_without_optional_fields_uses_defaults() {
+    let tmp = TempDir::new().unwrap();
+    let dir = tmp.path().to_path_buf();
+    ensure_builtin_in_dir(&dir).unwrap();
+
+    // 仅含必填字段 id / name / rules，省略 schema_version / source / updated_at
+    let minimal_json = r#"{
+        "id": "minimal-tpl",
+        "name": "精简模板",
+        "rules": { "font.body": { "enabled": true, "value": { "family": "宋体", "size_pt": 12 } } }
+    }"#;
+
+    let src_path = tmp.path().join("minimal.json");
+    fs::write(&src_path, minimal_json).unwrap();
+
+    // import 应成功，不因缺 schema_version 而报错
+    let imported = import_template(&dir, src_path.to_str().unwrap())
+        .expect("import 缺 schema_version/source/updated_at 的 JSON 应成功");
+
+    // schema_version 应默认为 1
+    assert_eq!(imported.schema_version, 1, "schema_version 应默认 1");
+    // source.type 应默认为 "imported"
+    assert_eq!(imported.source.source_type, "imported", "source.type 应默认 imported");
+    // updated_at 不为空（由 default_now() 填充）
+    assert!(!imported.updated_at.is_empty(), "updated_at 不应为空");
+    // id 含 "minimal-tpl-imported-"
+    assert!(
+        imported.id.starts_with("minimal-tpl-imported-"),
+        "import id 前缀应为原 id，实际: {}",
+        imported.id
+    );
+}

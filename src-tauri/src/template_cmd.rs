@@ -32,12 +32,24 @@ fn template_lock() -> &'static Mutex<()> {
 // 公开数据结构
 // ============================================
 
+/// schema_version 缺失时的默认值（兼容外部 JSON 导入）
+fn default_schema_version() -> u32 {
+    1
+}
+
+/// updated_at 缺失时以当前 UTC 时间填充
+fn default_now() -> String {
+    // chrono 已在 Cargo.toml 中引入，此处直接使用
+    chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
+}
+
 /// 模板来源信息
 /// 区分内置模板（builtin）、用户手动创建（user）和从 docx 抽取（extracted）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemplateSource {
-    /// 类型标识："builtin" | "user" | "extracted"
-    #[serde(rename = "type")]
+    /// 类型标识："builtin" | "user" | "extracted" | "imported"
+    /// 外部 JSON 缺 type 字段时默认 "imported"
+    #[serde(rename = "type", default = "default_source_type")]
     pub source_type: String,
     /// 原始 docx 文件路径（仅 extracted 类型有值）
     pub origin_docx: Option<String>,
@@ -45,19 +57,40 @@ pub struct TemplateSource {
     pub extracted_at: Option<String>,
 }
 
+/// TemplateSource.type 缺失时填 "imported"
+fn default_source_type() -> String {
+    "imported".to_string()
+}
+
+impl Default for TemplateSource {
+    fn default() -> Self {
+        Self {
+            source_type: "imported".to_string(),
+            origin_docx: None,
+            extracted_at: None,
+        }
+    }
+}
+
 /// 模板 JSON 完整结构（spec Section 4）
 /// rules 字段透传给 sidecar，不在 Rust 端解析具体规则内容
+///
+/// id 和 name 仍是必填字段——缺失这两个字段则 import 无意义。
+/// schema_version / source / updated_at 缺失时使用合理默认值，兼容外部工具导出的精简格式。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemplateJson {
-    /// schema 版本号，用于未来迁移检测
+    /// schema 版本号，用于未来迁移检测；外部 JSON 缺此字段时默认 1
+    #[serde(default = "default_schema_version")]
     pub schema_version: u32,
-    /// 模板唯一 id，文件名为 {id}.json
+    /// 模板唯一 id，文件名为 {id}.json（必填，缺失则 import 无意义）
     pub id: String,
-    /// 用户可读的模板名称
+    /// 用户可读的模板名称（必填）
     pub name: String,
-    /// 模板来源信息
+    /// 模板来源信息；缺失时默认 imported
+    #[serde(default)]
     pub source: TemplateSource,
-    /// 最后更新时间（ISO 8601）
+    /// 最后更新时间（ISO 8601）；缺失时填入当前 UTC 时间
+    #[serde(default = "default_now")]
     pub updated_at: String,
     /// 规则集合，透传给 sidecar，不在 Rust 端做结构校验
     pub rules: serde_json::Value,
