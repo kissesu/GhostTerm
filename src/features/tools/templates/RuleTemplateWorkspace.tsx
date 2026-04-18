@@ -231,11 +231,20 @@ export function RuleTemplateWorkspace({ docxPath, initialName, onSave, onCancel 
       }
     };
 
+    // 窗口失焦保护：用户按 Shift 切换到其他 app 再松开时，本 window 收不到 keyup，
+    // isShiftPressed 会卡在 true 导致 hint 条永驻"多选中"。blur 事件兜底重置
+    // hint 状态；但不清空 selectionBuffer，用户切回后可继续积累
+    const onBlur = () => {
+      setIsShiftPressed(false);
+    };
+
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
     };
   }, [flushSelectionBuffer]);
 

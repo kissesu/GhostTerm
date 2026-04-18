@@ -91,7 +91,7 @@ interface DocxPreviewProps {
  * - 切分标点包含中文句末停顿符（。！？）和中文标点（；：）
  * - 使用 capture group 让分隔符保留在前一句末尾，而非丢弃
  * - 若段落无任何标点则整段视为一句（兼容英文/数字段落）
- * - 空字符串 / 全空白句子跳过，但仍计入索引（保持 DOM 与索引对应）
+ * - 空字符串 / 全空白句子跳过，sIdx 在过滤后的连续序列上。
  */
 function splitIntoSentences(text: string): string[] {
   // 用捕获组切分，确保标点归属于前一句
@@ -170,6 +170,10 @@ export function DocxPreview({
       .catch((err) => {
         if (!cancelled) {
           console.error('[DocxPreview] 渲染失败：', err);
+          // 设标记供 Effect 2 探知，避免其无限等待段落注入
+          if (containerRef.current) {
+            containerRef.current.setAttribute('data-render-failed', '1');
+          }
         }
       });
 
@@ -198,12 +202,25 @@ export function DocxPreview({
     if (!container) return;
     let cancelled = false;
 
+    // 最大轮询次数：30 × 100ms = 3 秒上限，避免 Effect 1 失败时 Effect 2 无限轮询
+    const MAX_RETRIES = 30;
+    let retries = 0;
+
     // 等到 docx 渲染完成（段落被写入 DOM）后执行句子切分
     // 利用一个简单轮询检查 data-para-idx 是否已注入，避免与 Effect 1 的 then 链竞争
     const tryWrap = () => {
       if (cancelled || !containerRef.current) return;
+      // 快速退出：Effect 1 已报告失败，无需继续等
+      if (containerRef.current.getAttribute('data-render-failed') === '1') {
+        return;
+      }
       const paragraphs = containerRef.current.querySelectorAll<HTMLElement>('[data-para-idx]');
       if (paragraphs.length === 0) {
+        retries += 1;
+        if (retries >= MAX_RETRIES) {
+          console.warn('[DocxPreview] 段落注入超时，放弃句子切分');
+          return;
+        }
         // 段落尚未注入，100ms 后重试（docx-preview 渲染为异步）
         setTimeout(tryWrap, 100);
         return;
