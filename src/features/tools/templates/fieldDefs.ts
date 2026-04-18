@@ -257,7 +257,7 @@ export const FIELD_DEFS: FieldDef[] = [
     label: '数字/西文字体全局',
     group: 'global',
     order: 32,
-    applicable_attributes: ['mixed_script.ascii_is_tnr'],
+    applicable_attributes: ['mixed_script.ascii_is_tnr', 'mixed_script.punct_space_after'],
   },
 ];
 

@@ -693,6 +693,16 @@ export function RuleValueEditorByAttr({ attr, value, onChange }: RuleValueEditor
         />
       );
 
+    case 'mixed_script.punct_space_after':
+      // 英文标点后是否规范空一字符（句号/逗号/分号等 ASCII 标点后接空格）
+      return (
+        <Toggle
+          testId="attr-punct-space-after"
+          checked={(value as boolean) ?? false}
+          onChange={onChange}
+        />
+      );
+
     // ── 默认：JSON 预览（不隐藏未知属性）──────
     default:
       return (

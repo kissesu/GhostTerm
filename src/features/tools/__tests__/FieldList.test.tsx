@@ -119,6 +119,37 @@ describe('FieldList', () => {
     expect(uncaptured.length).toBeGreaterThan(0);
   });
 
+  // ─────────────────────────────────────────────
+  // Task 5：mixed_script.punct_space_after 属性行渲染测试
+  // ─────────────────────────────────────────────
+
+  it('renders mixed_script.punct_space_after label and uncaptured marker when value is empty', () => {
+    // 构造一个使用 mixed_script_global 字段的 FieldStatus，value 为空
+    // applicable_attributes 会从 fieldDefs 中读取，包含 punct_space_after
+    const fields = [
+      {
+        id: 'mixed_script_global',
+        label: '数字/西文字体全局',
+        status: 'empty' as const,
+        // 无 value → punct_space_after 未抓到
+      },
+    ];
+    render(
+      <FieldList
+        fields={fields}
+        currentFieldId={null}
+        onJump={vi.fn()}
+        onSkip={vi.fn()}
+        onAttrChange={vi.fn()}
+      />
+    );
+    // 属性标签应出现
+    expect(screen.getByText('英文标点后空一字符')).toBeInTheDocument();
+    // 未抓到时显示"⨯ 未抓到"标记
+    const uncaptured = screen.queryAllByText('⨯ 未抓到');
+    expect(uncaptured.length).toBeGreaterThan(0);
+  });
+
   it('calls onAttrChange with correct args when editor value changes', () => {
     // 构造一个字段，只测试 font.cjk（CjkFontSelect，select 元素可 fireEvent.change）
     const fields = [

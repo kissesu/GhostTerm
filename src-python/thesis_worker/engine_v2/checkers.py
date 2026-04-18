@@ -436,6 +436,32 @@ def check_mixed_script_ascii_is_tnr(doc: Document, expected: bool) -> Optional[d
     return {'attr': 'mixed_script.ascii_is_tnr', 'actual': actual, 'expected': expected}
 
 
+def check_mixed_script_punct_space_after(doc: Document, expected: bool) -> Optional[dict]:
+    """
+    检查文档英文标点后是否规范空一字符。
+    复用 pipeline._detect_punct_space_after 的统计逻辑：
+    对全文 run.text 做正则统计，按 2:1 阈值判定。
+    """
+    import re
+    fulltext_parts = []
+    for para in doc.paragraphs:
+        for run in para.runs:
+            if run.text:
+                fulltext_parts.append(run.text)
+    fulltext = ''.join(fulltext_parts)
+
+    space_after = len(re.findall(r'[.,;:!?](?=\s)', fulltext))
+    no_space = len(re.findall(r'[.,;:!?](?=\S)', fulltext))
+    total = space_after + no_space
+    if total < 3:
+        # 样本不足，无法做可靠推断，视为满足（不报告 issue）
+        return None
+    actual = space_after >= 2 * no_space
+    if actual == expected:
+        return None
+    return {'attr': 'mixed_script.punct_space_after', 'actual': actual, 'expected': expected}
+
+
 # ───────────────────────────────────────────────
 # 类别 C：延后存根（deferred to v3）
 # ───────────────────────────────────────────────
@@ -513,6 +539,7 @@ CHECKER_MAP: dict[str, Any] = {
     'content.specific_text':           check_content_specific_text,
     # mixed_script 中西混排
     'mixed_script.ascii_is_tnr':       check_mixed_script_ascii_is_tnr,
+    'mixed_script.punct_space_after':  check_mixed_script_punct_space_after,
     # layout / citation / pagination（延后存根）
     'layout.position':                 check_layout_position,
     'citation.style':                  check_citation_style,
@@ -528,6 +555,7 @@ DOC_LEVEL_KEYS: frozenset[str] = frozenset({
     'page.margin_left_cm',
     'page.margin_right_cm',
     'mixed_script.ascii_is_tnr',
+    'mixed_script.punct_space_after',
     'pagination.front_style',
     'pagination.body_style',
 })

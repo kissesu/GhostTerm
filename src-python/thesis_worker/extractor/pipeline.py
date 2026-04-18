@@ -255,6 +255,36 @@ def _calculate_confidence(attrs: dict[str, Any], text_len: int) -> float:
     return 0.5
 
 
+def _detect_punct_space_after(doc) -> 'bool | None':
+    """检测英文标点后是否规范地空一字符。
+
+    业务逻辑：
+    1. 拼接全文所有 run.text，得到整个文档的纯文本
+    2. 统计 ASCII 标点 [.,;:!?] 后紧跟空白字符的次数（space_after_count）
+    3. 统计 ASCII 标点后紧跟非空白字符的次数（no_space_count）
+    4. 若 space_after_count 明显占优（>= 2x 无空格），判定为 True；
+       若无空格明显占优（no_space >= 2x space_after），判定为 False；
+       样本过少（两者加起来 < 3）时返回 None 表示"无法判定"
+    阈值 2x 的依据：标点后空格有时夹杂引号/括号等上下文紧接情况，
+    允许少量例外，但超过 2:1 才认定主导规范成立。
+    """
+    # 收集全文文本（逐 run 而非逐段，可避免段落拼接引入误差）
+    fulltext_parts = []
+    for para in doc.paragraphs:
+        for run in para.runs:
+            if run.text:
+                fulltext_parts.append(run.text)
+    fulltext = ''.join(fulltext_parts)
+
+    space_after = len(re.findall(r'[.,;:!?](?=\s)', fulltext))
+    no_space = len(re.findall(r'[.,;:!?](?=\S)', fulltext))
+    total = space_after + no_space
+    if total < 3:
+        # 样本不足，无法做可靠的统计推断
+        return None
+    return space_after >= 2 * no_space
+
+
 def extract_all(file: str) -> dict[str, Any]:
     """全文自动抽取字段规则
 
@@ -309,6 +339,18 @@ def extract_all(file: str) -> dict[str, Any]:
             'source_text': para.text[:100],
             'confidence': final_conf,
         })
+
+    # ============================================
+    # 全文扫描：英文标点后空格规范推断
+    # 无法通过段落级 field_matcher 命中，需要独立扫全文一次
+    # ============================================
+    punct_result = _detect_punct_space_after(doc)
+    if punct_result is not None:
+        # setdefault 避免覆盖已由段落级流程填入的 mixed_script_global 条目
+        rules.setdefault('mixed_script_global', {'enabled': True, 'value': {}})
+        # 写入 value 子字典；该字段全文启发式推断，置信度约 0.7
+        # （非段落直接匹配，0.7 与 _calculate_confidence 中"2个属性"档位对齐）
+        rules['mixed_script_global']['value']['mixed_script.punct_space_after'] = punct_result
 
     return {
         'rules': rules,

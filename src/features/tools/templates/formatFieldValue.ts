@@ -102,6 +102,9 @@ function formatAttr(key: string, value: unknown): string {
       return `正文页码：${PAGE_STYLE_LABEL[String(value)] ?? value}`;
     case 'mixed_script.ascii_is_tnr':
       return value === true ? '西文=Times New Roman' : '';
+    case 'mixed_script.punct_space_after':
+      // 检测结果为 true 表示英文标点后空格规范符合要求
+      return value === true ? '英文标点后空一字符' : '';
     case 'layout.position':
       return LAYOUT_POSITION_LABEL[String(value)] ?? String(value);
     case 'citation.style':

@@ -39,6 +39,7 @@ const ATTR_LABEL: Record<string, string> = {
   'pagination.front_style': '前置页码',
   'pagination.body_style': '正文页码',
   'mixed_script.ascii_is_tnr': '西文用 Times New Roman',
+  'mixed_script.punct_space_after': '英文标点后空一字符',
   'layout.position': '图表位置',
   'citation.style': '引文样式',
 };
