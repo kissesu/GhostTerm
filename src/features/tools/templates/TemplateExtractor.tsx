@@ -398,7 +398,7 @@ export function TemplateExtractor({
             style={{
               ...actionBtnStyle,
               background: !extracted || loading || saving ? 'var(--c-raised)' : 'var(--c-accent)',
-              color: !extracted || loading || saving ? 'var(--c-fg-muted)' : 'var(--c-accent-fg)',
+              color: !extracted || loading || saving ? 'var(--c-fg-muted)' : 'var(--c-accent-text)',
               cursor: !extracted || loading || saving ? 'not-allowed' : 'pointer',
               border: '1px solid var(--c-border)',
             }}
