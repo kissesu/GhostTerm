@@ -171,6 +171,40 @@ describe('TemplateManager', () => {
     expect(screen.getByTestId('delete-btn-user-apa')).toBeTruthy();
     expect(screen.queryByTestId('restore-btn-user-apa')).toBeNull();
   });
+
+  it('保存失败时停留在编辑器并弹 alert', async () => {
+    // store.update 注入 reject，模拟磁盘写入失败
+    const updateFail = vi.fn().mockRejectedValueOnce(new Error('boom'));
+    useTemplateStore.setState({
+      templates: [builtinTpl, userTpl],
+      loading: false,
+      load: vi.fn().mockResolvedValue(undefined),
+      update: updateFail,
+      remove: vi.fn().mockResolvedValue(undefined),
+      restoreBuiltin: vi.fn().mockResolvedValue(undefined),
+    });
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+    render(<TemplateManager isOpen onClose={vi.fn()} />);
+
+    // 进入编辑视图
+    fireEvent.click(screen.getByTestId('edit-btn-user-apa'));
+    await waitFor(() => expect(screen.getByTestId('template-editor')).toBeTruthy());
+
+    // 触发保存（会 reject）
+    fireEvent.click(screen.getByTestId('editor-save-btn'));
+
+    // 等 update 被调，alert 弹出
+    await waitFor(() => {
+      expect(updateFail).toHaveBeenCalledTimes(1);
+      expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('boom'));
+    });
+
+    // 编辑器仍在屏幕上，editing 没被清空（key 重置不应触发，因为 editing 没改）
+    expect(screen.getByTestId('template-editor')).toBeTruthy();
+
+    alertSpy.mockRestore();
+  });
 });
 
 // ─────────────────────────────────────────────

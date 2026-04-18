@@ -58,10 +58,16 @@ export function TemplateManager({ isOpen, onClose }: Props) {
 
   // ============================================
   // 保存编辑：调 store.update → reload，回到列表
+  // 失败时弹 alert 暴露错误，editing 保持不变让用户重试
   // ============================================
   const handleSave = async (updated: TemplateJson) => {
-    await update(updated.id, { rules: updated.rules });
-    setEditing(null);
+    try {
+      await update(updated.id, { rules: updated.rules });
+      setEditing(null);
+    } catch (e) {
+      console.error('[TemplateManager] save failed', e);
+      alert(`保存失败：${String(e)}`);
+    }
   };
 
   return (
@@ -131,7 +137,9 @@ export function TemplateManager({ isOpen, onClose }: Props) {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           {editing ? (
             // 编辑视图：覆盖列表区域
+            // key=editing.id 强制 remount，切换模板时重置 draft 避免脏数据残留
             <TemplateEditor
+              key={editing.id}
               template={editing}
               onSave={handleSave}
               onCancel={() => setEditing(null)}
