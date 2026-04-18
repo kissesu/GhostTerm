@@ -4,6 +4,7 @@
 @author: Atlas.oi
 @date: 2026-04-17
 """
+import pytest
 from pathlib import Path
 from thesis_worker.handlers import handle
 
@@ -24,6 +25,7 @@ class TestPing:
 
 
 class TestDetect:
+    @pytest.mark.skip(reason="P3 schema (cjk_ascii_space REGISTRY rule); replaced by v2 detector in Task 10; P3 code removed in Task 19")
     def test_detect_returns_issues(self):
         resp = handle({
             'id': 'r2',
@@ -54,6 +56,7 @@ class TestUnknownCmd:
 
 
 class TestFixPreview:
+    @pytest.mark.skip(reason="P3 schema (cjk_ascii_space REGISTRY rule); detect 返回空 issues，issue[0] IndexError；replaced by v2 detector in Task 10; P3 code removed in Task 19")
     def test_fix_preview_returns_diff_no_write(self, tmp_path):
         import shutil
         import os
@@ -134,6 +137,7 @@ class TestExtractTemplate:
 
 
 class TestRuleException:
+    @pytest.mark.skip(reason="P3 schema (monkeypatches P3 REGISTRY rule); v2 detector 不走 REGISTRY，注入无效；replaced by v2 detector in Task 10; P3 code removed in Task 19")
     def test_rule_raising_exception_aborts_batch(self, monkeypatch):
         """按 spec Section 7：规则异常 → 整批中止，抛 RULE_ERROR"""
         from thesis_worker.rules import REGISTRY

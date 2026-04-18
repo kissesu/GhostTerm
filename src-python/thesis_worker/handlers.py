@@ -66,6 +66,7 @@ def handle(req: dict) -> dict:
 
 
 def _handle_detect(req_id: str, req: dict) -> dict:
+    from .engine_v2.detector import detect_v2
     file = req['file']
     template = req['template']
 
@@ -73,41 +74,28 @@ def _handle_detect(req_id: str, req: dict) -> dict:
     if not Path(file).exists():
         return {'id': req_id, 'ok': False, 'error': f'file not found: {file}', 'code': 'ENOENT'}
 
+    # 打开一次确认文件格式有效（detect_v2 内部也会打开，此处保证 PARSE_ERROR / EPERM 语义对齐）
     try:
-        doc = Document(file)
+        Document(file)
     except PackageNotFoundError:
         return {'id': req_id, 'ok': False, 'error': f'docx malformed: {file}', 'code': 'PARSE_ERROR'}
     except PermissionError as e:
         return {'id': req_id, 'ok': False, 'error': str(e), 'code': 'EPERM'}
 
-    all_issues: list = []
-    for rule_id, rule_cfg in template['rules'].items():
-        if not rule_cfg.get('enabled', False):
-            continue
-        rule = REGISTRY.get(rule_id)
-        if rule is None:
-            # 未注册的规则跳过（模板 schema 可能比当前 sidecar 新）
-            continue
+    try:
+        issues = detect_v2(file, template)
+    except Exception as e:
+        return {
+            'id': req_id, 'ok': False,
+            'error': f'detect_v2 raised: {type(e).__name__}: {e}\n{traceback.format_exc()}',
+            'code': 'RULE_ERROR',
+        }
 
-        try:
-            found = rule.detect(doc, rule_cfg.get('value'))
-        except Exception as e:
-            # spec Section 7：单规则抛异常 → 整批中止，不 continue 到下一规则
-            return {
-                'id': req_id, 'ok': False,
-                'error': f'rule {rule_id} raised: {type(e).__name__}: {e}\n{traceback.format_exc()}',
-                'code': 'RULE_ERROR',
-            }
+    # 给每个 issue 分配稳定 id（rule_id-全局偏移，跨字段唯一）
+    for idx, issue in enumerate(issues):
+        issue['issue_id'] = f"{issue['rule_id']}-{idx}"
 
-        # 给每个 issue 分配稳定 id（基于全局偏移，跨规则唯一）
-        for idx, issue in enumerate(found):
-            issue.issue_id = f'{rule_id}-{len(all_issues) + idx}'
-        all_issues.extend(found)
-
-    return {
-        'id': req_id, 'ok': True,
-        'result': {'issues': [i.to_dict() for i in all_issues]},
-    }
+    return {'id': req_id, 'ok': True, 'result': {'issues': issues}}
 
 
 def _handle_fix(req_id: str, req: dict) -> dict:
