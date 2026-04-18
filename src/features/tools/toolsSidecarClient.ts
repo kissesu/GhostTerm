@@ -36,18 +36,8 @@ export interface FixPreviewRequest extends SidecarRequestBase {
   value?: unknown;
 }
 
-export interface ListRulesRequest extends SidecarRequestBase {
-  cmd: 'list_rules';
-}
-
 export interface CancelRequest extends SidecarRequestBase {
   cmd: 'cancel';
-}
-
-/** extract_template 占位：sidecar 侧尚未实现，类型预留供后续 Task 21 使用 */
-export interface ExtractTemplateRequest extends SidecarRequestBase {
-  cmd: 'extract_template';
-  file: string;
 }
 
 /** P4 语义字段：从 docx 自动抽取全部 32 个语义字段的当前值 */
@@ -76,9 +66,7 @@ export type SidecarRequest =
   | DetectRequest
   | FixRequest
   | FixPreviewRequest
-  | ListRulesRequest
   | CancelRequest
-  | ExtractTemplateRequest
   | ExtractAllRequest
   | ExtractFromSelectionRequest
   | ListFieldsRequest;

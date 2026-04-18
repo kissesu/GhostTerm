@@ -5,7 +5,6 @@
  *   2. create 后 list 含新模板
  *   3. 深拷贝隔离：改内置 rules 不影响已存用户模板
  *   4. migrateNewRules 为所有模板追加缺失规则
- *   5. load migration check：pendingMigrationCount 与 acknowledgeMigration
  * @author Atlas.oi
  * @date 2026-04-18
  */
@@ -17,18 +16,11 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
 }));
 
-// ─── Mock sidecarClient（extract_template + list_rules） ───
-vi.mock('../toolsSidecarClient', () => ({
-  sidecarInvoke: vi.fn(),
-}));
-
 import { invoke } from '@tauri-apps/api/core';
-import { sidecarInvoke } from '../toolsSidecarClient';
 import { useTemplateStore } from '../templates/TemplateStore';
 import type { TemplateJson } from '../templates/TemplateStore';
 
 const mockedInvoke = vi.mocked(invoke);
-const mockedSidecarInvoke = vi.mocked(sidecarInvoke);
 
 // ─── 测试用内置模板 fixture ───────────────────
 const builtinTemplate: TemplateJson = {
@@ -46,7 +38,6 @@ const builtinTemplate: TemplateJson = {
 // 每个 test 前重置 store 和 mock
 beforeEach(() => {
   mockedInvoke.mockReset();
-  mockedSidecarInvoke.mockReset();
   useTemplateStore.setState({ templates: [], loading: false, pendingMigrationCount: 0 });
 });
 
@@ -225,54 +216,3 @@ describe('migrateNewRules', () => {
   });
 });
 
-// ─────────────────────────────────────────────
-// Case 5: load migration check（pendingMigrationCount）
-// ─────────────────────────────────────────────
-describe('load migration check', () => {
-  it('检测到新规则时 pendingMigrationCount > 0', async () => {
-    // builtin 只含 cjk_ascii_space/font_body，sidecar 多出 new.rule
-    mockedInvoke.mockResolvedValueOnce([builtinTemplate]); // template_list_cmd
-    mockedSidecarInvoke.mockResolvedValueOnce({
-      rules: ['cjk_ascii_space', 'font_body', 'new.rule'],
-    });
-    // migrateNewRules 内部：save builtin + reload
-    mockedInvoke.mockResolvedValueOnce(undefined); // template_save_cmd
-    mockedInvoke.mockResolvedValueOnce([builtinTemplate]); // reload inside migrateNewRules
-
-    await useTemplateStore.getState().load();
-
-    expect(useTemplateStore.getState().pendingMigrationCount).toBe(1);
-  });
-
-  it('acknowledgeMigration 清零 pendingMigrationCount', () => {
-    useTemplateStore.setState({ pendingMigrationCount: 3 });
-    useTemplateStore.getState().acknowledgeMigration();
-    expect(useTemplateStore.getState().pendingMigrationCount).toBe(0);
-  });
-
-  it('list_rules 失败时不阻断 templates 加载', async () => {
-    mockedInvoke.mockResolvedValueOnce([builtinTemplate]); // template_list_cmd
-    mockedSidecarInvoke.mockRejectedValueOnce(new Error('sidecar not running'));
-
-    await useTemplateStore.getState().load();
-
-    // templates 正常加载，pendingMigrationCount 维持 0
-    expect(useTemplateStore.getState().templates).toHaveLength(1);
-    expect(useTemplateStore.getState().pendingMigrationCount).toBe(0);
-  });
-
-  it('builtin 含全部规则时 pendingMigrationCount = 0 且 migrateNewRules 不调用', async () => {
-    // sidecar 返回的规则与内置模板完全吻合，无新规则
-    mockedInvoke.mockResolvedValueOnce([builtinTemplate]); // template_list_cmd
-    mockedSidecarInvoke.mockResolvedValueOnce({
-      rules: ['cjk_ascii_space', 'font_body'],
-    });
-
-    await useTemplateStore.getState().load();
-
-    expect(useTemplateStore.getState().pendingMigrationCount).toBe(0);
-    // template_save_cmd 不应被调用（无迁移）
-    const saveCalls = mockedInvoke.mock.calls.filter(([cmd]) => cmd === 'template_save_cmd');
-    expect(saveCalls).toHaveLength(0);
-  });
-});

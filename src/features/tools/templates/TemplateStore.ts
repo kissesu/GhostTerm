@@ -10,7 +10,6 @@
 
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
-import { sidecarInvoke } from '../toolsSidecarClient';
 
 // ─────────────────────────────────────────────
 // 类型定义（与 Rust TemplateJson 字段对齐）
@@ -81,13 +80,11 @@ interface TemplateStoreState {
    * 1. 找到内置模板 _builtin-gbt7714（必须存在）
    * 2. JSON.parse(JSON.stringify(...)) 强制值复制，确保与内置模板完全隔离
    * 3. 若传入 explicitRules，直接使用而非拷贝内置规则（P4 Workspace 流程）
-   * 4. 若传入 fromDocx，调用 sidecar extract_template 覆盖对应 rule value（P3 旧流程，保留兼容）
-   * 5. 调用 template_save_cmd 持久化，再 load() 重读
+   * 4. 调用 template_save_cmd 持久化，再 load() 重读
    */
   create(
     name: string,
     options?: {
-      fromDocx?: string;
       // P4 Workspace 流程：直接传入用户逐字段确认后的规则 map，不再从内置拷贝
       explicitRules?: Record<string, { enabled: boolean; value: Record<string, unknown> }>;
     },
@@ -127,26 +124,6 @@ export const useTemplateStore = create<TemplateStoreState>((set, get) => ({
       const templates = await invoke<TemplateJson[]>('template_list_cmd');
       set({ templates });
 
-      // ============================================
-      // Migration check：向 sidecar 获取支持的规则列表，
-      // 与内置模板已有规则 diff，追加新规则（enabled:false）
-      // 若 sidecar 不可用，静默跳过，不阻断模板加载
-      // ============================================
-      try {
-        const { rules: supported } = await sidecarInvoke<{ rules: string[] }>({ cmd: 'list_rules' });
-        const builtin = templates.find((t) => t.id === '_builtin-gbt7714');
-        if (builtin) {
-          const newRuleIds = supported.filter((id) => !(id in builtin.rules));
-          if (newRuleIds.length > 0) {
-            // 记录新规则数量，MigrationBanner 据此显示提示
-            set({ pendingMigrationCount: newRuleIds.length });
-            await get().migrateNewRules(newRuleIds);
-          }
-        }
-      } catch (e) {
-        // sidecar 未启动或网络异常：跳过 migration，不影响模板加载
-        console.warn('[TemplateStore] migration check skipped:', e);
-      }
     } finally {
       set({ loading: false });
     }
@@ -161,7 +138,7 @@ export const useTemplateStore = create<TemplateStoreState>((set, get) => ({
     return get().templates.find((t) => t.id === id) ?? null;
   },
 
-  async create(name, options) {
+  async create(name: string, options?: { explicitRules?: Record<string, { enabled: boolean; value: Record<string, unknown> }> }) {
     // ============================================
     // 第一步：确定 rules 来源
     // P4 Workspace 流程：explicitRules 直接来自用户逐字段确认，深拷贝后使用
@@ -191,27 +168,6 @@ export const useTemplateStore = create<TemplateStoreState>((set, get) => ({
       updated_at: new Date().toISOString(),
       rules: deepCloned,
     };
-
-    // ============================================
-    // 第三步（可选）：旧 P3 extract_template 覆盖路径
-    // 仅在未传 explicitRules 时执行，P4 Workspace 流程不需要再调 sidecar
-    // ============================================
-    if (!options?.explicitRules && options?.fromDocx) {
-      const extracted = await sidecarInvoke<{ rules: Record<string, { value: unknown }> }>({
-        cmd: 'extract_template',
-        file: options.fromDocx,
-      });
-      Object.entries(extracted.rules).forEach(([k, v]) => {
-        if (newTpl.rules[k]) {
-          newTpl.rules[k].value = v.value;
-        }
-      });
-      newTpl.source = {
-        type: 'extracted',
-        origin_docx: options.fromDocx,
-        extracted_at: new Date().toISOString(),
-      };
-    }
 
     await invoke('template_save_cmd', { template: newTpl });
     await get().load();
