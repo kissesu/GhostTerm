@@ -30,6 +30,16 @@ def handle(req: dict) -> dict:
         if cmd == 'fix':
             return _handle_fix(req_id, req)
 
+        if cmd == 'fix_preview':
+            return _handle_fix_preview(req_id, req)
+
+        if cmd == 'list_rules':
+            return {'id': req_id, 'ok': True, 'result': {'rules': list(REGISTRY.keys())}}
+
+        if cmd == 'cancel':
+            # P3 单线程串行，cancel 只做 ack；真实中断留 P4 实现
+            return {'id': req_id, 'ok': True, 'result': {'cancelled': True}}
+
         return {
             'id': req_id, 'ok': False,
             'error': f'unknown cmd: {cmd}',
@@ -121,5 +131,44 @@ def _handle_fix(req_id: str, req: dict) -> dict:
 
     result = rule.fix(doc, issue, value)
     doc.save(file)
+
+    return {'id': req_id, 'ok': True, 'result': result.to_dict()}
+
+
+def _handle_fix_preview(req_id: str, req: dict) -> dict:
+    """预览模式：执行修复逻辑但不写回文件，返回 diff 供前端展示"""
+    file = req['file']
+    issue_dict = req['issue']
+
+    if not Path(file).exists():
+        return {'id': req_id, 'ok': False, 'error': f'file not found: {file}', 'code': 'ENOENT'}
+
+    # issue_dict 可能为空（ENOENT 检查优先，在下面再取 rule_id）
+    rule_id = issue_dict.get('rule_id', '')
+    value = req.get('value', {})
+
+    try:
+        doc = Document(file)
+    except PackageNotFoundError:
+        return {'id': req_id, 'ok': False, 'error': f'docx malformed: {file}', 'code': 'PARSE_ERROR'}
+
+    rule = REGISTRY.get(rule_id)
+    if rule is None:
+        return {'id': req_id, 'ok': False, 'error': f'unknown rule: {rule_id}', 'code': 'UNKNOWN_RULE'}
+
+    from .models import Issue, Location
+    issue = Issue(
+        rule_id=rule_id,
+        loc=Location(**issue_dict['loc']),
+        message=issue_dict['message'],
+        current=issue_dict['current'],
+        expected=issue_dict['expected'],
+        fix_available=issue_dict['fix_available'],
+        issue_id=issue_dict.get('issue_id', ''),
+    )
+
+    result = rule.fix(doc, issue, value)
+    # 预览模式：不调 doc.save()，并将 applied 标记为 False
+    result.applied = False
 
     return {'id': req_id, 'ok': True, 'result': result.to_dict()}
