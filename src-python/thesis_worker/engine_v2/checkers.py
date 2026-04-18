@@ -16,6 +16,14 @@ from docx.document import Document
 from docx.text.paragraph import Paragraph
 
 # ───────────────────────────────────────────────
+# 容差常量（用于浮点属性的近似匹配）
+# ───────────────────────────────────────────────
+_TOL_FONT_PT = 0.10       # 字号容差（pt）
+_TOL_MARGIN_CM = 0.05     # 页边距容差（cm）
+_TOL_SIZE_INCH = 0.05     # 页面尺寸容差（英寸）
+_TOL_LINE_SPACING = 0.05  # 行距倍数容差
+
+# ───────────────────────────────────────────────
 # 内部工具函数
 # ───────────────────────────────────────────────
 
@@ -97,7 +105,7 @@ def check_font_size_pt(para: Paragraph, expected: float) -> Optional[dict]:
     if run.font.size is None:
         return {'attr': 'font.size_pt', 'actual': None, 'expected': expected}
     actual = float(run.font.size.pt)
-    if abs(actual - expected) < 0.1:
+    if abs(actual - expected) < _TOL_FONT_PT:
         return None
     return {'attr': 'font.size_pt', 'actual': actual, 'expected': expected}
 
@@ -193,7 +201,7 @@ def check_para_line_spacing(para: Paragraph, expected: float) -> Optional[dict]:
             actual = float(ls)
         except (TypeError, AttributeError):
             actual = 1.0
-    if abs(actual - expected) < 0.05:
+    if abs(actual - expected) < _TOL_LINE_SPACING:
         return None
     return {'attr': 'para.line_spacing', 'actual': actual, 'expected': expected}
 
@@ -359,7 +367,7 @@ def check_page_size(doc: Document, expected: str) -> Optional[dict]:
     w_in = section.page_width.inches
     h_in = section.page_height.inches
     for name, (sw, sh) in _PAGE_SIZES.items():
-        if abs(w_in - sw) < 0.05 and abs(h_in - sh) < 0.05:
+        if abs(w_in - sw) < _TOL_SIZE_INCH and abs(h_in - sh) < _TOL_SIZE_INCH:
             actual = name
             break
     else:
@@ -372,7 +380,7 @@ def check_page_size(doc: Document, expected: str) -> Optional[dict]:
 def check_page_margin_top_cm(doc: Document, expected: float) -> Optional[dict]:
     """检查页面上边距（cm），容差 0.05cm"""
     actual = doc.sections[0].top_margin.cm
-    if abs(actual - expected) < 0.05:
+    if abs(actual - expected) < _TOL_MARGIN_CM:
         return None
     return {'attr': 'page.margin_top_cm', 'actual': round(actual, 2), 'expected': expected}
 
@@ -380,7 +388,7 @@ def check_page_margin_top_cm(doc: Document, expected: float) -> Optional[dict]:
 def check_page_margin_bottom_cm(doc: Document, expected: float) -> Optional[dict]:
     """检查页面下边距（cm），容差 0.05cm"""
     actual = doc.sections[0].bottom_margin.cm
-    if abs(actual - expected) < 0.05:
+    if abs(actual - expected) < _TOL_MARGIN_CM:
         return None
     return {'attr': 'page.margin_bottom_cm', 'actual': round(actual, 2), 'expected': expected}
 
@@ -388,7 +396,7 @@ def check_page_margin_bottom_cm(doc: Document, expected: float) -> Optional[dict
 def check_page_margin_left_cm(doc: Document, expected: float) -> Optional[dict]:
     """检查页面左边距（cm），容差 0.05cm"""
     actual = doc.sections[0].left_margin.cm
-    if abs(actual - expected) < 0.05:
+    if abs(actual - expected) < _TOL_MARGIN_CM:
         return None
     return {'attr': 'page.margin_left_cm', 'actual': round(actual, 2), 'expected': expected}
 
@@ -396,7 +404,7 @@ def check_page_margin_left_cm(doc: Document, expected: float) -> Optional[dict]:
 def check_page_margin_right_cm(doc: Document, expected: float) -> Optional[dict]:
     """检查页面右边距（cm），容差 0.05cm"""
     actual = doc.sections[0].right_margin.cm
-    if abs(actual - expected) < 0.05:
+    if abs(actual - expected) < _TOL_MARGIN_CM:
         return None
     return {'attr': 'page.margin_right_cm', 'actual': round(actual, 2), 'expected': expected}
 
@@ -432,7 +440,7 @@ def check_mixed_script_ascii_is_tnr(doc: Document, expected: bool) -> Optional[d
 # 类别 C：延后存根（deferred to v3）
 # ───────────────────────────────────────────────
 
-def check_layout_position(para: Paragraph, expected: str) -> None:
+def check_layout_position(para: Paragraph, expected: str) -> Optional[dict]:
     """
     [延后 v3] 检查图题/表题位置（'above'/'below'）。
     需要解析段落与图/表的相对位置关系，当前能力范围之外，固定返回 None（不评判）。
@@ -440,7 +448,7 @@ def check_layout_position(para: Paragraph, expected: str) -> None:
     return None
 
 
-def check_citation_style(para: Paragraph, expected: str) -> None:
+def check_citation_style(para: Paragraph, expected: str) -> Optional[dict]:
     """
     [延后 v3] 检查参考文献条目是否符合 GB/T 7714 格式。
     需要复杂正则 + 格式解析，当前固定返回 None（不评判）。
@@ -448,7 +456,7 @@ def check_citation_style(para: Paragraph, expected: str) -> None:
     return None
 
 
-def check_pagination_front_style(doc: Document, expected: str) -> None:
+def check_pagination_front_style(doc: Document, expected: str) -> Optional[dict]:
     """
     [延后 v3] 检查前置页码样式（'roman' 罗马数字 / 'arabic' 阿拉伯数字）。
     需要读取 section 的页码格式 XML，当前固定返回 None（不评判）。
@@ -456,7 +464,7 @@ def check_pagination_front_style(doc: Document, expected: str) -> None:
     return None
 
 
-def check_pagination_body_style(doc: Document, expected: str) -> None:
+def check_pagination_body_style(doc: Document, expected: str) -> Optional[dict]:
     """
     [延后 v3] 检查正文页码样式（'arabic' 阿拉伯数字）。
     同 check_pagination_front_style，固定返回 None（不评判）。

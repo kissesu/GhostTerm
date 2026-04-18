@@ -311,16 +311,12 @@ class TestParaSpaceBeforeAfter:
 
     def test_space_after_mismatch(self):
         doc = Document()
-        p = doc.add_paragraph('段落')
-        p.paragraph_format.space_after = Pt(6)  # 0.5 行 → round 到 1
-        # 期望 0 → 不匹配
-        issue = check_para_space_after_lines(p, 0, body_size_pt=12)
-        # round(6/12)=0 实际上刚好等于 1 行需要 12pt；6pt=0.5→round=1≠0 → issue
-        # 验证 issue 存在即可（具体值取决于四舍五入）
-        # 6pt / 12pt = 0.5 → round = 0（Python 银行家舍入）
-        # 为避免 round 歧义，改用 Pt(6) 时容差内测试
-        # 此处只验证函数可调用且返回 None 或 dict
-        assert issue is None or isinstance(issue, dict)
+        p = doc.add_paragraph('测试')
+        p.paragraph_format.space_after = Pt(24)  # 24pt / 12pt body = 2 lines
+        issue = check_para_space_after_lines(p, 0, body_size_pt=12)  # 期望 0 行
+        assert issue is not None
+        assert issue['actual'] == 2
+        assert issue['expected'] == 0
 
 
 # ───────────────────────────────────────────────
