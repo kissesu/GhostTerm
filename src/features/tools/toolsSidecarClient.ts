@@ -29,7 +29,35 @@ export interface FixRequest extends SidecarRequestBase {
   value?: unknown;
 }
 
-export type SidecarRequest = PingRequest | DetectRequest | FixRequest;
+export interface FixPreviewRequest extends SidecarRequestBase {
+  cmd: 'fix_preview';
+  file: string;
+  issue: IssueDict;
+  value?: unknown;
+}
+
+export interface ListRulesRequest extends SidecarRequestBase {
+  cmd: 'list_rules';
+}
+
+export interface CancelRequest extends SidecarRequestBase {
+  cmd: 'cancel';
+}
+
+/** extract_template 占位：sidecar 侧尚未实现，类型预留供后续 Task 21 使用 */
+export interface ExtractTemplateRequest extends SidecarRequestBase {
+  cmd: 'extract_template';
+  file: string;
+}
+
+export type SidecarRequest =
+  | PingRequest
+  | DetectRequest
+  | FixRequest
+  | FixPreviewRequest
+  | ListRulesRequest
+  | CancelRequest
+  | ExtractTemplateRequest;
 
 export interface IssueDict {
   rule_id: string;
