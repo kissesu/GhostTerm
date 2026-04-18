@@ -6,6 +6,9 @@
  *   3. TemplateManager 点击"编辑" → TemplateEditor 出现
  *   4. RuleValueEditor font shape 渲染 family + size_pt 输入框
  *   5. RuleValueEditor allowed shape 渲染 toggle
+ *   6. Task 10 — 新建模板 prompt + store.create
+ *   7. Task 10 — 导入 JSON → invoke template_import_cmd
+ *   8. Task 10 — 从 docx 创建 → 仅显示 Phase D 占位 alert，不调 store.create
  * @author Atlas.oi
  * @date 2026-04-18
  */
@@ -18,11 +21,19 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
 }));
 
+// ─── Mock dialog 插件（open/save） ───────────
+vi.mock('@tauri-apps/plugin-dialog', () => ({
+  open: vi.fn(),
+  save: vi.fn(),
+}));
+
 // ─── Mock sidecarClient ───────────────────────
 vi.mock('../toolsSidecarClient', () => ({
   sidecarInvoke: vi.fn(),
 }));
 
+import { invoke } from '@tauri-apps/api/core';
+import * as dialog from '@tauri-apps/plugin-dialog';
 import { useTemplateStore } from '../templates/TemplateStore';
 import { TemplateEditor } from '../templates/TemplateEditor';
 import { TemplateManager } from '../templates/TemplateManager';
@@ -203,6 +214,94 @@ describe('TemplateManager', () => {
     // 编辑器仍在屏幕上，editing 没被清空（key 重置不应触发，因为 editing 没改）
     expect(screen.getByTestId('template-editor')).toBeTruthy();
 
+    alertSpy.mockRestore();
+  });
+
+  // ─── Task 10 新增测试 ────────────────────────
+
+  it('点击「新建模板」prompt 输入名称 → store.create 被调用', async () => {
+    const createMock = vi.fn().mockResolvedValue('new-tpl-id');
+    useTemplateStore.setState({
+      templates: [builtinTpl, userTpl],
+      loading: false,
+      load: vi.fn().mockResolvedValue(undefined),
+      update: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+      restoreBuiltin: vi.fn().mockResolvedValue(undefined),
+      create: createMock,
+    });
+    // 模拟 prompt 返回用户输入的模板名
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('我的新模板');
+
+    render(<TemplateManager isOpen onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByTestId('create-template-btn'));
+
+    await waitFor(() => {
+      expect(createMock).toHaveBeenCalledWith('我的新模板');
+    });
+
+    promptSpy.mockRestore();
+  });
+
+  it('点击「导入 JSON」选择文件 → invoke template_import_cmd 被调用', async () => {
+    const loadMock = vi.fn().mockResolvedValue(undefined);
+    useTemplateStore.setState({
+      templates: [builtinTpl, userTpl],
+      loading: false,
+      load: loadMock,
+      update: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+      restoreBuiltin: vi.fn().mockResolvedValue(undefined),
+      create: vi.fn().mockResolvedValue('id'),
+    });
+    // dialog.open 返回选中的文件路径
+    vi.mocked(dialog.open).mockResolvedValue('/path/to/my-template.json');
+    vi.mocked(invoke).mockResolvedValue(undefined);
+
+    render(<TemplateManager isOpen onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByTestId('import-json-btn'));
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('template_import_cmd', {
+        jsonPath: '/path/to/my-template.json',
+      });
+      // 导入成功后应 reload
+      expect(loadMock).toHaveBeenCalled();
+    });
+  });
+
+  it('点击「从 docx 创建」选文件 + prompt → 显示 Phase D 占位 alert，不调 store.create', async () => {
+    const createMock = vi.fn().mockResolvedValue('id');
+    useTemplateStore.setState({
+      templates: [builtinTpl, userTpl],
+      loading: false,
+      load: vi.fn().mockResolvedValue(undefined),
+      update: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+      restoreBuiltin: vi.fn().mockResolvedValue(undefined),
+      create: createMock,
+    });
+    // 模拟选中 docx 文件路径
+    vi.mocked(dialog.open).mockResolvedValue('/docs/thesis.docx');
+    // 模拟 prompt 输入模板名
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('论文模板');
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+    render(<TemplateManager isOpen onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByTestId('create-from-docx-btn'));
+
+    await waitFor(() => {
+      // 应弹出 Phase D 占位提示
+      expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('Phase D'));
+    });
+
+    // store.create 不应被调用（占位阶段）
+    expect(createMock).not.toHaveBeenCalled();
+
+    promptSpy.mockRestore();
     alertSpy.mockRestore();
   });
 });

@@ -1,16 +1,24 @@
 /**
  * @file TemplateManager.tsx
  * @description 模板管理 modal。列表形式展示所有模板；
- *   支持编辑 / 导出（占位）/ 删除 / 内置恢复默认操作；
- *   底部提供新建 / 从 docx / 导入 三个入口（Task 10 接入前占位）。
+ *   支持编辑 / 导出 / 删除 / 内置恢复默认操作；
+ *   底部提供新建 / 从 docx / 导入 JSON 三个入口。
+ *   「从 docx 创建」依赖 Phase D Task 22 sidecar extract_template，当前为脚手架占位。
  * @author Atlas.oi
  * @date 2026-04-18
  */
 
 import { useState } from 'react';
+import { open, save } from '@tauri-apps/plugin-dialog';
+import { invoke } from '@tauri-apps/api/core';
 import { useTemplateStore } from './TemplateStore';
 import type { TemplateJson } from './TemplateStore';
 import { TemplateEditor } from './TemplateEditor';
+
+// 从文件路径中提取文件名（兼容 macOS / Windows 路径分隔符）
+function basename(p: string): string {
+  return p.split(/[/\\]/).pop() ?? 'template';
+}
 
 interface Props {
   isOpen: boolean;
@@ -28,7 +36,7 @@ const SOURCE_LABELS: Record<string, string> = {
 };
 
 export function TemplateManager({ isOpen, onClose }: Props) {
-  const { templates, remove, restoreBuiltin, update } = useTemplateStore();
+  const { templates, remove, restoreBuiltin, update, create, load } = useTemplateStore();
   // null = 列表视图；非 null = 编辑视图
   const [editing, setEditing] = useState<TemplateJson | null>(null);
 
@@ -67,6 +75,77 @@ export function TemplateManager({ isOpen, onClose }: Props) {
     } catch (e) {
       console.error('[TemplateManager] save failed', e);
       alert(`保存失败：${String(e)}`);
+    }
+  };
+
+  // ============================================
+  // 新建空白模板：prompt 输入名称 → store.create 深拷贝内置
+  // ============================================
+  const handleNewBlank = async () => {
+    const name = window.prompt('请输入模板名称');
+    if (!name?.trim()) return;
+    try {
+      await create(name.trim());
+    } catch (e) {
+      console.error('[TemplateManager] create failed', e);
+      alert(`新建失败：${String(e)}`);
+    }
+  };
+
+  // ============================================
+  // 从 docx 创建模板（Phase D Task 22 脚手架）
+  // 当前 sidecar extract_template 命令尚未实现，先做 UI 流程：
+  //   1. 选 docx 文件
+  //   2. prompt 输入名称
+  //   3. 提示 Phase D 占位，不真正调 store.create
+  // ============================================
+  const handleNewFromDocx = async () => {
+    const docx = await open({
+      multiple: false,
+      filters: [{ name: 'Word', extensions: ['docx'] }],
+    });
+    if (typeof docx !== 'string') return;
+    const name = window.prompt('请输入模板名称', basename(docx).replace(/\.docx$/i, ''));
+    if (!name?.trim()) return;
+    // Task 22 完成前的占位提示——不调 store.create，暴露未完成状态
+    alert('「从 docx 创建」需要 Phase D Task 22 完成 sidecar extract_template 命令后才能使用。当前是脚手架占位。');
+    // TODO Task 22: await create(name.trim(), { fromDocx: docx });
+  };
+
+  // ============================================
+  // 导入 JSON 模板：文件选择器 → Rust template_import_cmd → reload
+  // ============================================
+  const handleImport = async () => {
+    const picked = await open({
+      multiple: false,
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    });
+    if (typeof picked !== 'string') return;
+    try {
+      // Rust 函数参数名 json_path → JS camelCase jsonPath
+      await invoke('template_import_cmd', { jsonPath: picked });
+      await load();
+    } catch (e) {
+      console.error('[TemplateManager] import failed', e);
+      alert(`导入失败：${String(e)}`);
+    }
+  };
+
+  // ============================================
+  // 导出单条模板：文件保存对话框 → Rust template_export_cmd
+  // ============================================
+  const handleExport = async (template: TemplateJson) => {
+    const dest = await save({
+      defaultPath: `${template.name}.json`,
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    });
+    if (!dest) return;
+    try {
+      // Rust 函数参数名 dest_path → JS camelCase destPath
+      await invoke('template_export_cmd', { id: template.id, destPath: dest });
+    } catch (e) {
+      console.error('[TemplateManager] export failed', e);
+      alert(`导出失败：${String(e)}`);
     }
   };
 
@@ -195,10 +274,10 @@ export function TemplateManager({ isOpen, onClose }: Props) {
                             编辑
                           </button>
 
-                          {/* 导出（Task 10 前占位） */}
+                          {/* 导出：保存对话框 → Rust template_export_cmd */}
                           <button
                             data-testid={`export-btn-${t.id}`}
-                            onClick={() => alert('导出功能 Task 10 接入')}
+                            onClick={() => handleExport(t)}
                             style={btnStyle}
                           >
                             导出
@@ -253,28 +332,28 @@ export function TemplateManager({ isOpen, onClose }: Props) {
               flexShrink: 0,
             }}
           >
-            {/* 新建模板（Task 10 前占位） */}
+            {/* 新建空白模板：prompt 输入名称 → store.create */}
             <button
               data-testid="create-template-btn"
-              onClick={() => alert('新建模板 Task 10 接入')}
+              onClick={() => { void handleNewBlank(); }}
               style={actionBtnStyle}
             >
               新建模板
             </button>
 
-            {/* 从 docx 创建（Task 10 前占位） */}
+            {/* 从 docx 创建：Phase D Task 22 脚手架，暂显示占位提示 */}
             <button
               data-testid="create-from-docx-btn"
-              onClick={() => alert('从 docx 创建 Task 10 接入')}
+              onClick={() => { void handleNewFromDocx(); }}
               style={actionBtnStyle}
             >
               从 docx 创建
             </button>
 
-            {/* 导入 JSON（Task 10 前占位） */}
+            {/* 导入 JSON：文件选择器 → Rust template_import_cmd */}
             <button
               data-testid="import-json-btn"
-              onClick={() => alert('导入 JSON Task 10 接入')}
+              onClick={() => { void handleImport(); }}
               style={actionBtnStyle}
             >
               导入 JSON
