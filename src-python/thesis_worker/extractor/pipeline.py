@@ -154,6 +154,83 @@ def _read_paragraph_style_attrs(para) -> dict[str, Any]:
     return attrs
 
 
+def _read_run_list_style_attrs(run_list: list) -> dict[str, Any]:
+    """从指定 run 列表中读取字体/加粗/字间距属性（不含段落级 align/indent/spacing）
+
+    业务逻辑：
+    - 与 _read_paragraph_style_attrs 的 run 部分逻辑一致，但接收外部 run 子集
+    - 段落级属性（对齐、行距、首行缩进、段前/段后）属于整段，不跟 run 走，
+      因此本函数只读 run 级属性，调用方负责补全段落级属性
+    - 取 run_list 中第一个非空文字 run 的属性
+    """
+    attrs: dict[str, Any] = {}
+    for run in run_list:
+        if not run.text.strip():
+            # 跳过空白 run，避免取到占位 run 的默认属性
+            continue
+        if run.font.size is not None:
+            attrs['font.size_pt'] = float(run.font.size.pt)
+        if run.font.bold is True:
+            attrs['font.bold'] = True
+        rpr = run._element.rPr
+        if rpr is not None:
+            rfonts = rpr.find(_W_RFONTS)
+            if rfonts is not None:
+                ea = rfonts.get(_W_EAST_ASIA)
+                if ea:
+                    attrs['font.cjk'] = ea
+                asc = rfonts.get(_W_ASCII)
+                if asc and 'font.cjk' not in attrs:
+                    attrs['font.ascii'] = asc
+            spacing_el = rpr.find(_W_SPACING)
+            if spacing_el is not None:
+                val = spacing_el.get(_W_VAL)
+                if val:
+                    try:
+                        attrs['para.letter_spacing_chars'] = round(int(val) / 240, 1)
+                    except ValueError:
+                        pass
+        # 只取第一个非空 run（与 _read_paragraph_style_attrs 策略一致）
+        break
+    return attrs
+
+
+def _find_runs_for_text(para, selected_text: str) -> list:
+    """在段落的 runs 中定位覆盖 selected_text 的 run 子集
+
+    业务逻辑：
+    1. 遍历 para.runs，逐步累加字符偏移，找到 selected_text 在 para.text 中的
+       字符范围 [start, start+len)
+    2. 返回与该范围有重叠的 run 列表（部分重叠也算覆盖）
+    3. 若 selected_text 在 para.text 中找不到，返回空列表（调用方会回退到全段提取）
+
+    @param para - python-docx Paragraph 对象
+    @param selected_text - 用户选中的文本字符串
+    @returns 覆盖选中文本的 run 列表，可能为空（未找到时回退）
+    """
+    full_text = para.text
+    start = full_text.find(selected_text)
+    if start == -1:
+        # 找不到目标文本：无法定位 run，返回空列表让上层回退到全段
+        return []
+
+    end = start + len(selected_text)
+    matched_runs: list = []
+    cursor = 0
+
+    for run in para.runs:
+        run_len = len(run.text)
+        run_start = cursor
+        run_end = cursor + run_len
+        cursor = run_end
+
+        # run 与 [start, end) 有重叠则纳入子集
+        if run_start < end and run_end > start:
+            matched_runs.append(run)
+
+    return matched_runs
+
+
 def _merge_attrs(from_text: dict[str, Any], from_style: dict[str, Any]) -> dict[str, Any]:
     """合并文本抽取和样式抽取的属性
 
@@ -244,22 +321,61 @@ def extract_from_selection(
     file: str,
     para_indices: list[int],
     field_id: str,
+    selected_text: str | None = None,
 ) -> dict[str, Any]:
     """从用户选定的段落抽取属性，赋给指定字段
 
     业务逻辑：
     1. 读取指定索引段落的文本和样式
-    2. 合并多段属性（后段覆盖前段同名键，保证取到最多属性）
-    3. 返回字段 id + 合并属性 + 置信度 + 证据信息
+    2. 若传入 selected_text：
+       a. 在 para_indices[0] 的段落中定位 selected_text 覆盖的 run 子集
+       b. 用 _read_run_list_style_attrs(matched_runs) 读 run 级属性
+       c. 补全段落级属性（行距、对齐、缩进等属于整段，不跟 run 走）
+       d. 若 selected_text 在段落中找不到，回退为全段提取（不报错，安全降级）
+    3. 若未传入 selected_text：合并多段属性（后段覆盖前段同名键）
+    4. 返回字段 id + 合并属性 + 置信度 + 证据信息
 
     @param file - docx 文件路径
     @param para_indices - 用户选定的段落索引列表（可多段）
     @param field_id - 用户指定的字段 id
+    @param selected_text - 用户按句选取的文本字符串（可选）
     @returns {field_id, value, confidence, evidence}
     """
     doc = Document(file)
     all_paras = list(doc.paragraphs)
 
+    # ============================================
+    # selected_text 路径：缩小到单段特定 run 子集
+    # ============================================
+    if selected_text is not None and para_indices:
+        first_idx = para_indices[0]
+        if 0 <= first_idx < len(all_paras):
+            para = all_paras[first_idx]
+            matched_runs = _find_runs_for_text(para, selected_text)
+
+            if matched_runs:
+                # 仅对覆盖选中文本的 run 读字体/加粗等 run 级属性
+                run_attrs = _read_run_list_style_attrs(matched_runs)
+                # 段落级属性（行距/对齐/首行缩进）属于整段，无论选哪句都应读取
+                para_level_attrs = _extract_para_level_attrs(para)
+                style_attrs = {**para_level_attrs, **run_attrs}
+                text_attrs = _extract_attributes_from_text(selected_text)
+                value = _merge_attrs(text_attrs, style_attrs)
+                confidence = _calculate_confidence(value, len(selected_text))
+                return {
+                    'field_id': field_id,
+                    'value': value,
+                    'confidence': confidence,
+                    'evidence': {
+                        'source_text': selected_text[:200],
+                        'matched_patterns': list(value.keys()),
+                    },
+                }
+            # 找不到 selected_text：回退到全段提取（不报错，走下方通用路径）
+
+    # ============================================
+    # 通用路径：多段合并提取（selected_text 未传 or 定位失败时）
+    # ============================================
     text_parts: list[str] = []
     combined_style_attrs: dict[str, Any] = {}
 
@@ -287,3 +403,50 @@ def extract_from_selection(
             'matched_patterns': list(value.keys()),
         },
     }
+
+
+def _extract_para_level_attrs(para) -> dict[str, Any]:
+    """从段落读取段落级格式属性（不含 run 级字体/字号/加粗）
+
+    业务逻辑：
+    - 段落级属性（对齐、行距、首行缩进、段前/段后）属于整段语义，
+      即使用户只选了一句话，这些属性仍应从整段读取
+    - 与 _read_paragraph_style_attrs 的后半段逻辑一致，抽为独立函数供
+      selected_text 路径使用
+    """
+    attrs: dict[str, Any] = {}
+
+    # 段落对齐
+    if para.paragraph_format.alignment is not None:
+        align_map = {0: 'left', 1: 'center', 2: 'right', 3: 'justify'}
+        val = para.paragraph_format.alignment
+        if val in align_map:
+            attrs['para.align'] = align_map[val]
+
+    # 首行缩进
+    fli = para.paragraph_format.first_line_indent
+    if fli is not None:
+        attrs['para.first_line_indent_chars'] = round(fli.pt / 12)
+
+    # 行距
+    ls = para.paragraph_format.line_spacing
+    if ls is not None and isinstance(ls, (int, float)):
+        attrs['para.line_spacing'] = round(float(ls), 2)
+
+    # 段前行数
+    sb = para.paragraph_format.space_before
+    if sb is not None:
+        attrs['para.space_before_lines'] = round(sb.pt / 12, 1)
+
+    # 段后行数
+    sa = para.paragraph_format.space_after
+    if sa is not None:
+        attrs['para.space_after_lines'] = round(sa.pt / 12, 1)
+
+    # 空格占位字间距（字间距 fallback，与 _read_paragraph_style_attrs 一致）
+    stripped = para.text.strip()
+    m = re.match(r'^(\S)([\s\u3000]+)(\S)$', stripped)
+    if m:
+        attrs['para.letter_spacing_chars'] = len(m.group(2))
+
+    return attrs

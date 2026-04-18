@@ -1,13 +1,13 @@
 /**
  * @file RuleTemplateWorkspace.tsx
  * @description P4 核心工作台：双栏 docx 预览 + 字段表 sequential 工作流
- *              挂载时自动 extract_all → 用户点段落 → extract_from_selection → 推进下一字段
- *              支持跳转（临时切换字段 + 完成后回到原顺序）和跳过
+ *              挂载时自动 extract_all → 用户点段落/句子 → extract_from_selection → 推进下一字段
+ *              支持跳转（临时切换字段 + 完成后回到原顺序）、跳过、shift 多句选取积累
  * @author Atlas.oi
  * @date 2026-04-18
  */
-import { useEffect, useState } from 'react';
-import { DocxPreview } from './DocxPreview';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { DocxPreview, SelectionClick } from './DocxPreview';
 import { FieldList, FieldStatus } from './FieldList';
 import { FIELD_DEFS } from './fieldDefs';
 import {
@@ -53,6 +53,28 @@ export function RuleTemplateWorkspace({ docxPath, initialName, onSave, onCancel 
   const [error, setError] = useState<string | null>(null);
   // 模板名称，来自 Props 或默认值
   const [templateName, setTemplateName] = useState(initialName ?? '新模板');
+
+  // ============================================
+  // Task 4：shift 多选状态
+  // selectionBuffer：积累的选择项，Shift 松开后一次性 flush 到 sidecar
+  // isShiftPressed：跟踪 Shift 键按下状态，驱动 hint 文字和背景变色
+  // selectedSentenceIds：传给 DocxPreview 渲染 .docx-sent-selected class
+  // ============================================
+  const [selectionBuffer, setSelectionBuffer] = useState<SelectionClick[]>([]);
+  const [isShiftPressed, setIsShiftPressed] = useState(false);
+  const [selectedSentenceIds, setSelectedSentenceIds] = useState<Set<string>>(new Set());
+
+  // 用 ref 持有最新的 selectionBuffer + currentFieldId，避免 keyUp 闭包捕获旧值
+  const selectionBufferRef = useRef<SelectionClick[]>([]);
+  const currentFieldIdRef = useRef<string | null>(null);
+  const fieldsRef = useRef<FieldStatus[]>([]);
+  const interruptReturnRef = useRef<string | null>(null);
+
+  // 同步 ref
+  selectionBufferRef.current = selectionBuffer;
+  currentFieldIdRef.current = currentFieldId;
+  fieldsRef.current = fields;
+  interruptReturnRef.current = interruptReturn;
 
   // ============================================
   // 第一步：挂载时自动全文抽取
@@ -105,65 +127,154 @@ export function RuleTemplateWorkspace({ docxPath, initialName, onSave, onCancel 
   // ============================================
   // 辅助：推进到下一个待填字段
   // 若有 interruptReturn，优先回归；否则按 fields 当前顺序继续
-  // 不在 setFields 回调内调 setCurrentFieldId，避免嵌套 setter 的渲染时序问题
+  // 用 ref 读取最新 fields 避免闭包过期问题
   // ============================================
-  const advanceField = () => {
-    if (interruptReturn) {
-      setCurrentFieldId(interruptReturn);
+  const advanceField = useCallback(() => {
+    const currentFields = fieldsRef.current;
+    const currentId = currentFieldIdRef.current;
+    const ret = interruptReturnRef.current;
+
+    if (ret) {
+      setCurrentFieldId(ret);
       setInterruptReturn(null);
       return;
     }
-    const idx = fields.findIndex((f) => f.id === currentFieldId);
-    // 从当前字段之后找下一个未完成字段
-    const next = fields.slice(idx + 1).find(
+    const idx = currentFields.findIndex((f) => f.id === currentId);
+    const next = currentFields.slice(idx + 1).find(
       (f) => f.status === 'empty' || f.status === 'partial',
     );
     setCurrentFieldId(next?.id ?? null);
-  };
+  }, []);
 
   // ============================================
-  // 第二步：用户点击段落
-  // 调用 extract_from_selection 确认当前字段的值
+  // 核心调用：invoke sidecar extract_from_selection
+  // 由单击路径和 shift flush 路径共用
   // ============================================
-  const handleParaClick = async (paraIdx: number) => {
-    if (!currentFieldId) return;
+  const invokeExtract = useCallback(async (
+    paraIndices: number[],
+    selectedText: string,
+    fieldId: string,
+  ) => {
+    const result = await sidecarInvoke<ExtractFromSelectionResult>({
+      cmd: 'extract_from_selection',
+      file: docxPath,
+      para_indices: paraIndices,
+      field_id: fieldId,
+      selected_text: selectedText || undefined,
+    });
+    setFields((prev) =>
+      prev.map((f) =>
+        f.id === fieldId
+          ? {
+              ...f,
+              status: classifyStatus(result.confidence, true),
+              confidence: result.confidence,
+              value: result.value,
+            }
+          : f,
+      ),
+    );
+  }, [docxPath]);
+
+  // ============================================
+  // Task 4：flush 积累的 shift 选择项到 sidecar
+  // 合并所有选中文本（空格连接），使用第一项的 paraIdx
+  // ============================================
+  const flushSelectionBuffer = useCallback(async () => {
+    const buffer = selectionBufferRef.current;
+    const fieldId = currentFieldIdRef.current;
+    if (buffer.length === 0 || !fieldId) return;
+
+    const combinedText = buffer.map((s) => s.text).join(' ');
+    const firstParaIdx = buffer[0].paraIdx;
+
     try {
-      const result = await sidecarInvoke<ExtractFromSelectionResult>({
-        cmd: 'extract_from_selection',
-        file: docxPath,
-        para_indices: [paraIdx],
-        field_id: currentFieldId,
-      });
-      // 更新该字段的状态和值
-      // （字段值直接存入 fields[].value，handleSaveClick 从 fields 聚合最终规则，不需要单独 extractedRules map）
-      setFields((prev) =>
-        prev.map((f) =>
-          f.id === currentFieldId
-            ? {
-                ...f,
-                status: classifyStatus(result.confidence, true),
-                confidence: result.confidence,
-                value: result.value,
-              }
-            : f,
-        ),
-      );
-      // 推进到下一字段
+      await invokeExtract([firstParaIdx], combinedText, fieldId);
+      advanceField();
+    } catch (e) {
+      const msg = e instanceof SidecarError ? e.message : String(e);
+      setError(msg);
+    } finally {
+      // 无论成功失败都清空 buffer 和选中态，避免 UI 卡住
+      setSelectionBuffer([]);
+      setSelectedSentenceIds(new Set());
+    }
+  }, [invokeExtract, advanceField]);
+
+  // ============================================
+  // Task 4：Shift / Escape 键盘监听
+  //
+  // 为何在 useEffect 而非 onKeyDown 组件 prop：
+  // DocxPreview 是 DOM 操作组件，焦点不在 React 元素上；
+  // window 级监听保证用户在 docx 预览区操作时也能触发
+  // ============================================
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') {
+        setIsShiftPressed(true);
+      }
+      if (e.key === 'Escape') {
+        // 取消多选积累
+        setSelectionBuffer([]);
+        setSelectedSentenceIds(new Set());
+      }
+    };
+
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') {
+        setIsShiftPressed(false);
+        // Shift 松开时 flush 积累的选择
+        // 此处直接读 ref，避免闭包捕获到旧 selectionBuffer state
+        if (selectionBufferRef.current.length > 0) {
+          void flushSelectionBuffer();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, [flushSelectionBuffer]);
+
+  // ============================================
+  // Task 4：用户点击段落或句子的统一处理
+  // - shiftKey=true：积累到 buffer，不立即调 sidecar
+  // - shiftKey=false：单次调用 sidecar，advanceField
+  // ============================================
+  const handleSelectionClick = useCallback(async (sel: SelectionClick) => {
+    if (!currentFieldIdRef.current) return;
+
+    if (sel.shiftKey) {
+      // 多选积累模式：只更新 UI 选中态，不调 sidecar
+      setSelectionBuffer((prev) => [...prev, sel]);
+      if (sel.sentenceIdx) {
+        setSelectedSentenceIds((prev) => new Set([...prev, sel.sentenceIdx!]));
+      }
+      return;
+    }
+
+    // 单选模式：直接调 sidecar
+    const fieldId = currentFieldIdRef.current!;
+    try {
+      await invokeExtract([sel.paraIdx], sel.text, fieldId);
       advanceField();
     } catch (e) {
       const msg = e instanceof SidecarError ? e.message : String(e);
       setError(msg);
     }
-  };
+    // 清除可能残留的选中态（如用户先 shift 了几句，再普通单击）
+    setSelectedSentenceIds(new Set());
+  }, [invokeExtract, advanceField]);
 
   // ============================================
   // 跳转到指定字段（临时打断顺序推进）
   // 记录下一个待续字段，完成跳转字段后回到它
-  // 不在 setFields 回调内调 setInterruptReturn/setCurrentFieldId，避免嵌套 setter
   // ============================================
   const handleJump = (fieldId: string) => {
     const idx = fields.findIndex((f) => f.id === currentFieldId);
-    // 找到当前位置后的下一个未完成字段作为回归点
     const returnTo = fields.slice(idx + 1).find(
       (f) => f.status === 'empty' || f.status === 'partial',
     );
@@ -214,6 +325,9 @@ export function RuleTemplateWorkspace({ docxPath, initialName, onSave, onCancel 
     }
     onSave(templateName, finalRules);
   };
+
+  // 当前字段标签，用于 hint 文字
+  const currentFieldLabel = FIELD_DEFS.find((f) => f.id === currentFieldId)?.label ?? '';
 
   return (
     <div
@@ -302,24 +416,29 @@ export function RuleTemplateWorkspace({ docxPath, initialName, onSave, onCancel 
             minHeight: 0,
           }}
         >
-          {/* 当前待选字段提示条 */}
+          {/* 当前待选字段提示条
+              shift 按下时变为积累模式提示，背景色切换为 accent-dim 让用户明确感知到"正在多选" */}
           <div
             style={{
               padding: 10,
-              background: 'var(--c-raised)',
+              background: isShiftPressed ? 'var(--c-accent-dim)' : 'var(--c-raised)',
               fontSize: 12,
-              color: 'var(--c-fg-muted)',
+              color: isShiftPressed ? 'var(--c-fg)' : 'var(--c-fg-muted)',
               flexShrink: 0,
+              transition: 'background-color 0.15s ease',
             }}
           >
             {currentFieldId
-              ? `请为「${FIELD_DEFS.find((f) => f.id === currentFieldId)?.label}」选取段落`
+              ? isShiftPressed
+                ? `多选中 · 已选 ${selectionBuffer.length} 句，松开 Shift 提交 · Esc 取消`
+                : `请为「${currentFieldLabel}」选取段落\u3000按住 Shift 可多选多句，松开 Shift 提交 · Esc 取消`
               : '所有字段已完成或跳过，点击右上方「保存为模板」'}
           </div>
           <DocxPreview
             file={docxPath}
-            onParaClick={handleParaClick}
+            onSelectionClick={handleSelectionClick}
             hoveredFieldId={currentFieldId ?? undefined}
+            selectedSentenceIds={selectedSentenceIds}
           />
         </div>
 

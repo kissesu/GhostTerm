@@ -54,6 +54,9 @@ export interface ExtractFromSelectionRequest extends SidecarRequestBase {
   para_indices: number[];
   // 要确认的语义字段 id（如 "title_font_size"）
   field_id: string;
+  // P4 Task 4：用户按句选取时传入选中文本；sidecar 将范围缩小到覆盖该文本的 run 子集
+  // 未传则回退为整段提取（兼容旧路径）
+  selected_text?: string;
 }
 
 /** P4 语义字段：列出引擎支持的全部字段定义 */

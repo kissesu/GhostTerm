@@ -1,6 +1,7 @@
 /**
  * @file DocxPreview.test.tsx
  * @description DocxPreview 组件测试（mock docx-preview 库 + Tauri invoke）
+ *              Task 4：onParaClick 已改为 onSelectionClick，测试同步更新
  * @author Atlas.oi
  * @date 2026-04-18
  */
@@ -36,10 +37,10 @@ describe('DocxPreview', () => {
     vi.clearAllMocks();
   });
 
-  it('点击段落触发 onParaClick 并传入正确索引', async () => {
-    const onParaClick = vi.fn();
+  it('点击段落触发 onSelectionClick 并传入正确 paraIdx', async () => {
+    const onSelectionClick = vi.fn();
     const { container } = render(
-      <DocxPreview file="/tmp/test.docx" onParaClick={onParaClick} />
+      <DocxPreview file="/tmp/test.docx" onSelectionClick={onSelectionClick} />
     );
 
     // 等待 renderAsync 执行 + data-para-idx 注入完成
@@ -49,7 +50,10 @@ describe('DocxPreview', () => {
 
     const p1 = container.querySelector('[data-para-idx="1"]');
     if (p1) fireEvent.click(p1);
-    expect(onParaClick).toHaveBeenCalledWith(1);
+
+    expect(onSelectionClick).toHaveBeenCalledWith(
+      expect.objectContaining({ paraIdx: 1 }),
+    );
   });
 
   it('使用 read_image_bytes_cmd 命令读取文件字节', async () => {
