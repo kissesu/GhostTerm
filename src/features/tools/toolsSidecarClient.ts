@@ -19,7 +19,7 @@ export interface PingRequest extends SidecarRequestBase {
 export interface DetectRequest extends SidecarRequestBase {
   cmd: 'detect';
   file: string;
-  template: TemplateJson;
+  template: MinimalTemplateForDetect;
 }
 
 export interface FixRequest extends SidecarRequestBase {
@@ -74,9 +74,13 @@ export interface IssueDict {
   evidence_xml?: string | null;
 }
 
-export interface TemplateJson {
+/** detect 命令的最小模板结构（P2 兼容）。完整模板定义见 templates/TemplateStore.ts */
+export interface MinimalTemplateForDetect {
   rules: Record<string, { enabled: boolean; value: unknown }>;
 }
+
+/** @deprecated 请使用 MinimalTemplateForDetect 或 templates/TemplateStore.ts 的 TemplateJson */
+export type TemplateJson = MinimalTemplateForDetect;
 
 export interface SidecarOk<T = unknown> {
   id: string;
