@@ -2,10 +2,12 @@
  * @file formatFieldValue.ts
  * @description 将 sidecar 返回的字段 value（扁平 attrKey → primitive 的 map）
  *   翻译成人读中文字符串，用于 FieldList 展示"抓取到了什么规则约束"。
- *   例如 { "font.cjk": "宋体", "font.size_pt": 14, "font.bold": true } → "宋体 · 14pt · 加粗"
+ *   例如 { "font.cjk": "宋体", "font.size_pt": 14, "font.bold": true } → "中 宋体 · 四号 · 加粗"
  * @author Atlas.oi
  * @date 2026-04-18
  */
+
+import { ptToName } from './chineseSizeMap';
 
 // ────────────────────────────────────────────────────────
 // 对齐值 → 中文标签
@@ -45,9 +47,13 @@ function formatAttr(key: string, value: unknown): string {
   switch (key) {
     case 'font.cjk':
     case 'font.ascii':
-      return String(value);
-    case 'font.size_pt':
-      return `${value}pt`;
+      // cjk/ascii 由 formatFieldValue 的后处理合并逻辑统一处理，此处返回空串跳过
+      return '';
+    case 'font.size_pt': {
+      // 优先使用中文字号名（如"小四"），非标准尺寸退回 pt 数值
+      const name = ptToName(Number(value));
+      return name !== null ? name : `${value}pt`;
+    }
     case 'font.bold':
       return value === true ? '加粗' : '';
     case 'para.align':
@@ -110,21 +116,55 @@ function formatAttr(key: string, value: unknown): string {
  * 将字段 value 整体格式化为单行人读字符串
  *
  * 业务逻辑：
- * 1. 遍历 value 所有键，跳过 enabled 元字段
- * 2. 逐项调用 formatAttr，丢掉空字符串结果
- * 3. 用" · "连接所有片段
+ * 1. 预先收集 font.cjk / font.ascii，跳过 enabled 元字段
+ * 2. 对其他属性逐项调用 formatAttr，丢掉空字符串结果
+ * 3. 对 cjk/ascii 做合并后处理，生成"中西文 X"/"中 X · 西 Y"/"中 X"/"西 X"四种形式
+ * 4. 合并片段置于最前，其余按迭代顺序跟随，用" · "连接
  *
  * @param value sidecar 返回的扁平属性 map，可能为 undefined
  * @returns     人读字符串；无任何有效属性时返回空串
  */
 export function formatFieldValue(value: Record<string, unknown> | undefined): string {
   if (!value) return '';
-  const parts: string[] = [];
+
+  // cjk/ascii 单独收集，由后处理决定显示形式（避免同值出现"宋体 · 宋体"重复）
+  let cjkVal: string | null = null;
+  let asciiVal: string | null = null;
+  const otherParts: string[] = [];
+
   for (const [key, raw] of Object.entries(value)) {
     // enabled 是模板结构外层字段，不在 value 内展示
     if (key === 'enabled') continue;
+
+    if (key === 'font.cjk' && raw !== undefined && raw !== null && raw !== '') {
+      cjkVal = String(raw);
+      continue;
+    }
+    if (key === 'font.ascii' && raw !== undefined && raw !== null && raw !== '') {
+      asciiVal = String(raw);
+      continue;
+    }
+
     const fragment = formatAttr(key, raw);
-    if (fragment) parts.push(fragment);
+    if (fragment) otherParts.push(fragment);
   }
-  return parts.join(' · ');
+
+  // ── cjk/ascii 合并后处理 ──────────────────────────────────
+  // 两者都存在且相同：模板对中西文用同一字体，合并为"中西文 X"减少视觉冗余
+  // 两者都存在但不同：分别标注中/西，便于区分
+  // 只有一种：加前缀说明字体作用范围
+  const fontParts: string[] = [];
+  if (cjkVal !== null && asciiVal !== null) {
+    if (cjkVal === asciiVal) {
+      fontParts.push(`中西文 ${cjkVal}`);
+    } else {
+      fontParts.push(`中 ${cjkVal} · 西 ${asciiVal}`);
+    }
+  } else if (cjkVal !== null) {
+    fontParts.push(`中 ${cjkVal}`);
+  } else if (asciiVal !== null) {
+    fontParts.push(`西 ${asciiVal}`);
+  }
+
+  return [...fontParts, ...otherParts].join(' · ');
 }
