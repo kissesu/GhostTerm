@@ -13,6 +13,7 @@ from .paragraph_indent import ParagraphIndentRule
 from .figure_table_caption import FigureCaptionPosRule, TableCaptionPosRule
 from .chapter_new_page import ChapterNewPageRule
 from .quote_style import QuoteStyleRule
+from .ai_pattern import AiPatternCheckRule
 
 REGISTRY: dict[str, type[Rule]] = {
     'cjk_ascii_space': CjkAsciiSpaceRule,
@@ -24,5 +25,6 @@ REGISTRY: dict[str, type[Rule]] = {
     'table.caption_pos': TableCaptionPosRule,
     'chapter.new_page': ChapterNewPageRule,
     'quote.style': QuoteStyleRule,
+    'ai_pattern.check': AiPatternCheckRule,
     # P4 追加其余规则
 }
