@@ -64,3 +64,30 @@ class TestDetectV2:
         }
         issues = detect_v2(str(path), template)
         assert issues == []
+
+    def test_detects_doc_level_margin_mismatch(self, tmp_path):
+        """验证 doc-level 属性（page.margin_top_cm）违规能被识别，para_idx=-1"""
+        from docx.shared import Cm
+        doc = Document()
+        doc.sections[0].top_margin = Cm(3.5)  # 设置上边距 3.5cm
+        doc.add_paragraph('随便一段内容')
+        path = tmp_path / 'bad_margin.docx'
+        doc.save(path)
+
+        template = {
+            'rules': {
+                'page_margin': {
+                    'enabled': True,
+                    'value': {
+                        'page.margin_top_cm': 2.5,  # 期望 2.5cm，实际 3.5cm
+                    },
+                },
+            },
+        }
+        issues = detect_v2(str(path), template)
+        # 应该至少有 1 个 issue，属于文档级
+        assert len(issues) >= 1
+        doc_level = [i for i in issues if i['para_idx'] == -1]
+        assert len(doc_level) == 1
+        assert doc_level[0]['attr'] == 'page.margin_top_cm'
+        assert doc_level[0]['rule_id'] == 'page_margin'
