@@ -11,10 +11,18 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime};
 
 // 备份保留天数 — 超过此阈值的快照将在启动时自动清理
 const BACKUP_RETENTION_DAYS: u64 = 30;
+
+// ============================================
+// 进程级文件锁：防止 backup_before_fix 并发调用时
+// "读取 max version → 写入 v{n}" 非原子导致 v{n} 重号覆盖
+// 参照 project_manager/session.rs 的 OnceLock<Mutex<()>> 模式
+// ============================================
+static BACKUP_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 // ============================================
 // 公开数据结构
@@ -72,31 +80,40 @@ fn parse_snapshots(dir: &Path) -> Vec<SnapshotInfo> {
         return Vec::new();
     };
 
-    let mut snapshots: Vec<SnapshotInfo> = entries
-        .filter_map(|e| e.ok())
-        .filter_map(|e| {
-            let fname = e.file_name();
-            let name = fname.to_string_lossy();
-            // 只处理 v{n}_*.docx 格式的文件
-            if !name.starts_with('v') || !name.ends_with(".docx") {
-                return None;
-            }
-            // 解析 version 号（v 与第一个 _ 之间的数字）
-            let version_str = name.strip_prefix('v')?.split('_').next()?;
-            let version: u32 = version_str.parse().ok()?;
+    // metadata stat 失败的 entry 直接跳过 — 不可降级为 mtime=0
+    // 否则 cleanup 会把"读不到 mtime 的快照"当作 1970 年文件立即删除
+    // （与 cleanup_old_backups 内层 metadata Err 时 continue 的行为保持一致）
+    let mut snapshots: Vec<SnapshotInfo> = Vec::new();
+    for e in entries.filter_map(|e| e.ok()) {
+        let fname = e.file_name();
+        let name = fname.to_string_lossy();
+        // 只处理 v{n}_*.docx 格式的文件
+        if !name.starts_with('v') || !name.ends_with(".docx") {
+            continue;
+        }
+        // 解析 version 号（v 与第一个 _ 之间的数字）
+        let Some(version_str) = name.strip_prefix('v').and_then(|s| s.split('_').next()) else {
+            continue;
+        };
+        let Ok(version) = version_str.parse::<u32>() else {
+            continue;
+        };
 
-            let path = e.path();
-            let mtime = e
-                .metadata()
-                .ok()
-                .and_then(|m| m.modified().ok())
-                .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
-                .map(|d| d.as_secs())
-                .unwrap_or(0);
+        let path = e.path();
+        // 关键：metadata 失败时跳过该 entry，不可 fallback 0
+        let modified = match e.metadata().and_then(|m| m.modified()) {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+        // duration_since 仅在系统时钟早于 epoch 时 Err，此为真实"无效 mtime"
+        // 此时退化为 0 是符合语义的（极端异常场景，非降级）
+        let mtime = modified
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
 
-            Some(SnapshotInfo { version, path, mtime })
-        })
-        .collect();
+        snapshots.push(SnapshotInfo { version, path, mtime });
+    }
 
     // 按 version 升序排列，保证 list 结果一致
     snapshots.sort_by_key(|s| s.version);
@@ -117,6 +134,14 @@ fn parse_snapshots(dir: &Path) -> Vec<SnapshotInfo> {
 ///
 /// 返回新建快照的绝对路径
 pub fn backup_before_fix(origin: &Path, bak_dir: PathBuf) -> Result<PathBuf, String> {
+    // ============================================
+    // 第零步：进程级文件锁 — 串行化 read-modify-write 防 v{n} 重号
+    // 锁覆盖整个备份流程（mkdir → meta → 计算 version → copy）
+    // 直至函数返回时 _guard drop 自动释放
+    // ============================================
+    let lock = BACKUP_LOCK.get_or_init(|| Mutex::new(()));
+    let _guard = lock.lock().map_err(|_| "备份锁中毒".to_string())?;
+
     // ============================================
     // 第一步：确保备份子目录存在
     // ============================================
@@ -223,9 +248,12 @@ pub fn cleanup_old_backups(bak_dir: &Path) -> Result<u32, String> {
             };
 
             // mtime 早于 cutoff = 过期，需删除
+            // 删除失败时 stderr 日志可见，继续处理下一个文件不中断整体清理流程
+            // 全局规则：禁止 silent swallow
             if mtime < cutoff {
-                if fs::remove_file(&path).is_ok() {
-                    deleted += 1;
+                match fs::remove_file(&path) {
+                    Ok(_) => deleted += 1,
+                    Err(e) => eprintln!("[backup] cleanup 删除失败 {}: {}", path.display(), e),
                 }
             }
         }
