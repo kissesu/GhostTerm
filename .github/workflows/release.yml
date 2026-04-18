@@ -127,6 +127,16 @@ jobs:
         shell: bash
         run: ./build_sidecar.sh
 
+      # 前端 + Rust 单测：发布前最后一道质量门
+      - name: 前端测试
+        shell: bash
+        run: pnpm test -- --run
+
+      - name: Rust 测试
+        working-directory: src-tauri
+        shell: bash
+        run: cargo test
+
       # 诊断：验证签名 Secret 已正确注入（仅打印长度，不暴露值）
       - name: 验证签名 Secret 非空
         env:
@@ -244,6 +254,16 @@ jobs:
         working-directory: src-python
         shell: pwsh
         run: .\build_sidecar.ps1
+
+      # 前端 + Rust 单测
+      - name: 前端测试
+        shell: pwsh
+        run: pnpm test -- --run
+
+      - name: Rust 测试
+        working-directory: src-tauri
+        shell: pwsh
+        run: cargo test
 
       - name: 验证签名 Secret 非空
         shell: bash
