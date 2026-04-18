@@ -29,7 +29,7 @@ def _build_size_name_pattern() -> re.Pattern:
     keys = list(CHINESE_SIZE_MAP.keys())
     # 按"小"前缀优先、再按键名长度降序排列
     # 所有键均为 2 字，但"小*"比无前缀的"X号"更具体（因为"小三号"中包含"三号"子串）
-    sorted_keys = sorted(keys, key=lambda k: (0 if k.startswith('小') or k.startswith('初') else 1, -len(k)))
+    sorted_keys = sorted(keys, key=lambda k: (0 if k.startswith('小') else 1, -len(k)))
     pattern = r'(' + '|'.join(re.escape(k) for k in sorted_keys) + r')(?:号)?'
     return re.compile(pattern)
 
@@ -40,8 +40,12 @@ _SIZE_PT_RE = re.compile(r'(\d+(?:\.\d+)?)\s*(?:pt|磅|点)', re.IGNORECASE)
 
 # A 型括号说明：匹配 "字段名（括号内描述）"
 # 使用中文全角括号 （ ）
-_PARENS_RE = re.compile(r'([^（）\n]{1,40})（([^（）]{3,200})）')
+# 括号内容 {3,200}：上限防误匹配正文括号；下限 3 同时过滤只有字体名无字号的极短括号
+# （如「宋体」2字），这是有意设计，不是 bug
+_PARENS_RE = re.compile(r'([^（）\n]{1,40})（([^（）\n]{3,200})）')
 
+# 设计决策：open/close 字符类独立匹配，不强制同类型配对（如 "xxx」 也接受）。
+# 真实规范文档混用引号概率极低，强制配对会让复杂度不成比例上升
 # B 型引号字段：匹配 "xxx"为... / "xxx"为... / 「xxx」为...
 # 支持 ASCII 双引号、中文弯引号（U+201C/U+201D）、ASCII 单引号、
 # 中文弯单引号（U+2018/U+2019）、日文角括号（U+300C/U+300D）

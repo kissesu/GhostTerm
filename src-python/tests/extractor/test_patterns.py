@@ -21,6 +21,7 @@ class TestExtractSize:
         assert extract_size_pt_raw('12pt 宋体') == 12.0
         assert extract_size_pt_raw('字号 15 磅') == 15.0
         assert extract_size_pt_raw('10.5pt') == 10.5
+        assert extract_size_pt_raw('10.5点') == 10.5
 
     def test_no_size(self):
         assert extract_size_name('无字号描述') is None
