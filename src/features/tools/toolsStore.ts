@@ -71,22 +71,24 @@ export const useToolsStore = create<ToolsState>((set, get) => ({
    *
    * 业务逻辑：
    * 1. 栈空时直接返回，不调用 invoke（幂等安全）
-   * 2. 弹出栈顶条目
-   * 3. 调用 Rust backup_restore_cmd 以 originPath/snapshotVersion 还原文件
+   * 2. 先调用 Rust backup_restore_cmd 还原文件快照
+   * 3. 还原成功后才弹出栈顶；失败时让错误冒泡，栈保留以便用户重试
+   *
+   * 注意：顺序关键。若先弹栈再 invoke，invoke 失败时栈顶条目永久丢失，
+   * 用户将无法再次尝试 undo。
    */
   undo: async () => {
     const { undoStack } = get();
     if (undoStack.length === 0) return;
 
-    // 弹出栈顶：不可变更新，保留其余条目
     const top = undoStack[undoStack.length - 1];
-    set({ undoStack: undoStack.slice(0, -1) });
-
-    // 调用 Rust 还原快照
     await invoke('backup_restore_cmd', {
       origin: top.originPath,
       version: top.snapshotVersion,
     });
+
+    // invoke 成功后才弹栈，重新读取最新栈避免并发 push 被覆盖
+    set((state) => ({ undoStack: state.undoStack.slice(0, -1) }));
   },
 
   /**

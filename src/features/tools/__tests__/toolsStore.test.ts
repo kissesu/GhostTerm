@@ -95,6 +95,30 @@ describe('toolsStore', () => {
   });
 
   // ============================================================
+  // undo 失败时栈顶必须保留，以便用户重试
+  // ============================================================
+
+  it('undo 时 invoke 失败应保留栈顶条目', async () => {
+    vi.mocked(invoke).mockRejectedValueOnce(new Error('boom'));
+
+    const entry = {
+      originPath: '/proj/a.docx',
+      snapshotVersion: 5,
+      issueId: 'issue-5',
+      timestamp: 5000,
+    };
+    useToolsStore.getState().pushUndo(entry);
+
+    // 调用应抛出，错误冒泡到调用方
+    await expect(useToolsStore.getState().undo()).rejects.toThrow('boom');
+
+    // 关键断言：栈未被弹空，用户可重试
+    const { undoStack } = useToolsStore.getState();
+    expect(undoStack).toHaveLength(1);
+    expect(undoStack[0]).toEqual(entry);
+  });
+
+  // ============================================================
   // setActiveTool / setActiveTemplate
   // ============================================================
 
