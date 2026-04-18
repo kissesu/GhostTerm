@@ -16,6 +16,7 @@ pub mod git_backend;
 pub mod project_manager;
 pub mod sidecar;
 pub mod backup_cmd;
+pub mod template_cmd;
 
 // PBI-1 Commands
 use pty_manager::{spawn_pty_cmd, kill_pty_cmd, resize_pty_cmd, reconnect_pty_cmd, get_default_shell_cmd};
@@ -37,6 +38,13 @@ use git_backend::worktree::{worktree_list_cmd, worktree_add_cmd, worktree_remove
 
 // P3: 备份/undo Commands
 use backup_cmd::{backup_create_cmd, backup_restore_cmd, backup_list_cmd};
+
+// P3: 模板 CRUD Commands
+use template_cmd::{
+    template_list_cmd, template_get_cmd, template_save_cmd,
+    template_delete_cmd, template_import_cmd, template_export_cmd,
+    template_restore_builtin_cmd,
+};
 
 // ============================================
 // "打开方式"启动时暂存的文件路径队列
@@ -158,6 +166,16 @@ pub fn run() {
                 }
             });
 
+            // ============================================
+            // P3: 启动时确保内置模板存在
+            // 同步调用（仅创建单个文件，极快），失败时 eprintln 不 panic
+            // 参照 feedback_no_panic_in_setup.md：extern C 中 panic 会 abort
+            // ============================================
+            let app_handle = app.handle().clone();
+            if let Err(e) = template_cmd::ensure_builtin(&app_handle) {
+                eprintln!("[setup] ensure_builtin failed: {e}");
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -207,6 +225,14 @@ pub fn run() {
             backup_create_cmd,
             backup_restore_cmd,
             backup_list_cmd,
+            // P3: 模板 CRUD
+            template_list_cmd,
+            template_get_cmd,
+            template_save_cmd,
+            template_delete_cmd,
+            template_import_cmd,
+            template_export_cmd,
+            template_restore_builtin_cmd,
         ])
         // ============================================
         // 改用 build().run() 以便在 RunEvent 回调中处理 macOS"打开方式"事件

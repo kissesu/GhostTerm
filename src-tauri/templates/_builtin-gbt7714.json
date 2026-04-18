@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "id": "_builtin-gbt7714",
+  "name": "GB/T 7714-2015 默认（内置）",
+  "source": {
+    "type": "builtin",
+    "origin_docx": null,
+    "extracted_at": null
+  },
+  "updated_at": "2026-04-18T00:00:00Z",
+  "rules": {
+    "font.body":          { "enabled": true, "value": {"family":"宋体","size_pt":12} },
+    "font.h1":            { "enabled": true, "value": {"family":"黑体","size_pt":16,"bold":true} },
+    "paragraph.indent":   { "enabled": true, "value": {"first_line_chars":2} },
+    "citation.format":    { "enabled": true, "value": {"style":"gbt7714","marker":"bracket"} },
+    "figure.caption_pos": { "enabled": true, "value": "below" },
+    "table.caption_pos":  { "enabled": true, "value": "above" },
+    "cjk_ascii_space":    { "enabled": true, "value": {"allowed": false} },
+    "chapter.new_page":   { "enabled": true, "value": true },
+    "quote.style":        { "enabled": true, "value": "cjk" },
+    "ai_pattern.check":   { "enabled": true, "value": {"ruleset":"thesis-default"} },
+    "pagination":         { "enabled": true, "value": {"front_matter":"roman","body":"arabic"} }
+  }
+}
