@@ -44,6 +44,19 @@ export function ToolRunner() {
         file,
         template: P2_TEMPLATE,
       });
+      // 校验新字段存在：旧版常驻 sidecar 进程可能无 snippet/context，
+      // 必须显式报错并让用户重启 sidecar，不能让 UI 静默降级
+      const missing = result.issues.find(
+        (i) => typeof i.snippet !== 'string' || typeof i.context !== 'string',
+      );
+      if (missing) {
+        throw new SidecarError(
+          'SIDECAR_VERSION_MISMATCH',
+          `sidecar 返回的 Issue 缺 snippet/context 字段，常驻进程是旧版本。\n` +
+            `请在此对话框点"重启 sidecar"或退出重进 app。\n` +
+            `示例 issue: ${JSON.stringify(missing)}`,
+        );
+      }
       setIssues(result.issues);
     } catch (e) {
       if (e instanceof SidecarError) {
