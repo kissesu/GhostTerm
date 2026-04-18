@@ -192,12 +192,19 @@ export default function Terminal({ projectPath, className }: TerminalProps) {
   // 设置变化时更新 xterm.js 配色、字体、光标
   // ============================================
   useEffect(() => {
-    if (termRef.current) {
-      termRef.current.options.theme = terminalTheme;
-      termRef.current.options.fontSize = terminalSettings.fontSize;
-      termRef.current.options.fontFamily = terminalSettings.fontFamily;
-      termRef.current.options.cursorStyle = terminalSettings.cursorStyle;
+    if (!termRef.current) return;
+    termRef.current.options.theme = terminalTheme;
+    termRef.current.options.fontSize = terminalSettings.fontSize;
+    termRef.current.options.fontFamily = terminalSettings.fontFamily;
+    termRef.current.options.cursorStyle = terminalSettings.cursorStyle;
+    // 容器 0×0（tools/progress tab 切换后的 display:none 状态）时 xterm renderer
+    // 读 dimensions 会拿到 undefined，fit() 抛 TypeError。只在容器可见时 fit。
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0 || rect.height === 0) return;
+    try {
       fitAddonRef.current?.fit();
+    } catch {
+      // renderer 未就绪（dispose 中间态 / WebGL context lost 重建）时忽略
     }
   }, [terminalTheme, terminalSettings.fontFamily, terminalSettings.fontSize, terminalSettings.cursorStyle]);
 
