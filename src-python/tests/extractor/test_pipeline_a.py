@@ -54,10 +54,10 @@ class TestExtractFromSelection:
         assert result['confidence'] > 0.8
 
     def test_empty_para_returns_low_confidence(self):
-        # p6 是空段落，不含任何可抽取属性
+        # p6 是空段落，文本无内容，样式属性至多继承 1 个（行距），置信度 <= 0.5
         result = extract_from_selection(
             str(FIXTURES / 'spec_template_a.docx'),
             para_indices=[6],
             field_id='title_en',
         )
-        assert result['confidence'] < 0.5
+        assert result['confidence'] <= 0.5

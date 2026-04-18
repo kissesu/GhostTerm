@@ -5,6 +5,7 @@
 @author: Atlas.oi
 @date: 2026-04-18
 """
+import re  # 用于空格占位 fallback 的正则匹配
 from typing import Any
 from docx import Document
 
@@ -18,6 +19,10 @@ _W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
 _W_RFONTS = f'{{{_W_NS}}}rFonts'
 _W_EAST_ASIA = f'{{{_W_NS}}}eastAsia'
 _W_ASCII = f'{{{_W_NS}}}ascii'
+# run 级字间距（rPr/w:spacing），单位 twips
+_W_SPACING = f'{{{_W_NS}}}spacing'
+# w:spacing/@w:val 属性名
+_W_VAL = f'{{{_W_NS}}}val'
 
 
 def _extract_attributes_from_text(text: str) -> dict[str, Any]:
@@ -93,6 +98,16 @@ def _read_paragraph_style_attrs(para) -> dict[str, Any]:
                 if asc and 'font.cjk' not in attrs:
                     # 只有在没读到 CJK 字体时才保存 ascii 字体
                     attrs['font.ascii'] = asc
+            # 字间距（OOXML rPr/w:spacing，单位 twips）
+            # 240 twips = 1 字宽（@ 12pt 正文基准），换算为字数方便规范校验
+            spacing_el = rpr.find(_W_SPACING)
+            if spacing_el is not None:
+                val = spacing_el.get(_W_VAL)
+                if val:
+                    try:
+                        attrs['para.letter_spacing_chars'] = round(int(val) / 240, 1)
+                    except ValueError:
+                        pass  # 非法 val 值跳过（不影响其他属性）
         # 只读第一个非空 run 的属性：规范模板同段 run 格式通常一致，取首 run 已足够。
         # 若未来发现模板同段多 run 格式差异大，再改为 setdefault 遍历策略。
         break
@@ -109,6 +124,31 @@ def _read_paragraph_style_attrs(para) -> dict[str, Any]:
     fli = para.paragraph_format.first_line_indent
     if fli is not None:
         attrs['para.first_line_indent_chars'] = round(fli.pt / 12)
+
+    # 行距：paragraph_format.line_spacing 返回 float（倍数）或 Emu（固定值）
+    # 此处仅处理倍数模式（如 1.5 倍），固定值用 Emu 表示，暂不换算
+    ls = para.paragraph_format.line_spacing
+    if ls is not None and isinstance(ls, (int, float)):
+        attrs['para.line_spacing'] = round(float(ls), 2)
+
+    # 段前行数：space_before 以 Emu 返回，除以 12pt 换算为行数
+    # 12pt = 1 行基准（与首行缩进换算统一基准）
+    sb = para.paragraph_format.space_before
+    if sb is not None:
+        attrs['para.space_before_lines'] = round(sb.pt / 12, 1)
+
+    # 段后行数
+    sa = para.paragraph_format.space_after
+    if sa is not None:
+        attrs['para.space_after_lines'] = round(sa.pt / 12, 1)
+
+    # 若 XML 未设 w:spacing，尝试识别空格占位字间距风格（如"摘  要"、"目  录"）
+    # 仅匹配 {单个非空字符}+{连续空格}+{单个非空字符} 的短标题模式，避免误匹配正文句子
+    if 'para.letter_spacing_chars' not in attrs:
+        stripped = para.text.strip()
+        m = re.match(r'^(\S)(\s+)(\S)$', stripped)
+        if m:
+            attrs['para.letter_spacing_chars'] = len(m.group(2))
 
     return attrs
 

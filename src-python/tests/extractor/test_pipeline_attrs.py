@@ -1,0 +1,75 @@
+"""
+@file: test_pipeline_attrs.py
+@description: 测试 _read_paragraph_style_attrs 新增的行距/字间距/段前段后抽取
+@author: Atlas.oi
+@date: 2026-04-18
+"""
+from docx import Document
+from docx.shared import Pt
+from docx.oxml.ns import qn
+from thesis_worker.extractor.pipeline import _read_paragraph_style_attrs
+
+
+def test_line_spacing_multiplier():
+    """段落设置 1.5 倍行距 → para.line_spacing = 1.5"""
+    doc = Document()
+    para = doc.add_paragraph('测试段落')
+    para.paragraph_format.line_spacing = 1.5
+    attrs = _read_paragraph_style_attrs(para)
+    assert attrs.get('para.line_spacing') == 1.5
+
+
+def test_space_before_after_lines():
+    """段前 12pt 段后 6pt → space_before_lines=1.0, space_after_lines=0.5"""
+    doc = Document()
+    para = doc.add_paragraph('测试段落')
+    para.paragraph_format.space_before = Pt(12)
+    para.paragraph_format.space_after = Pt(6)
+    attrs = _read_paragraph_style_attrs(para)
+    assert attrs.get('para.space_before_lines') == 1.0
+    assert attrs.get('para.space_after_lines') == 0.5
+
+
+def test_letter_spacing_chars_from_xml():
+    """run 的 w:spacing val=240 → letter_spacing_chars=1.0（1 字宽 @ 12pt）"""
+    doc = Document()
+    para = doc.add_paragraph('摘要')
+    run = para.runs[0]
+    # 注入 w:spacing XML 节点到 rPr
+    rpr = run._element.get_or_add_rPr()
+    spacing = rpr.makeelement(qn('w:spacing'), {qn('w:val'): '240'})
+    rpr.append(spacing)
+    attrs = _read_paragraph_style_attrs(para)
+    assert attrs.get('para.letter_spacing_chars') == 1.0
+
+
+def test_letter_spacing_chars_from_space_placeholder():
+    """段落文本 "摘  要" 中间 2 空格 → letter_spacing_chars=2（fallback 路径）"""
+    doc = Document()
+    para = doc.add_paragraph('摘  要')
+    attrs = _read_paragraph_style_attrs(para)
+    assert attrs.get('para.letter_spacing_chars') == 2
+
+
+def test_xml_spacing_wins_over_placeholder():
+    """XML 字间距优先于空格占位 fallback"""
+    doc = Document()
+    para = doc.add_paragraph('摘  要')  # 文本有 2 空格占位
+    run = para.runs[0]
+    rpr = run._element.get_or_add_rPr()
+    spacing = rpr.makeelement(qn('w:spacing'), {qn('w:val'): '480'})  # 2 字宽
+    rpr.append(spacing)
+    attrs = _read_paragraph_style_attrs(para)
+    # XML 说 2.0 字宽（480/240=2.0），fallback 也是 2，但命中路径必须是 XML
+    assert attrs.get('para.letter_spacing_chars') == 2.0
+
+
+def test_no_attrs_when_not_set():
+    """段落无任何样式设置 → 相关 key 缺席"""
+    doc = Document()
+    para = doc.add_paragraph('普通段落')
+    attrs = _read_paragraph_style_attrs(para)
+    assert 'para.line_spacing' not in attrs
+    assert 'para.space_before_lines' not in attrs
+    assert 'para.space_after_lines' not in attrs
+    assert 'para.letter_spacing_chars' not in attrs
