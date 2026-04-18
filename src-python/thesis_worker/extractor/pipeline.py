@@ -93,6 +93,8 @@ def _read_paragraph_style_attrs(para) -> dict[str, Any]:
                 if asc and 'font.cjk' not in attrs:
                     # 只有在没读到 CJK 字体时才保存 ascii 字体
                     attrs['font.ascii'] = asc
+        # 只读第一个非空 run 的属性：规范模板同段 run 格式通常一致，取首 run 已足够。
+        # 若未来发现模板同段多 run 格式差异大，再改为 setdefault 遍历策略。
         break
 
     # 段落对齐
@@ -122,11 +124,9 @@ def _merge_attrs(from_text: dict[str, Any], from_style: dict[str, Any]) -> dict[
 
 
 def _calculate_confidence(attrs: dict[str, Any], text_len: int) -> float:
-    """根据属性数量估算置信度
-
-    属性数量越多说明从文本/样式里抽取到的信息越完整，置信度越高。
-    text_len 保留为将来扩展用（例如空段落特判）。
-    """
+    """根据属性数量估算置信度（启发式）。
+    阈值 0.0 / 0.5 / 0.7 / 0.9 对应抽到 0 / 1 / 2 / ≥3 个属性。
+    数值为经验启发，非统计模型；Phase B 引入校验集后再替换为回归式估算。"""
     if len(attrs) == 0:
         return 0.0
     if len(attrs) >= 3:
@@ -219,18 +219,19 @@ def extract_from_selection(
     doc = Document(file)
     all_paras = list(doc.paragraphs)
 
-    combined_text = ''
+    text_parts: list[str] = []
     combined_style_attrs: dict[str, Any] = {}
 
     for idx in para_indices:
         if idx < 0 or idx >= len(all_paras):
             continue
         para = all_paras[idx]
-        combined_text += '\n' + para.text
+        text_parts.append(para.text)
         style_attrs = _read_paragraph_style_attrs(para)
         # 后段属性覆盖前段，取到的属性集合更丰富
         combined_style_attrs.update(style_attrs)
 
+    combined_text = '\n'.join(text_parts)
     text_attrs = _extract_attributes_from_text(combined_text)
     value = _merge_attrs(text_attrs, combined_style_attrs)
 
