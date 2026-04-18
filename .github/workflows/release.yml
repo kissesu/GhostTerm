@@ -42,9 +42,11 @@ jobs:
           # Apple Silicon (arm64) - 使用 macos-latest（自动分配 M 系列 runner）
           - target: aarch64-apple-darwin
             runner: macos-latest
-          # Intel x86_64 - macos-13 runner 已退役，改用 macos-latest (arm64) 交叉编译
-          - target: x86_64-apple-darwin
-            runner: macos-latest
+          # Intel x86_64 暂时下线：P2 引入 Python sidecar，PyInstaller 不支持 Python
+          # 跨架构交叉编译，arm64 runner 上无法构建 x86_64 sidecar binary。
+          # P4 引入 universal2 Python 或 macos-13 runner 后恢复。
+          # - target: x86_64-apple-darwin
+          #   runner: macos-latest
 
     steps:
       - name: 检出代码
@@ -99,6 +101,31 @@ jobs:
               f.write(ct)
           print('version synced:', v)
           "
+
+      # Python sidecar：安装 Python 3.12 + uv，跑测试 + PyInstaller 打包
+      # 产物输出到 src-tauri/binaries/ghostterm-thesis-<triple>，供 Tauri externalBin 打包
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 安装 uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+        shell: bash
+
+      - name: Python sidecar 测试
+        working-directory: src-python
+        shell: bash
+        run: |
+          uv sync
+          uv run pytest -v
+
+      - name: 构建 Python sidecar binary
+        working-directory: src-python
+        shell: bash
+        run: ./build_sidecar.sh
 
       # 诊断：验证签名 Secret 已正确注入（仅打印长度，不暴露值）
       - name: 验证签名 Secret 非空
@@ -193,6 +220,30 @@ jobs:
               f.write(ct)
           print('version synced:', v)
           "
+
+      # Python sidecar：安装 Python 3.12 + uv，跑测试 + PyInstaller 打包
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 安装 uv
+        shell: pwsh
+        run: |
+          powershell -Command "irm https://astral.sh/uv/install.ps1 | iex"
+          echo "$env:USERPROFILE\.local\bin" >> $env:GITHUB_PATH
+
+      - name: Python sidecar 测试
+        working-directory: src-python
+        shell: pwsh
+        run: |
+          uv sync
+          uv run pytest -v
+
+      - name: 构建 Python sidecar binary
+        working-directory: src-python
+        shell: pwsh
+        run: .\build_sidecar.ps1
 
       - name: 验证签名 Secret 非空
         shell: bash
