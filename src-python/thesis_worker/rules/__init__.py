@@ -11,6 +11,7 @@ from .font_body import FontBodyRule
 from .font_h1 import FontH1Rule
 from .paragraph_indent import ParagraphIndentRule
 from .figure_table_caption import FigureCaptionPosRule, TableCaptionPosRule
+from .chapter_new_page import ChapterNewPageRule
 
 REGISTRY: dict[str, type[Rule]] = {
     'cjk_ascii_space': CjkAsciiSpaceRule,
@@ -20,5 +21,6 @@ REGISTRY: dict[str, type[Rule]] = {
     'paragraph.indent': ParagraphIndentRule,
     'figure.caption_pos': FigureCaptionPosRule,
     'table.caption_pos': TableCaptionPosRule,
+    'chapter.new_page': ChapterNewPageRule,
     # P4 追加其余规则
 }
