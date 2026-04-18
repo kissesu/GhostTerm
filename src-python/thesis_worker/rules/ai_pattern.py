@@ -14,13 +14,14 @@ from ..models import Issue, Location, FixResult
 # context 预览长度：段落前 N 字符，供用户在 WPS 里 Ctrl-F 搜定位
 _CONTEXT_MAX = 30
 
-# thesis-default ruleset 的保守 AI marker 列表
-# 这些句式在 LLM 生成文本中出现频率远高于人类自然写作
+# thesis-default ruleset 的高信号 AI marker 列表
+# 仅保留 LLM 写作显著特征词；删除 "首先/其次/最后/本文将/一方面/另一方面" 等
+# 在正常论文方法论步骤和转折语境下高频出现的通用词，避免 info 级噪音淹没用户
+# 若需检测 "首先...其次..." 这类共现模式应走 composite pattern，超出 P3 范围
 _AI_MARKERS = [
     '综上所述', '值得注意的是', '总而言之', '毋庸置疑',
     '显而易见', '深度挖掘', '进一步分析', '至关重要',
-    '不容忽视', '本文将', '本研究旨在', '首先',
-    '其次', '最后', '一方面', '另一方面',
+    '不容忽视', '本研究旨在',
 ]
 
 
