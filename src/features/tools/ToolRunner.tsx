@@ -118,20 +118,45 @@ export function ToolRunner() {
               <li
                 key={i.issue_id}
                 style={{
-                  padding: '8px 12px',
+                  padding: '10px 12px',
                   background: 'var(--c-raised)',
                   borderRadius: 'var(--r-sm)',
-                  marginBottom: 4,
+                  marginBottom: 6,
                   fontSize: 12,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 6,
                 }}
               >
-                <div><strong>{i.message}</strong></div>
-                <div style={{ color: 'var(--c-fg-muted)' }}>
-                  位置：段落 {i.loc.para}，run {i.loc.run}
-                  {' · '}
-                  当前：<code style={{ fontFamily: 'var(--font-mono)' }}>{JSON.stringify(i.current)}</code>
-                  {' · '}
-                  期望：<code style={{ fontFamily: 'var(--font-mono)' }}>{JSON.stringify(i.expected)}</code>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                  <code
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 13,
+                      color: 'var(--c-fg)',
+                      background: 'var(--c-bg)',
+                      padding: '2px 6px',
+                      borderRadius: 'var(--r-sm)',
+                    }}
+                  >
+                    {i.snippet}
+                  </code>
+                  <span style={{ color: 'var(--c-fg-muted)' }}>→</span>
+                  <code
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 13,
+                      color: 'var(--c-accent)',
+                      background: 'var(--c-bg)',
+                      padding: '2px 6px',
+                      borderRadius: 'var(--r-sm)',
+                    }}
+                  >
+                    {i.snippet.replace(/ +/g, '')}
+                  </code>
+                </div>
+                <div style={{ color: 'var(--c-fg-muted)', fontSize: 11 }}>
+                  所在段落：{i.context}
                 </div>
               </li>
             ))}

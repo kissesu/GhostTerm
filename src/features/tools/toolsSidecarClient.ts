@@ -38,6 +38,10 @@ export interface IssueDict {
   current: unknown;
   expected: unknown;
   fix_available: boolean;
+  // 违规点扩展到一个完整"中文连续段 + 英文 token"（例："通过 submit"）
+  snippet: string;
+  // 段落预览（前 ~30 字符），供用户在 WPS 里 Ctrl-F 搜段定位
+  context: string;
   issue_id: string;
   evidence_xml?: string | null;
 }

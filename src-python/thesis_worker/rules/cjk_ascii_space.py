@@ -25,6 +25,67 @@ _VIOLATION_RE = re.compile(
 # 蓝色标记：Office 标准 "蓝色, 个性色 1" = #0070C0
 _MARK_COLOR = RGBColor(0x00, 0x70, 0xC0)
 
+# 中文标点集合：作为 ASCII 侧扩展的停止符（否则句末句号会被吸进 snippet）
+_CJK_PUNCT = set('，。；：！？、、""‘’（）《》【】…—「」『』')
+
+# context 预览长度：段落前 N 字符，供用户 Ctrl-F 搜段落
+_CONTEXT_MAX = 30
+
+
+def _is_cjk(ch: str) -> bool:
+    return bool(ch) and '\u4e00' <= ch <= '\u9fa5'
+
+
+def _is_ascii_token_char(ch: str) -> bool:
+    """ASCII 侧扩展接受的字符：非空白、非 CJK、非中文标点
+    这样版本号 `2.1.1` 和代码标识 `v2.0-beta` 整块保留"""
+    if not ch or ch.isspace():
+        return False
+    if _is_cjk(ch):
+        return False
+    if ch in _CJK_PUNCT:
+        return False
+    return True
+
+
+def _expand_snippet(text: str, match_start: int, match_end: int) -> str:
+    """把正则最小匹配扩展到用户可读的完整片段
+    CJK 侧：连续 CJK 字符直到非 CJK 停
+    ASCII 侧：连续"非空白非 CJK 非中文标点"字符直到边界停"""
+    left = match_start
+    right = match_end
+
+    # 左扩展：看 match 左邻字符属于哪个字符族，按同族继续吃
+    if left > 0:
+        c = text[left - 1]
+        if _is_cjk(c):
+            while left > 0 and _is_cjk(text[left - 1]):
+                left -= 1
+        elif _is_ascii_token_char(c):
+            while left > 0 and _is_ascii_token_char(text[left - 1]):
+                left -= 1
+
+    # 右扩展：同理
+    n = len(text)
+    if right < n:
+        c = text[right]
+        if _is_cjk(c):
+            while right < n and _is_cjk(text[right]):
+                right += 1
+        elif _is_ascii_token_char(c):
+            while right < n and _is_ascii_token_char(text[right]):
+                right += 1
+
+    return text[left:right]
+
+
+def _make_context(para_text: str) -> str:
+    """段落预览：首尾 strip 后取前 N 字符"""
+    stripped = para_text.strip()
+    if len(stripped) <= _CONTEXT_MAX:
+        return stripped
+    return stripped[:_CONTEXT_MAX] + '…'
+
 
 class CjkAsciiSpaceRule:
     id = 'cjk_ascii_space'
@@ -40,11 +101,13 @@ class CjkAsciiSpaceRule:
 
         issues: list[Issue] = []
         for p_idx, para in enumerate(doc.paragraphs):
+            context = _make_context(para.text)
             for r_idx, run in enumerate(para.runs):
                 text = run.text
                 for m in _VIOLATION_RE.finditer(text):
                     current = m.group(0)
                     expected = re.sub(r' +', '', current)
+                    snippet = _expand_snippet(text, m.start(), m.end())
                     issues.append(Issue(
                         rule_id='cjk_ascii_space',
                         loc=Location(para=p_idx, run=r_idx, char=m.start()),
@@ -52,6 +115,8 @@ class CjkAsciiSpaceRule:
                         current=current,
                         expected=expected,
                         fix_available=True,
+                        snippet=snippet,
+                        context=context,
                     ))
         return issues
 

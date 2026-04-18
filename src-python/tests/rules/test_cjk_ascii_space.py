@@ -38,6 +38,54 @@ class TestDetect:
         issues = CjkAsciiSpaceRule.detect(doc, {'allowed': True})
         assert issues == []
 
+    def test_detect_snippet_and_context_fields(self):
+        """snippet 扩展 + context 段落预览，用户可直接在 WPS 里定位违规"""
+        doc = Document(FIXTURES / 'cjk_space_bad.docx')
+        issues = CjkAsciiSpaceRule.detect(doc, CONFIG_FORBID)
+        assert len(issues) == 4
+
+        # 段落 0: "这是 AI 工具。" → 两处违规，snippet 各扩到 "这是 AI" 和 "AI 工具"
+        assert issues[0].snippet == '这是 AI'
+        assert issues[1].snippet == 'AI 工具'
+        assert issues[0].context == '这是 AI 工具。'
+        assert issues[1].context == '这是 AI 工具。'
+
+        # 段落 1: "版本 2.1.1 已发布。" → . 不是 ASCII 停止符，数字串整块保留
+        assert issues[2].snippet == '版本 2.1.1'
+        assert issues[3].snippet == '2.1.1 已发布'
+        assert '版本 2.1.1' in issues[2].context
+
+
+class TestSnippetExpansion:
+    """_expand_snippet 的边界单元测试，不依赖 docx fixture"""
+
+    def test_cjk_side_stops_at_non_cjk(self):
+        from thesis_worker.rules.cjk_ascii_space import _expand_snippet
+        text = '使用 AI 完成'
+        # 违规 "用 A" 位置
+        start = text.index('用 A')
+        assert _expand_snippet(text, start, start + 3) == '使用 AI'
+
+    def test_ascii_side_keeps_dots_in_version(self):
+        from thesis_worker.rules.cjk_ascii_space import _expand_snippet
+        text = '版本 2.1.1 已发布'
+        start = text.index('本 2')
+        assert _expand_snippet(text, start, start + 3) == '版本 2.1.1'
+
+    def test_ascii_side_keeps_paren_inside_token(self):
+        from thesis_worker.rules.cjk_ascii_space import _expand_snippet
+        text = '使用 (AI) 工具'
+        start = text.index('用 (')
+        # 右侧吃 "(AI)" 直到遇到空格停，不把中文标点吸入
+        assert _expand_snippet(text, start, start + 3) == '使用 (AI)'
+
+    def test_cjk_punct_stops_ascii_expansion(self):
+        from thesis_worker.rules.cjk_ascii_space import _expand_snippet
+        # 中文句号应停止 ASCII 侧扩展
+        text = '通过 submit。下一步'
+        start = text.index('过 s')
+        assert _expand_snippet(text, start, start + 3) == '通过 submit'
+
 
 class TestFix:
     def test_fix_and_reopen_produces_no_issues(self, tmp_path):

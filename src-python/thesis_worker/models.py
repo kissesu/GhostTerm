@@ -23,9 +23,14 @@ class Issue:
     rule_id: str
     loc: Location
     message: str
-    current: Any          # 实际值（例如 "字体A"）
-    expected: Any         # 期望值（例如 "宋体"）
+    current: Any          # 实际值（diff 用，精确到违规字符）
+    expected: Any         # 期望值（diff 用，修复后的字符）
     fix_available: bool
+    # 用户可读片段：违规点扩展到一个完整的"中文连续段 + 英文 token"
+    # 例：current="过 s" → snippet="通过 submit"
+    snippet: str = ""
+    # 段落上下文预览：段落前 ~30 字符，供用户在 WPS 里 Ctrl-F 搜定位
+    context: str = ""
     issue_id: str = ""    # 由 handler 后分配，稳定引用
     evidence_xml: Optional[str] = None
 
