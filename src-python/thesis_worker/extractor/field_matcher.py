@@ -25,7 +25,7 @@ FIELD_KEYWORDS: dict[str, list[str]] = {
     'toc_title': ['目  录', '目 录', '目录'],
     'toc_entry': [],
     # ---- 正文部分（8 个）----
-    'chapter_title': ['一级标题', '第X章', '第1章', '第2章'],
+    'chapter_title': ['一级标题', '第一章', '第二章', '第三章', '第1章', '第2章'],
     'section_title': ['二级标题'],
     'subsection_title': ['三级标题'],
     # 正文段落依赖位置推断，无独立关键词（"正文"过于通用，易误匹配）
@@ -36,7 +36,7 @@ FIELD_KEYWORDS: dict[str, list[str]] = {
     'table_inner_text': ['表内容'],
     # ---- 后置部分（6 个）----
     'references_title': ['参考文献'],
-    'reference_entry': ['参考文献格式', '参考文献条目', 'GB/T7714'],
+    'reference_entry': ['参考文献格式', '参考文献条目', 'GB/T 7714', 'GB/T7714'],
     'ack_title': ['致  谢', '致 谢', '致谢'],
     'ack_body': [],
     'appendix_title': ['附  录', '附 录', '附录'],
@@ -53,9 +53,9 @@ FIELD_KEYWORDS: dict[str, list[str]] = {
 
 def match_field(text: str) -> Optional[str]:
     """给定一段文本，返回匹配到的字段 id
-
-    匹配策略：按插入顺序遍历 FIELD_KEYWORDS，子串包含检查（text 含 keyword）
-    如果匹配多个字段，返回第一个命中的；都不匹配返回 None
+    如果匹配多个，按 FIELD_KEYWORDS 的插入顺序取第一个命中（前置部分优先于正文和页面级字段）。
+    都不匹配返回 None。
+    匹配策略：子串包含检查（text 含 keyword）
 
     @param text - 待匹配的段落文本
     @returns 字段 id 字符串，或 None
