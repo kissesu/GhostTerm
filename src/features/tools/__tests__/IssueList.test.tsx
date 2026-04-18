@@ -269,4 +269,45 @@ describe('IssueList', () => {
       expect(onError).toHaveBeenCalledWith(expect.any(SidecarError));
     });
   });
+
+  it('backup_create_cmd 失败时不调 sidecar fix 且 onError 收到 FIX_FAILED', async () => {
+    const onError = vi.fn();
+
+    // fix_preview 成功打开 modal
+    vi.mocked(sidecarInvoke).mockResolvedValueOnce({ diff: '- a\n+ b', applied: false });
+    // backup_create_cmd 失败（Tauri 抛字符串而非 SidecarError）
+    vi.mocked(invoke).mockRejectedValueOnce('backup err');
+
+    render(
+      <IssueList
+        file={MOCK_FILE}
+        issues={[makeIssue()]}
+        ruleValues={MOCK_RULE_VALUES}
+        onChanged={vi.fn()}
+        onError={onError}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /修复/ }));
+    await waitFor(() => screen.getByRole('dialog'));
+
+    fireEvent.click(screen.getByRole('button', { name: '确认修复' }));
+
+    await waitFor(() => {
+      // 关键断言 1：onError 收到包装后的 SidecarError，code=FIX_FAILED，fullError 含原始错误信息
+      expect(onError).toHaveBeenCalledWith(expect.any(SidecarError));
+      const errArg = onError.mock.calls[0][0] as SidecarError;
+      expect(errArg.code).toBe('FIX_FAILED');
+      expect(errArg.fullError).toContain('backup err');
+    });
+
+    // 关键断言 2：sidecar fix 未被调用（fix_preview 是第 1 次，fix 应是第 2 次但未发生）
+    expect(vi.mocked(sidecarInvoke)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(sidecarInvoke)).not.toHaveBeenCalledWith(
+      expect.objectContaining({ cmd: 'fix' }),
+    );
+
+    // 关键断言 3：pushUndo 未被调用，避免幽灵 undo 条目
+    expect(mockPushUndo).not.toHaveBeenCalled();
+  });
 });

@@ -58,10 +58,13 @@ export function IssueList({ file, issues, ruleValues, onChanged, onError }: Issu
       });
       setPreviewing({ issue, diff: result.diff });
     } catch (e) {
+      // 任何失败都必须冒泡到 ErrorModal 给用户看，禁止 silent re-throw
+      // SidecarError 保留原始 code/message；其他类型（Tauri invoke 失败、内部异常）
+      // 包装为 PREVIEW_FAILED 统一展示，fullError 保留原始信息
       if (e instanceof SidecarError) {
         onError(e);
       } else {
-        throw e;
+        onError(new SidecarError('PREVIEW_FAILED', String(e)));
       }
     } finally {
       setBusy(false);
@@ -112,10 +115,13 @@ export function IssueList({ file, issues, ruleValues, onChanged, onError }: Issu
       // ============================================================
       await onChanged();
     } catch (e) {
+      // 涵盖三类失败：backup_create_cmd（Tauri 抛字符串）、parseVersionFromPath
+      // （内部 Error）、sidecar fix（SidecarError）。统一冒泡 ErrorModal，禁止
+      // re-throw 让用户看不到失败原因
       if (e instanceof SidecarError) {
         onError(e);
       } else {
-        throw e;
+        onError(new SidecarError('FIX_FAILED', String(e)));
       }
     } finally {
       setBusy(false);
