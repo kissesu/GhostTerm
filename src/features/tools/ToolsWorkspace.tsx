@@ -9,6 +9,7 @@
 import { useEffect } from 'react';
 import { ToolRunner } from './ToolRunner';
 import { useToolsStore } from './toolsStore';
+import { TemplateSelector } from './templates/TemplateSelector';
 
 export function ToolsWorkspace() {
   // Cmd+Z（macOS）/ Ctrl+Z（Windows/Linux）触发 undo
@@ -27,7 +28,9 @@ export function ToolsWorkspace() {
   }, []);
 
   return (
-    <div data-testid="tools-workspace" style={{ flex: 1, display: 'flex' }}>
+    <div data-testid="tools-workspace" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+      {/* TemplateSelector 固定在工具面板顶部，Task 9 完成后传入 onManage */}
+      <TemplateSelector />
       <ToolRunner />
     </div>
   );
