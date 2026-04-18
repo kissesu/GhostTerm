@@ -14,6 +14,7 @@ from .figure_table_caption import FigureCaptionPosRule, TableCaptionPosRule
 from .chapter_new_page import ChapterNewPageRule
 from .quote_style import QuoteStyleRule
 from .ai_pattern import AiPatternCheckRule
+from .pagination import PaginationRule
 
 REGISTRY: dict[str, type[Rule]] = {
     'cjk_ascii_space': CjkAsciiSpaceRule,
@@ -26,5 +27,6 @@ REGISTRY: dict[str, type[Rule]] = {
     'chapter.new_page': ChapterNewPageRule,
     'quote.style': QuoteStyleRule,
     'ai_pattern.check': AiPatternCheckRule,
+    'pagination': PaginationRule,
     # P4 追加其余规则
 }
