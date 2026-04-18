@@ -15,6 +15,10 @@ from typing import Any, Optional
 from docx.document import Document
 from docx.text.paragraph import Paragraph
 
+# 复用 extractor 中已实现的全文启发式扫描，避免重复维护两份正则+阈值
+# extractor 包不依赖 engine_v2，反向 import 无循环
+from ..extractor.pipeline import _detect_punct_space_after
+
 # ───────────────────────────────────────────────
 # 容差常量（用于浮点属性的近似匹配）
 # ───────────────────────────────────────────────
@@ -439,24 +443,12 @@ def check_mixed_script_ascii_is_tnr(doc: Document, expected: bool) -> Optional[d
 def check_mixed_script_punct_space_after(doc: Document, expected: bool) -> Optional[dict]:
     """
     检查文档英文标点后是否规范空一字符。
-    复用 pipeline._detect_punct_space_after 的统计逻辑：
-    对全文 run.text 做正则统计，按 2:1 阈值判定。
+    扫描逻辑复用 pipeline._detect_punct_space_after，保持 extractor 与 checker 口径一致。
+    detector 返回 None 表示样本不足 — 此时视为"无法判定"，不报告 issue。
     """
-    import re
-    fulltext_parts = []
-    for para in doc.paragraphs:
-        for run in para.runs:
-            if run.text:
-                fulltext_parts.append(run.text)
-    fulltext = ''.join(fulltext_parts)
-
-    space_after = len(re.findall(r'[.,;:!?](?=\s)', fulltext))
-    no_space = len(re.findall(r'[.,;:!?](?=\S)', fulltext))
-    total = space_after + no_space
-    if total < 3:
-        # 样本不足，无法做可靠推断，视为满足（不报告 issue）
+    actual = _detect_punct_space_after(doc)
+    if actual is None:
         return None
-    actual = space_after >= 2 * no_space
     if actual == expected:
         return None
     return {'attr': 'mixed_script.punct_space_after', 'actual': actual, 'expected': expected}
