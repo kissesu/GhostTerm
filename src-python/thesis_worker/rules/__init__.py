@@ -7,9 +7,11 @@
 from .base import Rule
 from .cjk_ascii_space import CjkAsciiSpaceRule
 from .font_body import FontBodyRule
+from .font_h1 import FontH1Rule
 
 REGISTRY: dict[str, type[Rule]] = {
     'cjk_ascii_space': CjkAsciiSpaceRule,
     'font.body': FontBodyRule,
+    'font.h1': FontH1Rule,
     # P4 追加其余规则
 }
