@@ -6,8 +6,10 @@
 """
 from .base import Rule
 from .cjk_ascii_space import CjkAsciiSpaceRule
+from .font_body import FontBodyRule
 
 REGISTRY: dict[str, type[Rule]] = {
     'cjk_ascii_space': CjkAsciiSpaceRule,
-    # P4 追加其余 10 条
+    'font.body': FontBodyRule,
+    # P4 追加其余规则
 }
