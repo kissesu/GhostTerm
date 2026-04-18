@@ -143,8 +143,7 @@ def _handle_fix_preview(req_id: str, req: dict) -> dict:
     if not Path(file).exists():
         return {'id': req_id, 'ok': False, 'error': f'file not found: {file}', 'code': 'ENOENT'}
 
-    # issue_dict 可能为空（ENOENT 检查优先，在下面再取 rule_id）
-    rule_id = issue_dict.get('rule_id', '')
+    rule_id = issue_dict['rule_id']
     value = req.get('value', {})
 
     try:
