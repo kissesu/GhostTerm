@@ -139,3 +139,11 @@ class CjkAsciiSpaceRule:
             applied=True,
             xml_changed=[f'w:p[{issue.loc.para}]/w:r[{issue.loc.run}]'],
         )
+
+    @staticmethod
+    def extract(doc) -> None:
+        """
+        cjk_ascii_space.allowed 是院校级约束而非 docx 本身的属性，
+        无法从文档内容反推，返回 None 让 extractor 走占位分支。
+        """
+        return None

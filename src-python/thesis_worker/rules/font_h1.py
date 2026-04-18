@@ -171,3 +171,43 @@ class FontH1Rule:
             applied=True,
             xml_changed=[f'w:p[{issue.loc.para}]/w:r[{issue.loc.run}]'],
         )
+
+    @staticmethod
+    def extract(doc: Document) -> dict | None:
+        """
+        从 docx 反推一级标题的字体、字号和加粗设置。
+
+        策略：扫所有 Heading 1 段落的所有 run，
+        统计 majority 字体名、字号和加粗，返回置信度 = 字体多数票占比。
+        """
+        from collections import Counter
+        fc: Counter = Counter()
+        sc: Counter = Counter()
+        bc: Counter = Counter()
+        for para in doc.paragraphs:
+            if not _is_h1_paragraph(para):
+                continue
+            for run in para.runs:
+                if not run.text.strip():
+                    continue
+                fname = _read_actual_font_name(run)
+                fsize = _read_actual_size_pt(run)
+                if fname:
+                    fc[fname] += 1
+                if fsize:
+                    sc[fsize] += 1
+                # bold 为 None 表示继承，只统计明确设置的值
+                if run.font.bold is not None:
+                    bc[bool(run.font.bold)] += 1
+        if not fc or not sc:
+            # 文档无一级标题内容，无法提取
+            return None
+        family = fc.most_common(1)[0][0]
+        size = sc.most_common(1)[0][0]
+        bold = bc.most_common(1)[0][0] if bc else False
+        total = sum(fc.values())
+        return {
+            'value': {'family': family, 'size_pt': size, 'bold': bold},
+            'source_xml': f'h1: <w:rFonts w:eastAsia="{family}"/>',
+            'confidence': round(fc[family] / total, 2) if total else 0.0,
+        }

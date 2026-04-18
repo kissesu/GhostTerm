@@ -148,3 +148,33 @@ class ParagraphIndentRule:
             applied=True,
             xml_changed=[f'w:p[{issue.loc.para}]/w:pPr'],
         )
+
+    @staticmethod
+    def extract(doc: Document) -> dict | None:
+        """
+        从 docx 反推段首缩进（字数）。
+
+        策略：扫所有非 Heading 非空段落，统计 majority first_line_indent（磅），
+        再除以 12pt 换算为字数（假设正文 12pt）。
+        """
+        from collections import Counter
+        indent_counter: Counter = Counter()
+        for para in doc.paragraphs:
+            if not _is_body_paragraph(para):
+                continue
+            if not para.text.strip():
+                continue
+            fli = para.paragraph_format.first_line_indent
+            if fli is not None:
+                indent_counter[round(fli.pt)] += 1
+        if not indent_counter:
+            return None
+        top_pt = indent_counter.most_common(1)[0][0]
+        # 以 12pt 正文为基准换算字数
+        chars = round(top_pt / 12)
+        total = sum(indent_counter.values())
+        return {
+            'value': {'first_line_chars': chars},
+            'source_xml': f'<w:ind w:firstLine="{int(top_pt * 20)}"/>',
+            'confidence': round(indent_counter[top_pt] / total, 2),
+        }
