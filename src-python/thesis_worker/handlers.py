@@ -43,6 +43,15 @@ def handle(req: dict) -> dict:
         if cmd == 'extract_template':
             return _handle_extract_template(req_id, req)
 
+        if cmd == 'extract_all':
+            return _handle_extract_all(req_id, req)
+
+        if cmd == 'extract_from_selection':
+            return _handle_extract_from_selection(req_id, req)
+
+        if cmd == 'list_fields':
+            return _handle_list_fields(req_id)
+
         return {
             'id': req_id, 'ok': False,
             'error': f'unknown cmd: {cmd}',
@@ -195,3 +204,50 @@ def _handle_extract_template(req_id: str, req: dict) -> dict:
         return {'id': req_id, 'ok': True, 'result': result}
     except PackageNotFoundError:
         return {'id': req_id, 'ok': False, 'error': f'docx malformed: {file}', 'code': 'PARSE_ERROR'}
+
+
+def _handle_extract_all(req_id: str, req: dict) -> dict:
+    """
+    P4 语义字段抽取：扫描整个 docx，返回所有识别到的语义字段规则和证据。
+
+    业务逻辑：
+    1. ENOENT 检查先于 pipeline，原因同 _handle_extract_template
+    2. 调用 pipeline.extract_all(file)，返回 {rules, evidence}
+    3. PackageNotFoundError → PARSE_ERROR，与其它命令保持一致
+    """
+    file = req['file']
+    if not Path(file).exists():
+        return {'id': req_id, 'ok': False, 'error': f'file not found: {file}', 'code': 'ENOENT'}
+    try:
+        from .extractor.pipeline import extract_all
+        result = extract_all(file)
+        return {'id': req_id, 'ok': True, 'result': result}
+    except PackageNotFoundError:
+        return {'id': req_id, 'ok': False, 'error': f'docx malformed: {file}', 'code': 'PARSE_ERROR'}
+
+
+def _handle_extract_from_selection(req_id: str, req: dict) -> dict:
+    """
+    P4 基于用户选中段落的精确字段抽取。
+
+    业务逻辑：
+    1. 接受 para_indices（用户在预览中点选的段落索引列表）和 field_id（目标字段）
+    2. ENOENT 检查先于 pipeline
+    3. 调用 pipeline.extract_from_selection(file, para_indices, field_id)
+    """
+    file = req['file']
+    para_indices = req['para_indices']
+    field_id = req['field_id']
+    if not Path(file).exists():
+        return {'id': req_id, 'ok': False, 'error': f'file not found: {file}', 'code': 'ENOENT'}
+    try:
+        from .extractor.pipeline import extract_from_selection
+        result = extract_from_selection(file, para_indices, field_id)
+        return {'id': req_id, 'ok': True, 'result': result}
+    except PackageNotFoundError:
+        return {'id': req_id, 'ok': False, 'error': f'docx malformed: {file}', 'code': 'PARSE_ERROR'}
+
+
+def _handle_list_fields(req_id: str) -> dict:
+    # Task 8 会替换为返回 FIELD_DEFS 完整列表；当前占位返回空列表供前端调用
+    return {'id': req_id, 'ok': True, 'result': {'fields': []}}
