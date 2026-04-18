@@ -223,21 +223,25 @@ export function FieldList({ fields, currentFieldId, onJump, onSkip, onAttrChange
                         key={attr}
                         style={{
                           // 三列：属性标签（固定宽） | 编辑器（弹性） | 状态标记（自动宽）
+                          // label 列 140px：容纳最长标签"西文用 Times New Roman"，避免截断
                           display: 'grid',
-                          gridTemplateColumns: '100px 1fr auto',
+                          gridTemplateColumns: '140px 1fr auto',
                           columnGap: 10,
                           alignItems: 'center',
                           padding: '4px 10px 4px 30px',
                         }}
                       >
-                        {/* 属性标签 */}
-                        <span style={{
-                          fontSize: 12,
-                          color: 'var(--c-fg-muted)',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}>
+                        {/* 属性标签：title 兜底，列宽不够时用户 hover 可看完整文字 */}
+                        <span
+                          title={attrLabel}
+                          style={{
+                            fontSize: 12,
+                            color: 'var(--c-fg-muted)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
                           {attrLabel}
                         </span>
 
