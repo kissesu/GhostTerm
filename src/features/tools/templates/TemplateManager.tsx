@@ -14,6 +14,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useTemplateStore } from './TemplateStore';
 import type { TemplateJson } from './TemplateStore';
 import { TemplateEditor } from './TemplateEditor';
+import { TemplateExtractor } from './TemplateExtractor';
 
 // 从文件路径中提取文件名（兼容 macOS / Windows 路径分隔符）
 function basename(p: string): string {
@@ -39,6 +40,8 @@ export function TemplateManager({ isOpen, onClose }: Props) {
   const { templates, remove, restoreBuiltin, update, create, load } = useTemplateStore();
   // null = 列表视图；非 null = 编辑视图
   const [editing, setEditing] = useState<TemplateJson | null>(null);
+  // 非 null = TemplateExtractor modal 打开状态（含 docxPath + 预填名称）
+  const [extractorOpen, setExtractorOpen] = useState<{ docxPath: string; name: string } | null>(null);
 
   if (!isOpen) return null;
 
@@ -93,11 +96,10 @@ export function TemplateManager({ isOpen, onClose }: Props) {
   };
 
   // ============================================
-  // 从 docx 创建模板（Phase D Task 22 脚手架）
-  // 当前 sidecar extract_template 命令尚未实现，先做 UI 流程：
+  // 从 docx 创建模板：
   //   1. 选 docx 文件
-  //   2. prompt 输入名称
-  //   3. 提示 Phase D 占位，不真正调 store.create
+  //   2. prompt 输入模板名称（预填去扩展名的文件名）
+  //   3. 打开 TemplateExtractor modal（Task 22 实现）
   // ============================================
   const handleNewFromDocx = async () => {
     const docx = await open({
@@ -107,9 +109,7 @@ export function TemplateManager({ isOpen, onClose }: Props) {
     if (typeof docx !== 'string') return;
     const name = window.prompt('请输入模板名称', basename(docx).replace(/\.docx$/i, ''));
     if (!name?.trim()) return;
-    // Task 22 完成前的占位提示——不调 store.create，暴露未完成状态
-    alert('「从 docx 创建」需要 Phase D Task 22 完成 sidecar extract_template 命令后才能使用。当前是脚手架占位。');
-    // TODO Task 22: await create(name.trim(), { fromDocx: docx });
+    setExtractorOpen({ docxPath: docx, name: name.trim() });
   };
 
   // ============================================
@@ -150,6 +150,7 @@ export function TemplateManager({ isOpen, onClose }: Props) {
   };
 
   return (
+    <>
     <div
       role="dialog"
       aria-modal="true"
@@ -362,6 +363,18 @@ export function TemplateManager({ isOpen, onClose }: Props) {
         )}
       </div>
     </div>
+
+    {/* TemplateExtractor modal（从 docx 提取 review，Task 22） */}
+    {extractorOpen && (
+      <TemplateExtractor
+        isOpen
+        docxPath={extractorOpen.docxPath}
+        defaultName={extractorOpen.name}
+        onClose={() => setExtractorOpen(null)}
+        onSaved={() => setExtractorOpen(null)}
+      />
+    )}
+  </>
   );
 }
 

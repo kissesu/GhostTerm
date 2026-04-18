@@ -272,8 +272,11 @@ describe('TemplateManager', () => {
     });
   });
 
-  it('点击「从 docx 创建」选文件 + prompt → 显示 Phase D 占位 alert，不调 store.create', async () => {
-    const createMock = vi.fn().mockResolvedValue('id');
+  it('点击「从 docx 创建」选文件 + prompt → 打开 TemplateExtractor modal', async () => {
+    // sidecarInvoke 在 TemplateExtractor mount 时会被调，mock 返回空结果
+    const { sidecarInvoke: si } = await import('../toolsSidecarClient');
+    vi.mocked(si).mockResolvedValue({ rules: {}, evidence: [] });
+
     useTemplateStore.setState({
       templates: [builtinTpl, userTpl],
       loading: false,
@@ -281,28 +284,23 @@ describe('TemplateManager', () => {
       update: vi.fn().mockResolvedValue(undefined),
       remove: vi.fn().mockResolvedValue(undefined),
       restoreBuiltin: vi.fn().mockResolvedValue(undefined),
-      create: createMock,
+      create: vi.fn().mockResolvedValue('id'),
     });
     // 模拟选中 docx 文件路径
     vi.mocked(dialog.open).mockResolvedValue('/docs/thesis.docx');
     // 模拟 prompt 输入模板名
     const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('论文模板');
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
 
     render(<TemplateManager isOpen onClose={vi.fn()} />);
 
     fireEvent.click(screen.getByTestId('create-from-docx-btn'));
 
+    // TemplateExtractor modal 应弹出
     await waitFor(() => {
-      // 应弹出 Phase D 占位提示
-      expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('Phase D'));
+      expect(screen.getByTestId('template-extractor')).toBeTruthy();
     });
 
-    // store.create 不应被调用（占位阶段）
-    expect(createMock).not.toHaveBeenCalled();
-
     promptSpy.mockRestore();
-    alertSpy.mockRestore();
   });
 });
 
