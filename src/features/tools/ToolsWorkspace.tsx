@@ -11,6 +11,7 @@ import { ToolRunner } from './ToolRunner';
 import { useToolsStore } from './toolsStore';
 import { TemplateSelector } from './templates/TemplateSelector';
 import { TemplateManager } from './templates/TemplateManager';
+import { MigrationBanner } from './templates/MigrationBanner';
 import { ToolBoxGrid } from './ToolBoxGrid';
 
 export function ToolsWorkspace() {
@@ -39,6 +40,8 @@ export function ToolsWorkspace() {
     <div data-testid="tools-workspace" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
       {/* TemplateSelector 固定在工具面板顶部，onManage 打开管理 modal */}
       <TemplateSelector onManage={() => setManagerOpen(true)} />
+      {/* 检测到新规则时显示迁移提示横幅，用户确认后消失 */}
+      <MigrationBanner />
       {/* activeToolId 为 null 时展示分类卡片入口，非 null 时展示 ToolRunner */}
       {activeToolId === null ? (
         <ToolBoxGrid onSelectTool={(tb) => setActiveTool(tb.id)} />

@@ -59,9 +59,17 @@ function slugify(name: string): string {
 interface TemplateStoreState {
   templates: TemplateJson[];
   loading: boolean;
+  /**
+   * 本次启动检测到的新规则数量（尚未追加到模板的规则）
+   * 大于 0 时 MigrationBanner 显示提示；用户点"知道了"后清零
+   */
+  pendingMigrationCount: number;
 
   /** 从 Rust 端全量读取模板列表 */
   load(): Promise<void>;
+
+  /** 用户确认 migration 提示，清零 pendingMigrationCount */
+  acknowledgeMigration(): void;
 
   /** 按 id 查找模板，不存在返回 null */
   get(id: string): TemplateJson | null;
@@ -102,15 +110,43 @@ interface TemplateStoreState {
 export const useTemplateStore = create<TemplateStoreState>((set, get) => ({
   templates: [],
   loading: false,
+  // 初始为 0，load 时若检测到新规则才更新
+  pendingMigrationCount: 0,
 
   async load() {
     set({ loading: true });
     try {
       const templates = await invoke<TemplateJson[]>('template_list_cmd');
       set({ templates });
+
+      // ============================================
+      // Migration check：向 sidecar 获取支持的规则列表，
+      // 与内置模板已有规则 diff，追加新规则（enabled:false）
+      // 若 sidecar 不可用，静默跳过，不阻断模板加载
+      // ============================================
+      try {
+        const { rules: supported } = await sidecarInvoke<{ rules: string[] }>({ cmd: 'list_rules' });
+        const builtin = templates.find((t) => t.id === '_builtin-gbt7714');
+        if (builtin) {
+          const newRuleIds = supported.filter((id) => !(id in builtin.rules));
+          if (newRuleIds.length > 0) {
+            // 记录新规则数量，MigrationBanner 据此显示提示
+            set({ pendingMigrationCount: newRuleIds.length });
+            await get().migrateNewRules(newRuleIds);
+          }
+        }
+      } catch (e) {
+        // sidecar 未启动或网络异常：跳过 migration，不影响模板加载
+        console.warn('[TemplateStore] migration check skipped:', e);
+      }
     } finally {
       set({ loading: false });
     }
+  },
+
+  acknowledgeMigration() {
+    // 用户点"知道了"后清零，隐藏 banner
+    set({ pendingMigrationCount: 0 });
   },
 
   get(id) {
