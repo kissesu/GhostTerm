@@ -249,5 +249,5 @@ def _handle_extract_from_selection(req_id: str, req: dict) -> dict:
 
 
 def _handle_list_fields(req_id: str) -> dict:
-    # Task 8 会替换为返回 FIELD_DEFS 完整列表；当前占位返回空列表供前端调用
-    return {'id': req_id, 'ok': True, 'result': {'fields': []}}
+    from .engine_v2.field_defs import FIELD_DEFS
+    return {'id': req_id, 'ok': True, 'result': {'fields': FIELD_DEFS}}

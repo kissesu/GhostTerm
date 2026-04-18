@@ -45,8 +45,15 @@ class TestExtractFromSelection:
 
 
 class TestListFields:
-    def test_returns_placeholder_for_now(self):
-        # Task 8 会让这里返回 32 字段；目前占位返回空列表
+    def test_returns_32_fields(self):
         resp = handle({'id': 'r4', 'cmd': 'list_fields'})
         assert resp['ok'] is True
-        assert resp['result']['fields'] == []
+        fields = resp['result']['fields']
+        assert len(fields) == 32
+        # 每字段必须有 id/label/group/order/applicable_attributes
+        for f in fields:
+            assert 'id' in f
+            assert 'label' in f
+            assert 'group' in f
+            assert 'order' in f
+            assert 'applicable_attributes' in f
