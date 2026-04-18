@@ -1,39 +1,103 @@
 /**
  * @file ToolRunner.tsx
- * @description P2 最小 UI：选 docx → 点"检测"（仅 cjk_ascii_space） → 列 issues
- *              P3 接入 IssueList 组件，支持单条修复闭环
+ * @description P3 工具运行器：从 useToolsStore 读 activeTemplateId/activeToolId，
+ *              从 useTemplateStore 读对应模板，按 activeToolId 的 ruleIds 过滤后传 sidecar。
+ *              无 activeTemplate 时提示用户先在顶部选择模板，不做静默降级。
  * @author Atlas.oi
  * @date 2026-04-18
  */
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
-import { sidecarInvoke, SidecarError, type IssueDict, sidecarRestart, type TemplateJson } from './toolsSidecarClient';
-// IssueDict 仅用于 setIssues 类型推断
+import {
+  sidecarInvoke,
+  SidecarError,
+  type IssueDict,
+  sidecarRestart,
+  type MinimalTemplateForDetect,
+} from './toolsSidecarClient';
 import { ErrorModal } from './ErrorModal';
 import { IssueList } from './IssueList';
 import { useToolsStore } from './toolsStore';
+import { useTemplateStore } from './templates/TemplateStore';
+import { TOOL_BOXES } from './ToolBoxGrid';
+import type { TemplateJson } from './templates/TemplateStore';
 
-// P2 写死最小模板：只启用 cjk_ascii_space
-const P2_TEMPLATE: TemplateJson = {
-  rules: {
-    cjk_ascii_space: { enabled: true, value: { allowed: false } },
-  },
-};
+/**
+ * 按 toolBoxId 的 ruleIds 过滤模板规则。
+ *
+ * 过滤逻辑：
+ * 1. toolBoxId 为 null → 不过滤，返回完整 template
+ * 2. 找不到对应 toolBox → 异常情况，返回完整 template（不静默丢失数据）
+ * 3. 只保留 toolBox.ruleIds 中且在 template.rules 中存在的 rule
+ */
+function filterTemplateForTool(template: TemplateJson, toolBoxId: string | null): MinimalTemplateForDetect {
+  // 无 toolBoxId 时运行全部规则
+  if (!toolBoxId) return { rules: template.rules };
 
-// 从模板提取 ruleValues 映射，传给 IssueList 按 rule_id 取对应修复 value
-// 这样 fix/fix_preview 和 detect 使用的 value 保持一致，不会因 P2_TEMPLATE 修改而产生分叉
-const P2_RULE_VALUES: Record<string, Record<string, unknown> | boolean | null> = Object.fromEntries(
-  Object.entries(P2_TEMPLATE.rules).map(([id, rule]) => [id, rule.value as Record<string, unknown> | boolean | null]),
-);
+  const toolBox = TOOL_BOXES.find((tb) => tb.id === toolBoxId);
+  // 找不到 toolBox 属于调用方数据不一致，走完整规则，不抛错静默继续
+  if (!toolBox) return { rules: template.rules };
+
+  const filteredRules: MinimalTemplateForDetect['rules'] = {};
+  for (const ruleId of toolBox.ruleIds) {
+    if (ruleId in template.rules) {
+      filteredRules[ruleId] = template.rules[ruleId];
+    }
+  }
+  return { rules: filteredRules };
+}
 
 export function ToolRunner() {
   // 返回工具卡片入口：setActiveTool(null) 回到 ToolBoxGrid
-  const { activeToolId, setActiveTool } = useToolsStore();
+  const { activeToolId, activeTemplateId, setActiveTool } = useToolsStore();
+  const templates = useTemplateStore((s) => s.templates);
+
+  // 按 activeTemplateId 找当前模板；找不到时为 undefined
+  const activeTemplate = templates.find((t) => t.id === activeTemplateId);
 
   const [file, setFile] = useState<string | null>(null);
   const [issues, setIssues] = useState<IssueDict[] | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<SidecarError | null>(null);
+
+  // ============================================================
+  // mount 时如果模板列表为空则触发加载（延迟初始化）
+  // ============================================================
+  useEffect(() => {
+    if (templates.length === 0) {
+      useTemplateStore.getState().load();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ============================================================
+  // activeToolId 变化时清空文件和结果，避免上一个工具的数据残留
+  // ============================================================
+  useEffect(() => {
+    setFile(null);
+    setIssues(null);
+    setError(null);
+  }, [activeToolId]);
+
+  // ============================================================
+  // ruleValues：按当前工具过滤后的 rule → value 映射
+  // 传给 IssueList 用于 fix/fix_preview 时取对应修复值
+  // ============================================================
+  // RuleValue 与 IssueList.tsx 保持一致，value 可能是 object/boolean/null
+  type RuleValue = Record<string, unknown> | boolean | null;
+  const ruleValues = useMemo(() => {
+    if (!activeTemplate) return {} as Record<string, RuleValue>;
+    const filtered = filterTemplateForTool(activeTemplate, activeToolId);
+    const out: Record<string, RuleValue> = {};
+    for (const [ruleId, ruleCfg] of Object.entries(filtered.rules)) {
+      out[ruleId] = ruleCfg.value as RuleValue;
+    }
+    return out;
+  }, [activeTemplate, activeToolId]);
+
+  // 当前工具箱标题：有选中工具时显示工具名，否则显示通用"工具箱"
+  const toolBox = activeToolId ? TOOL_BOXES.find((tb) => tb.id === activeToolId) : null;
+  const title = toolBox ? toolBox.label : '工具箱';
 
   const handlePick = async () => {
     const picked = await open({
@@ -48,16 +112,27 @@ export function ToolRunner() {
 
   const handleDetect = async () => {
     if (!file) return;
+
+    // 无 activeTemplate 时必须报错，不允许用旧的 hardcode 模板静默降级
+    if (!activeTemplate) {
+      setError(new SidecarError('NO_ACTIVE_TEMPLATE', '请先在顶部选择模板'));
+      return;
+    }
+
     setRunning(true);
     setIssues(null);
     try {
+      // 按当前工具的 ruleIds 过滤模板，只检测该工具负责的规则
+      const filtered = filterTemplateForTool(activeTemplate, activeToolId);
+
       const result = await sidecarInvoke<{ issues: IssueDict[] }>({
         cmd: 'detect',
         file,
-        template: P2_TEMPLATE,
+        template: filtered,
       });
+
       // 校验新字段存在：旧版常驻 sidecar 进程可能无 snippet/context，
-      // 必须显式报错并让用户重启 sidecar，不能让 UI 静默降级
+      // 必须显式报错让用户重启 sidecar，不能让 UI 静默降级
       const missing = result.issues.find(
         (i) => typeof i.snippet !== 'string' || typeof i.context !== 'string',
       );
@@ -112,7 +187,21 @@ export function ToolRunner() {
         </button>
       )}
 
-      <h2 style={{ fontSize: 18, fontWeight: 600 }}>工具箱（P2：中英空格检测）</h2>
+      <h2 style={{ fontSize: 18, fontWeight: 600 }}>{title}</h2>
+
+      {/* 无 activeTemplate 时提示用户选模板，阻断操作 */}
+      {!activeTemplate && (
+        <div style={{
+          padding: '8px 12px',
+          background: 'var(--c-raised)',
+          border: '1px solid var(--c-border)',
+          borderRadius: 'var(--r-sm)',
+          fontSize: 12,
+          color: 'var(--c-fg-muted)',
+        }}>
+          请先在顶部选择模板后再运行检测
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <button
@@ -136,28 +225,27 @@ export function ToolRunner() {
 
       <button
         onClick={handleDetect}
-        disabled={!file || running}
+        disabled={!file || running || !activeTemplate}
         style={{
           alignSelf: 'flex-start',
           padding: '8px 16px',
-          background: file && !running ? 'var(--c-accent)' : 'var(--c-raised)',
-          color: file && !running ? 'var(--c-accent-text)' : 'var(--c-fg-subtle)',
+          background: file && !running && activeTemplate ? 'var(--c-accent)' : 'var(--c-raised)',
+          color: file && !running && activeTemplate ? 'var(--c-accent-text)' : 'var(--c-fg-subtle)',
           border: 'none',
           borderRadius: 'var(--r-sm)',
-          cursor: file && !running ? 'pointer' : 'default',
+          cursor: file && !running && activeTemplate ? 'pointer' : 'default',
           fontSize: 13,
           fontWeight: 500,
         }}
       >
-        {running ? '检测中…' : '运行检测（cjk_ascii_space）'}
+        {running ? '检测中…' : '运行检测'}
       </button>
 
-      {/* issues 列表：P3 替换为 IssueList 组件，支持单条修复闭环 */}
       {issues && (
         <IssueList
           file={file!}
           issues={issues}
-          ruleValues={P2_RULE_VALUES}
+          ruleValues={ruleValues}
           onChanged={handleDetect}
           onError={setError}
         />
