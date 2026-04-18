@@ -49,10 +49,6 @@ export function RuleTemplateWorkspace({ docxPath, initialName, onSave, onCancel 
   const [currentFieldId, setCurrentFieldId] = useState<string | null>(null);
   // 跳转打断后的回归点：跳回该 id 后恢复顺序推进
   const [interruptReturn, setInterruptReturn] = useState<string | null>(null);
-  // 已从 sidecar 抽取的规则 map，用于 extract_from_selection 时更新字段值
-  const [_extractedRules, setExtractedRules] = useState<
-    Record<string, { enabled: boolean; value: Record<string, unknown> }>
-  >({});
   // 错误提示（sidecar 调用失败时展示）
   const [error, setError] = useState<string | null>(null);
   // 模板名称，来自 Props 或默认值
@@ -71,8 +67,6 @@ export function RuleTemplateWorkspace({ docxPath, initialName, onSave, onCancel 
           file: docxPath,
         });
         if (cancelled) return;
-
-        setExtractedRules(result.rules);
 
         // 将 evidence 列表转为 fieldId → confidence 快速查找 map
         const evidenceMap = new Map(result.evidence.map((e) => [e.field_id, e.confidence]));
@@ -110,7 +104,8 @@ export function RuleTemplateWorkspace({ docxPath, initialName, onSave, onCancel 
 
   // ============================================
   // 辅助：推进到下一个待填字段
-  // 若有 interruptReturn，优先回归；否则顺序推进
+  // 若有 interruptReturn，优先回归；否则按 fields 当前顺序继续
+  // 不在 setFields 回调内调 setCurrentFieldId，避免嵌套 setter 的渲染时序问题
   // ============================================
   const advanceField = () => {
     if (interruptReturn) {
@@ -118,15 +113,12 @@ export function RuleTemplateWorkspace({ docxPath, initialName, onSave, onCancel 
       setInterruptReturn(null);
       return;
     }
-    setFields((prev) => {
-      const idx = prev.findIndex((f) => f.id === currentFieldId);
-      // 从当前字段之后找下一个未完成字段
-      const next = prev.slice(idx + 1).find(
-        (f) => f.status === 'empty' || f.status === 'partial',
-      );
-      setCurrentFieldId(next?.id ?? null);
-      return prev;
-    });
+    const idx = fields.findIndex((f) => f.id === currentFieldId);
+    // 从当前字段之后找下一个未完成字段
+    const next = fields.slice(idx + 1).find(
+      (f) => f.status === 'empty' || f.status === 'partial',
+    );
+    setCurrentFieldId(next?.id ?? null);
   };
 
   // ============================================
@@ -142,12 +134,8 @@ export function RuleTemplateWorkspace({ docxPath, initialName, onSave, onCancel 
         para_indices: [paraIdx],
         field_id: currentFieldId,
       });
-      // 更新抽取规则 map
-      setExtractedRules((prev) => ({
-        ...prev,
-        [currentFieldId]: { enabled: true, value: result.value },
-      }));
       // 更新该字段的状态和值
+      // （字段值直接存入 fields[].value，handleSaveClick 从 fields 聚合最终规则，不需要单独 extractedRules map）
       setFields((prev) =>
         prev.map((f) =>
           f.id === currentFieldId
@@ -171,17 +159,15 @@ export function RuleTemplateWorkspace({ docxPath, initialName, onSave, onCancel 
   // ============================================
   // 跳转到指定字段（临时打断顺序推进）
   // 记录下一个待续字段，完成跳转字段后回到它
+  // 不在 setFields 回调内调 setInterruptReturn/setCurrentFieldId，避免嵌套 setter
   // ============================================
   const handleJump = (fieldId: string) => {
-    setFields((prev) => {
-      const idx = prev.findIndex((f) => f.id === currentFieldId);
-      // 找到当前位置后的下一个未完成字段作为回归点
-      const returnTo = prev.slice(idx + 1).find(
-        (f) => f.status === 'empty' || f.status === 'partial',
-      );
-      setInterruptReturn(returnTo?.id ?? null);
-      return prev;
-    });
+    const idx = fields.findIndex((f) => f.id === currentFieldId);
+    // 找到当前位置后的下一个未完成字段作为回归点
+    const returnTo = fields.slice(idx + 1).find(
+      (f) => f.status === 'empty' || f.status === 'partial',
+    );
+    setInterruptReturn(returnTo?.id ?? null);
     setCurrentFieldId(fieldId);
   };
 

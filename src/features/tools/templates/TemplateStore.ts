@@ -80,10 +80,18 @@ interface TemplateStoreState {
    * 业务逻辑：
    * 1. 找到内置模板 _builtin-gbt7714（必须存在）
    * 2. JSON.parse(JSON.stringify(...)) 强制值复制，确保与内置模板完全隔离
-   * 3. 若传入 fromDocx，调用 sidecar extract_template 覆盖对应 rule value
-   * 4. 调用 template_save_cmd 持久化，再 load() 重读
+   * 3. 若传入 explicitRules，直接使用而非拷贝内置规则（P4 Workspace 流程）
+   * 4. 若传入 fromDocx，调用 sidecar extract_template 覆盖对应 rule value（P3 旧流程，保留兼容）
+   * 5. 调用 template_save_cmd 持久化，再 load() 重读
    */
-  create(name: string, options?: { fromDocx?: string }): Promise<string>;
+  create(
+    name: string,
+    options?: {
+      fromDocx?: string;
+      // P4 Workspace 流程：直接传入用户逐字段确认后的规则 map，不再从内置拷贝
+      explicitRules?: Record<string, { enabled: boolean; value: Record<string, unknown> }>;
+    },
+  ): Promise<string>;
 
   /** 更新模板（write 后 reload） */
   update(id: string, patch: Partial<TemplateJson>): Promise<void>;
@@ -155,13 +163,19 @@ export const useTemplateStore = create<TemplateStoreState>((set, get) => ({
 
   async create(name, options) {
     // ============================================
-    // 第一步：找内置模板并深拷贝 rules
-    // 必须用 JSON 序列化/反序列化，确保值层面完全独立
+    // 第一步：确定 rules 来源
+    // P4 Workspace 流程：explicitRules 直接来自用户逐字段确认，深拷贝后使用
+    // 其他流程：从内置模板深拷贝（必须用 JSON 序列化/反序列化确保值层面独立）
     // ============================================
-    const builtin = get().templates.find((t) => t.id === '_builtin-gbt7714');
-    if (!builtin) throw new Error('Builtin template missing');
+    let deepCloned: TemplateJson['rules'];
 
-    const deepCloned = JSON.parse(JSON.stringify(builtin.rules)) as TemplateJson['rules'];
+    if (options?.explicitRules) {
+      deepCloned = JSON.parse(JSON.stringify(options.explicitRules)) as TemplateJson['rules'];
+    } else {
+      const builtin = get().templates.find((t) => t.id === '_builtin-gbt7714');
+      if (!builtin) throw new Error('Builtin template missing');
+      deepCloned = JSON.parse(JSON.stringify(builtin.rules)) as TemplateJson['rules'];
+    }
 
     // ============================================
     // 第二步：构造新模板对象
@@ -172,16 +186,17 @@ export const useTemplateStore = create<TemplateStoreState>((set, get) => ({
       schema_version: 2,
       id: newId,
       name,
-      source: { type: 'manual' },
+      // P4 Workspace 流程用 extracted source，普通新建用 manual
+      source: options?.explicitRules ? { type: 'extracted' } : { type: 'manual' },
       updated_at: new Date().toISOString(),
       rules: deepCloned,
     };
 
     // ============================================
-    // 第三步（可选）：从 docx 提取规则值覆盖
-    // Task 21 实现 sidecar extract_template 后才可用
+    // 第三步（可选）：旧 P3 extract_template 覆盖路径
+    // 仅在未传 explicitRules 时执行，P4 Workspace 流程不需要再调 sidecar
     // ============================================
-    if (options?.fromDocx) {
+    if (!options?.explicitRules && options?.fromDocx) {
       const extracted = await sidecarInvoke<{ rules: Record<string, { value: unknown }> }>({
         cmd: 'extract_template',
         file: options.fromDocx,

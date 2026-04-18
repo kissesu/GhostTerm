@@ -8,7 +8,7 @@
  *   5. RuleValueEditor allowed shape 渲染 toggle
  *   6. 新建模板：点击按钮 → NamePromptModal 弹出 → 输入名称 → store.create
  *   7. 导入 JSON → invoke template_import_cmd
- *   8. 从 docx 创建：选文件 → NamePromptModal 弹出 → 输入名称 → TemplateExtractor
+ *   8. 从 docx 创建：选文件 → NamePromptModal 弹出 → 输入名称 → RuleTemplateWorkspace
  * @author Atlas.oi
  * @date 2026-04-18
  */
@@ -279,10 +279,10 @@ describe('TemplateManager', () => {
     });
   });
 
-  it('点击「从 docx 创建」选文件 → NamePromptModal 弹出 → 输入名称 → 打开 TemplateExtractor modal', async () => {
-    // sidecarInvoke 在 TemplateExtractor mount 时会被调，mock 返回空结果
+  it('点击「从 docx 创建」选文件 → NamePromptModal 弹出 → 输入名称 → 打开 RuleTemplateWorkspace', async () => {
+    // sidecarInvoke 在 RuleTemplateWorkspace 挂载时调 extract_all，mock 返回空结果
     const { sidecarInvoke: si } = await import('../toolsSidecarClient');
-    vi.mocked(si).mockResolvedValue({ rules: {}, evidence: [] });
+    vi.mocked(si).mockResolvedValue({ rules: {}, evidence: [], unmatched_paragraphs: [] });
 
     useTemplateStore.setState({
       templates: [builtinTpl, userTpl],
@@ -300,22 +300,20 @@ describe('TemplateManager', () => {
 
     fireEvent.click(screen.getByTestId('create-from-docx-btn'));
 
-    // 先等 NamePromptModal 弹出（选文件是异步的）
+    // 等 NamePromptModal 弹出且 defaultValue 通过 useEffect 填入（两步异步：open dialog + useEffect）
     await waitFor(() => {
-      expect(screen.getByTestId('name-prompt-modal')).toBeTruthy();
+      const inp = screen.getByTestId('name-prompt-input') as HTMLInputElement;
+      expect(inp.value).toBe('thesis');
     });
 
-    // defaultValue 应预填去扩展名的文件名 "thesis"
-    const input = screen.getByTestId('name-prompt-input') as HTMLInputElement;
-    expect(input.value).toBe('thesis');
-
     // 输入模板名后确认
+    const input = screen.getByTestId('name-prompt-input') as HTMLInputElement;
     fireEvent.change(input, { target: { value: '论文模板' } });
     fireEvent.click(screen.getByTestId('name-prompt-submit'));
 
-    // TemplateExtractor modal 应弹出
+    // P4 RuleTemplateWorkspace 全屏覆盖层应弹出
     await waitFor(() => {
-      expect(screen.getByTestId('template-extractor')).toBeTruthy();
+      expect(screen.getByTestId('workspace-overlay')).toBeTruthy();
     });
   });
 });
