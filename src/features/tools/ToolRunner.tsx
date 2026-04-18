@@ -95,6 +95,20 @@ export function ToolRunner() {
     return out;
   }, [activeTemplate, activeToolId]);
 
+  // ============================================================
+  // detect 进度展示：统计启用的规则数 + 规则 id 列表
+  // 运行中展示"正在检测 N 条规则..."，完成后展示规则数+违规数汇总
+  // ============================================================
+  const enabledRuleIds = useMemo(() => {
+    if (!activeTemplate) return [] as string[];
+    const filtered = filterTemplateForTool(activeTemplate, activeToolId);
+    return Object.entries(filtered.rules)
+      .filter(([, r]) => r.enabled)
+      .map(([id]) => id);
+  }, [activeTemplate, activeToolId]);
+
+  const ruleCount = enabledRuleIds.length;
+
   // 当前工具箱标题：有选中工具时显示工具名，否则显示通用"工具箱"
   const toolBox = activeToolId ? TOOL_BOXES.find((tb) => tb.id === activeToolId) : null;
   const title = toolBox ? toolBox.label : '工具箱';
@@ -240,6 +254,47 @@ export function ToolRunner() {
       >
         {running ? '检测中…' : '运行检测'}
       </button>
+
+      {/* 检测进行中：显示规则数 + 规则列表，让用户看到"在跑哪些规则" */}
+      {running && (
+        <div
+          data-testid="detect-progress"
+          style={{
+            padding: '10px 14px',
+            background: 'var(--c-raised)',
+            border: '1px solid var(--c-border)',
+            borderRadius: 'var(--r-sm)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+          }}
+        >
+          <div style={{ fontSize: 13, color: 'var(--c-fg)' }}>
+            正在检测 {ruleCount} 条规则…
+          </div>
+          {enabledRuleIds.length > 0 && (
+            <div style={{ fontSize: 11, color: 'var(--c-fg-muted)', wordBreak: 'break-all' }}>
+              规则：{enabledRuleIds.join(' · ')}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 检测完成汇总：替代仅显示"未发现违规"的单一状态，显示扫了多少规则 */}
+      {issues !== null && !running && (
+        <div
+          data-testid="detect-summary"
+          style={{
+            fontSize: 13,
+            color: issues.length === 0 ? 'var(--c-fg-muted)' : 'var(--c-fg)',
+            padding: '6px 0',
+          }}
+        >
+          {issues.length === 0
+            ? `检测完成：已扫描 ${ruleCount} 条规则，未发现违规`
+            : `检测完成：已扫描 ${ruleCount} 条规则，发现 ${issues.length} 处违规`}
+        </div>
+      )}
 
       {issues && (
         <IssueList

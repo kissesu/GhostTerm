@@ -150,6 +150,13 @@ describe('ToolRunner', () => {
     expect(ruleKeys).toContain('chapter.new_page');
     expect(ruleKeys).not.toContain('cjk_ascii_space');
     expect(ruleKeys).not.toContain('citation.format');
+
+    // 检测完成后应显示汇总（2 处违规：font.body + font.h1）
+    await waitFor(() => {
+      const summary = screen.getByTestId('detect-summary');
+      expect(summary.textContent).toContain('4 条规则');
+      expect(summary.textContent).toContain('2 处违规');
+    });
   });
 
   it('无 activeTemplate 时点检测显示错误提示，不调用 sidecarInvoke', async () => {
@@ -172,7 +179,7 @@ describe('ToolRunner', () => {
     expect(vi.mocked(sidecarInvoke)).not.toHaveBeenCalled();
   });
 
-  it('activeToolId=null 时不过滤规则，传完整 template', async () => {
+  it('activeToolId=null 时不过滤规则，传完整 template，完成后显示规则数汇总', async () => {
     setupStoreMocks({ activeToolId: null });
 
     vi.mocked(sidecarInvoke).mockResolvedValue({ issues: [] });
@@ -189,5 +196,11 @@ describe('ToolRunner', () => {
     // activeToolId=null 时返回完整 template（6 条规则）
     const ruleKeys = Object.keys(callArg.template.rules);
     expect(ruleKeys).toHaveLength(6);
+
+    // 无违规时显示"未发现违规"汇总
+    await waitFor(() => {
+      const summary = screen.getByTestId('detect-summary');
+      expect(summary.textContent).toContain('未发现违规');
+    });
   });
 });
