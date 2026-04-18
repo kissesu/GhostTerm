@@ -6,12 +6,16 @@
  * @author Atlas.oi
  * @date 2026-04-18
  */
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { ToolRunner } from './ToolRunner';
 import { useToolsStore } from './toolsStore';
 import { TemplateSelector } from './templates/TemplateSelector';
+import { TemplateManager } from './templates/TemplateManager';
 
 export function ToolsWorkspace() {
+  // 控制 TemplateManager modal 的显示状态
+  const [managerOpen, setManagerOpen] = useState(false);
+
   // Cmd+Z（macOS）/ Ctrl+Z（Windows/Linux）触发 undo
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -29,9 +33,11 @@ export function ToolsWorkspace() {
 
   return (
     <div data-testid="tools-workspace" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-      {/* TemplateSelector 固定在工具面板顶部，Task 9 完成后传入 onManage */}
-      <TemplateSelector />
+      {/* TemplateSelector 固定在工具面板顶部，onManage 打开管理 modal */}
+      <TemplateSelector onManage={() => setManagerOpen(true)} />
       <ToolRunner />
+      {/* 模板管理 modal（isOpen=false 时不渲染任何 DOM） */}
+      <TemplateManager isOpen={managerOpen} onClose={() => setManagerOpen(false)} />
     </div>
   );
 }
