@@ -47,6 +47,7 @@ def find_font(text: str) -> Optional[tuple[str, str]]:
     3. 遇到第一个命中立即返回，不继续扫描
 
     返回 ('cjk' | 'ascii', 字体名) 或 None
+    当文本同时含多个 CJK/ASCII 字体名时，返回哪个是不确定的（frozenset 无序）。
     """
     for font in CJK_FONTS:
         if font in text:

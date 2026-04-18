@@ -57,6 +57,10 @@ class TestFindAlign:
     def test_no_match(self):
         assert find_align('没有对齐词') is None
 
+    def test_align_priority_order(self):
+        # 居中 排在 顶格 之前，ALIGN_MAP 插入顺序使 居中 先命中
+        assert find_align('居中顶格') == 'center'
+
 
 class TestBoldKeyword:
     def test_bold(self):
