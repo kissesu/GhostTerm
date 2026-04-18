@@ -37,18 +37,18 @@ fn test_ensure_builtin_creates_file() {
 
     ensure_builtin_in_dir(&dir).unwrap();
 
-    let builtin_path = dir.join("_builtin-gbt7714.json");
+    let builtin_path = dir.join("_builtin-gbt7714-v2.json");
     assert!(builtin_path.exists(), "内置模板文件应被创建");
 
     // 验证内容可被解析为 TemplateJson
     let content = fs::read_to_string(&builtin_path).unwrap();
     let parsed: TemplateJson = serde_json::from_str(&content).unwrap();
-    assert_eq!(parsed.id, "_builtin-gbt7714");
-    assert_eq!(parsed.schema_version, 1);
+    assert_eq!(parsed.id, "_builtin-gbt7714-v2");
+    assert_eq!(parsed.schema_version, 2);
 
-    // 验证 11 条规则
+    // 验证 32 条规则
     let rules = parsed.rules.as_object().unwrap();
-    assert_eq!(rules.len(), 11, "内置模板应包含 11 条规则，实际: {}", rules.len());
+    assert_eq!(rules.len(), 32, "内置模板应包含 32 条规则，实际: {}", rules.len());
 }
 
 // ============================================
@@ -71,7 +71,7 @@ fn test_save_then_list() {
     assert_eq!(list.len(), 2, "应有 2 条模板，实际: {}", list.len());
 
     let ids: Vec<&str> = list.iter().map(|t| t.id.as_str()).collect();
-    assert!(ids.contains(&"_builtin-gbt7714"), "列表应含内置模板");
+    assert!(ids.contains(&"_builtin-gbt7714-v2"), "列表应含内置模板");
     assert!(ids.contains(&"my-template"), "列表应含用户模板");
 }
 
@@ -84,11 +84,11 @@ fn test_delete_builtin_auto_rebuilds() {
     let dir = tmp.path().to_path_buf();
 
     ensure_builtin_in_dir(&dir).unwrap();
-    let builtin_path = dir.join("_builtin-gbt7714.json");
+    let builtin_path = dir.join("_builtin-gbt7714-v2.json");
     assert!(builtin_path.exists());
 
     // delete 内置模板（delete_template 在删内置时自动调 ensure_builtin_in_dir）
-    delete_template(&dir, "_builtin-gbt7714").unwrap();
+    delete_template(&dir, "_builtin-gbt7714-v2").unwrap();
 
     // 文件应自动重建（delete_template 对内置 id 会自动 ensure）
     assert!(builtin_path.exists(), "删除内置模板后应自动重建");
