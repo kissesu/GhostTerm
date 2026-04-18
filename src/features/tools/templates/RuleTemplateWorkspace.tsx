@@ -172,6 +172,24 @@ export function RuleTemplateWorkspace({ docxPath, initialName, onSave, onCancel 
   };
 
   // ============================================
+  // 用户手动编辑某属性行
+  // 将新值写入对应字段的 value map，并将置信度升为 1.0（满分）
+  // 因为用户手动确认视为最可信来源，不再需要 sidecar 推断
+  // ============================================
+  const handleAttrChange = (fieldId: string, attrKey: string, newValue: unknown) => {
+    setFields((prev) => prev.map((f) =>
+      f.id === fieldId
+        ? {
+            ...f,
+            value: { ...(f.value ?? {}), [attrKey]: newValue },
+            status: 'done',
+            confidence: 1.0,
+          }
+        : f,
+    ));
+  };
+
+  // ============================================
   // 跳过当前字段
   // 将字段状态标记为 skipped，若是当前字段则顺序推进
   // ============================================
@@ -312,6 +330,7 @@ export function RuleTemplateWorkspace({ docxPath, initialName, onSave, onCancel 
             currentFieldId={currentFieldId}
             onJump={handleJump}
             onSkip={handleSkip}
+            onAttrChange={handleAttrChange}
           />
         </div>
       </div>
