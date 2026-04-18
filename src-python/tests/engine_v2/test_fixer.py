@@ -99,3 +99,11 @@ class TestFixV2:
         value = {'font.size_pt': 12}
         result = fix_v2(str(path), issue, value)
         assert result['applied'] is False
+
+    def test_fix_para_align_unknown_value_no_op(self, tmp_path):
+        """para.align 传入未知值应返回 applied=False，不破坏段落对齐"""
+        path = make_bad_doc(tmp_path)
+        issue = {'rule_id': 'body_para', 'attr': 'para.align', 'para_idx': 0}
+        value = {'para.align': 'distributed'}  # 不在支持枚举内
+        result = fix_v2(str(path), issue, value)
+        assert result['applied'] is False

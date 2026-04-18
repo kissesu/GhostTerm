@@ -9,9 +9,23 @@ from typing import Any
 from docx import Document
 from docx.shared import Pt, RGBColor
 from docx.oxml.ns import qn
+from lxml import etree
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 # 修复标记蓝色：Microsoft Word 修订蓝，视觉辨识度高且不干扰文字可读性
 _MARK_COLOR = RGBColor(0x00, 0x70, 0xC0)
+
+# 首行缩进换算基数：默认按正文 12pt（小四号）换算，与 spec 对齐。
+# 当模板正文字号不是 12pt 时，此换算不准确，但作为 v2 的默认值可接受。
+_BODY_SIZE_PT = 12.0
+
+# 对齐方式名→枚举映射，定义在模块级避免每次调用重建
+_ALIGN_MAP: dict[str, WD_ALIGN_PARAGRAPH] = {
+    'left': WD_ALIGN_PARAGRAPH.LEFT,
+    'center': WD_ALIGN_PARAGRAPH.CENTER,
+    'right': WD_ALIGN_PARAGRAPH.RIGHT,
+    'justify': WD_ALIGN_PARAGRAPH.JUSTIFY,
+}
 
 # 可修复的属性集合，detector 用此过滤 fix_available 标志
 # 注意：此处列出的 attr_key 必须与 checkers.py 中的键名一致
@@ -64,12 +78,13 @@ def fix_v2(file: str, issue: dict, value: dict[str, Any]) -> dict:
         run.font.size = Pt(expected)
 
     elif attr == 'font.cjk':
-        before_summary = f'font.cjk: ?'
         # 中文字体写在 w:rFonts/@w:eastAsia，python-docx 无直接属性，需操作 XML
         rpr = run._element.get_or_add_rPr()
         rfonts = rpr.find(qn('w:rFonts'))
+        # 先读取现有值作为 before_summary，再决定是否需要新建节点
+        existing_cjk = rfonts.get(qn('w:eastAsia'), '?') if rfonts is not None else '?'
+        before_summary = f'font.cjk: {existing_cjk}'
         if rfonts is None:
-            from lxml import etree
             rfonts = etree.SubElement(rpr, qn('w:rFonts'))
         rfonts.set(qn('w:eastAsia'), expected)
 
@@ -78,22 +93,17 @@ def fix_v2(file: str, issue: dict, value: dict[str, Any]) -> dict:
         run.font.bold = expected
 
     elif attr == 'para.align':
-        from docx.enum.text import WD_ALIGN_PARAGRAPH
-        # 字符串对齐名 → WD_ALIGN_PARAGRAPH 枚举值
-        align_map = {
-            'left': WD_ALIGN_PARAGRAPH.LEFT,
-            'center': WD_ALIGN_PARAGRAPH.CENTER,
-            'right': WD_ALIGN_PARAGRAPH.RIGHT,
-            'justify': WD_ALIGN_PARAGRAPH.JUSTIFY,
-        }
+        # 未知对齐值：不能用 None 写入（会静默清除对齐），直接返回 applied=False
+        if expected not in _ALIGN_MAP:
+            return {'diff': '', 'applied': False, 'xml_changed': []}
         before_summary = f'para.align: {para.paragraph_format.alignment}'
-        para.paragraph_format.alignment = align_map.get(expected)
+        para.paragraph_format.alignment = _ALIGN_MAP[expected]
 
     elif attr == 'para.first_line_indent_chars':
         before_summary = f'para.first_line_indent_chars: ?'
-        # 按正文 12pt 字号换算字符数到 EMU（1pt = 12700 EMU）
+        # 按 _BODY_SIZE_PT 换算字符数到 EMU（1pt = 12700 EMU）
         # 2个字符首行缩进 = 2 × 12pt = 24pt
-        para.paragraph_format.first_line_indent = Pt(expected * 12)
+        para.paragraph_format.first_line_indent = Pt(expected * _BODY_SIZE_PT)
 
     else:
         # 未知 attr，不支持修复
