@@ -96,6 +96,43 @@ class TestCancel:
         assert resp['result']['cancelled'] is True
 
 
+class TestExtractTemplate:
+    def test_extract_template_returns_rules_and_evidence(self, tmp_path):
+        """正常 docx → ok=True，result 含所有 REGISTRY 规则 + evidence 列表"""
+        from docx import Document as _Doc
+        # 创建一个最小合法 docx（含一个段落，使 python-docx 可正常读取正文样式）
+        tmp = tmp_path / 'sample.docx'
+        doc = _Doc()
+        doc.add_paragraph('测试段落 test paragraph')
+        doc.save(str(tmp))
+
+        resp = handle({'id': 'e1', 'cmd': 'extract_template', 'file': str(tmp)})
+        assert resp['ok'] is True
+        result = resp['result']
+        # 必须含 rules 和 evidence 两个顶层字段
+        assert 'rules' in result
+        assert 'evidence' in result
+        # rules 应覆盖全部 REGISTRY 条目（当前 11 条）
+        from thesis_worker.rules import REGISTRY
+        assert set(result['rules'].keys()) == set(REGISTRY.keys())
+        # evidence 列表长度与 rules 数量一致
+        assert len(result['evidence']) == len(REGISTRY)
+
+    def test_extract_template_file_not_found_returns_enoent(self):
+        """不存在文件 → ok=False, code=ENOENT"""
+        resp = handle({'id': 'e2', 'cmd': 'extract_template', 'file': '/nonexistent/fake.docx'})
+        assert resp['ok'] is False
+        assert resp['code'] == 'ENOENT'
+
+    def test_extract_template_malformed_docx_returns_parse_error(self, tmp_path):
+        """非合法 docx（纯文本写入）→ ok=False, code=PARSE_ERROR"""
+        fake = tmp_path / 'fake.docx'
+        fake.write_text('this is not a docx file', encoding='utf-8')
+        resp = handle({'id': 'e3', 'cmd': 'extract_template', 'file': str(fake)})
+        assert resp['ok'] is False
+        assert resp['code'] == 'PARSE_ERROR'
+
+
 class TestRuleException:
     def test_rule_raising_exception_aborts_batch(self, monkeypatch):
         """按 spec Section 7：规则异常 → 整批中止，抛 RULE_ERROR"""

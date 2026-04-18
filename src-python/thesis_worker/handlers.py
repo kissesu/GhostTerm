@@ -40,6 +40,9 @@ def handle(req: dict) -> dict:
             # P3 单线程串行，cancel 只做 ack；真实中断留 P4 实现
             return {'id': req_id, 'ok': True, 'result': {'cancelled': True}}
 
+        if cmd == 'extract_template':
+            return _handle_extract_template(req_id, req)
+
         return {
             'id': req_id, 'ok': False,
             'error': f'unknown cmd: {cmd}',
@@ -171,3 +174,24 @@ def _handle_fix_preview(req_id: str, req: dict) -> dict:
     result.applied = False
 
     return {'id': req_id, 'ok': True, 'result': result.to_dict()}
+
+
+def _handle_extract_template(req_id: str, req: dict) -> dict:
+    """
+    从 docx 文件反推模板规则值。
+
+    业务逻辑：
+    1. ENOENT 检查必须在 extract_from_docx 前：python-docx 在路径不存在时
+       抛出的 PackageNotFoundError 与 malformed docx 相同，无法区分两种错误
+    2. 调用 extractor.extract_from_docx(file)，内部自行 Document(file)
+    3. PackageNotFoundError 在 extractor 内部触发时向上冒泡，此处捕获转 PARSE_ERROR
+    """
+    file = req['file']
+    if not Path(file).exists():
+        return {'id': req_id, 'ok': False, 'error': f'file not found: {file}', 'code': 'ENOENT'}
+    try:
+        from .extractor import extract_from_docx
+        result = extract_from_docx(file)
+        return {'id': req_id, 'ok': True, 'result': result}
+    except PackageNotFoundError:
+        return {'id': req_id, 'ok': False, 'error': f'docx malformed: {file}', 'code': 'PARSE_ERROR'}
