@@ -107,4 +107,30 @@ describe('formatFieldValue', () => {
     const result = formatFieldValue({ 'page.print_mode': 'single' });
     expect(result).toContain('单面打印');
   });
+
+  // ── T3.2: table.* namespace attr 中文片段输出 ──────────────────
+  it('table.is_three_line true → 三线表', () => {
+    const result = formatFieldValue({ 'table.is_three_line': true });
+    expect(result).toContain('三线表');
+  });
+
+  it('table.is_three_line false → 空串（不显示负向描述）', () => {
+    const result = formatFieldValue({ 'table.is_three_line': false });
+    expect(result).toBe('');
+  });
+
+  it('table.border_top_pt → 表格上线 Xpt', () => {
+    const result = formatFieldValue({ 'table.border_top_pt': 1.5 });
+    expect(result).toContain('表格上线 1.5pt');
+  });
+
+  it('table.border_bottom_pt → 表格下线 Xpt', () => {
+    const result = formatFieldValue({ 'table.border_bottom_pt': 1.5 });
+    expect(result).toContain('表格下线 1.5pt');
+  });
+
+  it('table.header_border_pt → 表头下线 Xpt', () => {
+    const result = formatFieldValue({ 'table.header_border_pt': 0.5 });
+    expect(result).toContain('表头下线 0.5pt');
+  });
 });

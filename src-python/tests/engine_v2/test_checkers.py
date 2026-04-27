@@ -49,6 +49,11 @@ from thesis_worker.engine_v2.checkers import (
     check_para_space_before_lines,
     check_para_space_before_pt,
     check_para_space_after_pt,
+    # T3.2: table.* namespace
+    check_table_is_three_line,
+    check_table_border_top_pt,
+    check_table_border_bottom_pt,
+    check_table_header_border_pt,
 )
 from thesis_worker.engine_v2.field_defs import FIELD_DEFS
 
@@ -723,3 +728,172 @@ class TestPagePrintMode:
         assert issue is not None
         assert issue['actual'] == 'double'
         assert issue['expected'] == 'single'
+
+
+# ───────────────────────────────────────────────
+# T3.2: table.* namespace checker 测试
+# ───────────────────────────────────────────────
+
+def _doc_with_three_line_table(top_sz: int = 12, bottom_sz: int = 12, inside_h_sz: int = 4) -> Document:
+    """构造含三线表 tblBorders 的文档辅助函数。
+
+    参数均使用 eighth-points（OOXML 原生单位）：
+    - top_sz=12 → 1.5pt（规范上线）
+    - bottom_sz=12 → 1.5pt（规范下线）
+    - inside_h_sz=4 → 0.5pt（规范表头下线）
+    不注入 insideV → 视为 0，即无纵格线（三线表特征）。
+    """
+    from lxml import etree
+    doc = Document()
+    table = doc.add_table(rows=2, cols=2)
+    tbl_pr = table._element.find(qn('w:tblPr'))
+    borders = etree.SubElement(tbl_pr, qn('w:tblBorders'))
+    for tag, sz in [('top', top_sz), ('bottom', bottom_sz), ('insideH', inside_h_sz)]:
+        el = etree.SubElement(borders, qn(f'w:{tag}'))
+        el.set(qn('w:sz'), str(sz))
+        el.set(qn('w:val'), 'single')
+    return doc
+
+
+def _doc_with_full_border_table() -> Document:
+    """构造含四边全线表格（非三线表）的文档：insideV 有值。"""
+    from lxml import etree
+    doc = Document()
+    table = doc.add_table(rows=2, cols=2)
+    tbl_pr = table._element.find(qn('w:tblPr'))
+    borders = etree.SubElement(tbl_pr, qn('w:tblBorders'))
+    for tag, sz in [('top', 12), ('bottom', 12), ('insideH', 4), ('insideV', 8)]:
+        el = etree.SubElement(borders, qn(f'w:{tag}'))
+        el.set(qn('w:sz'), str(sz))
+        el.set(qn('w:val'), 'single')
+    return doc
+
+
+class TestTableIsThreeLine:
+    """三线表判定检查器。
+
+    判别力设计：
+    - PASS case：仅有 top/bottom/insideH，无 insideV → 判定为三线表。
+    - FAIL case：注入 insideV（sz=8）→ 存在纵格线，不是三线表。
+    - None path：文档无表格时 actual=False，expected=False → None（无 issue）。
+    删除 check_table_is_three_line 主体后两个 PASS/FAIL case 会互换结果，测试必挂。
+    """
+
+    def test_three_line_table_passes(self):
+        # 三线表：无 insideV，top/bottom > 0 → actual=True，expected=True → None
+        doc = _doc_with_three_line_table()
+        assert check_table_is_three_line(doc, True) is None
+
+    def test_full_border_table_fails(self):
+        # 有 insideV（sz=8=1pt）→ 不是三线表，actual=False，expected=True → issue
+        doc = _doc_with_full_border_table()
+        issue = check_table_is_three_line(doc, True)
+        assert issue is not None
+        assert issue['attr'] == 'table.is_three_line'
+        assert issue['actual'] is False
+        assert issue['expected'] is True
+
+    def test_no_table_returns_none_when_expected_false(self):
+        # 文档无表格 → actual=False；expected=False → 符合规范，返回 None
+        doc = Document()
+        assert check_table_is_three_line(doc, False) is None
+
+    def test_no_table_returns_issue_when_expected_true(self):
+        # 文档无表格 → actual=False；expected=True → 违规，返回 issue
+        doc = Document()
+        issue = check_table_is_three_line(doc, True)
+        assert issue is not None
+        assert issue['actual'] is False
+
+
+class TestTableBorderTopPt:
+    """表格上边框线宽检查器（容差 0.1pt）。
+
+    判别力设计：
+    - PASS：sz=12 eighth-pts = 1.5pt，expected=1.5 → 差 0 < 0.1 → None。
+    - FAIL：sz=12 = 1.5pt，expected=3.0 → 差 1.5 > 0.1 → issue。
+    - 容差边界：sz=12 = 1.5pt，expected=1.57（差 0.07 < 0.1）→ None。
+    - None path：文档无表格，actual=0.0，expected=0.0 → None。
+    """
+
+    def test_pass_exact(self):
+        # sz=12 eighth-pts = 1.5pt，expected=1.5 → 通过
+        doc = _doc_with_three_line_table(top_sz=12)
+        assert check_table_border_top_pt(doc, 1.5) is None
+
+    def test_fail_mismatch(self):
+        # sz=12 = 1.5pt，expected=3.0 → 违规
+        doc = _doc_with_three_line_table(top_sz=12)
+        issue = check_table_border_top_pt(doc, 3.0)
+        assert issue is not None
+        assert issue['attr'] == 'table.border_top_pt'
+        # actual 应为 1.5（不是 3.0）
+        assert abs(issue['actual'] - 1.5) < 0.01
+
+    def test_tolerance_boundary_pass(self):
+        # sz=12 = 1.5pt，expected=1.57（差 0.07 < 0.1）→ 容差内，通过
+        doc = _doc_with_three_line_table(top_sz=12)
+        assert check_table_border_top_pt(doc, 1.57) is None
+
+    def test_no_table_zero_matches_zero(self):
+        # 文档无表格 → actual=0.0；expected=0.0 → None
+        doc = Document()
+        assert check_table_border_top_pt(doc, 0.0) is None
+
+
+class TestTableBorderBottomPt:
+    """表格下边框线宽检查器（容差 0.1pt）。
+
+    判别力设计：sz=12=1.5pt vs expected 两个互斥值覆盖两条路径。
+    """
+
+    def test_pass_exact(self):
+        doc = _doc_with_three_line_table(bottom_sz=12)
+        assert check_table_border_bottom_pt(doc, 1.5) is None
+
+    def test_fail_mismatch(self):
+        # sz=12 = 1.5pt，expected=0.5 → 差 1.0 > 0.1 → 违规
+        doc = _doc_with_three_line_table(bottom_sz=12)
+        issue = check_table_border_bottom_pt(doc, 0.5)
+        assert issue is not None
+        assert issue['attr'] == 'table.border_bottom_pt'
+        assert abs(issue['actual'] - 1.5) < 0.01
+
+    def test_no_table_returns_none(self):
+        # 文档无表格 → actual=0.0；expected=0.0 → None
+        doc = Document()
+        assert check_table_border_bottom_pt(doc, 0.0) is None
+
+
+class TestTableHeaderBorderPt:
+    """表头下边框线宽检查器（insideH，容差 0.1pt）。
+
+    判别力设计：
+    - PASS：sz=4 eighth-pts = 0.5pt，expected=0.5 → 通过（三线表标准值）。
+    - FAIL：sz=4 = 0.5pt，expected=1.5 → 差 1.0 > 0.1 → 违规（与上下线混淆可检出）。
+    - 容差边界：sz=4 = 0.5pt，expected=0.55（差 0.05 < 0.1）→ 通过。
+    - None path：文档无表格 → actual=0.0；expected=0.0 → None。
+    """
+
+    def test_pass_standard_half_pt(self):
+        # sz=4 eighth-pts = 0.5pt，符合规范表头下线标准值
+        doc = _doc_with_three_line_table(inside_h_sz=4)
+        assert check_table_header_border_pt(doc, 0.5) is None
+
+    def test_fail_wrong_expected(self):
+        # sz=4 = 0.5pt，但期望 1.5pt → 违规，防止把 header 和 top/bottom 搞混
+        doc = _doc_with_three_line_table(inside_h_sz=4)
+        issue = check_table_header_border_pt(doc, 1.5)
+        assert issue is not None
+        assert issue['attr'] == 'table.header_border_pt'
+        assert abs(issue['actual'] - 0.5) < 0.01
+
+    def test_tolerance_boundary_pass(self):
+        # sz=4 = 0.5pt，expected=0.55（差 0.05 < 0.1）→ 容差内通过
+        doc = _doc_with_three_line_table(inside_h_sz=4)
+        assert check_table_header_border_pt(doc, 0.55) is None
+
+    def test_no_table_returns_none(self):
+        # 文档无表格 → actual=0.0；expected=0.0 → None
+        doc = Document()
+        assert check_table_header_border_pt(doc, 0.0) is None

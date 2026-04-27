@@ -21,8 +21,12 @@
                     toc_title.applicable_attributes 追加同上两项；
                     page_margin.applicable_attributes 追加 page.margin_gutter_cm /
                     page.header_offset_cm / page.footer_offset_cm / page.print_mode。
+              T3.2: 新增 table.* namespace（4 个 attr），覆盖三线表规范（上下线 1.5pt/表头下线 0.5pt）：
+                    table_header.applicable_attributes 末尾追加 table.is_three_line /
+                    table.border_top_pt / table.border_bottom_pt / table.header_border_pt，
+                    共 8 attr；table_caption / table_inner_text 不变。
 @author: Atlas.oi
-@date: 2026-04-27
+@date: 2026-04-28
 """
 from typing import Optional
 
@@ -128,8 +132,16 @@ FIELD_DEFS: list[dict] = [
         # 规范层对表头（首行格式/下边框线）与表内容（小五宋体）是分开规定的两件事，
         # 合并为 table_inner_text 会导致规范校验无法区分两者。
         # T2.2 后 order 由 20 → 22
+        # T3.2: 追加 4 个 table.* attr（三线表判定 + 三条边框线宽）。
+        # 表格线宽属于"表格结构"语义，挂在 table_header 字段是因为表头行承载了
+        # 三线表最关键的边框（表头下线），将线宽约束与表头字体约束统一到同一字段
+        # 可以避免新增字段（保持总字段数 37 不变）。
         'id': 'table_header', 'label': '表头', 'group': 'body', 'order': 22,
-        'applicable_attributes': ['font.cjk', 'font.size_pt', 'font.bold', 'para.align'],
+        'applicable_attributes': [
+            'font.cjk', 'font.size_pt', 'font.bold', 'para.align',
+            # T3.2: table namespace 4 attr（三线表 + 三条边框线宽 pt）
+            'table.is_three_line', 'table.border_top_pt', 'table.border_bottom_pt', 'table.header_border_pt',
+        ],
     },
     {
         'id': 'table_inner_text', 'label': '表内容', 'group': 'body', 'order': 23,

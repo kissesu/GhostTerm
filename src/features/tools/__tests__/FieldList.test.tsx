@@ -234,6 +234,45 @@ describe('FieldList', () => {
     expect(screen.getByTestId('attr-footer-offset')).toBeInTheDocument();
   });
 
+  // ─────────────────────────────────────────────
+  // T3.2: table.* namespace attr 渲染断言
+  // ─────────────────────────────────────────────
+
+  it('T3.2: table_header 渲染管线包含 4 个 table.* attr 的编辑器', () => {
+    // table_header.applicable_attributes T3.2 后包含 4 个 table.* attr
+    const fields = [
+      {
+        id: 'table_header',
+        label: '表头',
+        status: 'done' as const,
+        confidence: 0.9,
+        value: {
+          'table.is_three_line': true,
+          'table.border_top_pt': 1.5,
+          'table.border_bottom_pt': 1.5,
+          'table.header_border_pt': 0.5,
+        },
+      },
+    ];
+    render(
+      <FieldList
+        fields={fields}
+        currentFieldId={null}
+        onJump={vi.fn()}
+        onSkip={vi.fn()}
+        onAttrChange={vi.fn()}
+      />
+    );
+    // attr-three-line → Toggle（table.is_three_line）
+    expect(screen.getByTestId('attr-three-line')).toBeInTheDocument();
+    // attr-border-top → NumberInput（table.border_top_pt）
+    expect(screen.getByTestId('attr-border-top')).toBeInTheDocument();
+    // attr-border-bottom → NumberInput（table.border_bottom_pt）
+    expect(screen.getByTestId('attr-border-bottom')).toBeInTheDocument();
+    // attr-border-header → NumberInput（table.header_border_pt）
+    expect(screen.getByTestId('attr-border-header')).toBeInTheDocument();
+  });
+
   it('calls onAttrChange with correct args when editor value changes', () => {
     // 构造一个字段，只测试 font.cjk（CjkFontSelect，select 元素可 fireEvent.change）
     const fields = [

@@ -17,6 +17,9 @@
  *         chapter_title + toc_title 追加 para.space_before_pt / para.space_after_pt；
  *         page_margin 追加 page.margin_gutter_cm / page.header_offset_cm /
  *         page.footer_offset_cm / page.print_mode（并入而非新建字段）。
+ *   T3.2: 新增 table.* namespace 4 attr，table_header 追加：
+ *         table.is_three_line / table.border_top_pt / table.border_bottom_pt /
+ *         table.header_border_pt（共 8 attr）；table_caption / table_inner_text 不变。
  * @author Atlas.oi
  * @date 2026-04-28
  */
@@ -200,11 +203,15 @@ export const FIELD_DEFS: FieldDef[] = [
     // 规范层对表头（首行格式/下边框线）与表内容（小五宋体）是分开规定的两件事，
     // 合并为 table_inner_text 会导致规范校验无法区分两者。
     // T2.2 后 order 由 20 → 22
+    // T3.2: 追加 4 个 table.* attr（三线表判定 + 三条边框线宽 pt）
     id: 'table_header',
     label: '表头',
     group: 'body',
     order: 22,
-    applicable_attributes: ['font.cjk', 'font.size_pt', 'font.bold', 'para.align'],
+    applicable_attributes: [
+      'font.cjk', 'font.size_pt', 'font.bold', 'para.align',
+      'table.is_three_line', 'table.border_top_pt', 'table.border_bottom_pt', 'table.header_border_pt',
+    ],
   },
   {
     id: 'table_inner_text',

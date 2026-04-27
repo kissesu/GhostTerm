@@ -178,6 +178,73 @@ class TestExtractFromSelectionWithSelectedText:
         # p1 = 摘要标题行，居中对齐
         assert result['value'].get('para.align') == 'center'
 
+class TestT32TableAttrsExtraction:
+    """T3.2: 验证 extract_all 能正确抽取 table.* 属性并写入 table_header 字段"""
+
+    def test_three_line_table_attrs_in_table_header(self, tmp_path):
+        """构造含三线表 tblBorders 的 docx，断言 extract_all 将 4 个 table.* attr
+        写入 rules['table_header']['value']。
+
+        三线表规格（eighth-points）：
+        - top=12 → 1.5pt（规范上线）
+        - bottom=12 → 1.5pt（规范下线）
+        - insideH=4 → 0.5pt（规范表头下线）
+        无 insideV → 视为 0，三线表判定 True。
+        """
+        from docx import Document
+        from docx.oxml.ns import qn
+        from lxml import etree
+        doc = Document()
+        table = doc.add_table(rows=2, cols=2)
+        tbl_pr = table._element.find(qn('w:tblPr'))
+        borders = etree.SubElement(tbl_pr, qn('w:tblBorders'))
+        for tag, sz in [('top', 12), ('bottom', 12), ('insideH', 4)]:
+            el = etree.SubElement(borders, qn(f'w:{tag}'))
+            el.set(qn('w:sz'), str(sz))
+            el.set(qn('w:val'), 'single')
+        docx_path = tmp_path / 'three_line_table.docx'
+        doc.save(str(docx_path))
+
+        result = extract_all(str(docx_path))
+        assert 'table_header' in result['rules'], (
+            f'table_header 字段应由表格属性触发写入；实际 rules keys={list(result["rules"].keys())}'
+        )
+        value = result['rules']['table_header']['value']
+
+        # 全部 4 个 table.* attr 必须存在
+        assert 'table.is_three_line' in value, f'缺 table.is_three_line；value={value}'
+        assert 'table.border_top_pt' in value, f'缺 table.border_top_pt；value={value}'
+        assert 'table.border_bottom_pt' in value, f'缺 table.border_bottom_pt；value={value}'
+        assert 'table.header_border_pt' in value, f'缺 table.header_border_pt；value={value}'
+
+        # 值正确性：eighth-points → pt 换算（sz/8）
+        assert value['table.is_three_line'] is True
+        assert abs(value['table.border_top_pt'] - 1.5) < 0.01
+        assert abs(value['table.border_bottom_pt'] - 1.5) < 0.01
+        assert abs(value['table.header_border_pt'] - 0.5) < 0.01
+
+    def test_no_table_does_not_inject_table_attrs(self, tmp_path):
+        """文档无表格时，extract_all 不应在 table_header 中注入 table.* attr。
+
+        table_header 字段可能由段落路径被命中（如规范文档含"表头"关键词），
+        但 value 中不应含 table.* 前缀的 attr。
+        """
+        from docx import Document
+        doc = Document()
+        doc.add_paragraph('无表格内容')
+        docx_path = tmp_path / 'no_table.docx'
+        doc.save(str(docx_path))
+
+        result = extract_all(str(docx_path))
+        # 若 table_header 字段存在（由段落路径命中），其 value 不应含 table.* attr
+        if 'table_header' in result['rules']:
+            value = result['rules']['table_header']['value']
+            for key in value:
+                assert not key.startswith('table.'), (
+                    f'无表格文档的 table_header 不应含 table.* attr；实际 key={key}'
+                )
+
+
     def test_extract_from_selection_with_selected_text_isolates_run(self, tmp_path):
         """构造 2-run 段落：run0 加粗，run1 不加粗；selected_text 只命中 run1。
 

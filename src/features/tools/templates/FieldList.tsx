@@ -41,6 +41,18 @@ const ATTR_LABEL: Record<string, string> = {
   'mixed_script.punct_space_after': '英文标点后空一字符',
   'layout.position': '图表位置',
   'citation.style': '引文样式',
+  // T3.1: 补齐磅值段间距 + 装订线/页眉脚距/打印模式
+  'para.space_before_pt': '段前（pt）',
+  'para.space_after_pt': '段后（pt）',
+  'page.margin_gutter_cm': '装订线',
+  'page.header_offset_cm': '页眉边距',
+  'page.footer_offset_cm': '页脚边距',
+  'page.print_mode': '打印模式',
+  // T3.2: table namespace
+  'table.is_three_line': '三线表',
+  'table.border_top_pt': '上边框（pt）',
+  'table.border_bottom_pt': '下边框（pt）',
+  'table.header_border_pt': '表头下线（pt）',
 };
 
 // 字段状态类型：done=已填写，partial=部分填写，empty=待填写，skipped=已跳过

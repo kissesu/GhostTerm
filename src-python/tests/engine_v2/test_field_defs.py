@@ -1,7 +1,8 @@
 """
 @file: test_field_defs.py
 @description: 37 字段定义测试（T2.1 新增 table_header / T2.2 拆分 toc_entry 为 l1/l2/l3 /
-              T2.3 新增 formula_block / T2.4 新增 footnote / T3.1 追加 6 个 attr key）
+              T2.3 新增 formula_block / T2.4 新增 footnote / T3.1 追加 6 个 attr key /
+              T3.2 table_header 追加 4 个 table.* attr）
 @author: Atlas.oi
 @date: 2026-04-28
 """
@@ -50,10 +51,13 @@ class TestFieldDefs:
         assert f['order'] == 22
 
     def test_table_header_applicable_attributes(self):
-        # 白名单精确：规范层对表头的约束仅 4 项，不多不少
+        # T3.2: table_header 追加 4 个 table.* attr 后共 8 个，白名单精确
         attrs = applicable_attrs('table_header')
-        assert set(attrs) == {'font.cjk', 'font.size_pt', 'font.bold', 'para.align'}
-        assert len(attrs) == 4
+        assert set(attrs) == {
+            'font.cjk', 'font.size_pt', 'font.bold', 'para.align',
+            'table.is_three_line', 'table.border_top_pt', 'table.border_bottom_pt', 'table.header_border_pt',
+        }
+        assert len(attrs) == 8
 
     def test_table_inner_text_order_is_23(self):
         # T2.2 后 table_inner_text 由 21 → 23
@@ -222,3 +226,36 @@ class TestFieldDefs:
         attrs = applicable_attrs('subsection_title')
         assert 'para.space_before_pt' not in attrs
         assert 'para.space_after_pt' not in attrs
+
+    # ─────────────────────────────────────────────
+    # T3.2: table.* namespace 4 attr 绑定断言
+    # ─────────────────────────────────────────────
+
+    def test_table_header_has_table_namespace_attrs(self):
+        # T3.2: table_header 必须含 4 个 table.* attr
+        attrs = applicable_attrs('table_header')
+        assert 'table.is_three_line' in attrs
+        assert 'table.border_top_pt' in attrs
+        assert 'table.border_bottom_pt' in attrs
+        assert 'table.header_border_pt' in attrs
+        # 原有 4 个 font/para attr 保留
+        assert 'font.cjk' in attrs
+        assert 'font.size_pt' in attrs
+        assert 'font.bold' in attrs
+        assert 'para.align' in attrs
+        # 总数为 8，确保无多余字段
+        assert len(attrs) == 8
+
+    def test_table_caption_not_changed_by_t32(self):
+        # table_caption 不受 T3.2 影响：线宽属于表格结构，不挂在表题字段
+        attrs = applicable_attrs('table_caption')
+        assert 'table.is_three_line' not in attrs
+        assert 'table.border_top_pt' not in attrs
+        assert set(attrs) == {'font.cjk', 'font.size_pt', 'para.align', 'layout.position'}
+
+    def test_table_inner_text_not_changed_by_t32(self):
+        # table_inner_text 不受 T3.2 影响
+        attrs = applicable_attrs('table_inner_text')
+        assert 'table.is_three_line' not in attrs
+        assert 'table.border_top_pt' not in attrs
+        assert set(attrs) == {'font.cjk', 'font.size_pt'}

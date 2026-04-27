@@ -121,6 +121,16 @@ function formatAttr(key: string, value: unknown): string {
       return LAYOUT_POSITION_LABEL[String(value)] ?? String(value);
     case 'citation.style':
       return `引文样式：${value}`;
+    // T3.2: table namespace（三线表 + 边框线宽）
+    case 'table.is_three_line':
+      // 仅 true 时输出中文标签，false 不输出（避免"不是三线表"的负向描述污染摘要行）
+      return value === true ? '三线表' : '';
+    case 'table.border_top_pt':
+      return `表格上线 ${value}pt`;
+    case 'table.border_bottom_pt':
+      return `表格下线 ${value}pt`;
+    case 'table.header_border_pt':
+      return `表头下线 ${value}pt`;
     default:
       // 未识别 key：保持原样展示，便于 debug + 不丢信息
       return `${key}=${String(value)}`;

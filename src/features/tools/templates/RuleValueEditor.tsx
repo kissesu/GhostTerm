@@ -737,6 +737,44 @@ export function RuleValueEditorByAttr({ attr, value, onChange }: RuleValueEditor
         />
       );
 
+    // ── 表格结构属性（T3.2）──────────────────────
+    // T3.2: 三线表开关（布尔，Toggle）
+    case 'table.is_three_line':
+      return (
+        <Toggle
+          testId="attr-three-line"
+          checked={(value as boolean) ?? false}
+          onChange={onChange}
+        />
+      );
+
+    // T3.2: 表格上边框线宽（pt，数值输入）
+    case 'table.border_top_pt':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.1} min={0} testId="attr-border-top" />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>pt</span>
+        </span>
+      );
+
+    // T3.2: 表格下边框线宽（pt，数值输入）
+    case 'table.border_bottom_pt':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.1} min={0} testId="attr-border-bottom" />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>pt</span>
+        </span>
+      );
+
+    // T3.2: 表头下边框线宽（pt，数值输入）
+    case 'table.header_border_pt':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.1} min={0} testId="attr-border-header" />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>pt</span>
+        </span>
+      );
+
     // ── 混排属性 ──────────────────────────────
     case 'mixed_script.ascii_is_tnr':
       // 数字/西文是否强制 Times New Roman

@@ -96,7 +96,11 @@ describe('FIELD_DEFS', () => {
     expect(f).toBeDefined();
     expect(f?.group).toBe('body');
     expect(f?.order).toBe(22);
-    expect(f?.applicable_attributes).toEqual(['font.cjk', 'font.size_pt', 'font.bold', 'para.align']);
+    // T3.2: table_header 追加 4 个 table.* attr 后共 8 个
+    expect(f?.applicable_attributes).toEqual([
+      'font.cjk', 'font.size_pt', 'font.bold', 'para.align',
+      'table.is_three_line', 'table.border_top_pt', 'table.border_bottom_pt', 'table.header_border_pt',
+    ]);
   });
 
   it('table_inner_text order 已升至 23', () => {

@@ -362,6 +362,59 @@ def _read_section_attrs(doc) -> dict[str, Any]:
     return attrs
 
 
+def _read_table_attrs(doc) -> dict[str, Any]:
+    """读取文档第一个表格的 OOXML tblBorders 线宽属性，返回 table.* attr 字典。
+
+    业务逻辑：
+    1. 若 doc.tables 为空，直接返回空字典（不报错，文档无表格是合理情况）
+    2. 取第一个表格，查找 tblPr/tblBorders 子元素
+    3. 读 top/bottom/insideH/insideV 各方向的 w:sz（eighth-points → pt 除以 8）
+    4. 三线表判定：top > 0 且 bottom > 0 且 insideV == 0
+    5. 返回 4 个 attr key；table.is_three_line 固定写入（即使为 False 也写，便于 UI 展示）
+
+    注意：OOXML w:sz 单位为 eighth-points（1/8 pt），除以 8 得磅值。
+    """
+    from docx.oxml.ns import qn
+    attrs: dict[str, Any] = {}
+    if not doc.tables:
+        return attrs
+    tbl = doc.tables[0]
+    tbl_pr = tbl._element.find(qn('w:tblPr'))
+    if tbl_pr is None:
+        return attrs
+    tbl_borders = tbl_pr.find(qn('w:tblBorders'))
+    if tbl_borders is None:
+        return attrs
+
+    # 从 tblBorders 子元素中提取各方向线宽（eighth-points → pt）
+    border_pt: dict[str, float] = {}
+    for child in tbl_borders:
+        local = child.tag.split('}')[-1] if '}' in child.tag else child.tag
+        sz_val = child.get(qn('w:sz'))
+        if sz_val is not None:
+            try:
+                border_pt[local] = int(sz_val) / 8.0
+            except ValueError:
+                pass  # sz 非法值跳过
+
+    # 三线表判定：有顶线/底线，无竖向内线（无纵格线）
+    top_pt = border_pt.get('top', 0.0)
+    bottom_pt = border_pt.get('bottom', 0.0)
+    inside_v_pt = border_pt.get('insideV', 0.0)
+    attrs['table.is_three_line'] = top_pt > 0 and bottom_pt > 0 and inside_v_pt == 0.0
+
+    # 上下边框线宽（直接来自 tblBorders）
+    if 'top' in border_pt:
+        attrs['table.border_top_pt'] = round(border_pt['top'], 4)
+    if 'bottom' in border_pt:
+        attrs['table.border_bottom_pt'] = round(border_pt['bottom'], 4)
+    # 表头下边框：用 insideH 作为简化代理（水平内线 = 表头下线）
+    if 'insideH' in border_pt:
+        attrs['table.header_border_pt'] = round(border_pt['insideH'], 4)
+
+    return attrs
+
+
 def _detect_punct_space_after(doc) -> 'bool | None':
     """检测英文标点后是否规范地空一字符。
 
@@ -484,6 +537,25 @@ def extract_all(file: str) -> dict[str, Any]:
         if section_attrs:
             rules.setdefault('page_margin', {'enabled': True, 'value': {}})
             rules['page_margin']['value'].update(section_attrs)
+
+    # ============================================
+    # T3.2: 表格级属性抽取（三线表判定 + 边框线宽）
+    # 表格结构无法通过段落扫描命中，需独立读取文档 tables
+    # 结果合并到 table_header 字段（线宽约束挂在表头字段，
+    # 因为三线表中表头行承载了最关键的边框约束）
+    # ============================================
+    table_attrs = _read_table_attrs(doc)
+    if table_attrs:
+        # 过滤掉 schema 未声明的 attr key（与 section_attrs 流程保持一致）
+        table_attrs = _log_and_filter_unsupported(
+            table_attrs,
+            spec_file=os.path.basename(file),
+            field_id='table_header',
+            context_snippet='[table-level attrs]',
+        )
+        if table_attrs:
+            rules.setdefault('table_header', {'enabled': True, 'value': {}})
+            rules['table_header']['value'].update(table_attrs)
 
     return {
         'rules': rules,

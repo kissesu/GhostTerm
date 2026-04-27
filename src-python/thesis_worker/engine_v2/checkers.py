@@ -522,6 +522,107 @@ def check_mixed_script_punct_space_after(doc: Document, expected: bool) -> Optio
 
 
 # ───────────────────────────────────────────────
+# 类别 B（续）：T3.2 table.* namespace（表格线宽/三线表）
+# ───────────────────────────────────────────────
+
+def _read_tbl_borders(doc: Document) -> dict[str, float]:
+    """从文档第一个表格读取 OOXML tblBorders 各方向线宽（单位 pt）。
+
+    业务逻辑：
+    1. 检查 doc.tables 是否为空，空则返回空字典（不报错）
+    2. 取第一个表格，找 tblPr/tblBorders 元素
+    3. 遍历子元素，读 w:sz 属性（eighth-points 单位，除以 8 得 pt）
+    4. 返回 {tag: pt} 字典，只含能读到 sz 的方向
+
+    注意：OOXML w:sz 单位为 eighth-points（1/8 pt），不是 twips（1/20 pt）。
+    """
+    from docx.oxml.ns import qn
+    borders: dict[str, float] = {}
+    if not doc.tables:
+        return borders
+    tbl = doc.tables[0]
+    tbl_pr = tbl._element.find(qn('w:tblPr'))
+    if tbl_pr is None:
+        return borders
+    tbl_borders = tbl_pr.find(qn('w:tblBorders'))
+    if tbl_borders is None:
+        return borders
+    for child in tbl_borders:
+    # 去掉命名空间前缀，取 localname（如 'top'/'bottom'/'insideH' 等）
+        local = child.tag.split('}')[-1] if '}' in child.tag else child.tag
+        sz_val = child.get(qn('w:sz'))
+        if sz_val is not None:
+            try:
+                # eighth-points → pt：除以 8
+                borders[local] = int(sz_val) / 8.0
+            except ValueError:
+                pass  # sz 值非法，跳过
+    return borders
+
+
+def check_table_is_three_line(doc: Document, expected: bool) -> 'Optional[dict]':
+    """检查文档第一个表格是否符合三线表规范。
+
+    三线表判定逻辑（简化版）：
+    - top > 0（有上边框）
+    - bottom > 0（有下边框）
+    - insideV 不存在或 insideV.sz == 0（无竖向内线，即无纵格线）
+    若 doc 无表格，视为"不是三线表"（返回 False 与 expected 比对）。
+    """
+    borders = _read_tbl_borders(doc)
+    if not borders:
+        # 文档无表格或无 tblBorders：视为不是三线表
+        actual = False
+    else:
+        top_pt = borders.get('top', 0.0)
+        bottom_pt = borders.get('bottom', 0.0)
+        inside_v_pt = borders.get('insideV', 0.0)
+        # 三线表：有顶线/底线，无竖向内线
+        actual = top_pt > 0 and bottom_pt > 0 and inside_v_pt == 0.0
+    if actual == expected:
+        return None
+    return {'attr': 'table.is_three_line', 'actual': actual, 'expected': expected}
+
+
+def check_table_border_top_pt(doc: Document, expected: float) -> 'Optional[dict]':
+    """检查文档第一个表格上边框线宽（pt），容差 0.1pt。
+
+    若 doc 无表格或无 tblBorders，actual 视为 0.0。
+    """
+    borders = _read_tbl_borders(doc)
+    actual = borders.get('top', 0.0)
+    if abs(actual - expected) < _TOL_FONT_PT:
+        return None
+    return {'attr': 'table.border_top_pt', 'actual': actual, 'expected': expected}
+
+
+def check_table_border_bottom_pt(doc: Document, expected: float) -> 'Optional[dict]':
+    """检查文档第一个表格下边框线宽（pt），容差 0.1pt。
+
+    若 doc 无表格或无 tblBorders，actual 视为 0.0。
+    """
+    borders = _read_tbl_borders(doc)
+    actual = borders.get('bottom', 0.0)
+    if abs(actual - expected) < _TOL_FONT_PT:
+        return None
+    return {'attr': 'table.border_bottom_pt', 'actual': actual, 'expected': expected}
+
+
+def check_table_header_border_pt(doc: Document, expected: float) -> 'Optional[dict]':
+    """检查文档第一个表格表头下边框线宽（pt），容差 0.1pt。
+
+    使用 insideH（水平内线宽度）作为表头下边框的简化代理值。
+    三线表中表头下线即内部水平线，此值与表头下边框线宽在绝大多数规范模板中一致。
+    若 doc 无表格或无 tblBorders，actual 视为 0.0。
+    """
+    borders = _read_tbl_borders(doc)
+    actual = borders.get('insideH', 0.0)
+    if abs(actual - expected) < _TOL_FONT_PT:
+        return None
+    return {'attr': 'table.header_border_pt', 'actual': actual, 'expected': expected}
+
+
+# ───────────────────────────────────────────────
 # 类别 C：延后存根（deferred to v3）
 # ───────────────────────────────────────────────
 
@@ -606,6 +707,11 @@ CHECKER_MAP: dict[str, Any] = {
     # mixed_script 中西混排
     'mixed_script.ascii_is_tnr':       check_mixed_script_ascii_is_tnr,
     'mixed_script.punct_space_after':  check_mixed_script_punct_space_after,
+    # T3.2: table namespace（三线表判定 + 三条边框线宽）
+    'table.is_three_line':             check_table_is_three_line,
+    'table.border_top_pt':             check_table_border_top_pt,
+    'table.border_bottom_pt':          check_table_border_bottom_pt,
+    'table.header_border_pt':          check_table_header_border_pt,
     # layout / citation / pagination（延后存根）
     'layout.position':                 check_layout_position,
     'citation.style':                  check_citation_style,
@@ -629,4 +735,9 @@ DOC_LEVEL_KEYS: frozenset[str] = frozenset({
     'mixed_script.punct_space_after',
     'pagination.front_style',
     'pagination.body_style',
+    # T3.2: table namespace 4 个文档级 key（表格结构属于文档级，不依赖段落）
+    'table.is_three_line',
+    'table.border_top_pt',
+    'table.border_bottom_pt',
+    'table.header_border_pt',
 })
