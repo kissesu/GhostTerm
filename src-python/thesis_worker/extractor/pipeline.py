@@ -19,9 +19,13 @@ from ..utils.size import name_to_pt
 # 模块级 logger，遵循 Python 最佳实践：用包层级名称，不新建 handler
 logger = logging.getLogger(__name__)
 
-# 所有字段 applicable_attributes 的并集，惰性计算后冻结为 frozenset。
+# 开发者诊断日志中 context_snippet 的截断长度（字符数）。
+# 30 字足以定位段落来源，同时避免日志行过长影响可读性。
+_LOG_SNIPPET_LEN = 30
+
+# 所有字段 applicable_attributes 的并集，导入时一次性构建并冻结为 frozenset。
 # 任何不在此集合内的 attr key 即为 unsupported，需写开发者诊断日志。
-# 用 lambda 延迟到首次访问，避免在模块导入阶段引发循环依赖。
+# field_defs 不反向依赖 pipeline，无循环导入风险；此处直接调用无副作用。
 def _build_known_attr_keys() -> frozenset[str]:
     """从 field_defs 汇总所有已知 attr key 并集。
     此函数仅在模块首次被导入时调用一次，结果缓存在模块级常量中。
@@ -297,7 +301,7 @@ def _log_and_filter_unsupported(
                 extra={
                     'attr_key': key,
                     'spec_file': spec_file,
-                    'context_snippet': context_snippet[:30],
+                    'context_snippet': context_snippet[:_LOG_SNIPPET_LEN],
                     'suspected_field_id': field_id,
                 },
             )

@@ -61,13 +61,23 @@ class TestUnsupportedAttrLogging:
             f"期望至少一条含 'unsupported_attr' 的 INFO 日志，实际 caplog.records={caplog.records}"
         )
 
-        # 断言：日志 extra 含正确的 attr_key
+        # 断言：日志 extra 含正确的 attr_key 及其他三个结构化字段
         record = unsupported_records[0]
         assert hasattr(record, 'attr_key'), (
             "日志 extra 必须包含 attr_key 字段"
         )
         assert record.attr_key == 'mystery.unknown_key', (
             f"attr_key 应为 'mystery.unknown_key'，实际为 {record.attr_key!r}"
+        )
+        # 验证 4 字段 dict 拼写无误（spec_file / context_snippet / suspected_field_id）
+        assert hasattr(record, 'spec_file'), (
+            "日志 extra 必须包含 spec_file 字段"
+        )
+        assert hasattr(record, 'context_snippet'), (
+            "日志 extra 必须包含 context_snippet 字段"
+        )
+        assert hasattr(record, 'suspected_field_id'), (
+            "日志 extra 必须包含 suspected_field_id 字段"
         )
 
     def test_unknown_attr_not_exposed_in_response(self, tmp_path, caplog):
