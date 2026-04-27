@@ -1,8 +1,8 @@
 """
 @file: test_field_matcher.py
-@description: 字段 id ← 关键词 关联
+@description: 字段 id ← 关键词 关联（T2.2: toc_entry 拆分 l1/l2/l3）
 @author: Atlas.oi
-@date: 2026-04-18
+@date: 2026-04-27
 """
 import pytest
 from thesis_worker.extractor.field_matcher import (
@@ -11,9 +11,23 @@ from thesis_worker.extractor.field_matcher import (
 
 
 class TestKeywords:
-    def test_all_33_fields_have_keywords(self):
-        # T2.1 新增 table_header 后，共 33 个字段都必须有关键词列表（哪怕是空 list）
-        assert len(FIELD_KEYWORDS) == 33
+    def test_all_35_fields_have_keywords(self):
+        # T2.2 拆分 toc_entry 为 l1/l2/l3 后，共 35 个字段都必须有关键词列表
+        assert len(FIELD_KEYWORDS) == 35
+
+    def test_toc_entry_removed_from_keywords(self):
+        # 旧 toc_entry 关键词条目已删除
+        assert 'toc_entry' not in FIELD_KEYWORDS
+
+    def test_toc_entry_l1_keywords_exist(self):
+        # l1 关键词列表不为空
+        assert len(FIELD_KEYWORDS.get('toc_entry_l1', [])) > 0
+
+    def test_toc_entry_l2_keywords_exist(self):
+        assert len(FIELD_KEYWORDS.get('toc_entry_l2', [])) > 0
+
+    def test_toc_entry_l3_keywords_exist(self):
+        assert len(FIELD_KEYWORDS.get('toc_entry_l3', [])) > 0
 
     def test_abstract_zh_keywords(self):
         assert '摘要' in FIELD_KEYWORDS['abstract_zh_title']
@@ -54,6 +68,62 @@ class TestMatchField:
         text = '表题（五号黑体居中）'
         assert match_field(text) == 'table_caption'
         assert match_field(text) != 'table_header'
+
+    # --- toc_entry_l1/l2/l3 匹配测试（T2.2）---
+
+    def test_toc_entry_l1_match_primary(self):
+        # "一级目录条目" 是 l1 的核心关键词
+        text = '一级目录条目：黑体四号顶格'
+        assert match_field(text) == 'toc_entry_l1'
+
+    def test_toc_entry_l1_match_secondary(self):
+        # "目录一级条目" 是 l1 的第二关键词
+        text = '目录一级条目格式说明'
+        assert match_field(text) == 'toc_entry_l1'
+
+    def test_toc_entry_l2_match_primary(self):
+        # "二级目录条目" 是 l2 的核心关键词
+        text = '二级目录条目：宋体小四缩进2字符'
+        assert match_field(text) == 'toc_entry_l2'
+
+    def test_toc_entry_l2_match_secondary(self):
+        # "目录二级条目" 是 l2 的第二关键词
+        text = '目录二级条目右缩2字符'
+        assert match_field(text) == 'toc_entry_l2'
+
+    def test_toc_entry_l3_match_primary(self):
+        # "三级目录条目" 是 l3 的核心关键词
+        text = '三级目录条目：宋体小四缩进4字符'
+        assert match_field(text) == 'toc_entry_l3'
+
+    def test_toc_entry_l3_match_secondary(self):
+        # "目录三级条目" 是 l3 的第二关键词
+        text = '目录三级条目缩进4字符'
+        assert match_field(text) == 'toc_entry_l3'
+
+    def test_toc_entry_l1_not_match_chapter_title(self):
+        # "一级标题" 触发 chapter_title，"一级目录条目" 不应触发 chapter_title
+        # 边界：chapter_title 关键词含 "第一章"，不含 "一级目录"
+        text = '第一章 绪论'
+        assert match_field(text) == 'chapter_title'
+        assert match_field(text) != 'toc_entry_l1'
+
+    def test_toc_entry_l2_not_match_section_title(self):
+        # "二级标题" 触发 section_title，不触发 toc_entry_l2
+        text = '二级标题格式要求'
+        assert match_field(text) == 'section_title'
+        assert match_field(text) != 'toc_entry_l2'
+
+    def test_toc_entry_l3_not_match_subsection_title(self):
+        # "三级标题" 触发 subsection_title，不触发 toc_entry_l3
+        text = '三级标题格式说明'
+        assert match_field(text) == 'subsection_title'
+        assert match_field(text) != 'toc_entry_l3'
+
+    def test_toc_title_still_matches(self):
+        # 拆分操作不影响 toc_title（"目录"）的匹配
+        text = '目录（黑体三号居中）'
+        assert match_field(text) == 'toc_title'
 
 
 class TestMatchAllFields:
