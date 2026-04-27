@@ -397,20 +397,19 @@ def _read_table_attrs(doc) -> dict[str, Any]:
             except ValueError:
                 pass  # sz 非法值跳过
 
-    # 三线表判定：有顶线/底线，无竖向内线（无纵格线）
+    # tblBorders 存在时，无条件写入 4 个 attr 全集（缺方向填 0.0）。
+    # 保持与 checker 侧 borders.get('top', 0.0) 的行为对等，
+    # 确保 UI 始终展示完整的 4 个 attr 行，不出现数量不固定的问题。
     top_pt = border_pt.get('top', 0.0)
     bottom_pt = border_pt.get('bottom', 0.0)
     inside_v_pt = border_pt.get('insideV', 0.0)
+    # 三线表判定：有顶线/底线，无竖向内线（无纵格线）
     attrs['table.is_three_line'] = top_pt > 0 and bottom_pt > 0 and inside_v_pt == 0.0
-
-    # 上下边框线宽（直接来自 tblBorders）
-    if 'top' in border_pt:
-        attrs['table.border_top_pt'] = round(border_pt['top'], 4)
-    if 'bottom' in border_pt:
-        attrs['table.border_bottom_pt'] = round(border_pt['bottom'], 4)
+    # 上下边框线宽（缺方向时填 0.0，与 checker 侧 fallback 对齐）
+    attrs['table.border_top_pt'] = round(top_pt, 4)
+    attrs['table.border_bottom_pt'] = round(bottom_pt, 4)
     # 表头下边框：用 insideH 作为简化代理（水平内线 = 表头下线）
-    if 'insideH' in border_pt:
-        attrs['table.header_border_pt'] = round(border_pt['insideH'], 4)
+    attrs['table.header_border_pt'] = round(border_pt.get('insideH', 0.0), 4)
 
     return attrs
 

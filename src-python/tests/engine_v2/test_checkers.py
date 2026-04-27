@@ -793,9 +793,10 @@ class TestTableIsThreeLine:
         assert issue['actual'] is False
         assert issue['expected'] is True
 
-    def test_no_table_returns_none_when_expected_false(self):
-        # 文档无表格 → actual=False；expected=False → 符合规范，返回 None
-        doc = Document()
+    def test_full_border_table_returns_none_when_expected_false(self):
+        # 有 insideV（纵格线）→ actual=False；expected=False → 符合规范，返回 None。
+        # 判别力：删除 insideV==0 的逻辑后，actual 变为 True，与 expected=False 不符 → 挂。
+        doc = _doc_with_full_border_table()
         assert check_table_is_three_line(doc, False) is None
 
     def test_no_table_returns_issue_when_expected_true(self):
@@ -835,10 +836,11 @@ class TestTableBorderTopPt:
         doc = _doc_with_three_line_table(top_sz=12)
         assert check_table_border_top_pt(doc, 1.57) is None
 
-    def test_no_table_zero_matches_zero(self):
-        # 文档无表格 → actual=0.0；expected=0.0 → None
-        doc = Document()
-        assert check_table_border_top_pt(doc, 0.0) is None
+    def test_tolerance_inner_boundary_pass(self):
+        # sz=12 = 1.5pt，expected=1.45（差 0.05 < _TOL_FONT_PT=0.1）→ 容差内，通过。
+        # 判别力：将 abs<容差 改为严格相等后，1.5 != 1.45 → 测试挂。
+        doc = _doc_with_three_line_table(top_sz=12)
+        assert check_table_border_top_pt(doc, 1.45) is None
 
 
 class TestTableBorderBottomPt:
@@ -859,10 +861,11 @@ class TestTableBorderBottomPt:
         assert issue['attr'] == 'table.border_bottom_pt'
         assert abs(issue['actual'] - 1.5) < 0.01
 
-    def test_no_table_returns_none(self):
-        # 文档无表格 → actual=0.0；expected=0.0 → None
-        doc = Document()
-        assert check_table_border_bottom_pt(doc, 0.0) is None
+    def test_tolerance_inner_boundary_pass(self):
+        # sz=12 = 1.5pt，expected=1.45（差 0.05 < _TOL_FONT_PT=0.1）→ 容差内，通过。
+        # 判别力：将 abs<容差 改为严格相等后，1.5 != 1.45 → 测试挂。
+        doc = _doc_with_three_line_table(bottom_sz=12)
+        assert check_table_border_bottom_pt(doc, 1.45) is None
 
 
 class TestTableHeaderBorderPt:
@@ -893,7 +896,8 @@ class TestTableHeaderBorderPt:
         doc = _doc_with_three_line_table(inside_h_sz=4)
         assert check_table_header_border_pt(doc, 0.55) is None
 
-    def test_no_table_returns_none(self):
-        # 文档无表格 → actual=0.0；expected=0.0 → None
-        doc = Document()
-        assert check_table_header_border_pt(doc, 0.0) is None
+    def test_tolerance_inner_boundary_pass(self):
+        # sz=4 = 0.5pt，expected=0.55（差 0.05 < _TOL_FONT_PT=0.1）→ 容差内，通过。
+        # 判别力：将 abs<容差 改为严格相等后，0.5 != 0.55 → 测试挂。
+        doc = _doc_with_three_line_table(inside_h_sz=4)
+        assert check_table_header_border_pt(doc, 0.55) is None

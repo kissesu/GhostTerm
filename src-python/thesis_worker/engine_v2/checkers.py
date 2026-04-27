@@ -548,7 +548,7 @@ def _read_tbl_borders(doc: Document) -> dict[str, float]:
     if tbl_borders is None:
         return borders
     for child in tbl_borders:
-    # 去掉命名空间前缀，取 localname（如 'top'/'bottom'/'insideH' 等）
+        # 去掉命名空间前缀，取 localname（如 'top'/'bottom'/'insideH' 等）
         local = child.tag.split('}')[-1] if '}' in child.tag else child.tag
         sz_val = child.get(qn('w:sz'))
         if sz_val is not None:
@@ -570,15 +570,14 @@ def check_table_is_three_line(doc: Document, expected: bool) -> 'Optional[dict]'
     若 doc 无表格，视为"不是三线表"（返回 False 与 expected 比对）。
     """
     borders = _read_tbl_borders(doc)
-    if not borders:
-        # 文档无表格或无 tblBorders：视为不是三线表
-        actual = False
-    else:
-        top_pt = borders.get('top', 0.0)
-        bottom_pt = borders.get('bottom', 0.0)
-        inside_v_pt = borders.get('insideV', 0.0)
-        # 三线表：有顶线/底线，无竖向内线
-        actual = top_pt > 0 and bottom_pt > 0 and inside_v_pt == 0.0
+    # 统一走数值判定，不区分"无 tblBorders"与"sz 全缺"两种情况。
+    # 两者结果均为 top=0/bottom=0 → actual=False，业务语义上都不能确认为三线表。
+    # 这消除了"空 dict 被误判为无 tblBorders"的混淆，与 check_table_border_* 行为对齐。
+    top_pt = borders.get('top', 0.0)
+    bottom_pt = borders.get('bottom', 0.0)
+    inside_v_pt = borders.get('insideV', 0.0)
+    # 三线表：有顶线/底线，无竖向内线
+    actual = top_pt > 0 and bottom_pt > 0 and inside_v_pt == 0.0
     if actual == expected:
         return None
     return {'attr': 'table.is_three_line', 'actual': actual, 'expected': expected}
