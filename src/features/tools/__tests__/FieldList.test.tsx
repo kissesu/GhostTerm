@@ -203,6 +203,37 @@ describe('FieldList', () => {
     expect(screen.getByTestId('attr-print-mode')).toBeInTheDocument();
   });
 
+  it('T3.1: page_margin 渲染管线包含 margin-gutter / header-offset / footer-offset 三个 cm 输入框', () => {
+    // page_margin.applicable_attributes T3.1 后包含三个 cm 类型属性：
+    // page.margin_gutter_cm / page.header_offset_cm / page.footer_offset_cm
+    const fields = [
+      {
+        id: 'page_margin',
+        label: '页边距',
+        status: 'partial' as const,
+        confidence: 0.7,
+        value: {
+          'page.margin_gutter_cm': 1.0,
+          'page.header_offset_cm': 1.5,
+          'page.footer_offset_cm': 1.75,
+        },
+      },
+    ];
+    render(
+      <FieldList
+        fields={fields}
+        currentFieldId={null}
+        onJump={vi.fn()}
+        onSkip={vi.fn()}
+        onAttrChange={vi.fn()}
+      />
+    );
+    // 三个 NumberInput 编辑器应渲染；testId 来自 RuleValueEditor.tsx T3.1 新增 case
+    expect(screen.getByTestId('attr-margin-gutter')).toBeInTheDocument();
+    expect(screen.getByTestId('attr-header-offset')).toBeInTheDocument();
+    expect(screen.getByTestId('attr-footer-offset')).toBeInTheDocument();
+  });
+
   it('calls onAttrChange with correct args when editor value changes', () => {
     // 构造一个字段，只测试 font.cjk（CjkFontSelect，select 元素可 fireEvent.change）
     const fields = [

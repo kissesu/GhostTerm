@@ -26,10 +26,8 @@ _TOL_FONT_PT = 0.10       # 字号容差（pt）
 _TOL_MARGIN_CM = 0.05     # 页边距容差（cm）
 _TOL_SIZE_INCH = 0.05     # 页面尺寸容差（英寸）
 _TOL_LINE_SPACING = 0.05  # 行距倍数容差
-# T3.1 新增：段前/段后磅值容差（对应 Word UI 0.5pt 精度）
-_TOL_SPACE_PT = 0.5
-# T3.1 新增：页眉/页脚距边界容差（语义独立于 _TOL_MARGIN_CM，数值相同但单独命名）
-_TOL_OFFSET_CM = 0.05
+_TOL_SPACE_PT = 0.5       # 段前/段后间距容差（pt，对应 Word UI 显示精度）
+_TOL_OFFSET_CM = 0.05     # 页眉/页脚距边界容差（语义独立于 _TOL_MARGIN_CM，数值相同）
 
 # ───────────────────────────────────────────────
 # 内部工具函数

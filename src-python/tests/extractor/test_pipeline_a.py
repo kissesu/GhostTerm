@@ -72,27 +72,31 @@ class TestT31SectionAttrsExtraction:
     """
 
     def test_space_before_pt_extracted(self, tmp_path):
-        """para.space_before_pt 应从段落样式中抽出并写入对应字段"""
+        """para.space_before_pt 应从段落样式中抽出并正确路由到 chapter_title 字段
+
+        路由验证：构造含 field_matcher 的 chapter_title 关键词"第一章"的段落，
+        断言 extract_all 将 para.space_before_pt 写入 rules['chapter_title']['value']，
+        而非仅检测某字段里"存在"该 key（后者无法区分路由是否正确）。
+        """
         from docx import Document
         from docx.shared import Pt
         doc = Document()
-        # 构造一个带"章节标题"文字的段落，设置 space_before=12pt
+        # 文本含 chapter_title 关键词"第一章"→ field_matcher 应路由到 chapter_title
         p = doc.add_paragraph('第一章 引言（一级标题）')
         p.paragraph_format.space_before = Pt(12)
         docx_path = tmp_path / 'space_before_test.docx'
         doc.save(str(docx_path))
 
         result = extract_all(str(docx_path))
-        # 该段落应命中 chapter_title 字段（关键词"第一章"）
-        # 若未命中则从任何已命中字段的 value 里检测 para.space_before_pt 存在
-        found_pt = False
-        for field_data in result['rules'].values():
-            val = field_data.get('value', {})
-            if 'para.space_before_pt' in val:
-                assert val['para.space_before_pt'] == pytest.approx(12.0, abs=0.5)
-                found_pt = True
-                break
-        assert found_pt, f'para.space_before_pt 未在任何字段 value 中找到；rules={result["rules"]}'
+        # 定向断言：必须路由到 chapter_title 字段
+        assert 'chapter_title' in result['rules'], (
+            f'chapter_title 字段未被命中；实际 rules keys={list(result["rules"].keys())}'
+        )
+        value = result['rules']['chapter_title']['value']
+        assert 'para.space_before_pt' in value, (
+            f'para.space_before_pt 未写入 chapter_title.value；value={value}'
+        )
+        assert value['para.space_before_pt'] == pytest.approx(12.0, abs=0.5)
 
     def test_section_attrs_in_page_margin(self, tmp_path):
         """Section 级属性（gutter/header_offset/footer_offset/print_mode）应写入 page_margin"""

@@ -562,7 +562,13 @@ class TestParaSpaceBeforePt:
 
 
 class TestParaSpaceAfterPt:
-    """段后磅值检查器（容差 0.5pt）的判别力测试"""
+    """段后磅值检查器（容差 0.5pt）的判别力测试
+
+    判别力设计：
+    - actual=6.4, expected=6 → |6.4-6|=0.4 < 0.5 → 容差内 → None
+    - actual=6.6, expected=6 → |6.6-6|=0.6 > 0.5 → 超出容差 → 返回 dict
+    None 路径与 TestParaSpaceBeforePt 对称：None space_after 视为 0pt。
+    """
 
     def test_within_tolerance_returns_none(self):
         doc = Document()
@@ -579,6 +585,22 @@ class TestParaSpaceAfterPt:
         issue = check_para_space_after_pt(p, 6.0)
         assert issue is not None
         assert issue['attr'] == 'para.space_after_pt'
+        assert issue['expected'] == 6.0
+
+    def test_none_space_after_treated_as_zero(self):
+        doc = Document()
+        p = doc.add_paragraph('无间距')
+        # space_after 未设置 → None → 视为 0pt
+        # expected=0 → 符合
+        assert check_para_space_after_pt(p, 0.0) is None
+
+    def test_none_space_after_mismatch(self):
+        doc = Document()
+        p = doc.add_paragraph('无间距')
+        # space_after None（0pt）但 expected=6 → 违规
+        issue = check_para_space_after_pt(p, 6.0)
+        assert issue is not None
+        assert issue['actual'] == 0.0
         assert issue['expected'] == 6.0
 
 
@@ -619,6 +641,12 @@ class TestPageHeaderOffsetCm:
         doc.sections[0].header_distance = Cm(1.5)
         assert check_page_header_offset_cm(doc, 1.5) is None
 
+    def test_within_tolerance_returns_none(self):
+        doc = Document()
+        # 1.53cm vs expected=1.5 → 差 0.03 < 0.05 → 符合
+        doc.sections[0].header_distance = Cm(1.53)
+        assert check_page_header_offset_cm(doc, 1.5) is None
+
     def test_mismatch_returns_issue(self):
         doc = Document()
         doc.sections[0].header_distance = Cm(2.0)
@@ -635,6 +663,12 @@ class TestPageFooterOffsetCm:
     def test_match_returns_none(self):
         doc = Document()
         doc.sections[0].footer_distance = Cm(1.75)
+        assert check_page_footer_offset_cm(doc, 1.75) is None
+
+    def test_within_tolerance_returns_none(self):
+        doc = Document()
+        # 1.78cm vs expected=1.75 → 差 0.03 < 0.05 → 符合
+        doc.sections[0].footer_distance = Cm(1.78)
         assert check_page_footer_offset_cm(doc, 1.75) is None
 
     def test_mismatch_returns_issue(self):
