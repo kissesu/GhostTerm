@@ -1,8 +1,9 @@
 /**
  * @file formatFieldValue.test.ts
  * @description formatFieldValue 单元测试：字号中文名、cjk/ascii 合并、多属性联合场景
+ *              T3.1: 新增 6 个 attr key 中文片段输出测试
  * @author Atlas.oi
- * @date 2026-04-18
+ * @date 2026-04-28
  */
 import { describe, it, expect } from 'vitest';
 import { formatFieldValue } from '../formatFieldValue';
@@ -69,5 +70,41 @@ describe('formatFieldValue', () => {
     expect(result).toContain('居中');
     // 各片段用" · "连接
     expect(result).toContain(' · ');
+  });
+
+  // ── T3.1: 新增 6 个 attr key 中文片段输出 ──────────────────
+  it('para.space_before_pt → 段前 Xpt', () => {
+    const result = formatFieldValue({ 'para.space_before_pt': 12 });
+    expect(result).toContain('段前 12pt');
+  });
+
+  it('para.space_after_pt → 段后 Xpt', () => {
+    const result = formatFieldValue({ 'para.space_after_pt': 6 });
+    expect(result).toContain('段后 6pt');
+  });
+
+  it('page.margin_gutter_cm → 装订线 Xcm', () => {
+    const result = formatFieldValue({ 'page.margin_gutter_cm': 0.5 });
+    expect(result).toContain('装订线 0.5cm');
+  });
+
+  it('page.header_offset_cm → 页眉距边界 Xcm', () => {
+    const result = formatFieldValue({ 'page.header_offset_cm': 1.5 });
+    expect(result).toContain('页眉距边界 1.5cm');
+  });
+
+  it('page.footer_offset_cm → 页脚距边界 Xcm', () => {
+    const result = formatFieldValue({ 'page.footer_offset_cm': 1.75 });
+    expect(result).toContain('页脚距边界 1.75cm');
+  });
+
+  it('page.print_mode double → 双面打印', () => {
+    const result = formatFieldValue({ 'page.print_mode': 'double' });
+    expect(result).toContain('双面打印');
+  });
+
+  it('page.print_mode single → 单面打印', () => {
+    const result = formatFieldValue({ 'page.print_mode': 'single' });
+    expect(result).toContain('单面打印');
   });
 });

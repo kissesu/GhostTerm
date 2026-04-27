@@ -70,6 +70,11 @@ function formatAttr(key: string, value: unknown): string {
       return `段前 ${value} 行`;
     case 'para.space_after_lines':
       return `段后 ${value} 行`;
+    // T3.1: 段前/段后磅值版本（规范文本用"磅"描述时显示此格式）
+    case 'para.space_before_pt':
+      return `段前 ${value}pt`;
+    case 'para.space_after_pt':
+      return `段后 ${value}pt`;
     case 'content.specific_text':
       return `文本「${value}」`;
     case 'content.char_count_min':
@@ -92,6 +97,15 @@ function formatAttr(key: string, value: unknown): string {
       return `左 ${value}cm`;
     case 'page.margin_right_cm':
       return `右 ${value}cm`;
+    // T3.1: 装订线/页眉脚距/打印模式
+    case 'page.margin_gutter_cm':
+      return `装订线 ${value}cm`;
+    case 'page.header_offset_cm':
+      return `页眉距边界 ${value}cm`;
+    case 'page.footer_offset_cm':
+      return `页脚距边界 ${value}cm`;
+    case 'page.print_mode':
+      return String(value) === 'double' ? '双面打印' : '单面打印';
     case 'page.new_page_before':
       return value === true ? '另起一页' : '';
     case 'pagination.front_style':

@@ -26,6 +26,10 @@ _TOL_FONT_PT = 0.10       # 字号容差（pt）
 _TOL_MARGIN_CM = 0.05     # 页边距容差（cm）
 _TOL_SIZE_INCH = 0.05     # 页面尺寸容差（英寸）
 _TOL_LINE_SPACING = 0.05  # 行距倍数容差
+# T3.1 新增：段前/段后磅值容差（对应 Word UI 0.5pt 精度）
+_TOL_SPACE_PT = 0.5
+# T3.1 新增：页眉/页脚距边界容差（语义独立于 _TOL_MARGIN_CM，数值相同但单独命名）
+_TOL_OFFSET_CM = 0.05
 
 # ───────────────────────────────────────────────
 # 内部工具函数
@@ -242,6 +246,29 @@ def check_para_space_after_lines(
     return {'attr': 'para.space_after_lines', 'actual': actual, 'expected': expected}
 
 
+def check_para_space_before_pt(para: Paragraph, expected: float) -> Optional[dict]:
+    """检查段前间距（磅值）；space_before 为 None 时视为 0；容差 0.5pt
+
+    与 check_para_space_before_lines 使用同一数据源（para.paragraph_format.space_before），
+    但不除以行基准值，直接保留 pt 数值。规范文本用"磅"描述时用本检查器，
+    用"行"描述时用 _lines 版本，两者互不冲突。
+    """
+    sb = para.paragraph_format.space_before
+    actual = round(sb.pt, 1) if sb is not None else 0.0
+    if abs(actual - expected) < _TOL_SPACE_PT:
+        return None
+    return {'attr': 'para.space_before_pt', 'actual': actual, 'expected': expected}
+
+
+def check_para_space_after_pt(para: Paragraph, expected: float) -> Optional[dict]:
+    """检查段后间距（磅值）；space_after 为 None 时视为 0；容差 0.5pt"""
+    sa = para.paragraph_format.space_after
+    actual = round(sa.pt, 1) if sa is not None else 0.0
+    if abs(actual - expected) < _TOL_SPACE_PT:
+        return None
+    return {'attr': 'para.space_after_pt', 'actual': actual, 'expected': expected}
+
+
 def check_para_letter_spacing_chars(
     para: Paragraph,
     expected: int,
@@ -405,6 +432,56 @@ def check_page_margin_right_cm(doc: Document, expected: float) -> Optional[dict]
     return {'attr': 'page.margin_right_cm', 'actual': round(actual, 2), 'expected': expected}
 
 
+def check_page_margin_gutter_cm(doc: Document, expected: float) -> Optional[dict]:
+    """检查装订线宽度（cm）；容差 0.05cm
+
+    gutter 为 0 也是有效值（表示无装订线），不做 None 特殊处理。
+    python-docx sections[0].gutter.cm 直接读取 OOXML w:pgMar/@w:gutter 属性。
+    """
+    actual = doc.sections[0].gutter.cm
+    if abs(actual - expected) < _TOL_OFFSET_CM:
+        return None
+    return {'attr': 'page.margin_gutter_cm', 'actual': round(actual, 2), 'expected': expected}
+
+
+def check_page_header_offset_cm(doc: Document, expected: float) -> Optional[dict]:
+    """检查页眉距页面边界的距离（cm）；容差 0.05cm
+
+    对应 OOXML w:pgMar/@w:header 属性，Word 中称"页眉边距"。
+    """
+    actual = doc.sections[0].header_distance.cm
+    if abs(actual - expected) < _TOL_OFFSET_CM:
+        return None
+    return {'attr': 'page.header_offset_cm', 'actual': round(actual, 2), 'expected': expected}
+
+
+def check_page_footer_offset_cm(doc: Document, expected: float) -> Optional[dict]:
+    """检查页脚距页面边界的距离（cm）；容差 0.05cm
+
+    对应 OOXML w:pgMar/@w:footer 属性，Word 中称"页脚边距"。
+    """
+    actual = doc.sections[0].footer_distance.cm
+    if abs(actual - expected) < _TOL_OFFSET_CM:
+        return None
+    return {'attr': 'page.footer_offset_cm', 'actual': round(actual, 2), 'expected': expected}
+
+
+def check_page_print_mode(doc: Document, expected: str) -> Optional[dict]:
+    """检查打印模式（'single' 单面 / 'double' 双面）；严格相等，无容差
+
+    判别方式：检测 w:settings 根元素是否含 w:evenAndOddHeaders 子元素。
+    存在该元素 → 文档启用奇偶页眉分设（双面打印模式）→ 'double'；
+    不存在 → 'single'。这是 Word 保存双面打印设置时的标准 OOXML 语义。
+    """
+    from docx.oxml.ns import qn
+    settings_el = doc.settings.element
+    even_odd = settings_el.find(qn('w:evenAndOddHeaders'))
+    actual = 'double' if even_odd is not None else 'single'
+    if actual == expected:
+        return None
+    return {'attr': 'page.print_mode', 'actual': actual, 'expected': expected}
+
+
 def check_mixed_script_ascii_is_tnr(doc: Document, expected: bool) -> Optional[dict]:
     """
     检查文档西文/数字字体是否全局使用 Times New Roman（TNR）。
@@ -505,6 +582,9 @@ CHECKER_MAP: dict[str, Any] = {
     'para.line_spacing':               check_para_line_spacing,
     'para.space_before_lines':         check_para_space_before_lines,
     'para.space_after_lines':          check_para_space_after_lines,
+    # T3.1: 段前/段后磅值版本（与 _lines 版本共存）
+    'para.space_before_pt':            check_para_space_before_pt,
+    'para.space_after_pt':             check_para_space_after_pt,
     'para.letter_spacing_chars':       check_para_letter_spacing_chars,
     # page 分页/页面
     'page.new_page_before':            check_page_new_page_before,
@@ -513,6 +593,11 @@ CHECKER_MAP: dict[str, Any] = {
     'page.margin_bottom_cm':           check_page_margin_bottom_cm,
     'page.margin_left_cm':             check_page_margin_left_cm,
     'page.margin_right_cm':            check_page_margin_right_cm,
+    # T3.1: 装订线/页眉脚距/打印模式（文档级）
+    'page.margin_gutter_cm':           check_page_margin_gutter_cm,
+    'page.header_offset_cm':           check_page_header_offset_cm,
+    'page.footer_offset_cm':           check_page_footer_offset_cm,
+    'page.print_mode':                 check_page_print_mode,
     # content 内容
     'content.char_count_min':          check_content_char_count_min,
     'content.char_count_max':          check_content_char_count_max,
@@ -537,6 +622,11 @@ DOC_LEVEL_KEYS: frozenset[str] = frozenset({
     'page.margin_bottom_cm',
     'page.margin_left_cm',
     'page.margin_right_cm',
+    # T3.1: 新增 4 个文档级 page key
+    'page.margin_gutter_cm',
+    'page.header_offset_cm',
+    'page.footer_offset_cm',
+    'page.print_mode',
     'mixed_script.ascii_is_tnr',
     'mixed_script.punct_space_after',
     'pagination.front_style',

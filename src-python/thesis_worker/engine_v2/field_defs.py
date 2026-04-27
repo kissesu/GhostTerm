@@ -16,6 +16,11 @@
                     spec1 规定注释列于当前页脚注位置（宋体小五号），
                     属于独立版面元素，applicable_attributes 仅 font.cjk + font.size_pt；
                     后续字段 order 全部 +1（references_title 25→26, ..., mixed_script_global 36→37）
+              T3.1: 补齐 B 类 6 个高频缺失 attr key（段前后磅值/装订线/页眉脚距/打印模式）：
+                    chapter_title.applicable_attributes 追加 para.space_before_pt / para.space_after_pt；
+                    toc_title.applicable_attributes 追加同上两项；
+                    page_margin.applicable_attributes 追加 page.margin_gutter_cm /
+                    page.header_offset_cm / page.footer_offset_cm / page.print_mode。
 @author: Atlas.oi
 @date: 2026-04-27
 """
@@ -65,7 +70,10 @@ FIELD_DEFS: list[dict] = [
     },
     {
         'id': 'toc_title', 'label': '目录标题', 'group': 'front', 'order': 11,
-        'applicable_attributes': ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.space_before_lines', 'para.space_after_lines'],
+        # T3.1: 追加 para.space_before_pt / para.space_after_pt。
+        # _lines 系列用于规范文本写"行"的情况，_pt 系列用于规范文本写"磅"的情况，
+        # 两者共存，前端/用户按实际规范文本描述两选一填写。
+        'applicable_attributes': ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.space_before_lines', 'para.space_after_lines', 'para.space_before_pt', 'para.space_after_pt'],
     },
     {
         # T2.2: 从 toc_entry 拆出一级目录条目独立字段。
@@ -87,7 +95,9 @@ FIELD_DEFS: list[dict] = [
     # 正文部分（11 字段：order 15-25）
     {
         'id': 'chapter_title', 'label': '一级章节标题', 'group': 'body', 'order': 15,
-        'applicable_attributes': ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.space_before_lines', 'para.space_after_lines', 'page.new_page_before'],
+        # T3.1: 追加 para.space_before_pt / para.space_after_pt（与 _lines 系列共存，
+        # 规范文本用"磅"描述时填 _pt，用"行"描述时填 _lines，互不冲突）。
+        'applicable_attributes': ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.space_before_lines', 'para.space_after_lines', 'para.space_before_pt', 'para.space_after_pt', 'page.new_page_before'],
     },
     {
         'id': 'section_title', 'label': '二级章节标题', 'group': 'body', 'order': 16,
@@ -172,7 +182,13 @@ FIELD_DEFS: list[dict] = [
     },
     {
         'id': 'page_margin', 'label': '页边距', 'group': 'global', 'order': 33,
-        'applicable_attributes': ['page.margin_top_cm', 'page.margin_bottom_cm', 'page.margin_left_cm', 'page.margin_right_cm'],
+        # T3.1: 追加装订线/页眉距/页脚距/打印模式四项。
+        # 均属于 Section 级页面属性，与四个 margin_*_cm 同属"页面排版约束"语义，
+        # 并入 page_margin 而非新建 page_layout 字段，保持全局字段总数不变。
+        'applicable_attributes': [
+            'page.margin_top_cm', 'page.margin_bottom_cm', 'page.margin_left_cm', 'page.margin_right_cm',
+            'page.margin_gutter_cm', 'page.header_offset_cm', 'page.footer_offset_cm', 'page.print_mode',
+        ],
     },
     {
         'id': 'page_header', 'label': '页眉', 'group': 'global', 'order': 34,

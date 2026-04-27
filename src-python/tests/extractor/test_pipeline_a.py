@@ -1,8 +1,9 @@
 """
 @file: test_pipeline_a.py
-@description: extract_all 在 Template A (括号型) 上的集成测试
+@description: extract_all 在 Template A (括号型) 上的集成测试；
+              T3.1: 追加 Section 级属性抽取断言（space_before_pt / gutter / print_mode）
 @author: Atlas.oi
-@date: 2026-04-18
+@date: 2026-04-28
 """
 from pathlib import Path
 import pytest
@@ -61,6 +62,80 @@ class TestExtractFromSelection:
             field_id='title_en',
         )
         assert result['confidence'] <= 0.5
+
+
+class TestT31SectionAttrsExtraction:
+    """T3.1: 验证 extract_all 能正确抽取 Section 级属性并写入 page_margin 字段
+
+    构造临时 docx，设定 space_before/gutter/print_mode，
+    验证 extract_all 返回的 rules['page_margin']['value'] 包含对应属性。
+    """
+
+    def test_space_before_pt_extracted(self, tmp_path):
+        """para.space_before_pt 应从段落样式中抽出并写入对应字段"""
+        from docx import Document
+        from docx.shared import Pt
+        doc = Document()
+        # 构造一个带"章节标题"文字的段落，设置 space_before=12pt
+        p = doc.add_paragraph('第一章 引言（一级标题）')
+        p.paragraph_format.space_before = Pt(12)
+        docx_path = tmp_path / 'space_before_test.docx'
+        doc.save(str(docx_path))
+
+        result = extract_all(str(docx_path))
+        # 该段落应命中 chapter_title 字段（关键词"第一章"）
+        # 若未命中则从任何已命中字段的 value 里检测 para.space_before_pt 存在
+        found_pt = False
+        for field_data in result['rules'].values():
+            val = field_data.get('value', {})
+            if 'para.space_before_pt' in val:
+                assert val['para.space_before_pt'] == pytest.approx(12.0, abs=0.5)
+                found_pt = True
+                break
+        assert found_pt, f'para.space_before_pt 未在任何字段 value 中找到；rules={result["rules"]}'
+
+    def test_section_attrs_in_page_margin(self, tmp_path):
+        """Section 级属性（gutter/header_offset/footer_offset/print_mode）应写入 page_margin"""
+        from docx import Document
+        from docx.shared import Cm
+        doc = Document()
+        doc.add_paragraph('测试内容')
+        # 设定装订线 0.5cm、页眉距 1.5cm、页脚距 1.75cm
+        doc.sections[0].gutter = Cm(0.5)
+        doc.sections[0].header_distance = Cm(1.5)
+        doc.sections[0].footer_distance = Cm(1.75)
+        docx_path = tmp_path / 'section_attrs_test.docx'
+        doc.save(str(docx_path))
+
+        result = extract_all(str(docx_path))
+        assert 'page_margin' in result['rules'], 'page_margin 字段应由 Section 级属性触发写入'
+        value = result['rules']['page_margin']['value']
+        assert 'page.margin_gutter_cm' in value
+        assert value['page.margin_gutter_cm'] == pytest.approx(0.5, abs=0.05)
+        assert 'page.header_offset_cm' in value
+        assert value['page.header_offset_cm'] == pytest.approx(1.5, abs=0.05)
+        assert 'page.footer_offset_cm' in value
+        assert value['page.footer_offset_cm'] == pytest.approx(1.75, abs=0.05)
+        # 默认文档无 w:evenAndOddHeaders → single
+        assert value.get('page.print_mode') == 'single'
+
+    def test_double_print_mode_extracted(self, tmp_path):
+        """注入 w:evenAndOddHeaders 后，print_mode 应抽取为 'double'"""
+        from docx import Document
+        from docx.oxml.ns import qn
+        from lxml import etree
+        doc = Document()
+        doc.add_paragraph('测试内容')
+        # 注入 w:evenAndOddHeaders → 双面打印模式
+        settings_el = doc.settings.element
+        etree.SubElement(settings_el, qn('w:evenAndOddHeaders'))
+        docx_path = tmp_path / 'double_print_test.docx'
+        doc.save(str(docx_path))
+
+        result = extract_all(str(docx_path))
+        assert 'page_margin' in result['rules']
+        value = result['rules']['page_margin']['value']
+        assert value.get('page.print_mode') == 'double'
 
 
 class TestExtractFromSelectionWithSelectedText:

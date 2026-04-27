@@ -32,6 +32,10 @@ from thesis_worker.engine_v2.checkers import (
     check_page_margin_left_cm,
     check_page_margin_right_cm,
     check_page_margin_top_cm,
+    check_page_margin_gutter_cm,
+    check_page_header_offset_cm,
+    check_page_footer_offset_cm,
+    check_page_print_mode,
     check_page_new_page_before,
     check_page_size,
     check_pagination_body_style,
@@ -43,6 +47,8 @@ from thesis_worker.engine_v2.checkers import (
     check_para_line_spacing,
     check_para_space_after_lines,
     check_para_space_before_lines,
+    check_para_space_before_pt,
+    check_para_space_after_pt,
 )
 from thesis_worker.engine_v2.field_defs import FIELD_DEFS
 
@@ -506,3 +512,180 @@ class TestDeferredStubs:
     def test_pagination_body_style_returns_none(self):
         doc = Document()
         assert check_pagination_body_style(doc, 'arabic') is None
+
+
+# ───────────────────────────────────────────────
+# T3.1: 新增 checker 测试
+# ───────────────────────────────────────────────
+
+class TestParaSpaceBeforePt:
+    """段前磅值检查器（容差 0.5pt）的判别力测试
+
+    判别力设计：
+    - actual=12.4, expected=12 → |12.4-12|=0.4 < 0.5 → 容差内 → None
+    - actual=12.6, expected=12 → |12.6-12|=0.6 > 0.5 → 超出容差 → 返回 dict
+    两个路径使用同一 expected=12 但不同 actual，确保测试真正检测了容差边界。
+    """
+
+    def test_within_tolerance_returns_none(self):
+        doc = Document()
+        p = doc.add_paragraph('章节标题')
+        # 12.4pt：与 expected=12 差 0.4 < _TOL_SPACE_PT=0.5 → 符合
+        p.paragraph_format.space_before = Pt(12.4)
+        assert check_para_space_before_pt(p, 12.0) is None
+
+    def test_exceeds_tolerance_returns_issue(self):
+        doc = Document()
+        p = doc.add_paragraph('章节标题')
+        # 12.6pt：与 expected=12 差 0.6 > _TOL_SPACE_PT=0.5 → 违规
+        p.paragraph_format.space_before = Pt(12.6)
+        issue = check_para_space_before_pt(p, 12.0)
+        assert issue is not None
+        assert issue['attr'] == 'para.space_before_pt'
+        assert abs(issue['actual'] - 12.6) < 0.05
+        assert issue['expected'] == 12.0
+
+    def test_none_space_before_treated_as_zero(self):
+        doc = Document()
+        p = doc.add_paragraph('无间距')
+        # space_before 未设置 → None → 视为 0pt
+        # expected=0 → 符合
+        assert check_para_space_before_pt(p, 0.0) is None
+
+    def test_none_space_before_mismatch(self):
+        doc = Document()
+        p = doc.add_paragraph('无间距')
+        # space_before None（0pt）但 expected=12 → 违规
+        issue = check_para_space_before_pt(p, 12.0)
+        assert issue is not None
+        assert issue['actual'] == 0.0
+
+
+class TestParaSpaceAfterPt:
+    """段后磅值检查器（容差 0.5pt）的判别力测试"""
+
+    def test_within_tolerance_returns_none(self):
+        doc = Document()
+        p = doc.add_paragraph('段落')
+        # 6.4pt vs expected=6 → 差 0.4 < 0.5 → 符合
+        p.paragraph_format.space_after = Pt(6.4)
+        assert check_para_space_after_pt(p, 6.0) is None
+
+    def test_exceeds_tolerance_returns_issue(self):
+        doc = Document()
+        p = doc.add_paragraph('段落')
+        # 6.6pt vs expected=6 → 差 0.6 > 0.5 → 违规
+        p.paragraph_format.space_after = Pt(6.6)
+        issue = check_para_space_after_pt(p, 6.0)
+        assert issue is not None
+        assert issue['attr'] == 'para.space_after_pt'
+        assert issue['expected'] == 6.0
+
+
+class TestPageMarginGutterCm:
+    """装订线宽度检查器（容差 0.05cm）"""
+
+    def test_match_returns_none(self):
+        doc = Document()
+        doc.sections[0].gutter = Cm(1.0)
+        assert check_page_margin_gutter_cm(doc, 1.0) is None
+
+    def test_within_tolerance_returns_none(self):
+        doc = Document()
+        # 1.03cm vs expected=1.0 → 差 0.03 < 0.05 → 符合
+        doc.sections[0].gutter = Cm(1.03)
+        assert check_page_margin_gutter_cm(doc, 1.0) is None
+
+    def test_exceeds_tolerance_returns_issue(self):
+        doc = Document()
+        # 1.8cm vs expected=1.0 → 差 0.8 > 0.05 → 违规
+        doc.sections[0].gutter = Cm(1.8)
+        issue = check_page_margin_gutter_cm(doc, 1.0)
+        assert issue is not None
+        assert issue['attr'] == 'page.margin_gutter_cm'
+
+    def test_zero_gutter_valid(self):
+        # 装订线为 0 也是有效值（无装订线）
+        doc = Document()
+        doc.sections[0].gutter = Cm(0)
+        assert check_page_margin_gutter_cm(doc, 0.0) is None
+
+
+class TestPageHeaderOffsetCm:
+    """页眉距边界检查器（容差 0.05cm）"""
+
+    def test_match_returns_none(self):
+        doc = Document()
+        doc.sections[0].header_distance = Cm(1.5)
+        assert check_page_header_offset_cm(doc, 1.5) is None
+
+    def test_mismatch_returns_issue(self):
+        doc = Document()
+        doc.sections[0].header_distance = Cm(2.0)
+        # expected=1.5，actual=2.0，差 0.5 > 0.05 → 违规
+        issue = check_page_header_offset_cm(doc, 1.5)
+        assert issue is not None
+        assert issue['attr'] == 'page.header_offset_cm'
+        assert issue['expected'] == 1.5
+
+
+class TestPageFooterOffsetCm:
+    """页脚距边界检查器（容差 0.05cm）"""
+
+    def test_match_returns_none(self):
+        doc = Document()
+        doc.sections[0].footer_distance = Cm(1.75)
+        assert check_page_footer_offset_cm(doc, 1.75) is None
+
+    def test_mismatch_returns_issue(self):
+        doc = Document()
+        doc.sections[0].footer_distance = Cm(1.0)
+        # expected=1.75，actual=1.0 → 差 0.75 > 0.05 → 违规
+        issue = check_page_footer_offset_cm(doc, 1.75)
+        assert issue is not None
+        assert issue['attr'] == 'page.footer_offset_cm'
+
+
+class TestPagePrintMode:
+    """打印模式检查器（严格相等，无容差）
+
+    判别力设计：
+    - 'single' vs 'double' 是互斥值，任何一个赋值都能独立区分两条路径。
+    测试通过 lxml 注入 w:evenAndOddHeaders 来构造 double 模式文档，
+    确保检测逻辑真实走通。
+    """
+
+    def test_single_mode_default(self):
+        # 新建文档默认无 w:evenAndOddHeaders → single 模式
+        doc = Document()
+        assert check_page_print_mode(doc, 'single') is None
+
+    def test_single_mode_mismatch(self):
+        # 默认 single 但期望 double → 违规
+        doc = Document()
+        issue = check_page_print_mode(doc, 'double')
+        assert issue is not None
+        assert issue['attr'] == 'page.print_mode'
+        assert issue['actual'] == 'single'
+        assert issue['expected'] == 'double'
+
+    def test_double_mode_with_even_odd_headers(self):
+        # 注入 w:evenAndOddHeaders → double 模式
+        from docx.oxml.ns import qn
+        from lxml import etree
+        doc = Document()
+        settings_el = doc.settings.element
+        etree.SubElement(settings_el, qn('w:evenAndOddHeaders'))
+        assert check_page_print_mode(doc, 'double') is None
+
+    def test_double_mode_mismatch(self):
+        # 注入 w:evenAndOddHeaders → double，但 expected=single → 违规
+        from docx.oxml.ns import qn
+        from lxml import etree
+        doc = Document()
+        settings_el = doc.settings.element
+        etree.SubElement(settings_el, qn('w:evenAndOddHeaders'))
+        issue = check_page_print_mode(doc, 'single')
+        assert issue is not None
+        assert issue['actual'] == 'double'
+        assert issue['expected'] == 'single'

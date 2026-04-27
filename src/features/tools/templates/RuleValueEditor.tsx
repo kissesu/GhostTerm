@@ -546,6 +546,23 @@ export function RuleValueEditorByAttr({ attr, value, onChange }: RuleValueEditor
         </span>
       );
 
+    // T3.1: 段前/段后磅值（与 _lines 版本共存，规范写"磅"时用此两项）
+    case 'para.space_before_pt':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.5} min={0} testId="attr-space-before-pt" />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>pt</span>
+        </span>
+      );
+
+    case 'para.space_after_pt':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.5} min={0} testId="attr-space-after-pt" />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>pt</span>
+        </span>
+      );
+
     // ── 内容属性 ──────────────────────────────
     case 'content.specific_text':
       return <TextInput value={value as string} onChange={onChange} testId="attr-specific-text" />;
@@ -610,6 +627,47 @@ export function RuleValueEditorByAttr({ attr, value, onChange }: RuleValueEditor
           <NumberInput value={value as number} onChange={onChange} step={0.1} min={0} testId="attr-margin-right" />
           <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>cm</span>
         </span>
+      );
+
+    // T3.1: 装订线宽度
+    case 'page.margin_gutter_cm':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.1} min={0} testId="attr-margin-gutter" />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>cm</span>
+        </span>
+      );
+
+    // T3.1: 页眉距页面边界
+    case 'page.header_offset_cm':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.1} min={0} testId="attr-header-offset" />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>cm</span>
+        </span>
+      );
+
+    // T3.1: 页脚距页面边界
+    case 'page.footer_offset_cm':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.1} min={0} testId="attr-footer-offset" />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>cm</span>
+        </span>
+      );
+
+    // T3.1: 打印模式（单面/双面，严格枚举）
+    case 'page.print_mode':
+      return (
+        <EnumSelect
+          value={value as string}
+          onChange={onChange}
+          testId="attr-print-mode"
+          options={[
+            { value: 'single', label: '单面打印' },
+            { value: 'double', label: '双面打印' },
+          ]}
+        />
       );
 
     case 'page.new_page_before':

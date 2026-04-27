@@ -1,8 +1,9 @@
 """
 @file: test_field_defs.py
-@description: 37 字段定义测试（T2.1 新增 table_header / T2.2 拆分 toc_entry 为 l1/l2/l3 / T2.3 新增 formula_block / T2.4 新增 footnote）
+@description: 37 字段定义测试（T2.1 新增 table_header / T2.2 拆分 toc_entry 为 l1/l2/l3 /
+              T2.3 新增 formula_block / T2.4 新增 footnote / T3.1 追加 6 个 attr key）
 @author: Atlas.oi
-@date: 2026-04-27
+@date: 2026-04-28
 """
 from thesis_worker.engine_v2.field_defs import FIELD_DEFS, get_field, applicable_attrs
 
@@ -172,3 +173,52 @@ class TestFieldDefs:
         attrs = applicable_attrs('footnote')
         assert set(attrs) == {'font.cjk', 'font.size_pt'}
         assert len(attrs) == 2
+
+    # ─────────────────────────────────────────────
+    # T3.1: 6 个新 attr key 绑定断言
+    # ─────────────────────────────────────────────
+
+    def test_toc_title_has_space_pt_attrs(self):
+        # toc_title 追加 para.space_before_pt / para.space_after_pt
+        attrs = applicable_attrs('toc_title')
+        assert 'para.space_before_pt' in attrs
+        assert 'para.space_after_pt' in attrs
+        # 原有 _lines 系列保留，与新 _pt 系列共存
+        assert 'para.space_before_lines' in attrs
+        assert 'para.space_after_lines' in attrs
+
+    def test_chapter_title_has_space_pt_attrs(self):
+        # chapter_title 追加 para.space_before_pt / para.space_after_pt
+        attrs = applicable_attrs('chapter_title')
+        assert 'para.space_before_pt' in attrs
+        assert 'para.space_after_pt' in attrs
+        # 原有 _lines 系列保留
+        assert 'para.space_before_lines' in attrs
+        assert 'para.space_after_lines' in attrs
+
+    def test_page_margin_has_t31_attrs(self):
+        # page_margin 追加装订线/页眉距/页脚距/打印模式 4 项
+        attrs = applicable_attrs('page_margin')
+        assert 'page.margin_gutter_cm' in attrs
+        assert 'page.header_offset_cm' in attrs
+        assert 'page.footer_offset_cm' in attrs
+        assert 'page.print_mode' in attrs
+        # 原有 4 个 margin_*_cm 保留
+        assert 'page.margin_top_cm' in attrs
+        assert 'page.margin_bottom_cm' in attrs
+        assert 'page.margin_left_cm' in attrs
+        assert 'page.margin_right_cm' in attrs
+        # 总计 8 个 attr
+        assert len(attrs) == 8
+
+    def test_section_title_not_changed(self):
+        # section_title 未被 T3.1 修改（无 spacing attrs，不对称则不追加）
+        attrs = applicable_attrs('section_title')
+        assert 'para.space_before_pt' not in attrs
+        assert 'para.space_after_pt' not in attrs
+
+    def test_subsection_title_not_changed(self):
+        # subsection_title 未被 T3.1 修改
+        attrs = applicable_attrs('subsection_title')
+        assert 'para.space_before_pt' not in attrs
+        assert 'para.space_after_pt' not in attrs

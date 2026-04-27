@@ -13,8 +13,12 @@
  *   T2.4: 新增 footnote(order=25)，spec1 规定脚注宋体小五号，属于独立版面元素；
  *         applicable_attributes 仅 font.cjk + font.size_pt；
  *         后续字段全部 +1（references_title 25→26，...，mixed_script_global 36→37）。
+ *   T3.1: 补齐 B 类 6 个高频缺失 attr key：
+ *         chapter_title + toc_title 追加 para.space_before_pt / para.space_after_pt；
+ *         page_margin 追加 page.margin_gutter_cm / page.header_offset_cm /
+ *         page.footer_offset_cm / page.print_mode（并入而非新建字段）。
  * @author Atlas.oi
- * @date 2026-04-27
+ * @date 2026-04-28
  */
 
 export interface FieldDef {
@@ -105,7 +109,8 @@ export const FIELD_DEFS: FieldDef[] = [
     label: '目录标题',
     group: 'front',
     order: 11,
-    applicable_attributes: ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.space_before_lines', 'para.space_after_lines'],
+    // T3.1: 追加 para.space_before_pt / para.space_after_pt（与 _lines 系列共存）
+    applicable_attributes: ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.space_before_lines', 'para.space_after_lines', 'para.space_before_pt', 'para.space_after_pt'],
   },
   {
     // T2.2: 从 toc_entry 拆出一级目录条目独立字段。
@@ -144,7 +149,9 @@ export const FIELD_DEFS: FieldDef[] = [
     label: '一级章节标题',
     group: 'body',
     order: 15,
-    applicable_attributes: ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.space_before_lines', 'para.space_after_lines', 'page.new_page_before'],
+    // T3.1: 追加 para.space_before_pt / para.space_after_pt（与 _lines 系列共存，
+    // 规范文本描述"磅"时用 _pt，描述"行"时用 _lines，两者互不冲突）
+    applicable_attributes: ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.space_before_lines', 'para.space_after_lines', 'para.space_before_pt', 'para.space_after_pt', 'page.new_page_before'],
   },
   {
     id: 'section_title',
@@ -294,7 +301,11 @@ export const FIELD_DEFS: FieldDef[] = [
     label: '页边距',
     group: 'global',
     order: 33,
-    applicable_attributes: ['page.margin_top_cm', 'page.margin_bottom_cm', 'page.margin_left_cm', 'page.margin_right_cm'],
+    // T3.1: 追加装订线/页眉距/页脚距/打印模式 4 项，并入而非新建字段
+    applicable_attributes: [
+      'page.margin_top_cm', 'page.margin_bottom_cm', 'page.margin_left_cm', 'page.margin_right_cm',
+      'page.margin_gutter_cm', 'page.header_offset_cm', 'page.footer_offset_cm', 'page.print_mode',
+    ],
   },
   {
     id: 'page_header',

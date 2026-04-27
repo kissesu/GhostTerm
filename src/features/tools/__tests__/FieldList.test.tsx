@@ -150,6 +150,59 @@ describe('FieldList', () => {
     expect(uncaptured.length).toBeGreaterThan(0);
   });
 
+  // ─────────────────────────────────────────────
+  // T3.1: 验证 chapter_title 渲染管线包含新增 attr 的编辑器
+  // ─────────────────────────────────────────────
+
+  it('T3.1: chapter_title 渲染管线包含 para.space_before_pt 和 para.space_after_pt 编辑器', () => {
+    // chapter_title 的 applicable_attributes T3.1 后包含 para.space_before_pt / para.space_after_pt
+    const fields = [
+      {
+        id: 'chapter_title',
+        label: '一级章节标题',
+        status: 'done' as const,
+        confidence: 0.9,
+        value: { 'para.space_before_pt': 12, 'para.space_after_pt': 6 },
+      },
+    ];
+    render(
+      <FieldList
+        fields={fields}
+        currentFieldId={null}
+        onJump={vi.fn()}
+        onSkip={vi.fn()}
+        onAttrChange={vi.fn()}
+      />
+    );
+    // attr-space-before-pt 对应 RuleValueEditorByAttr case 'para.space_before_pt'
+    expect(screen.getByTestId('attr-space-before-pt')).toBeInTheDocument();
+    expect(screen.getByTestId('attr-space-after-pt')).toBeInTheDocument();
+  });
+
+  it('T3.1: page_margin 渲染管线包含 page.print_mode 编辑器', () => {
+    // page_margin.applicable_attributes T3.1 后包含 page.print_mode
+    const fields = [
+      {
+        id: 'page_margin',
+        label: '页边距',
+        status: 'partial' as const,
+        confidence: 0.7,
+        value: { 'page.print_mode': 'single' },
+      },
+    ];
+    render(
+      <FieldList
+        fields={fields}
+        currentFieldId={null}
+        onJump={vi.fn()}
+        onSkip={vi.fn()}
+        onAttrChange={vi.fn()}
+      />
+    );
+    // attr-print-mode 对应 RuleValueEditorByAttr case 'page.print_mode'
+    expect(screen.getByTestId('attr-print-mode')).toBeInTheDocument();
+  });
+
   it('calls onAttrChange with correct args when editor value changes', () => {
     // 构造一个字段，只测试 font.cjk（CjkFontSelect，select 元素可 fireEvent.change）
     const fields = [

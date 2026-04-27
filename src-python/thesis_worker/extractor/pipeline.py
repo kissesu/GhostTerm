@@ -161,11 +161,17 @@ def _read_paragraph_style_attrs(para) -> dict[str, Any]:
     sb = para.paragraph_format.space_before
     if sb is not None:
         attrs['para.space_before_lines'] = round(sb.pt / 12, 1)
+        # T3.1: 同时写入 pt 版本（直接保留磅值，不除以行基准）。
+        # 规范文本用"磅"描述间距时用 _pt key，用"行"描述时用 _lines key，
+        # 前端按字段 applicable_attributes 决定显示哪个。
+        attrs['para.space_before_pt'] = round(sb.pt, 1)
 
     # 段后行数
     sa = para.paragraph_format.space_after
     if sa is not None:
         attrs['para.space_after_lines'] = round(sa.pt / 12, 1)
+        # T3.1: 同时写入 pt 版本（理由同 space_before_pt）
+        attrs['para.space_after_pt'] = round(sa.pt, 1)
 
     # 若 XML 未设 w:spacing，尝试识别空格占位字间距风格（如"摘  要"、"目　录"）
     # 同时接受半角空格（\s）和全角空格（U+3000），真实 Word 模板常用全角空格做字间距占位
@@ -322,6 +328,40 @@ def _calculate_confidence(attrs: dict[str, Any], text_len: int) -> float:
     return 0.5
 
 
+def _read_section_attrs(doc) -> dict[str, Any]:
+    """读取 Section 级页面布局属性（装订线/页眉脚距/打印模式）
+
+    业务逻辑：
+    1. 从 doc.sections[0] 读取装订线宽、页眉距、页脚距（均取 cm 并保留 2 位小数）
+    2. 通过 w:settings 根元素是否含 w:evenAndOddHeaders 判断打印模式
+    3. 返回 4 个属性的字典，供 extract_all 合并到 page_margin 字段
+
+    注意：若 sections 为空（异常文档），直接返回空字典，不抛异常。
+    """
+    from docx.oxml.ns import qn
+    attrs: dict[str, Any] = {}
+    if not doc.sections:
+        return attrs
+    section = doc.sections[0]
+
+    # 装订线宽度（cm）
+    attrs['page.margin_gutter_cm'] = round(section.gutter.cm, 2)
+
+    # 页眉距页面顶端距离（cm）
+    attrs['page.header_offset_cm'] = round(section.header_distance.cm, 2)
+
+    # 页脚距页面底端距离（cm）
+    attrs['page.footer_offset_cm'] = round(section.footer_distance.cm, 2)
+
+    # 打印模式：检测 w:evenAndOddHeaders 元素是否存在
+    # 存在 → 奇偶页眉分设（双面打印） → 'double'；不存在 → 'single'
+    settings_el = doc.settings.element
+    even_odd = settings_el.find(qn('w:evenAndOddHeaders'))
+    attrs['page.print_mode'] = 'double' if even_odd is not None else 'single'
+
+    return attrs
+
+
 def _detect_punct_space_after(doc) -> 'bool | None':
     """检测英文标点后是否规范地空一字符。
 
@@ -426,6 +466,24 @@ def extract_all(file: str) -> dict[str, Any]:
         # 写入 value 子字典；该字段全文启发式推断，置信度约 0.7
         # （非段落直接匹配，0.7 与 _calculate_confidence 中"2个属性"档位对齐）
         rules['mixed_script_global']['value']['mixed_script.punct_space_after'] = punct_result
+
+    # ============================================
+    # T3.1: Section 级页面属性抽取（装订线/页眉脚距/打印模式）
+    # 这四项属性无法通过段落扫描命中，需独立读取文档 Section
+    # 结果合并到 page_margin 字段（按 plan "或并入 page_margin" 选并入）
+    # ============================================
+    section_attrs = _read_section_attrs(doc)
+    if section_attrs:
+        # 过滤掉 schema 未声明的 attr key（与段落流程保持一致）
+        section_attrs = _log_and_filter_unsupported(
+            section_attrs,
+            spec_file=os.path.basename(file),
+            field_id='page_margin',
+            context_snippet='[section-level attrs]',
+        )
+        if section_attrs:
+            rules.setdefault('page_margin', {'enabled': True, 'value': {}})
+            rules['page_margin']['value'].update(section_attrs)
 
     return {
         'rules': rules,
@@ -564,15 +622,17 @@ def _extract_para_level_attrs(para) -> dict[str, Any]:
     if ls is not None and isinstance(ls, (int, float)):
         attrs['para.line_spacing'] = round(float(ls), 2)
 
-    # 段前行数
+    # 段前行数（T3.1: 同时写入 pt 版本，与 _read_paragraph_style_attrs 保持一致）
     sb = para.paragraph_format.space_before
     if sb is not None:
         attrs['para.space_before_lines'] = round(sb.pt / 12, 1)
+        attrs['para.space_before_pt'] = round(sb.pt, 1)
 
-    # 段后行数
+    # 段后行数（T3.1: 同时写入 pt 版本）
     sa = para.paragraph_format.space_after
     if sa is not None:
         attrs['para.space_after_lines'] = round(sa.pt / 12, 1)
+        attrs['para.space_after_pt'] = round(sa.pt, 1)
 
     # 空格占位字间距（字间距 fallback，与 _read_paragraph_style_attrs 一致）
     stripped = para.text.strip()
