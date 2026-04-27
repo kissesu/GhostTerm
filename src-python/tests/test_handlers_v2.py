@@ -45,11 +45,12 @@ class TestExtractFromSelection:
 
 
 class TestListFields:
-    def test_returns_32_fields(self):
+    def test_returns_33_fields(self):
+        # T2.1 新增 table_header 后，共 33 个字段
         resp = handle({'id': 'r4', 'cmd': 'list_fields'})
         assert resp['ok'] is True
         fields = resp['result']['fields']
-        assert len(fields) == 32
+        assert len(fields) == 33
         # 每字段必须有 id/label/group/order/applicable_attributes
         for f in fields:
             assert 'id' in f

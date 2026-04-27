@@ -11,9 +11,9 @@ from thesis_worker.extractor.field_matcher import (
 
 
 class TestKeywords:
-    def test_all_32_fields_have_keywords(self):
-        # 必须 32 个字段都有关键词列表（哪怕是空 list）
-        assert len(FIELD_KEYWORDS) == 32
+    def test_all_33_fields_have_keywords(self):
+        # T2.1 新增 table_header 后，共 33 个字段都必须有关键词列表（哪怕是空 list）
+        assert len(FIELD_KEYWORDS) == 33
 
     def test_abstract_zh_keywords(self):
         assert '摘要' in FIELD_KEYWORDS['abstract_zh_title']

@@ -8,7 +8,7 @@ from typing import Optional
 
 # 字段 id → 触发关键词列表
 # 关键词必须是字段的显著标志，优先用完整词避免误匹配
-# 分组：前置 12 + 正文 8 + 后置 6 + 页面级 6 = 32 个字段
+# 分组：前置 12 + 正文 9 + 后置 6 + 页面级 6 = 33 个字段（T2.1 新增 table_header）
 FIELD_KEYWORDS: dict[str, list[str]] = {
     # ---- 前置部分（12 个）----
     'title_zh': ['毕业论文题目', '毕业论文（设计）题目', '论文题目', '中文题目'],
@@ -33,6 +33,8 @@ FIELD_KEYWORDS: dict[str, list[str]] = {
     'figure_caption': ['图题', '图标题'],
     'figure_inner_text': ['图例', '图内文字', '标目'],
     'table_caption': ['表题', '表标题'],
+    # T2.1: 新增表头字段关键词。规范文本通常用"表头"或"表格标题行"描述首行格式要求。
+    'table_header': ['表头', '表格标题行'],
     'table_inner_text': ['表内容'],
     # ---- 后置部分（6 个）----
     'references_title': ['参考文献'],
