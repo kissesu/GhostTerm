@@ -29,6 +29,15 @@ class TestKeywords:
     def test_toc_entry_l3_keywords_exist(self):
         assert len(FIELD_KEYWORDS.get('toc_entry_l3', [])) > 0
 
+    def test_toc_entry_l_before_toc_title_in_dict(self):
+        """toc_title 含短子串"目录"，l1/l2/l3 必须排在其前面，
+        否则含"目录"的 l* 文本会先命中 toc_title。
+        本测试把字典顺序约束转化为可执行断言，靠注释维持的顺序是不可信的。"""
+        keys = list(FIELD_KEYWORDS.keys())
+        assert keys.index('toc_entry_l1') < keys.index('toc_title')
+        assert keys.index('toc_entry_l2') < keys.index('toc_title')
+        assert keys.index('toc_entry_l3') < keys.index('toc_title')
+
     def test_abstract_zh_keywords(self):
         assert '摘要' in FIELD_KEYWORDS['abstract_zh_title']
         assert '摘 要' in FIELD_KEYWORDS['abstract_zh_title']
@@ -108,17 +117,37 @@ class TestMatchField:
         assert match_field(text) == 'chapter_title'
         assert match_field(text) != 'toc_entry_l1'
 
-    def test_toc_entry_l2_not_match_section_title(self):
-        # "二级标题" 触发 section_title，不触发 toc_entry_l2
-        text = '二级标题格式要求'
-        assert match_field(text) == 'section_title'
-        assert match_field(text) != 'toc_entry_l2'
+    def test_toc_entry_l1_keyword_exists_and_matches(self):
+        # 判别力测试：确认 toc_entry_l1 关键词"一级目录条目"存在且能命中
+        # 删除 toc_entry_l1 关键词后此 case 会挂 → 具有判别力
+        assert match_field('一级目录条目：黑体四号') == 'toc_entry_l1'
+        assert match_field('目录一级条目对应格式') == 'toc_entry_l1'
 
-    def test_toc_entry_l3_not_match_subsection_title(self):
-        # "三级标题" 触发 subsection_title，不触发 toc_entry_l3
-        text = '三级标题格式说明'
-        assert match_field(text) == 'subsection_title'
-        assert match_field(text) != 'toc_entry_l3'
+    def test_toc_entry_l2_keyword_exists_and_matches(self):
+        # 判别力测试：确认 toc_entry_l2 关键词"二级目录条目"存在且能命中
+        # 删除 toc_entry_l2 关键词后此 case 会挂 → 具有判别力
+        assert match_field('二级目录条目宋体小四') == 'toc_entry_l2'
+        assert match_field('目录二级条目缩进格式') == 'toc_entry_l2'
+
+    def test_toc_entry_l3_keyword_exists_and_matches(self):
+        # 判别力测试：确认 toc_entry_l3 关键词"三级目录条目"存在且能命中
+        # 删除 toc_entry_l3 关键词后此 case 会挂 → 具有判别力
+        assert match_field('三级目录条目缩进4字符') == 'toc_entry_l3'
+        assert match_field('目录三级条目字体格式') == 'toc_entry_l3'
+
+    def test_toc_entry_l1_priority_over_toc_title(self):
+        # 字典顺序保护：含"目录"子串时 l1 应先命中而非 toc_title
+        # "目录一级条目格式" 同时含 "目录"（toc_title 关键词）和 "目录一级条目"（l1 关键词）
+        # 删除 toc_entry_l1 关键词后此 case 会挂（退化为 toc_title）→ 具有判别力
+        assert match_field('目录一级条目格式') == 'toc_entry_l1'
+
+    def test_toc_entry_l2_priority_over_toc_title(self):
+        # 字典顺序保护：含"目录"子串时 l2 应先命中而非 toc_title
+        assert match_field('目录二级条目格式') == 'toc_entry_l2'
+
+    def test_toc_entry_l3_priority_over_toc_title(self):
+        # 字典顺序保护：含"目录"子串时 l3 应先命中而非 toc_title
+        assert match_field('目录三级条目格式') == 'toc_entry_l3'
 
     def test_toc_title_still_matches(self):
         # 拆分操作不影响 toc_title（"目录"）的匹配
