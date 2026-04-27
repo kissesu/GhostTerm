@@ -183,7 +183,7 @@ def _handle_extract_all(req_id: str, req: dict) -> dict:
     P4 语义字段抽取：扫描整个 docx，返回所有识别到的语义字段规则和证据。
 
     业务逻辑：
-    1. ENOENT 检查先于 pipeline，原因同 _handle_extract_template
+    1. ENOENT 检查先于 pipeline，避免 docx 解析阶段抛非预期异常
     2. 调用 pipeline.extract_all(file)，返回 {rules, evidence}
     3. PackageNotFoundError → PARSE_ERROR，与其它命令保持一致
     """
