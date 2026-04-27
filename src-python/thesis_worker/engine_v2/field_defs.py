@@ -1,6 +1,6 @@
 """
 @file: field_defs.py
-@description: 36 个论文语义字段定义（参 docs/superpowers/specs/2026-04-18-p4-semantic-fields-design.md）
+@description: 37 个论文语义字段定义（参 docs/superpowers/specs/2026-04-18-p4-semantic-fields-design.md）
               属性列表已展开 spec 的 "+" 和 "同 X 换 ascii" 简写
               T2.1: 在 table_caption(19) 与 table_inner_text(21) 之间插入 table_header(20)，
                     拆分表头与表内容（规范层分开规定的两件事）
@@ -12,6 +12,10 @@
                     applicable_attributes 本 task 只加 para.align，
                     numbering.formula_style 等 T3.3 再补；
                     后续字段 order 全部 +1（references_title 24→25, ..., mixed_script_global 35→36）
+              T2.4: 在 formula_block(24) 之后插入 footnote(25)，
+                    spec1 规定注释列于当前页脚注位置（宋体小五号），
+                    属于独立版面元素，applicable_attributes 仅 font.cjk + font.size_pt；
+                    后续字段 order 全部 +1（references_title 25→26, ..., mixed_script_global 36→37）
 @author: Atlas.oi
 @date: 2026-04-27
 """
@@ -80,7 +84,7 @@ FIELD_DEFS: list[dict] = [
         'id': 'toc_entry_l3', 'label': '目录三级条目', 'group': 'front', 'order': 14,
         'applicable_attributes': ['font.cjk', 'font.size_pt', 'font.bold', 'para.first_line_indent_chars'],
     },
-    # 正文部分（10 字段：order 15-24）
+    # 正文部分（11 字段：order 15-25）
     {
         'id': 'chapter_title', 'label': '一级章节标题', 'group': 'body', 'order': 15,
         'applicable_attributes': ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.space_before_lines', 'para.space_after_lines', 'page.new_page_before'],
@@ -129,54 +133,61 @@ FIELD_DEFS: list[dict] = [
         'id': 'formula_block', 'label': '公式', 'group': 'body', 'order': 24,
         'applicable_attributes': ['para.align'],
     },
-    # 后置部分（6 字段：order 25-30）
     {
-        'id': 'references_title', 'label': '参考文献标题', 'group': 'back', 'order': 25,
+        # T2.4: 新增脚注字段。spec1 规定"注释列于当前页脚注位置，宋体小五号"，
+        # 属于独立版面元素，规范只规定字体和字号两个维度，
+        # applicable_attributes 仅 font.cjk + font.size_pt。
+        'id': 'footnote', 'label': '脚注', 'group': 'body', 'order': 25,
+        'applicable_attributes': ['font.cjk', 'font.size_pt'],
+    },
+    # 后置部分（6 字段：order 26-31）
+    {
+        'id': 'references_title', 'label': '参考文献标题', 'group': 'back', 'order': 26,
         'applicable_attributes': ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'page.new_page_before'],
     },
     {
-        'id': 'reference_entry', 'label': '参考文献条目', 'group': 'back', 'order': 26,
+        'id': 'reference_entry', 'label': '参考文献条目', 'group': 'back', 'order': 27,
         'applicable_attributes': ['font.cjk', 'font.ascii', 'font.size_pt', 'para.hanging_indent_chars', 'citation.style'],
     },
     {
-        'id': 'ack_title', 'label': '致谢标题', 'group': 'back', 'order': 27,
+        'id': 'ack_title', 'label': '致谢标题', 'group': 'back', 'order': 28,
         'applicable_attributes': ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.letter_spacing_chars', 'page.new_page_before'],
     },
     {
-        'id': 'ack_body', 'label': '致谢正文', 'group': 'back', 'order': 28,
+        'id': 'ack_body', 'label': '致谢正文', 'group': 'back', 'order': 29,
         'applicable_attributes': ['font.cjk', 'font.size_pt', 'para.first_line_indent_chars'],
     },
     {
-        'id': 'appendix_title', 'label': '附录标题', 'group': 'back', 'order': 29,
+        'id': 'appendix_title', 'label': '附录标题', 'group': 'back', 'order': 30,
         'applicable_attributes': ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.letter_spacing_chars', 'page.new_page_before'],
     },
     {
-        'id': 'appendix_body', 'label': '附录正文', 'group': 'back', 'order': 30,
+        'id': 'appendix_body', 'label': '附录正文', 'group': 'back', 'order': 31,
         'applicable_attributes': ['font.cjk', 'font.size_pt', 'para.first_line_indent_chars'],
     },
-    # 页面级全局（6 字段：order 31-36）
+    # 页面级全局（6 字段：order 32-37）
     {
-        'id': 'page_size', 'label': '页面大小', 'group': 'global', 'order': 31,
+        'id': 'page_size', 'label': '页面大小', 'group': 'global', 'order': 32,
         'applicable_attributes': ['page.size'],
     },
     {
-        'id': 'page_margin', 'label': '页边距', 'group': 'global', 'order': 32,
+        'id': 'page_margin', 'label': '页边距', 'group': 'global', 'order': 33,
         'applicable_attributes': ['page.margin_top_cm', 'page.margin_bottom_cm', 'page.margin_left_cm', 'page.margin_right_cm'],
     },
     {
-        'id': 'page_header', 'label': '页眉', 'group': 'global', 'order': 33,
+        'id': 'page_header', 'label': '页眉', 'group': 'global', 'order': 34,
         'applicable_attributes': ['font.cjk', 'font.size_pt', 'para.align', 'content.specific_text'],
     },
     {
-        'id': 'page_footer_number', 'label': '页脚页码', 'group': 'global', 'order': 34,
+        'id': 'page_footer_number', 'label': '页脚页码', 'group': 'global', 'order': 35,
         'applicable_attributes': ['font.ascii', 'font.size_pt', 'para.align', 'pagination.front_style', 'pagination.body_style'],
     },
     {
-        'id': 'line_spacing_global', 'label': '全文行距', 'group': 'global', 'order': 35,
+        'id': 'line_spacing_global', 'label': '全文行距', 'group': 'global', 'order': 36,
         'applicable_attributes': ['para.line_spacing'],
     },
     {
-        'id': 'mixed_script_global', 'label': '数字/西文字体全局', 'group': 'global', 'order': 36,
+        'id': 'mixed_script_global', 'label': '数字/西文字体全局', 'group': 'global', 'order': 37,
         'applicable_attributes': ['mixed_script.ascii_is_tnr', 'mixed_script.punct_space_after'],
     },
 ]

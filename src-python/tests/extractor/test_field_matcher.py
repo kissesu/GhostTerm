@@ -1,6 +1,6 @@
 """
 @file: test_field_matcher.py
-@description: 字段 id ← 关键词 关联（T2.2: toc_entry 拆分 l1/l2/l3 / T2.3: 新增 formula_block）
+@description: 字段 id ← 关键词 关联（T2.2: toc_entry 拆分 l1/l2/l3 / T2.3: 新增 formula_block / T2.4: 新增 footnote）
 @author: Atlas.oi
 @date: 2026-04-27
 """
@@ -11,9 +11,9 @@ from thesis_worker.extractor.field_matcher import (
 
 
 class TestKeywords:
-    def test_all_36_fields_have_keywords(self):
-        # T2.3 新增 formula_block 后，共 36 个字段都必须有关键词列表
-        assert len(FIELD_KEYWORDS) == 36
+    def test_all_37_fields_have_keywords(self):
+        # T2.4 新增 footnote 后，共 37 个字段都必须有关键词列表
+        assert len(FIELD_KEYWORDS) == 37
 
     def test_toc_entry_removed_from_keywords(self):
         # 旧 toc_entry 关键词条目已删除
@@ -200,6 +200,44 @@ class TestMatchField_FormulaBlock:
     def test_formula_block_keyword_discrimination_secondary(self):
         # 判别力 sanity：若删除"公式编号"，'公式编号圆括号靠右' 必须不命中 formula_block
         assert match_field('公式编号圆括号靠右') == 'formula_block'
+
+
+class TestMatchField_FootnoteBlock:
+    """footnote 关键词匹配行为测试（T2.4 新增）"""
+
+    def test_footnote_keywords_exist(self):
+        # footnote 必须有实际关键词（非空列表）
+        assert len(FIELD_KEYWORDS.get('footnote', [])) > 0
+
+    def test_footnote_match_primary(self):
+        # 正向 1："脚注格式" 是 footnote 的核心关键词
+        # 规范文本典型表述："脚注格式：宋体小五号"
+        text = '脚注格式要求宋体小五号'
+        assert match_field(text) == 'footnote'
+
+    def test_footnote_match_secondary(self):
+        # 正向 2："脚注字体" 是 footnote 的第二关键词
+        # 规范文本典型表述："脚注字体宋体小五"
+        text = '脚注字体宋体小五'
+        assert match_field(text) == 'footnote'
+
+    def test_footnote_not_match_page_footer(self):
+        # 边界负向：含"页脚"但不含脚注关键词的文本，命中 page_footer_number 而非 footnote
+        # 判别力：删 footnote 关键词后此 case 不受影响（它本来就期望非 footnote）；
+        # 真正有判别力的是上面两个正向 case：删关键词后退化为 None
+        text = '页脚页码格式要求阿拉伯数字'
+        assert match_field(text) == 'page_footer_number'
+        assert match_field(text) != 'footnote'
+
+    def test_footnote_keyword_discrimination_primary(self):
+        # 判别力 sanity：'脚注格式宋体小五' 必须命中 footnote
+        # 删除 footnote 所有关键词后此 case 退化为 None → 具有判别力
+        assert match_field('脚注格式宋体小五') == 'footnote'
+
+    def test_footnote_keyword_discrimination_secondary(self):
+        # 判别力 sanity：'脚注字体小五号宋体' 必须命中 footnote
+        # 删除 footnote 所有关键词后此 case 退化为 None → 具有判别力
+        assert match_field('脚注字体小五号宋体') == 'footnote'
 
 
 class TestMatchAllFields:
