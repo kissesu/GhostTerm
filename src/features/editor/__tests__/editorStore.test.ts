@@ -345,4 +345,107 @@ describe('editorStore', () => {
       expect(useEditorStore.getState().openFiles[0].isDirty).toBe(false);
     });
   });
+
+  // ============================================
+  // 持久化回归测试（Bug 2 修复）
+  //
+  // 业务背景：
+  // 旧版 closeFile / setActive 等只改内存，不触发 save_editor_session_cmd，
+  // 用户在不切项目的情况下关闭文件并直接退出 GhostTerm，
+  // 重启后 editor_sessions.json 仍是上次切项目时的快照 → 关闭过的文件复活。
+  //
+  // 修复后：close 系列 / openFile / setActive 末尾调用 syncCurrentSession，
+  // 通过 lazy import projectStore 拿 currentPath，触发 save_editor_session_cmd。
+  // ============================================
+  describe('syncCurrentSession 触发持久化', () => {
+    beforeEach(async () => {
+      // 测试持久化必须有当前项目，初始化 projectStore.currentProject
+      const { useProjectStore } = await import('../../sidebar/projectStore');
+      useProjectStore.setState({
+        currentProject: { path: '/proj-x', name: 'proj-x', last_opened: 0 } as never,
+        recentProjects: [],
+      });
+    });
+
+    it('closeFile 后调用 save_editor_session_cmd 持久化新状态', async () => {
+      // openFile + closeFile 会经历：read_file_cmd → save_editor_session_cmd × 2
+      vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+        if (cmd === 'read_file_cmd') return { kind: 'text', content: 'x' };
+        if (cmd === 'save_editor_session_cmd') return undefined;
+        return undefined;
+      });
+
+      const { useEditorStore } = await import('../editorStore');
+      await useEditorStore.getState().openFile('/proj-x/a.ts');
+      // openFile 触发一次 sync
+      // closeFile 应再次触发持久化
+      useEditorStore.getState().closeFile('/proj-x/a.ts');
+      // 等待 fire-and-forget 持久化完成
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const calls = vi.mocked(invoke).mock.calls.filter(
+        ([cmd]) => cmd === 'save_editor_session_cmd'
+      );
+      // openFile + closeFile 各触发一次，共两次
+      expect(calls.length).toBeGreaterThanOrEqual(2);
+      // 最后一次持久化体现关闭后的状态：openFilePaths 为空
+      const lastPayload = calls[calls.length - 1][1] as {
+        projectPath: string;
+        openFilePaths: string[];
+        activeFilePath: string | null;
+      };
+      expect(lastPayload.projectPath).toBe('/proj-x');
+      expect(lastPayload.openFilePaths).toEqual([]);
+      expect(lastPayload.activeFilePath).toBeNull();
+    });
+
+    it('setActive 后调用 save_editor_session_cmd 持久化新激活路径', async () => {
+      vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+        if (cmd === 'read_file_cmd') return { kind: 'text', content: 'x' };
+        if (cmd === 'save_editor_session_cmd') return undefined;
+        return undefined;
+      });
+
+      const { useEditorStore } = await import('../editorStore');
+      await useEditorStore.getState().openFile('/proj-x/a.ts');
+      await useEditorStore.getState().openFile('/proj-x/b.ts');
+      // 等待 openFile 内的 fire-and-forget syncCurrentSession 异步完成，
+      // 避免之后 mockClear 之后才到达的 save 污染调用计数
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      vi.mocked(invoke).mockClear();
+      useEditorStore.getState().setActive('/proj-x/a.ts');
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const calls = vi.mocked(invoke).mock.calls.filter(
+        ([cmd]) => cmd === 'save_editor_session_cmd'
+      );
+      expect(calls.length).toBe(1);
+      const payload = calls[0][1] as { activeFilePath: string | null };
+      expect(payload.activeFilePath).toBe('/proj-x/a.ts');
+    });
+
+    it('无 currentProject 时 syncCurrentSession 静默跳过，不触发 invoke', async () => {
+      // 重置 projectStore 至无项目状态
+      const { useProjectStore } = await import('../../sidebar/projectStore');
+      useProjectStore.setState({
+        currentProject: null,
+        recentProjects: [],
+      });
+
+      vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+        if (cmd === 'read_file_cmd') return { kind: 'text', content: 'x' };
+        return undefined;
+      });
+
+      const { useEditorStore } = await import('../editorStore');
+      await useEditorStore.getState().openFile('/orphan/a.ts');
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const saveCalls = vi.mocked(invoke).mock.calls.filter(
+        ([cmd]) => cmd === 'save_editor_session_cmd'
+      );
+      expect(saveCalls).toHaveLength(0);
+    });
+  });
 });

@@ -133,6 +133,18 @@ interface EditorState {
   loadPersistedSession: (projectPath: string) => Promise<void>;
   /** 将当前项目的编辑器状态持久化到磁盘 */
   persistSession: (projectPath: string) => Promise<void>;
+  /**
+   * 同步当前活跃项目的会话到磁盘
+   *
+   * 业务逻辑说明：
+   * 1. 通过 lazy import projectStore 读取 currentProject?.path（避免循环依赖）
+   * 2. 无活跃项目时静默返回（启动期或测试场景）
+   * 3. 先调 saveSession 把内存 openFiles/activeFilePath 写入 projectSessions
+   * 4. 再调 persistSession 把 projectSessions 写入磁盘 editor_sessions.json
+   *
+   * 调用时机：close 系列 / openFile / setActive 后立即调用，确保关闭/重启 GhostTerm 后状态保留
+   */
+  syncCurrentSession: () => Promise<void>;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -186,11 +198,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         pendingScrollLine: { ...state.pendingScrollLine, [path]: lineNumber },
       }));
     }
+
+    // 持久化新会话：用户主动打开文件后立刻保存，避免直接退出 GhostTerm 时丢失
+    get().syncCurrentSession().catch(() => {});
   },
 
   closeAll: () => {
     // 切换项目时清空所有已打开文件，避免旧项目文件残留在新项目中
     set({ openFiles: [], activeFilePath: null });
+    get().syncCurrentSession().catch(() => {});
   },
 
   closeFile: (path: string) => {
@@ -211,6 +227,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }
 
     set({ openFiles: newFiles, activeFilePath: newActive });
+    // 关闭文件后立即持久化，避免重启时关闭过的文件复活（Bug 修复）
+    get().syncCurrentSession().catch(() => {});
   },
 
   saveFile: async (path: string) => {
@@ -233,6 +251,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   setActive: (path: string) => {
     set({ activeFilePath: path });
+    // 切换激活标签后持久化，重启时恢复到最后激活的文件
+    get().syncCurrentSession().catch(() => {});
   },
 
   clearPendingScroll: (path: string) => {
@@ -253,6 +273,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         activeFilePath: path,
       };
     });
+    get().syncCurrentSession().catch(() => {});
   },
 
   closeLeft: (path: string) => {
@@ -264,6 +285,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         activeFilePath: state.activeFilePath === null ? path : state.activeFilePath,
       };
     });
+    get().syncCurrentSession().catch(() => {});
   },
 
   closeRight: (path: string) => {
@@ -277,6 +299,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         activeFilePath: activeStillOpen ? state.activeFilePath : path,
       };
     });
+    get().syncCurrentSession().catch(() => {});
   },
 
   updateContent: (path: string, content: string) => {
@@ -361,6 +384,18 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       // 持久化失败不影响主流程，记录日志
       console.error('[editor] 持久化会话失败', e);
     });
+  },
+
+  syncCurrentSession: async () => {
+    // lazy import projectStore，避免 editor ↔ sidebar 模块循环依赖
+    const { useProjectStore } = await import('../sidebar/projectStore');
+    const currentPath = useProjectStore.getState().currentProject?.path;
+    // 启动期或测试场景未打开项目时无需持久化
+    if (!currentPath) return;
+    // 先把内存当前 openFiles/activeFilePath 写入 projectSessions[currentPath]
+    get().saveSession(currentPath);
+    // 再把 projectSessions[currentPath] 持久化到磁盘 editor_sessions.json
+    await get().persistSession(currentPath);
   },
 
   /**

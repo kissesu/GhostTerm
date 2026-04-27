@@ -333,6 +333,36 @@ export default function Editor() {
   }, [mode]);
 
   // ============================================
+  // 占位文件 hydrate：activeFile.content 与 view 中 doc 不一致时同步替换
+  //
+  // 业务逻辑说明：
+  // 1. 启动 GhostTerm 时 loadPersistedSession 构造 content='' 的占位文件，
+  //    restoreSession 同步设置 openFiles + activeFilePath，
+  //    Editor 主 useEffect 立刻用空 doc 创建 EditorView。
+  // 2. 随后 openProject 异步触发 openFile，从磁盘读取真实内容并替换占位。
+  // 3. 但主 useEffect 依赖只有 [activeFilePath, activeFile?.kind]，
+  //    content 变化不会触发重建。因此需独立 effect 把 activeFile.content
+  //    通过 dispatch 替换到 EditorView，避免编辑器永远显示空白。
+  //
+  // 用户输入路径下：updateListener 把 doc → store content 同步，
+  // effect 触发时 doc 与 content 已一致，比较后跳过 dispatch，无副作用。
+  //
+  // handleExternalChange 路径下：外部修改文件且用户无脏改时，
+  // 此 effect 同步把新磁盘内容刷新到编辑器（顺带修复了原本不刷新的小坑）。
+  // ============================================
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || !activeFile || activeFile.kind !== 'text') return;
+    // 测试环境（vitest mock）下 view.state / view.dispatch 可能不存在，typeof 守卫即可
+    if (!view.state?.doc || typeof view.dispatch !== 'function') return;
+    const current = view.state.doc.toString();
+    if (current === activeFile.content) return;
+    view.dispatch({
+      changes: { from: 0, to: current.length, insert: activeFile.content },
+    });
+  }, [activeFile?.content, activeFile?.kind]);
+
+  // ============================================
   // Effect：监听 pendingScrollLine，滚动编辑器到指定行
   // 由 searchStore.confirmSelection() 写入 pendingScrollLine，
   // Editor 检测到后滚动到对应行并清除记录
