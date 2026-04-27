@@ -18,6 +18,15 @@ pub struct PathCheckResult {
 }
 
 /// Unix/macOS 系统敏感路径列表 - 误写会导致系统损坏
+///
+/// 业务逻辑说明（macOS canonicalize 行为）：
+/// macOS 上 `/etc → /private/etc`、`/tmp → /private/tmp`、`/var → /private/var`
+/// 是 firmlinks。canonicalize 后路径均带 `/private` 前缀。所以前缀列表必须同时
+/// 覆盖 `/etc` 形式 + `/private/...` 形式。
+///
+/// **不能用 `/private` 单独前缀**：会误命中 `/private/var/folders/...`（macOS 用户级
+/// 临时目录，系统 tempdir 默认位置），导致 `tempfile::tempdir()` 创建的合法用户
+/// 临时文件被判为敏感（v0.2.12 CI 误报根因，2026-04-27 修复）。
 #[cfg(not(target_os = "windows"))]
 const SENSITIVE_PREFIXES: &[&str] = &[
     "/etc",
@@ -26,7 +35,13 @@ const SENSITIVE_PREFIXES: &[&str] = &[
     "/sbin",
     "/System",   // macOS 系统目录
     "/Library",  // macOS 系统库（部分受保护）
-    "/private",  // macOS 对 /etc /tmp /var 的实际存储位置
+    // macOS canonicalize 后的真实子前缀（精确，不含 /private/var/folders 用户区）
+    "/private/etc",
+    "/private/tmp",     // /tmp 的真实路径（系统临时，与 /private/var/folders 用户临时不同）
+    "/private/var/db",
+    "/private/var/log",
+    "/private/var/root",
+    "/private/var/audit",
 ];
 
 /// Windows 系统敏感路径列表 - 写入会影响系统稳定性
@@ -167,6 +182,42 @@ mod tests {
         // macOS /System 目录
         let result = check_write_path("/System/Library/test").unwrap();
         assert!(result.needs_confirmation);
+    }
+
+    // ============================================
+    // 回归保护：v0.2.12 CI 失败根因
+    // 旧代码 SENSITIVE_PREFIXES 含 `/private` 顶层前缀，把 macOS 用户级
+    // tempdir `/private/var/folders/...` 误判为敏感。下面两组测试验证：
+    // 1. 用户级临时目录（macOS canonicalize 后） → 不敏感（user 合法）
+    // 2. 系统级 /private 子目录 → 仍敏感（保护未削弱）
+    // ============================================
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_macos_user_temp_not_sensitive() {
+        // /private/var/folders/<user>/T/ 是 macOS 用户级 tempdir 默认位置
+        // 由 tempfile::tempdir() 创建，是合法用户写区，不应触发确认
+        assert!(!is_sensitive_path("/private/var/folders/abc/T/.tmpXXXX/foo.txt"));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_macos_private_etc_still_sensitive() {
+        // /private/etc 是 /etc 的 firmlink 真实路径，仍是系统配置区
+        assert!(is_sensitive_path("/private/etc/hosts"));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_macos_private_var_log_still_sensitive() {
+        // /private/var/log 是系统日志，仍敏感
+        assert!(is_sensitive_path("/private/var/log/system.log"));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_macos_private_tmp_still_sensitive() {
+        // /private/tmp 是 /tmp 的 firmlink 真实路径（系统临时，非用户临时）
+        assert!(is_sensitive_path("/private/tmp/test.txt"));
     }
 
     #[test]
