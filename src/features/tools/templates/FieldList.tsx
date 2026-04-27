@@ -24,7 +24,6 @@ const ATTR_LABEL: Record<string, string> = {
   'para.space_after_lines': '段后',
   'para.hanging_indent_chars': '悬挂缩进',
   'content.specific_text': '指定文本',
-  'content.max_chars': '最大字数',
   'content.char_count_min': '最少字数',
   'content.char_count_max': '最多字数',
   'content.item_count_min': '最少项数',

@@ -286,14 +286,6 @@ def check_page_new_page_before(para: Paragraph, expected: bool) -> Optional[dict
 # 需要直接读 XML pPr/pageBreakAfter 元素（deferred to v3，实际不在 spec）
 
 
-def check_content_max_chars(para: Paragraph, expected: int) -> Optional[dict]:
-    """检查段落字符总数不超过上限（适用于中文题目等）"""
-    actual = len(para.text)
-    if actual <= expected:
-        return None
-    return {'attr': 'content.max_chars', 'actual': actual, 'expected': expected}
-
-
 def check_content_char_count_min(para: Paragraph, expected: int) -> Optional[dict]:
     """检查段落字符数不少于下限（适用于摘要正文最少字数）"""
     actual = len(para.text)
@@ -522,7 +514,6 @@ CHECKER_MAP: dict[str, Any] = {
     'page.margin_left_cm':             check_page_margin_left_cm,
     'page.margin_right_cm':            check_page_margin_right_cm,
     # content 内容
-    'content.max_chars':               check_content_max_chars,
     'content.char_count_min':          check_content_char_count_min,
     'content.char_count_max':          check_content_char_count_max,
     'content.item_count_min':          check_content_item_count_min,

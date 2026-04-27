@@ -25,7 +25,7 @@ export const FIELD_DEFS: FieldDef[] = [
     label: '中文题目',
     group: 'front',
     order: 1,
-    applicable_attributes: ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'content.max_chars'],
+    applicable_attributes: ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'content.char_count_max'],
   },
   {
     id: 'abstract_zh_title',

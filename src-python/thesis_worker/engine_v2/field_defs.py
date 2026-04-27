@@ -11,7 +11,7 @@ FIELD_DEFS: list[dict] = [
     # 前置部分（12 字段）
     {
         'id': 'title_zh', 'label': '中文题目', 'group': 'front', 'order': 1,
-        'applicable_attributes': ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'content.max_chars'],
+        'applicable_attributes': ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'content.char_count_max'],
     },
     {
         'id': 'abstract_zh_title', 'label': '中文「摘要」标题', 'group': 'front', 'order': 2,

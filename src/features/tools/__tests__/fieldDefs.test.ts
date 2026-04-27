@@ -68,10 +68,10 @@ describe('getField', () => {
 });
 
 describe('applicableAttrs', () => {
-  it('title_zh 包含 font.cjk 和 content.max_chars', () => {
+  it('title_zh 包含 font.cjk 和 content.char_count_max', () => {
     const attrs = applicableAttrs('title_zh');
     expect(attrs).toContain('font.cjk');
-    expect(attrs).toContain('content.max_chars');
+    expect(attrs).toContain('content.char_count_max');
   });
 
   it('title_en 包含 font.ascii 但不含 font.cjk', () => {

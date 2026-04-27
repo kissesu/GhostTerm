@@ -27,4 +27,4 @@ class TestFieldDefs:
         attrs = applicable_attrs('title_zh')
         assert 'font.cjk' in attrs
         assert 'font.size_pt' in attrs
-        assert 'content.max_chars' in attrs
+        assert 'content.char_count_max' in attrs

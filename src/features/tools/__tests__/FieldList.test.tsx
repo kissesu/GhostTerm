@@ -62,7 +62,7 @@ describe('FieldList', () => {
   // ─────────────────────────────────────────────
 
   it('renders attr labels for title_zh applicable_attributes', () => {
-    // title_zh 的 applicable_attributes: ['font.cjk','font.size_pt','font.bold','para.align','content.max_chars']
+    // title_zh 的 applicable_attributes: ['font.cjk','font.size_pt','font.bold','para.align','content.char_count_max']
     const fields = [
       {
         id: 'title_zh',
@@ -85,8 +85,8 @@ describe('FieldList', () => {
     expect(screen.getByText('中文字体')).toBeInTheDocument();
     // 字号标签应出现
     expect(screen.getByText('字号')).toBeInTheDocument();
-    // 最大字数标签应出现
-    expect(screen.getByText('最大字数')).toBeInTheDocument();
+    // 最多字数标签应出现（content.char_count_max）
+    expect(screen.getByText('最多字数')).toBeInTheDocument();
   });
 
   it('shows captured marker for attrs present in value, uncaptured marker for missing attrs', () => {

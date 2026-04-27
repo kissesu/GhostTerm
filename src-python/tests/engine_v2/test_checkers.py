@@ -20,7 +20,7 @@ from thesis_worker.engine_v2.checkers import (
     check_content_item_count_max,
     check_content_item_count_min,
     check_content_item_separator,
-    check_content_max_chars,
+    check_content_char_count_max as check_content_max_chars,
     check_content_specific_text,
     check_font_ascii,
     check_font_bold,
@@ -106,7 +106,7 @@ class TestCheckerMapCompleteness:
             'font.cjk', 'font.ascii', 'font.size_pt', 'font.bold', 'font.italic',
             'para.align', 'para.first_line_indent_chars', 'para.line_spacing',
             'page.size', 'page.margin_top_cm', 'page.new_page_before',
-            'content.max_chars', 'content.specific_text',
+            'content.char_count_max', 'content.specific_text',
             'mixed_script.ascii_is_tnr', 'citation.style', 'layout.position',
         ]
         for key in required:
@@ -334,7 +334,7 @@ class TestContentMaxChars:
         p = doc.add_paragraph('非常非常非常非常非常非常非常非常长的标题超过了二十五个字符超过了')
         issue = check_content_max_chars(p, 25)
         assert issue is not None
-        assert issue['attr'] == 'content.max_chars'
+        assert issue['attr'] == 'content.char_count_max'
         assert issue['actual'] > 25
 
 
