@@ -72,8 +72,6 @@ function formatAttr(key: string, value: unknown): string {
       return `段后 ${value} 行`;
     case 'content.specific_text':
       return `文本「${value}」`;
-    case 'content.max_chars':
-      return `≤ ${value} 字`;
     case 'content.char_count_min':
       return `≥ ${value} 字`;
     case 'content.char_count_max':

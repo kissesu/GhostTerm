@@ -550,9 +550,6 @@ export function RuleValueEditorByAttr({ attr, value, onChange }: RuleValueEditor
     case 'content.specific_text':
       return <TextInput value={value as string} onChange={onChange} testId="attr-specific-text" />;
 
-    case 'content.max_chars':
-      return <NumberInput value={value as number} onChange={onChange} step={1} min={1} testId="attr-max-chars" />;
-
     case 'content.char_count_min':
       return <NumberInput value={value as number} onChange={onChange} step={1} min={0} testId="attr-char-min" />;
 

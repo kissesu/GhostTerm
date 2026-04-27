@@ -5,7 +5,9 @@
 @author: Atlas.oi
 @date: 2026-04-18
 """
+import os
 import re  # 用于空格占位 fallback 的正则匹配
+import logging
 from typing import Any
 from docx import Document
 
@@ -13,6 +15,29 @@ from .gazetteer import find_font, find_align, is_bold_keyword
 from .patterns import extract_size_name, extract_size_pt_raw
 from .field_matcher import match_all_fields
 from ..utils.size import name_to_pt
+
+# 模块级 logger，遵循 Python 最佳实践：用包层级名称，不新建 handler
+logger = logging.getLogger(__name__)
+
+# 开发者诊断日志中 context_snippet 的截断长度（字符数）。
+# 30 字足以定位段落来源，同时避免日志行过长影响可读性。
+_LOG_SNIPPET_LEN = 30
+
+# 所有字段 applicable_attributes 的并集，导入时一次性构建并冻结为 frozenset。
+# 任何不在此集合内的 attr key 即为 unsupported，需写开发者诊断日志。
+# field_defs 不反向依赖 pipeline，无循环导入风险；此处直接调用无副作用。
+def _build_known_attr_keys() -> frozenset[str]:
+    """从 field_defs 汇总所有已知 attr key 并集。
+    此函数仅在模块首次被导入时调用一次，结果缓存在模块级常量中。
+    """
+    from ..engine_v2.field_defs import FIELD_DEFS
+    keys: set[str] = set()
+    for field in FIELD_DEFS:
+        keys.update(field.get('applicable_attributes', []))
+    return frozenset(keys)
+
+# 模块级常量：已知 attr key 全集（导入时计算一次，后续 O(1) 查询）
+_KNOWN_ATTR_KEYS: frozenset[str] = _build_known_attr_keys()
 
 # OOXML namespace，用于直接读 run 的 rFonts XML 属性
 _W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
@@ -241,6 +266,48 @@ def _merge_attrs(from_text: dict[str, Any], from_style: dict[str, Any]) -> dict[
     return merged
 
 
+def _log_and_filter_unsupported(
+    attrs: dict[str, Any],
+    spec_file: str,
+    field_id: str,
+    context_snippet: str,
+) -> dict[str, Any]:
+    """检测并过滤 attrs 中不在已知 schema 内的 attr key。
+
+    业务逻辑：
+    1. 遍历 attrs 的 key，对比 _KNOWN_ATTR_KEYS 全集
+    2. 未知 key → 写 INFO 诊断日志（开发者可达，用户不可见）
+    3. 从返回的 attrs 中剔除未知 key，确保前端/响应数据不暴露
+
+    此函数是 T1.2 的核心检测点：所有 extract_all / extract_from_selection
+    产出的最终 attrs 都必须经过此函数，才能写入 rules 或 response。
+
+    @param attrs          - 合并后的属性字典（可能含未知 key）
+    @param spec_file      - 来源规范文件名（用于日志定位）
+    @param field_id       - 当前字段 id（用于日志定位）
+    @param context_snippet - 来源段落文本前 30 字（用于日志定位）
+    @returns 过滤掉未知 key 后的干净属性字典
+    """
+    clean: dict[str, Any] = {}
+    for key, val in attrs.items():
+        if key in _KNOWN_ATTR_KEYS:
+            clean[key] = val
+        else:
+            # 未知 attr key：写开发者诊断日志。
+            # 不作为 issue 暴露给用户——这是系统能力缺口，用户无法修复。
+            logger.info(
+                'unsupported_attr: key=%r not in schema, will be dropped',
+                key,
+                extra={
+                    'attr_key': key,
+                    'spec_file': spec_file,
+                    'context_snippet': context_snippet[:_LOG_SNIPPET_LEN],
+                    'suspected_field_id': field_id,
+                },
+            )
+    return clean
+
+
 def _calculate_confidence(attrs: dict[str, Any], text_len: int) -> float:
     """根据属性数量估算置信度（启发式）。
     阈值 0.0 / 0.5 / 0.7 / 0.9 对应抽到 0 / 1 / 2 / ≥3 个属性。
@@ -327,6 +394,14 @@ def extract_all(file: str) -> dict[str, Any]:
         style_attrs = _read_paragraph_style_attrs(para)
         value = _merge_attrs(text_attrs, style_attrs)
 
+        # 过滤掉 schema 未声明的 attr key，同时写开发者诊断日志
+        value = _log_and_filter_unsupported(
+            value,
+            spec_file=os.path.basename(file),
+            field_id=field_id,
+            context_snippet=para.text,
+        )
+
         final_conf = _calculate_confidence(value, len(para.text))
 
         rules[field_id] = {
@@ -403,6 +478,13 @@ def extract_from_selection(
                 style_attrs = {**para_level_attrs, **run_attrs}
                 text_attrs = _extract_attributes_from_text(selected_text)
                 value = _merge_attrs(text_attrs, style_attrs)
+                # 过滤 schema 未声明的 attr key，同时写开发者诊断日志
+                value = _log_and_filter_unsupported(
+                    value,
+                    spec_file=os.path.basename(file),
+                    field_id=field_id,
+                    context_snippet=selected_text,
+                )
                 confidence = _calculate_confidence(value, len(selected_text))
                 return {
                     'field_id': field_id,
@@ -433,6 +515,13 @@ def extract_from_selection(
     combined_text = '\n'.join(text_parts)
     text_attrs = _extract_attributes_from_text(combined_text)
     value = _merge_attrs(text_attrs, combined_style_attrs)
+    # 过滤 schema 未声明的 attr key，同时写开发者诊断日志
+    value = _log_and_filter_unsupported(
+        value,
+        spec_file=os.path.basename(file),
+        field_id=field_id,
+        context_snippet=combined_text,
+    )
 
     confidence = _calculate_confidence(value, len(combined_text))
 
