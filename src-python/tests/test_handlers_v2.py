@@ -45,12 +45,12 @@ class TestExtractFromSelection:
 
 
 class TestListFields:
-    def test_returns_35_fields(self):
-        # T2.2 拆分 toc_entry 为 l1/l2/l3 后，共 35 个字段
+    def test_returns_36_fields(self):
+        # T2.3 新增 formula_block 后，共 36 个字段
         resp = handle({'id': 'r4', 'cmd': 'list_fields'})
         assert resp['ok'] is True
         fields = resp['result']['fields']
-        assert len(fields) == 35
+        assert len(fields) == 36
         # 每字段必须有 id/label/group/order/applicable_attributes
         for f in fields:
             assert 'id' in f

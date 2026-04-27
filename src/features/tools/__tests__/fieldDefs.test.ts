@@ -1,6 +1,6 @@
 /**
  * @file fieldDefs.test.ts
- * @description 35 语义字段定义测试（T2.1 新增 table_header / T2.2 拆分 toc_entry 为 l1/l2/l3）
+ * @description 36 语义字段定义测试（T2.1 新增 table_header / T2.2 拆分 toc_entry 为 l1/l2/l3 / T2.3 新增 formula_block）
  *   验证 FIELD_DEFS 数组完整性、顺序、查找函数正确性
  * @author Atlas.oi
  * @date 2026-04-27
@@ -9,20 +9,20 @@ import { describe, it, expect } from 'vitest';
 import { FIELD_DEFS, getField, applicableAttrs } from '../templates/fieldDefs';
 
 describe('FIELD_DEFS', () => {
-  it('共 35 个字段', () => {
-    // T2.2 拆分 toc_entry 为 l1/l2/l3 后总数由 33 升为 35
-    expect(FIELD_DEFS).toHaveLength(35);
+  it('共 36 个字段', () => {
+    // T2.3 新增 formula_block 后总数由 35 升为 36
+    expect(FIELD_DEFS).toHaveLength(36);
   });
 
-  it('order 严格连续 1-35', () => {
+  it('order 严格连续 1-36', () => {
     const orders = FIELD_DEFS.map((f) => f.order);
-    expect(orders).toEqual(Array.from({ length: 35 }, (_, i) => i + 1));
+    expect(orders).toEqual(Array.from({ length: 36 }, (_, i) => i + 1));
   });
 
   it('所有 id 唯一', () => {
     const ids = FIELD_DEFS.map((f) => f.id);
     const unique = new Set(ids);
-    expect(unique.size).toBe(35);
+    expect(unique.size).toBe(36);
   });
 
   it('分组只含合法值', () => {
@@ -77,11 +77,12 @@ describe('FIELD_DEFS', () => {
     expect(l2).toEqual(l3);
   });
 
-  it('正文部分 9 个（order 15-23，T2.2 后整体 +2）', () => {
+  it('正文部分 10 个（order 15-24，T2.3 新增 formula_block）', () => {
+    // T2.3 在 body 末尾插入 formula_block，正文部分由 9 升为 10
     const body = FIELD_DEFS.filter((f) => f.group === 'body');
-    expect(body).toHaveLength(9);
+    expect(body).toHaveLength(10);
     expect(body[0].order).toBe(15);
-    expect(body[8].order).toBe(23);
+    expect(body[9].order).toBe(24);
   });
 
   it('chapter_title order 已升至 15', () => {
@@ -103,23 +104,33 @@ describe('FIELD_DEFS', () => {
     expect(getField('table_inner_text')?.order).toBe(23);
   });
 
-  it('后置部分 6 个（order 24-29）', () => {
+  it('formula_block 在正文部分且 order=24', () => {
+    // T2.3: 公式字段插在 body 末尾
+    const f = getField('formula_block');
+    expect(f).toBeDefined();
+    expect(f?.group).toBe('body');
+    expect(f?.order).toBe(24);
+    expect(f?.label).toBe('公式');
+    expect(f?.applicable_attributes).toEqual(['para.align']);
+  });
+
+  it('后置部分 6 个（order 25-30，T2.3 后整体 +1）', () => {
     const back = FIELD_DEFS.filter((f) => f.group === 'back');
     expect(back).toHaveLength(6);
-    expect(back[0].order).toBe(24);
-    expect(back[5].order).toBe(29);
+    expect(back[0].order).toBe(25);
+    expect(back[5].order).toBe(30);
   });
 
-  it('全局部分 6 个（order 30-35）', () => {
+  it('全局部分 6 个（order 31-36，T2.3 后整体 +1）', () => {
     const global = FIELD_DEFS.filter((f) => f.group === 'global');
     expect(global).toHaveLength(6);
-    expect(global[0].order).toBe(30);
-    expect(global[5].order).toBe(35);
+    expect(global[0].order).toBe(31);
+    expect(global[5].order).toBe(36);
   });
 
-  it('mixed_script_global order 已升至 35', () => {
-    // T2.2 后末位字段 order 由 33 → 35
-    expect(getField('mixed_script_global')?.order).toBe(35);
+  it('mixed_script_global order 已升至 36', () => {
+    // T2.3 后末位字段 order 由 35 → 36
+    expect(getField('mixed_script_global')?.order).toBe(36);
   });
 });
 

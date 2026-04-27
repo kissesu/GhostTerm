@@ -1,6 +1,6 @@
 """
 @file: test_field_matcher.py
-@description: 字段 id ← 关键词 关联（T2.2: toc_entry 拆分 l1/l2/l3）
+@description: 字段 id ← 关键词 关联（T2.2: toc_entry 拆分 l1/l2/l3 / T2.3: 新增 formula_block）
 @author: Atlas.oi
 @date: 2026-04-27
 """
@@ -11,9 +11,9 @@ from thesis_worker.extractor.field_matcher import (
 
 
 class TestKeywords:
-    def test_all_35_fields_have_keywords(self):
-        # T2.2 拆分 toc_entry 为 l1/l2/l3 后，共 35 个字段都必须有关键词列表
-        assert len(FIELD_KEYWORDS) == 35
+    def test_all_36_fields_have_keywords(self):
+        # T2.3 新增 formula_block 后，共 36 个字段都必须有关键词列表
+        assert len(FIELD_KEYWORDS) == 36
 
     def test_toc_entry_removed_from_keywords(self):
         # 旧 toc_entry 关键词条目已删除
@@ -153,6 +153,53 @@ class TestMatchField:
         # 拆分操作不影响 toc_title（"目录"）的匹配
         text = '目录（黑体三号居中）'
         assert match_field(text) == 'toc_title'
+
+
+    # --- formula_block 匹配测试（T2.3）---
+
+    def test_formula_block_keywords_exist(self):
+        # formula_block 必须有实际关键词（非空列表）
+        assert len(FIELD_KEYWORDS.get('formula_block', [])) > 0
+
+    def test_formula_block_no_conflict_with_table(self):
+        # "公式" 短词不应命中 table_* 或 figure_* 字段
+        # 确认 table_caption / figure_caption 关键词中无"公式"子串
+        for kw in FIELD_KEYWORDS.get('table_caption', []):
+            assert '公式' not in kw
+        for kw in FIELD_KEYWORDS.get('figure_caption', []):
+            assert '公式' not in kw
+
+
+class TestMatchField_FormulaBlock:
+    """formula_block 关键词匹配行为测试（T2.3 新增）"""
+
+    def test_formula_block_match_primary(self):
+        # 正向 1："公式格式" 是 formula_block 的核心关键词
+        # 规范文本典型表述："公式格式要求另起一行居中"
+        text = '公式格式要求另起一行居中对齐'
+        assert match_field(text) == 'formula_block'
+
+    def test_formula_block_match_numbering(self):
+        # 正向 2："公式编号" 是 formula_block 的第二关键词
+        # 规范文本典型表述："公式编号用圆括号括注靠右对齐"
+        text = '公式编号用圆括号括注靠右对齐'
+        assert match_field(text) == 'formula_block'
+
+    def test_formula_block_negative_pure_equation(self):
+        # 边界负向：纯"方程式"文本不含 formula_block 关键词，返回 None
+        # 判别力：formula_block 关键词列表中无"方程式"词，删关键词后该 case 仍返回 None（不变）
+        # 真正有判别力的是下面两个正向 case：删关键词后它们会从 formula_block → None
+        text = '这里是某个方程式推导步骤'
+        assert match_field(text) != 'formula_block'
+
+    def test_formula_block_keyword_discrimination_primary(self):
+        # 判别力 sanity：若删除"公式格式"，'公式格式另起一行' 必须不命中 formula_block
+        # 当前有关键词时命中；删掉 formula_block 所有关键词后此 case 会退化为 None
+        assert match_field('公式格式另起一行') == 'formula_block'
+
+    def test_formula_block_keyword_discrimination_secondary(self):
+        # 判别力 sanity：若删除"公式编号"，'公式编号圆括号靠右' 必须不命中 formula_block
+        assert match_field('公式编号圆括号靠右') == 'formula_block'
 
 
 class TestMatchAllFields:

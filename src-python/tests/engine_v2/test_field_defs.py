@@ -1,6 +1,6 @@
 """
 @file: test_field_defs.py
-@description: 35 字段定义测试（T2.1 新增 table_header / T2.2 拆分 toc_entry 为 l1/l2/l3）
+@description: 36 字段定义测试（T2.1 新增 table_header / T2.2 拆分 toc_entry 为 l1/l2/l3 / T2.3 新增 formula_block）
 @author: Atlas.oi
 @date: 2026-04-27
 """
@@ -8,18 +8,18 @@ from thesis_worker.engine_v2.field_defs import FIELD_DEFS, get_field, applicable
 
 
 class TestFieldDefs:
-    def test_count_35(self):
-        # T2.2 拆分 toc_entry 为 toc_entry_l1/l2/l3 后总数由 33 升为 35
-        assert len(FIELD_DEFS) == 35
+    def test_count_36(self):
+        # T2.3 新增 formula_block 后总数由 35 升为 36
+        assert len(FIELD_DEFS) == 36
 
     def test_groups(self):
         groups = {f['group'] for f in FIELD_DEFS}
         assert groups == {'front', 'body', 'back', 'global'}
 
     def test_orders_sequential(self):
-        # 35 字段 order 必须连续 1-35
+        # 36 字段 order 必须连续 1-36
         orders = [f['order'] for f in FIELD_DEFS]
-        assert orders == list(range(1, 36))
+        assert orders == list(range(1, 37))
 
     def test_get_field(self):
         f = get_field('abstract_zh_title')
@@ -112,7 +112,40 @@ class TestFieldDefs:
         f = get_field('chapter_title')
         assert f['order'] == 15
 
-    def test_mixed_script_global_order_35(self):
-        # T2.2 后末位字段 order 由 33 → 35
+    def test_mixed_script_global_order_36(self):
+        # T2.3 新增 formula_block 后末位字段 order 由 35 → 36
         f = get_field('mixed_script_global')
-        assert f['order'] == 35
+        assert f['order'] == 36
+
+    # ─────────────────────────────────────────────
+    # T2.3: formula_block 字段存在性断言
+    # ─────────────────────────────────────────────
+
+    def test_formula_block_exists(self):
+        # 公式字段必须存在，id/label/group 正确
+        f = get_field('formula_block')
+        assert f is not None
+        assert f['id'] == 'formula_block'
+        assert f['label'] == '公式'
+        assert f['group'] == 'body'
+
+    def test_formula_block_order_24(self):
+        # formula_block 紧接正文末尾（body 原 order 15-23），插入 order=24
+        f = get_field('formula_block')
+        assert f['order'] == 24
+
+    def test_formula_block_applicable_attributes(self):
+        # T2.3 只加 para.align；numbering.formula_style 等 T3.3 再补
+        attrs = applicable_attrs('formula_block')
+        assert attrs == ['para.align']
+        assert len(attrs) == 1
+
+    def test_references_title_order_25(self):
+        # T2.3 后 references_title 由 24 → 25
+        f = get_field('references_title')
+        assert f['order'] == 25
+
+    def test_appendix_body_order_30(self):
+        # T2.3 后 back 组末位字段 appendix_body 由 29 → 30
+        f = get_field('appendix_body')
+        assert f['order'] == 30
