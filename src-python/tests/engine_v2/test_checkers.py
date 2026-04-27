@@ -20,7 +20,6 @@ from thesis_worker.engine_v2.checkers import (
     check_content_item_count_max,
     check_content_item_count_min,
     check_content_item_separator,
-    check_content_char_count_max as check_content_max_chars,
     check_content_specific_text,
     check_font_ascii,
     check_font_bold,
@@ -323,16 +322,16 @@ class TestParaSpaceBeforeAfter:
 # 内容检查器
 # ───────────────────────────────────────────────
 
-class TestContentMaxChars:
+class TestContentCharCountMax:
     def test_within_limit(self):
         doc = Document()
         p = doc.add_paragraph('短标题')
-        assert check_content_max_chars(p, 25) is None
+        assert check_content_char_count_max(p, 25) is None
 
     def test_exceeds_limit(self):
         doc = Document()
         p = doc.add_paragraph('非常非常非常非常非常非常非常非常长的标题超过了二十五个字符超过了')
-        issue = check_content_max_chars(p, 25)
+        issue = check_content_char_count_max(p, 25)
         assert issue is not None
         assert issue['attr'] == 'content.char_count_max'
         assert issue['actual'] > 25
