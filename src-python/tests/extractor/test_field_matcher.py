@@ -36,6 +36,25 @@ class TestMatchField:
         text = '一段普通正文，无字段关键词'
         assert match_field(text) is None
 
+    # --- table_header 行为匹配测试（T2.1 review 补充）---
+
+    def test_table_header_match_bold(self):
+        # "表头" 是 table_header 的核心关键词，规范文本常见表述
+        text = '表头行加粗'
+        assert match_field(text) == 'table_header'
+
+    def test_table_header_match_center(self):
+        # "表格标题行" 是 table_header 的第二关键词
+        text = '表格标题行居中对齐'
+        assert match_field(text) == 'table_header'
+
+    def test_table_header_not_match_table_caption(self):
+        # "表题" 触发 table_caption，而非 table_header；
+        # 确认 '表头' 关键词不会误命中含 "表题" 的文本
+        text = '表题（五号黑体居中）'
+        assert match_field(text) == 'table_caption'
+        assert match_field(text) != 'table_header'
+
 
 class TestMatchAllFields:
     def test_multiple_paragraphs(self):
