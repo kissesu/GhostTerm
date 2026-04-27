@@ -3,7 +3,7 @@
  * @description 模板管理 modal。列表形式展示所有模板；
  *   支持编辑 / 导出 / 删除 / 内置恢复默认操作；
  *   底部提供新建 / 从 docx / 导入 JSON 三个入口。
- *   「从 docx 创建」依赖 Phase D Task 22 sidecar extract_template，当前为脚手架占位。
+ *   「从 docx 创建」通过 P4 RuleTemplateWorkspace 完整 extract + 逐字段确认流程。
  * @author Atlas.oi
  * @date 2026-04-18
  */
@@ -14,7 +14,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useTemplateStore } from './TemplateStore';
 import type { TemplateJson } from './TemplateStore';
 import { TemplateEditor } from './TemplateEditor';
-import { TemplateExtractor } from './TemplateExtractor';
+import { RuleTemplateWorkspace } from './RuleTemplateWorkspace';
 import { NamePromptModal } from './NamePromptModal';
 
 // 从文件路径中提取文件名（兼容 macOS / Windows 路径分隔符）
@@ -46,8 +46,8 @@ export function TemplateManager({ isOpen, onClose }: Props) {
   const { templates, remove, restoreBuiltin, update, create, load } = useTemplateStore();
   // null = 列表视图；非 null = 编辑视图
   const [editing, setEditing] = useState<TemplateJson | null>(null);
-  // 非 null = TemplateExtractor modal 打开状态（含 docxPath + 预填名称）
-  const [extractorOpen, setExtractorOpen] = useState<{ docxPath: string; name: string } | null>(null);
+  // 非 null = RuleTemplateWorkspace 全屏打开状态（含 docxPath + 预填名称）
+  const [workspaceOpen, setWorkspaceOpen] = useState<{ docxPath: string; name: string } | null>(null);
   // 非 null = NamePromptModal 打开状态
   const [namePrompt, setNamePrompt] = useState<NamePromptState | null>(null);
 
@@ -101,7 +101,7 @@ export function TemplateManager({ isOpen, onClose }: Props) {
   // 从 docx 创建模板：
   //   1. 选 docx 文件
   //   2. 打开 NamePromptModal 输入名称（预填去扩展名的文件名）
-  //   3. NamePromptModal 确认后打开 TemplateExtractor modal
+  //   3. NamePromptModal 确认后打开 RuleTemplateWorkspace 全屏工作台
   // ============================================
   const handleNewFromDocx = async () => {
     const docx = await open({
@@ -131,8 +131,8 @@ export function TemplateManager({ isOpen, onClose }: Props) {
         alert(`新建失败：${String(e)}`);
       }
     } else {
-      // fromDocx：打开 TemplateExtractor modal
-      setExtractorOpen({ docxPath: namePrompt.docxPath, name });
+      // fromDocx：打开 RuleTemplateWorkspace 全屏工作台
+      setWorkspaceOpen({ docxPath: namePrompt.docxPath, name });
       setNamePrompt(null);
     }
   };
@@ -372,7 +372,7 @@ export function TemplateManager({ isOpen, onClose }: Props) {
               新建模板
             </button>
 
-            {/* 从 docx 创建：选文件 → NamePromptModal 输入名称 → TemplateExtractor */}
+            {/* 从 docx 创建：选文件 → NamePromptModal 输入名称 → RuleTemplateWorkspace */}
             <button
               data-testid="create-from-docx-btn"
               onClick={() => { void handleNewFromDocx(); }}
@@ -408,15 +408,39 @@ export function TemplateManager({ isOpen, onClose }: Props) {
       onCancel={() => setNamePrompt(null)}
     />
 
-    {/* TemplateExtractor modal（从 docx 提取 review，Task 22） */}
-    {extractorOpen && (
-      <TemplateExtractor
-        isOpen
-        docxPath={extractorOpen.docxPath}
-        defaultName={extractorOpen.name}
-        onClose={() => setExtractorOpen(null)}
-        onSaved={() => setExtractorOpen(null)}
-      />
+    {/* RuleTemplateWorkspace：P4 全屏工作台，从 docx 逐字段确认后保存为模板
+        top: 38 避开 WindowTitleBar（高度 38px），保留窗口拖拽和关闭控件的可见性 */}
+    {workspaceOpen && (
+      <div
+        data-testid="workspace-overlay"
+        style={{
+          position: 'fixed',
+          top: 38,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'var(--c-bg)',
+          zIndex: 1100,
+        }}
+      >
+        <RuleTemplateWorkspace
+          docxPath={workspaceOpen.docxPath}
+          initialName={workspaceOpen.name}
+          onCancel={() => setWorkspaceOpen(null)}
+          onSave={async (name, rules) => {
+            try {
+              await create(name, {
+                // Workspace 传出的 rules 已经是 { enabled, value } 结构
+                explicitRules: rules as Record<string, { enabled: boolean; value: Record<string, unknown> }>,
+              });
+              setWorkspaceOpen(null);
+            } catch (e) {
+              console.error('[TemplateManager] workspace save failed', e);
+              alert(`保存失败：${String(e)}`);
+            }
+          }}
+        />
+      </div>
     )}
   </>
   );

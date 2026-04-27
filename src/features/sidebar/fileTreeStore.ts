@@ -17,9 +17,19 @@ interface FileTreeState {
   tree: FileNode[];
   /** 已展开的目录路径集合（用于控制 UI 展开/折叠状态） */
   expandedPaths: Set<string>;
+  /**
+   * 当前项目根路径
+   *
+   * 业务逻辑说明：
+   * 项目根本身不是 tree 中的节点（tree 顶层是项目根的子项），
+   * 因此 applyFsEvent 在处理 created/renamed 事件时，
+   * 仅靠 findNodeByPath 找不到根级父目录，会丢失"在项目根直接新建/重命名文件"的事件。
+   * 单独记录 projectRoot 用于识别这种"父目录即根"的场景。
+   */
+  projectRoot: string | null;
   /** 刷新指定根路径下的文件树（保留 expandedPaths） */
   refreshFileTree: (rootPath: string) => Promise<void>;
-  /** 重置 store（切换项目时用；清空 tree + expandedPaths） */
+  /** 重置 store（切换项目时用；清空 tree + expandedPaths + projectRoot） */
   resetState: () => void;
   /** 展开或折叠目录（懒加载子节点内容） */
   toggleDir: (path: string) => Promise<void>;
@@ -69,6 +79,7 @@ function updateNodeChildren(
 export const useFileTreeStore = create<FileTreeState>((set, get) => ({
   tree: [],
   expandedPaths: new Set(),
+  projectRoot: null,
 
   /**
    * 刷新文件树
@@ -91,15 +102,15 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => ({
       children: entry.is_dir ? undefined : null,
     }));
 
-    // 只替换 tree，保留 expandedPaths
-    set({ tree });
+    // 只替换 tree 和 projectRoot，保留 expandedPaths
+    set({ tree, projectRoot: rootPath });
   },
 
   /**
    * 重置 store 状态（切换项目时调用）
-   * 清空 tree + expandedPaths，避免上个项目的路径污染新项目的展开状态
+   * 清空 tree + expandedPaths + projectRoot，避免上个项目的路径污染新项目的展开状态
    */
-  resetState: () => set({ tree: [], expandedPaths: new Set() }),
+  resetState: () => set({ tree: [], expandedPaths: new Set(), projectRoot: null }),
 
   /**
    * 展开/折叠目录
@@ -193,12 +204,33 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => ({
       }
     };
 
+    /**
+     * 路由刷新到合适的层级
+     *
+     * 业务逻辑说明：
+     * 1. parentPath 等于项目根：根本身不是 tree 节点，必须调用 refreshFileTree
+     *    重新加载顶层（根级新建/重命名的文件才能可见）
+     * 2. parentPath 在 tree 中存在节点：refreshParentDir 局部刷新
+     * 3. 都不满足：父目录在未展开的子树深处，不可见，无需刷新
+     */
+    const refreshAppropriately = (parentPath: string, treeSnapshot: FileNode[]) => {
+      const projectRoot = get().projectRoot;
+      if (projectRoot && parentPath === projectRoot) {
+        get().refreshFileTree(projectRoot).catch((e) =>
+          console.error('[fileTreeStore] 根目录刷新失败:', e),
+        );
+        return;
+      }
+      if (findNodeByPath(treeSnapshot, parentPath)) {
+        refreshParentDir(parentPath, treeSnapshot);
+      }
+    };
+
     switch (event.type) {
       case 'created': {
         // 新文件创建：找到其父目录节点，重新从后端加载父目录内容
         const parentPath = event.path.substring(0, event.path.lastIndexOf('/')) || '/';
-        // 传入当前树快照，async 过程不阻塞 applyFsEvent
-        refreshParentDir(parentPath, tree);
+        refreshAppropriately(parentPath, tree);
         break;
       }
 
@@ -220,9 +252,9 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => ({
         const treeAfterRemove = removeNodeByPath(tree, old_path);
         set({ tree: treeAfterRemove });
 
-        // 第二步（异步）：刷新新路径的父目录
+        // 第二步（异步）：刷新新路径的父目录（含根目录情形）
         const newParentPath = new_path.substring(0, new_path.lastIndexOf('/')) || '/';
-        refreshParentDir(newParentPath, treeAfterRemove);
+        refreshAppropriately(newParentPath, treeAfterRemove);
         break;
       }
     }

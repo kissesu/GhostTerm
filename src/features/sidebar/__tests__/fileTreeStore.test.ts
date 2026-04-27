@@ -28,6 +28,7 @@ beforeEach(() => {
   useFileTreeStore.setState({
     tree: [],
     expandedPaths: new Set(),
+    projectRoot: null,
   });
   vi.clearAllMocks();
 });
@@ -330,6 +331,103 @@ describe('fileTreeStore - applyFsEvent（完整实现）', () => {
       const { tree } = useFileTreeStore.getState();
       const srcNode = tree.find((n) => n.entry.path === '/proj/src');
       expect(srcNode?.children?.find((c) => c.entry.path === '/proj/src/main.rs')).toBeUndefined();
+    });
+  });
+
+  // ============================================
+  // 项目根级事件回归测试
+  // 修复盲区：tree 顶层是项目根的"子项"，根本身不在 tree 中；
+  // findNodeByPath 找不到根级父目录会丢事件，必须用 projectRoot 字段比对
+  // 调用 refreshFileTree 替换顶层
+  // ============================================
+  describe('项目根级 created/renamed 事件', () => {
+    beforeEach(async () => {
+      // refreshFileTree 写入 projectRoot=/proj，作为根级判定依据
+      mockInvoke.mockResolvedValueOnce(sampleEntries);
+      await useFileTreeStore.getState().refreshFileTree('/proj');
+      vi.clearAllMocks();
+    });
+
+    it('refreshFileTree 应记录 projectRoot', () => {
+      // 上一步 beforeEach 已调 refreshFileTree('/proj')
+      expect(useFileTreeStore.getState().projectRoot).toBe('/proj');
+    });
+
+    it('根级 created 事件应触发 refreshFileTree 替换顶层（而非 refreshParentDir 静默丢弃）', async () => {
+      // 模拟根目录刷新返回新增了 newroot.txt 的列表
+      const updatedRootEntries: FileEntry[] = [
+        ...sampleEntries,
+        { name: 'newroot.txt', path: '/proj/newroot.txt', is_dir: false, size: 0, modified: undefined },
+      ];
+      mockInvoke.mockResolvedValueOnce(updatedRootEntries);
+
+      useFileTreeStore.getState().applyFsEvent({ type: 'created', path: '/proj/newroot.txt' });
+
+      // 必须触发对项目根的 list_dir_cmd 调用
+      await vi.waitFor(() => {
+        expect(mockInvoke).toHaveBeenCalledWith('list_dir_cmd', { path: '/proj', showHidden: false });
+      });
+
+      // 顶层 tree 应包含新文件
+      const { tree } = useFileTreeStore.getState();
+      expect(tree.find((n) => n.entry.path === '/proj/newroot.txt')).toBeDefined();
+    });
+
+    it('根级 renamed 事件应移除旧节点 + 刷新顶层插入新节点', async () => {
+      // 模拟重命名后根目录内容（README.md → README.rst）
+      const renamedRootEntries: FileEntry[] = [
+        { name: 'src', path: '/proj/src', is_dir: true, size: undefined, modified: undefined },
+        { name: 'README.rst', path: '/proj/README.rst', is_dir: false, size: 100, modified: undefined },
+        { name: 'Cargo.toml', path: '/proj/Cargo.toml', is_dir: false, size: 500, modified: undefined },
+      ];
+      mockInvoke.mockResolvedValueOnce(renamedRootEntries);
+
+      useFileTreeStore.getState().applyFsEvent({
+        type: 'renamed',
+        old_path: '/proj/README.md',
+        new_path: '/proj/README.rst',
+      });
+
+      // 同步阶段：旧节点立即从 tree 移除
+      let { tree } = useFileTreeStore.getState();
+      expect(tree.find((n) => n.entry.path === '/proj/README.md')).toBeUndefined();
+
+      // 异步阶段：触发根目录刷新并插入新节点
+      await vi.waitFor(() => {
+        expect(mockInvoke).toHaveBeenCalledWith('list_dir_cmd', { path: '/proj', showHidden: false });
+      });
+      tree = useFileTreeStore.getState().tree;
+      expect(tree.find((n) => n.entry.path === '/proj/README.rst')).toBeDefined();
+    });
+
+    it('未展开子目录的深层 created 事件应静默忽略（避免误识别为根级灾难性刷新）', async () => {
+      // /proj/src 在 tree 中但未展开 → src.children 为 undefined
+      // /proj/src/deep/file.rs 的 parentPath = /proj/src/deep，既不是 projectRoot 也不在 tree 中
+      // 必须不触发任何 list_dir_cmd（不在用户当前可见范围内，不需要刷新）
+      useFileTreeStore.getState().applyFsEvent({ type: 'created', path: '/proj/src/deep/file.rs' });
+
+      // 给微任务一次机会触发
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(mockInvoke).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('resetState', () => {
+    it('应同时清空 tree、expandedPaths、projectRoot', async () => {
+      mockInvoke.mockResolvedValueOnce(sampleEntries);
+      await useFileTreeStore.getState().refreshFileTree('/proj');
+
+      // 验证设置成功
+      expect(useFileTreeStore.getState().projectRoot).toBe('/proj');
+      expect(useFileTreeStore.getState().tree).not.toHaveLength(0);
+
+      useFileTreeStore.getState().resetState();
+
+      const state = useFileTreeStore.getState();
+      expect(state.tree).toEqual([]);
+      expect(state.expandedPaths.size).toBe(0);
+      expect(state.projectRoot).toBeNull();
     });
   });
 });

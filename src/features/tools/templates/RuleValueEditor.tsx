@@ -1,6 +1,8 @@
 /**
  * @file RuleValueEditor.tsx
- * @description 规则值编辑器。按 valueShape.kind 分发到对应子编辑器。
+ * @description 规则值编辑器。
+ *   - RuleValueEditor（P3 遗留）：按 valueShape.kind 分发到对应子编辑器
+ *   - RuleValueEditorByAttr（P4 新增）：按属性 key 分发，供 Task 17 RuleTemplateWorkspace 使用
  *   所有子编辑器内联在本文件（无第二调用点，不抽独立文件）。
  * @author Atlas.oi
  * @date 2026-04-18
@@ -297,5 +299,419 @@ export function RuleValueEditor({ shape, value, onChange }: Props) {
       );
     case 'pagination':
       return <PaginationEditor value={value as PaginationValue} onChange={onChange} />;
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════
+// P4 新增：按属性 key 分发的子编辑器 + RuleValueEditorByAttr
+// Task 17 RuleTemplateWorkspace 将使用此接口
+// ═════════════════════════════════════════════════════════════════
+
+// ─────────────────────────────────────────────
+// P4 子编辑器：CJK 字体下拉（常见中文字体）
+// ─────────────────────────────────────────────
+
+// 常见 CJK 字体名称，来自 GB/T 7714 规范推荐字体
+const CJK_FONT_OPTIONS = ['宋体', '黑体', '楷体', '仿宋', '楷体_GB2312', '仿宋_GB2312'];
+
+function CjkFontSelect({ value, onChange }: { value: string; onChange: (v: unknown) => void }) {
+  return (
+    <select
+      data-testid="attr-cjk-font"
+      style={selectStyle}
+      value={value ?? '宋体'}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      {CJK_FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
+    </select>
+  );
+}
+
+// ─────────────────────────────────────────────
+// P4 子编辑器：ASCII 字体下拉（英文/数字字体）
+// ─────────────────────────────────────────────
+
+// 常见西文字体，Times New Roman 为论文默认推荐
+const ASCII_FONT_OPTIONS = ['Times New Roman', 'Arial', 'Calibri', 'Cambria'];
+
+function AsciiFontSelect({ value, onChange }: { value: string; onChange: (v: unknown) => void }) {
+  return (
+    <select
+      data-testid="attr-ascii-font"
+      style={selectStyle}
+      value={value ?? 'Times New Roman'}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      {ASCII_FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
+    </select>
+  );
+}
+
+// ─────────────────────────────────────────────
+// P4 子编辑器：字号数值输入（pt，支持半点）
+// ─────────────────────────────────────────────
+
+function SizeNameOrPtInput({ value, onChange }: { value: number; onChange: (v: unknown) => void }) {
+  return (
+    <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+      <input
+        data-testid="attr-size-pt"
+        style={{ ...inputStyle, width: 60 }}
+        type="number"
+        step={0.5}
+        min={6}
+        max={72}
+        value={value ?? 12}
+        onChange={(e) => onChange(Number(e.target.value))}
+      />
+      <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>pt</span>
+    </span>
+  );
+}
+
+// ─────────────────────────────────────────────
+// P4 子编辑器：对齐方式下拉
+// ─────────────────────────────────────────────
+
+function AlignSelect({ value, onChange }: { value: string; onChange: (v: unknown) => void }) {
+  return (
+    <select
+      data-testid="attr-align"
+      style={selectStyle}
+      value={value ?? 'justify'}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      <option value="left">左对齐</option>
+      <option value="center">居中</option>
+      <option value="right">右对齐</option>
+      <option value="justify">两端对齐</option>
+    </select>
+  );
+}
+
+// ─────────────────────────────────────────────
+// P4 子编辑器：通用数值输入
+// ─────────────────────────────────────────────
+
+function NumberInput({ value, onChange, step = 1, min, testId }: {
+  value: number;
+  onChange: (v: unknown) => void;
+  step?: number;
+  min?: number;
+  testId?: string;
+}) {
+  return (
+    <input
+      data-testid={testId ?? 'attr-number'}
+      style={{ ...inputStyle, width: 80 }}
+      type="number"
+      step={step}
+      min={min}
+      value={value ?? 0}
+      onChange={(e) => onChange(Number(e.target.value))}
+    />
+  );
+}
+
+// ─────────────────────────────────────────────
+// P4 子编辑器：通用文本输入
+// ─────────────────────────────────────────────
+
+function TextInput({ value, onChange, testId }: {
+  value: string;
+  onChange: (v: unknown) => void;
+  testId?: string;
+}) {
+  return (
+    <input
+      data-testid={testId ?? 'attr-text'}
+      style={inputStyle}
+      type="text"
+      value={value ?? ''}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
+}
+
+// ─────────────────────────────────────────────
+// P4 子编辑器：枚举下拉（通用）
+// ─────────────────────────────────────────────
+
+function EnumSelect({ value, onChange, options, testId }: {
+  value: string;
+  onChange: (v: unknown) => void;
+  options: { value: string; label: string }[];
+  testId?: string;
+}) {
+  return (
+    <select
+      data-testid={testId ?? 'attr-enum'}
+      style={selectStyle}
+      value={value ?? options[0]?.value ?? ''}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  );
+}
+
+// ─────────────────────────────────────────────
+// P4 主组件：按属性 key 分发（22+ case）
+// ─────────────────────────────────────────────
+
+export interface RuleValueEditorByAttrProps {
+  attr: string;
+  value: unknown;
+  onChange: (next: unknown) => void;
+}
+
+/**
+ * 按属性 key 分发到对应子编辑器（P4 版本）
+ *
+ * 业务逻辑：
+ * 1. attr 对应 fieldDefs.ts 中 applicable_attributes 的条目
+ * 2. 每个 case 处理一种属性类型，向上报 onChange(newValue)
+ * 3. default 用 JSON 预览兜底，不隐藏未知属性
+ */
+export function RuleValueEditorByAttr({ attr, value, onChange }: RuleValueEditorByAttrProps) {
+  switch (attr) {
+    // ── 字体属性 ──────────────────────────────
+    case 'font.cjk':
+      return <CjkFontSelect value={value as string} onChange={onChange} />;
+
+    case 'font.ascii':
+      return <AsciiFontSelect value={value as string} onChange={onChange} />;
+
+    case 'font.size_pt':
+      return <SizeNameOrPtInput value={value as number} onChange={onChange} />;
+
+    case 'font.bold':
+      return (
+        <Toggle
+          testId="attr-bold"
+          checked={(value as boolean) ?? false}
+          onChange={onChange}
+        />
+      );
+
+    // ── 段落属性 ──────────────────────────────
+    case 'para.align':
+      return <AlignSelect value={value as string} onChange={onChange} />;
+
+    case 'para.first_line_indent_chars':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.5} min={0} testId="attr-indent" />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>字符</span>
+        </span>
+      );
+
+    case 'para.hanging_indent_chars':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.5} min={0} testId="attr-hanging-indent" />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>字符</span>
+        </span>
+      );
+
+    case 'para.line_spacing':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.05} min={1} testId="attr-line-spacing" />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>倍</span>
+        </span>
+      );
+
+    case 'para.letter_spacing_chars':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.5} min={0} testId="attr-letter-spacing" />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>字符</span>
+        </span>
+      );
+
+    case 'para.space_before_lines':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.5} min={0} testId="attr-space-before" />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>行</span>
+        </span>
+      );
+
+    case 'para.space_after_lines':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.5} min={0} testId="attr-space-after" />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>行</span>
+        </span>
+      );
+
+    // ── 内容属性 ──────────────────────────────
+    case 'content.specific_text':
+      return <TextInput value={value as string} onChange={onChange} testId="attr-specific-text" />;
+
+    case 'content.max_chars':
+      return <NumberInput value={value as number} onChange={onChange} step={1} min={1} testId="attr-max-chars" />;
+
+    case 'content.char_count_min':
+      return <NumberInput value={value as number} onChange={onChange} step={1} min={0} testId="attr-char-min" />;
+
+    case 'content.char_count_max':
+      return <NumberInput value={value as number} onChange={onChange} step={1} min={0} testId="attr-char-max" />;
+
+    case 'content.item_count_min':
+      return <NumberInput value={value as number} onChange={onChange} step={1} min={0} testId="attr-item-min" />;
+
+    case 'content.item_count_max':
+      return <NumberInput value={value as number} onChange={onChange} step={1} min={0} testId="attr-item-max" />;
+
+    case 'content.item_separator':
+      return <TextInput value={value as string} onChange={onChange} testId="attr-item-sep" />;
+
+    // ── 页面属性 ──────────────────────────────
+    case 'page.size':
+      return (
+        <EnumSelect
+          value={value as string}
+          onChange={onChange}
+          testId="attr-page-size"
+          options={[
+            { value: 'A4', label: 'A4 (210×297mm)' },
+            { value: 'B5', label: 'B5 (176×250mm)' },
+            { value: 'Letter', label: 'Letter (216×279mm)' },
+          ]}
+        />
+      );
+
+    case 'page.margin_top_cm':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.1} min={0} testId="attr-margin-top" />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>cm</span>
+        </span>
+      );
+
+    case 'page.margin_bottom_cm':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.1} min={0} testId="attr-margin-bottom" />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>cm</span>
+        </span>
+      );
+
+    case 'page.margin_left_cm':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.1} min={0} testId="attr-margin-left" />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>cm</span>
+        </span>
+      );
+
+    case 'page.margin_right_cm':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.1} min={0} testId="attr-margin-right" />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>cm</span>
+        </span>
+      );
+
+    case 'page.new_page_before':
+      return (
+        <Toggle
+          testId="attr-new-page"
+          checked={(value as boolean) ?? false}
+          onChange={onChange}
+        />
+      );
+
+    // ── 分页格式 ──────────────────────────────
+    case 'pagination.front_style':
+      return (
+        <EnumSelect
+          value={value as string}
+          onChange={onChange}
+          testId="attr-pagination-front"
+          options={[
+            { value: 'roman', label: 'I II III（罗马）' },
+            { value: 'arabic', label: '1 2 3（阿拉伯）' },
+            { value: 'none', label: '无页码' },
+          ]}
+        />
+      );
+
+    case 'pagination.body_style':
+      return (
+        <EnumSelect
+          value={value as string}
+          onChange={onChange}
+          testId="attr-pagination-body"
+          options={[
+            { value: 'arabic', label: '1 2 3（阿拉伯）' },
+            { value: 'roman', label: 'I II III（罗马）' },
+            { value: 'none', label: '无页码' },
+          ]}
+        />
+      );
+
+    // ── 引用格式 ──────────────────────────────
+    case 'citation.style':
+      return (
+        <EnumSelect
+          value={value as string}
+          onChange={onChange}
+          testId="attr-citation-style"
+          options={[
+            { value: 'gbt7714', label: 'GB/T 7714' },
+            { value: 'apa', label: 'APA' },
+            { value: 'mla', label: 'MLA' },
+          ]}
+        />
+      );
+
+    // ── 布局属性 ──────────────────────────────
+    case 'layout.position':
+      return (
+        <EnumSelect
+          value={value as string}
+          onChange={onChange}
+          testId="attr-layout-position"
+          options={[
+            { value: 'above', label: '之上' },
+            { value: 'below', label: '之下' },
+          ]}
+        />
+      );
+
+    // ── 混排属性 ──────────────────────────────
+    case 'mixed_script.ascii_is_tnr':
+      // 数字/西文是否强制 Times New Roman
+      return (
+        <Toggle
+          testId="attr-ascii-tnr"
+          checked={(value as boolean) ?? true}
+          onChange={onChange}
+        />
+      );
+
+    case 'mixed_script.punct_space_after':
+      // 英文标点后是否规范空一字符（句号/逗号/分号等 ASCII 标点后接空格）
+      return (
+        <Toggle
+          testId="attr-punct-space-after"
+          checked={(value as boolean) ?? false}
+          onChange={onChange}
+        />
+      );
+
+    // ── 默认：JSON 预览（不隐藏未知属性）──────
+    default:
+      return (
+        <span
+          data-testid="attr-fallback"
+          style={{ fontSize: 12, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-mono)' }}
+        >
+          {JSON.stringify(value)}
+        </span>
+      );
   }
 }

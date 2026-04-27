@@ -8,8 +8,10 @@
  *                 用户在 Finder/Explorer 再次"打开方式"的情形
  *
  *              收到路径后的行为：
- *              - 将文件所在目录作为项目根打开（openProject）
- *              - 在编辑器中打开该文件（openFile）
+ *              - 仅在编辑器中打开该文件（openFile）
+ *              - 不修改当前项目，不持久化父目录到项目列表
+ *                （用户只是想查看/编辑文件，并非把目录纳入项目）
+ *                如需将目录加入项目，请通过侧边栏的"添加项目"功能
  * @author Atlas.oi
  * @date 2026-04-16
  */
@@ -17,28 +19,13 @@
 import { useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { useProjectStore } from '../../features/sidebar/projectStore';
 import { useEditorStore } from '../../features/editor/editorStore';
 
 /**
- * 从完整文件路径中提取父目录路径
- * 兼容 macOS（/）和 Windows（\）两种分隔符
- */
-function getParentDir(filePath: string): string {
-  // 统一为正斜杠后取最后一段之前的部分
-  const normalized = filePath.replace(/\\/g, '/');
-  const lastSlash = normalized.lastIndexOf('/');
-  // lastSlash <= 0 说明是根目录或无目录，直接返回原路径
-  return lastSlash > 0 ? filePath.slice(0, lastSlash) : filePath;
-}
-
-/**
- * 打开单个文件：先切换项目目录，再在编辑器中展开该文件
- * openProject 是幂等的——若已是该项目则不会重置状态
+ * 打开单个文件：仅加载到编辑器标签页
+ * 不更换当前项目，不污染最近项目列表
  */
 async function openWithFile(filePath: string): Promise<void> {
-  const parentDir = getParentDir(filePath);
-  await useProjectStore.getState().openProject(parentDir);
   await useEditorStore.getState().openFile(filePath);
 }
 

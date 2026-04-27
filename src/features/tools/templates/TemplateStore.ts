@@ -10,7 +10,6 @@
 
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
-import { sidecarInvoke } from '../toolsSidecarClient';
 
 // ─────────────────────────────────────────────
 // 类型定义（与 Rust TemplateJson 字段对齐）
@@ -23,7 +22,7 @@ export interface TemplateSource {
 }
 
 export interface TemplateJson {
-  schema_version: number;
+  schema_version: 2;
   id: string;
   name: string;
   source: TemplateSource;
@@ -80,10 +79,16 @@ interface TemplateStoreState {
    * 业务逻辑：
    * 1. 找到内置模板 _builtin-gbt7714（必须存在）
    * 2. JSON.parse(JSON.stringify(...)) 强制值复制，确保与内置模板完全隔离
-   * 3. 若传入 fromDocx，调用 sidecar extract_template 覆盖对应 rule value
+   * 3. 若传入 explicitRules，直接使用而非拷贝内置规则（P4 Workspace 流程）
    * 4. 调用 template_save_cmd 持久化，再 load() 重读
    */
-  create(name: string, options?: { fromDocx?: string }): Promise<string>;
+  create(
+    name: string,
+    options?: {
+      // P4 Workspace 流程：直接传入用户逐字段确认后的规则 map，不再从内置拷贝
+      explicitRules?: Record<string, { enabled: boolean; value: Record<string, unknown> }>;
+    },
+  ): Promise<string>;
 
   /** 更新模板（write 后 reload） */
   update(id: string, patch: Partial<TemplateJson>): Promise<void>;
@@ -119,26 +124,6 @@ export const useTemplateStore = create<TemplateStoreState>((set, get) => ({
       const templates = await invoke<TemplateJson[]>('template_list_cmd');
       set({ templates });
 
-      // ============================================
-      // Migration check：向 sidecar 获取支持的规则列表，
-      // 与内置模板已有规则 diff，追加新规则（enabled:false）
-      // 若 sidecar 不可用，静默跳过，不阻断模板加载
-      // ============================================
-      try {
-        const { rules: supported } = await sidecarInvoke<{ rules: string[] }>({ cmd: 'list_rules' });
-        const builtin = templates.find((t) => t.id === '_builtin-gbt7714');
-        if (builtin) {
-          const newRuleIds = supported.filter((id) => !(id in builtin.rules));
-          if (newRuleIds.length > 0) {
-            // 记录新规则数量，MigrationBanner 据此显示提示
-            set({ pendingMigrationCount: newRuleIds.length });
-            await get().migrateNewRules(newRuleIds);
-          }
-        }
-      } catch (e) {
-        // sidecar 未启动或网络异常：跳过 migration，不影响模板加载
-        console.warn('[TemplateStore] migration check skipped:', e);
-      }
     } finally {
       set({ loading: false });
     }
@@ -153,15 +138,21 @@ export const useTemplateStore = create<TemplateStoreState>((set, get) => ({
     return get().templates.find((t) => t.id === id) ?? null;
   },
 
-  async create(name, options) {
+  async create(name: string, options?: { explicitRules?: Record<string, { enabled: boolean; value: Record<string, unknown> }> }) {
     // ============================================
-    // 第一步：找内置模板并深拷贝 rules
-    // 必须用 JSON 序列化/反序列化，确保值层面完全独立
+    // 第一步：确定 rules 来源
+    // P4 Workspace 流程：explicitRules 直接来自用户逐字段确认，深拷贝后使用
+    // 其他流程：从内置模板深拷贝（必须用 JSON 序列化/反序列化确保值层面独立）
     // ============================================
-    const builtin = get().templates.find((t) => t.id === '_builtin-gbt7714');
-    if (!builtin) throw new Error('Builtin template missing');
+    let deepCloned: TemplateJson['rules'];
 
-    const deepCloned = JSON.parse(JSON.stringify(builtin.rules)) as TemplateJson['rules'];
+    if (options?.explicitRules) {
+      deepCloned = JSON.parse(JSON.stringify(options.explicitRules)) as TemplateJson['rules'];
+    } else {
+      const builtin = get().templates.find((t) => t.id === '_builtin-gbt7714');
+      if (!builtin) throw new Error('Builtin template missing');
+      deepCloned = JSON.parse(JSON.stringify(builtin.rules)) as TemplateJson['rules'];
+    }
 
     // ============================================
     // 第二步：构造新模板对象
@@ -169,34 +160,14 @@ export const useTemplateStore = create<TemplateStoreState>((set, get) => ({
     // ============================================
     const newId = slugify(name) + '-' + Date.now().toString(36);
     const newTpl: TemplateJson = {
-      schema_version: 1,
+      schema_version: 2,
       id: newId,
       name,
-      source: { type: 'manual' },
+      // P4 Workspace 流程用 extracted source，普通新建用 manual
+      source: options?.explicitRules ? { type: 'extracted' } : { type: 'manual' },
       updated_at: new Date().toISOString(),
       rules: deepCloned,
     };
-
-    // ============================================
-    // 第三步（可选）：从 docx 提取规则值覆盖
-    // Task 21 实现 sidecar extract_template 后才可用
-    // ============================================
-    if (options?.fromDocx) {
-      const extracted = await sidecarInvoke<{ rules: Record<string, { value: unknown }> }>({
-        cmd: 'extract_template',
-        file: options.fromDocx,
-      });
-      Object.entries(extracted.rules).forEach(([k, v]) => {
-        if (newTpl.rules[k]) {
-          newTpl.rules[k].value = v.value;
-        }
-      });
-      newTpl.source = {
-        type: 'extracted',
-        origin_docx: options.fromDocx,
-        extracted_at: new Date().toISOString(),
-      };
-    }
 
     await invoke('template_save_cmd', { template: newTpl });
     await get().load();

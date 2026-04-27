@@ -12,11 +12,11 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
 // 编译时嵌入内置模板（路径相对 src/template_cmd.rs）
-// 确保 src-tauri/templates/_builtin-gbt7714.json 存在
-const BUILTIN_JSON: &str = include_str!("../templates/_builtin-gbt7714.json");
+// 确保 src-tauri/templates/_builtin-gbt7714-v2.json 存在
+const BUILTIN_JSON: &str = include_str!("../templates/_builtin-gbt7714-v2.json");
 
 // 内置模板的固定 id，delete 时以此识别并触发自动重建
-const BUILTIN_ID: &str = "_builtin-gbt7714";
+const BUILTIN_ID: &str = "_builtin-gbt7714-v2";
 
 // ============================================
 // 进程级写操作锁：防止 save/delete/import/restore_builtin 并发竞争
