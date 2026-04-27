@@ -7,7 +7,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { invoke } from '@tauri-apps/api/core';
-import { openPath } from '@tauri-apps/plugin-opener';
+import { revealItemInDir } from '@tauri-apps/plugin-opener';
 import FileTree from '../FileTree';
 import { useFileTreeStore } from '../fileTreeStore';
 import { useProjectStore } from '../projectStore';
@@ -20,7 +20,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 }));
 
 const mockInvoke = vi.mocked(invoke);
-const mockOpenPath = vi.mocked(openPath);
+const mockRevealItemInDir = vi.mocked(revealItemInDir);
 
 const refreshFileTreeMock = vi.fn().mockResolvedValue(undefined);
 const applyFsEventMock = vi.fn();
@@ -65,7 +65,7 @@ beforeEach(() => {
   });
   refreshFileTreeMock.mockClear();
   applyFsEventMock.mockClear();
-  mockOpenPath.mockClear();
+  mockRevealItemInDir.mockClear();
   vi.clearAllMocks();
 });
 
@@ -167,7 +167,8 @@ describe('FileTree - 右键菜单对话框', () => {
     expect(node).toHaveAttribute('data-path', '/proj/README.md');
   });
 
-  it('文件夹右键菜单应包含创建类操作，文件右键菜单不应包含', async () => {
+  it('任何节点右键菜单都应包含完整操作（新建文件/夹、在 Finder 显示、复制、剪切、重命名、删除）', async () => {
+    // VS Code 对齐：文件节点也应允许新建（target=父目录），解决"项目根目录无新建入口"
     render(<FileTree />);
 
     fireEvent.contextMenu(screen.getByTestId('tree-node-src'));
@@ -186,8 +187,9 @@ describe('FileTree - 右键菜单对话框', () => {
     const fileMenuItems = await screen.findAllByText('在 Finder 中显示');
     const fileMenu = fileMenuItems[fileMenuItems.length - 1];
     const openMenu = fileMenu.closest('[data-state="open"]');
-    expect(openMenu?.textContent).not.toContain('新建文件');
-    expect(openMenu?.textContent).not.toContain('新建文件夹');
+    // 修复后：文件节点菜单也包含新建（target = 父目录）
+    expect(openMenu?.textContent).toContain('新建文件');
+    expect(openMenu?.textContent).toContain('新建文件夹');
     expect(openMenu?.textContent).toContain('复制');
     expect(openMenu?.textContent).toContain('剪切');
     expect(openMenu?.textContent).toContain('复制路径');
@@ -195,7 +197,24 @@ describe('FileTree - 右键菜单对话框', () => {
     expect(openMenu?.textContent).toContain('发送相对路径');
   });
 
-  it('文件右键菜单的在 Finder 中显示应调用 openPath', async () => {
+  it('在文件节点右键新建文件 → target 为该文件的父目录（解决项目根新建入口问题）', async () => {
+    const user = userEvent.setup();
+    const mockInvoke = vi.mocked((await import('@tauri-apps/api/core')).invoke);
+    mockInvoke.mockResolvedValueOnce(undefined);
+
+    render(<FileTree />);
+
+    // 在根级文件 README.md 上右键
+    fireEvent.contextMenu(screen.getByTestId('tree-node-README.md'));
+    await user.click(await screen.findByTestId('ctx-new-file'));
+
+    // 弹窗描述应表明 target 为 README.md 的父目录（即项目根 /proj）
+    const dialog = await screen.findByTestId('file-tree-create-dialog');
+    expect(dialog.textContent).toContain('/proj');
+    expect(dialog.textContent).not.toContain('/proj/README.md');
+  });
+
+  it('文件右键菜单的在 Finder 中显示应调用 revealItemInDir（系统文件管理器高亮文件，跨平台）', async () => {
     const user = userEvent.setup();
     render(<FileTree />);
 
@@ -203,7 +222,9 @@ describe('FileTree - 右键菜单对话框', () => {
     await user.click(await screen.findByText('在 Finder 中显示'));
 
     await waitFor(() => {
-      expect(mockOpenPath).toHaveBeenCalledWith('/proj/README.md');
+      // revealItemInDir：macOS Finder 高亮、Windows explorer.exe /select、Linux 父目录
+      // 与 openPath（"用默认应用打开"）语义不同，回归保护此 bug
+      expect(mockRevealItemInDir).toHaveBeenCalledWith('/proj/README.md');
     });
   });
 

@@ -32,7 +32,7 @@ import {
   ContextMenuSeparator,
 } from '@radix-ui/react-context-menu';
 import { useCallback, useState } from 'react';
-import { openPath } from '@tauri-apps/plugin-opener';
+import { revealItemInDir } from '@tauri-apps/plugin-opener';
 import { useFileTreeStore } from './fileTreeStore';
 import { useGitStore } from './gitStore';
 import { useProjectStore } from './projectStore';
@@ -225,29 +225,33 @@ function FileTreeNode({ node, depth, gitStatusClass }: FileTreeNodeProps) {
             boxShadow: 'var(--shadow-menu)',
           }}
         >
-          {isDir && (
-            <>
-              <ContextMenuItem
-                onSelect={() => openCreateDialog('file')}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12, color: 'var(--c-fg)', borderRadius: 4, fontFamily: 'var(--font-ui)' }}
-                data-testid="ctx-new-file"
-              >
-                <FilePlus size={12} aria-hidden />
-                新建文件
-              </ContextMenuItem>
-              <ContextMenuItem
-                onSelect={() => openCreateDialog('dir')}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12, color: 'var(--c-fg)', borderRadius: 4, fontFamily: 'var(--font-ui)' }}
-                data-testid="ctx-new-dir"
-              >
-                <FolderPlus size={12} aria-hidden />
-                新建文件夹
-              </ContextMenuItem>
-              <ContextMenuSeparator style={{ borderTop: '1px solid var(--c-border-sub)', margin: '4px 0' }} />
-            </>
-          )}
+          {/*
+            新建文件 / 新建文件夹 —— 任何节点上右键都可触发：
+            - 目录节点：target = 该目录（在其内部新建）
+            - 文件节点：target = 父目录（创建为同级兄弟）
+            parentPath 在 line 64 已按 isDir 区分，submitCreate 直接拼接即可。
+            VS Code 行为对齐：用户右键项目根目录下的文件 → 在项目根新建（解决"根目录无入口"）
+          */}
           <ContextMenuItem
-            onSelect={() => { void openPath(node.entry.path); }}
+            onSelect={() => openCreateDialog('file')}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12, color: 'var(--c-fg)', borderRadius: 4, fontFamily: 'var(--font-ui)' }}
+            data-testid="ctx-new-file"
+          >
+            <FilePlus size={12} aria-hidden />
+            新建文件
+          </ContextMenuItem>
+          <ContextMenuItem
+            onSelect={() => openCreateDialog('dir')}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12, color: 'var(--c-fg)', borderRadius: 4, fontFamily: 'var(--font-ui)' }}
+            data-testid="ctx-new-dir"
+          >
+            <FolderPlus size={12} aria-hidden />
+            新建文件夹
+          </ContextMenuItem>
+          <ContextMenuSeparator style={{ borderTop: '1px solid var(--c-border-sub)', margin: '4px 0' }} />
+
+          <ContextMenuItem
+            onSelect={() => { void revealItemInDir(node.entry.path); }}
             style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12, color: 'var(--c-fg)', borderRadius: 4, fontFamily: 'var(--font-ui)' }}
           >
             <ExternalLink size={12} aria-hidden />

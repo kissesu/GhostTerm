@@ -215,6 +215,11 @@ mod tests {
         let valid_project = tmp.path().join("ghostterm");
         std::fs::create_dir_all(&valid_project).unwrap();
 
+        // Windows 路径含 `\`，未转义直接放进 JSON 字符串会被 serde 解析为非法转义
+        // (e.g. `C:\Users` → `\U` is invalid JSON escape)。手动 \\\\ 双重转义后
+        // JSON 解析回单 `\`，恢复成原始 Windows 路径，与下方 assertion 对齐
+        let escaped_path = valid_project.display().to_string().replace('\\', "\\\\");
+
         let path = tmp.path().join("projects.json");
         let content = format!(
             r#"[
@@ -234,8 +239,8 @@ mod tests {
     "last_opened": 1713022000000
   }}
 ]"#,
-            valid_project.display(),
-            valid_project.display()
+            escaped_path,
+            escaped_path
         );
         std::fs::write(&path, content).unwrap();
 

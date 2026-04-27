@@ -465,6 +465,8 @@ mod tests {
         assert!(nested.exists());
     }
 
+    // 硬编码 POSIX `/etc` 路径，仅 Unix/macOS 有效；Windows 敏感路径前缀不同
+    #[cfg(unix)]
     #[test]
     fn test_write_file_sensitive_path_returns_confirmation_needed() {
         // 敏感路径写操作 - check_write_path 返回 needs_confirmation=true
@@ -512,6 +514,10 @@ mod tests {
         assert_eq!(entries[3].name, "z_file.txt");
     }
 
+    // Unix/macOS：. 前缀即为隐藏。Windows 上判定逻辑改用 FILE_ATTRIBUTE_HIDDEN
+    // 文件属性，单纯创建 ".hidden" 不会被 Windows 识别为隐藏；本测试仅覆盖 Unix 路径。
+    // Windows 隐藏行为由生产路径覆盖（is_hidden_entry Windows 实现见同文件 line 140）
+    #[cfg(unix)]
     #[test]
     fn test_list_dir_hidden_files_excluded_by_default() {
         // 默认不显示 . 开头的隐藏文件
