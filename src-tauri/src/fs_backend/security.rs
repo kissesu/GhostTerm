@@ -135,6 +135,10 @@ mod tests {
         assert!(result.canonical_path.ends_with("new_file.txt"));
     }
 
+    // 以下 4 个测试硬编码 POSIX 路径前缀，仅 Unix/macOS 有效；
+    // Windows 上 SENSITIVE_PREFIXES 是 C:\Windows / C:\Program Files 等，
+    // 单独的 Windows 测试在生产使用中由实际路径覆盖（保持单元测试简洁）
+    #[cfg(unix)]
     #[test]
     fn test_sensitive_path_needs_confirmation() {
         // /etc 是敏感路径，应触发确认
@@ -143,18 +147,21 @@ mod tests {
         assert!(result.reason.is_some());
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_sensitive_prefix_usr() {
         let result = check_write_path("/usr/local/test").unwrap();
         assert!(result.needs_confirmation);
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_sensitive_prefix_bin() {
         let result = check_write_path("/bin/test").unwrap();
         assert!(result.needs_confirmation);
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_sensitive_prefix_system_macos() {
         // macOS /System 目录

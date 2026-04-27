@@ -31,6 +31,7 @@ vi.mock('@tauri-apps/api/window', () => ({
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openPath: vi.fn().mockResolvedValue(undefined),
+  revealItemInDir: vi.fn().mockResolvedValue(undefined),
 }));
 
 if (!globalThis.navigator.clipboard) {
