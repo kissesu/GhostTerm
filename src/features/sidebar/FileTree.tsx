@@ -454,6 +454,10 @@ export default function FileTree() {
   const { tree } = useFileTreeStore();
   // 从 gitStore 获取变更列表，用于给文件着色
   const { changes } = useGitStore();
+  // 单文件模式判定依据：当前无项目 + 编辑器有打开文件
+  // 来源：Open With（Finder 右键）打开单文件时 useOpenWithFile 仅 openFile，不动 projectStore
+  const currentProject = useProjectStore((s) => s.currentProject);
+  const openFilesCount = useEditorStore((s) => s.openFiles.length);
 
   // 订阅 Rust watcher 推送的文件系统事件，驱动增量更新
   // 用 getState() 拿 action 引用（稳定），避免 useEffect 重复订阅
@@ -463,12 +467,23 @@ export default function FileTree() {
   useFsEvents(handleFsEvent);
 
   if (tree.length === 0) {
+    // 区分三种空状态：
+    // 1. 单文件模式：无项目 + 有打开文件（来自 Open With）→ 提示用户当前模式
+    // 2. 未打开项目：无项目 + 无打开文件 → 引导用户打开项目
+    // 3. 项目空目录：有项目 + 无文件 → 简单提示
+    const isGhostFileMode = !currentProject && openFilesCount > 0;
+    const message = isGhostFileMode
+      ? '单文件模式 — 打开项目以查看文件树'
+      : !currentProject
+        ? '未打开项目'
+        : '暂无文件';
     return (
       <div
-        style={{ padding: '16px 10px', fontSize: 12, color: 'var(--c-fg-subtle)', textAlign: 'center' }}
+        style={{ padding: '16px 10px', fontSize: 12, color: 'var(--c-fg-subtle)', textAlign: 'center', lineHeight: 1.6 }}
         data-testid="file-tree-empty"
+        data-mode={isGhostFileMode ? 'ghost-file' : (currentProject ? 'empty-project' : 'no-project')}
       >
-        暂无文件
+        {message}
       </div>
     );
   }

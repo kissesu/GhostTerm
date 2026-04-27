@@ -39,6 +39,41 @@ const LANG_MAP: Record<string, () => Promise<LanguageSupport>> = {
   py: () => import('@codemirror/lang-python').then((m) => m.python()),
 };
 
+/**
+ * 未注册语言包的扩展名 → 注释标记（line / block）映射
+ *
+ * 业务逻辑说明：
+ * CodeMirror 的 Cmd+/（toggleLineComment）依赖语言数据中的 commentTokens；
+ * 对未在 LANG_MAP 中注册的常见配置/脚本/标记型文件，通过 EditorState.languageData
+ * 直接注入 commentTokens，使快捷键即时可用，无需引入完整语言包。
+ *
+ * 选择规则：
+ * - YAML / TOML / Shell / Bash / Python-style 配置 → '#'
+ * - INI → ';'
+ * - Markdown / XML / SVG → 块注释 '<!-- -->'
+ * - SCSS / LESS / SQL → C-style 行 + 块注释（SQL 用 '--' 行）
+ */
+const FALLBACK_COMMENT_TOKENS: Record<string, { line?: string; block?: { open: string; close: string } }> = {
+  md: { block: { open: '<!--', close: '-->' } },
+  markdown: { block: { open: '<!--', close: '-->' } },
+  yaml: { line: '#' },
+  yml: { line: '#' },
+  toml: { line: '#' },
+  sh: { line: '#' },
+  bash: { line: '#' },
+  zsh: { line: '#' },
+  fish: { line: '#' },
+  ini: { line: ';' },
+  conf: { line: '#' },
+  xml: { block: { open: '<!--', close: '-->' } },
+  svg: { block: { open: '<!--', close: '-->' } },
+  // CSS 预处理器：lang-css 仅注册了 .css，scss/less 走 fallback
+  scss: { line: '//', block: { open: '/*', close: '*/' } },
+  less: { line: '//', block: { open: '/*', close: '*/' } },
+  // SQL 行注释为 '--'，块注释 '/* */'
+  sql: { line: '--', block: { open: '/*', close: '*/' } },
+};
+
 /** 语言隔间 - 用于运行时动态切换语法高亮，无需重建整个编辑器状态 */
 const langCompartment = new Compartment();
 
@@ -206,6 +241,12 @@ export default function Editor() {
 
     prevPathRef.current = activeFilePath;
 
+    // 计算 fallback commentTokens：仅对未在 LANG_MAP 注册的扩展名生效
+    // 已加载语言包的文件使用其自带 commentTokens，避免冲突
+    const fallbackTokens = LANG_MAP[activeFile.language]
+      ? null
+      : FALLBACK_COMMENT_TOKENS[activeFile.language] ?? null;
+
     // 创建新的 EditorView 实例
     const state = EditorState.create({
       doc: activeFile.content,
@@ -216,6 +257,11 @@ export default function Editor() {
         themeCompartment.of(mode === 'dark' ? oneDark : ghosttermLight),
         // 语言隔间初始为空，异步加载后通过 dispatch 更新
         langCompartment.of([]),
+        // Fallback commentTokens：让 Cmd+/ 在 .md/.yaml/.toml/.sh/.ini 等
+        // 未注册语言包的常见配置/脚本/标记型文件上立即可用
+        ...(fallbackTokens
+          ? [EditorState.languageData.of(() => [{ commentTokens: fallbackTokens }])]
+          : []),
         // 监听内容变化，更新 editorStore
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
@@ -239,6 +285,23 @@ export default function Editor() {
     });
 
     viewRef.current = view;
+    // 文件打开后立即 focus 编辑器，确保 Cmd+/ Cmd+F Cmd+Z 等 CodeMirror
+    // 内置快捷键无需用户先点击编辑区域即可触发。
+    //
+    // a11y：当前焦点位于标签页列表（role="tablist"）时不抢焦，
+    // 否则会破坏屏幕阅读器/键盘用户的标签页导航流（Tab 键切换 tab 后焦点立即被夺走）。
+    // - 用户从 FileTree 点击文件：activeElement 在 tree button → 抢焦（预期）
+    // - 用户点击编辑器 tab 切标签：activeElement 在 tablist 内 → 不抢焦（保留 tab 焦点）
+    // - 启动/Open With 时 activeElement 为 body：抢焦（预期）
+    //
+    // 测试环境（vitest mock）下 view.focus 可能不存在，typeof 守卫即可
+    if (typeof view.focus === 'function') {
+      const activeEl = typeof document !== 'undefined' ? document.activeElement : null;
+      const isOnTablist = activeEl instanceof Element && activeEl.closest('[role="tablist"]') !== null;
+      if (!isOnTablist) {
+        view.focus();
+      }
+    }
 
     // 异步加载语言包并注入
     const langLoader = LANG_MAP[activeFile.language];
