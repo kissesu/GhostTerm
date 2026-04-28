@@ -105,12 +105,11 @@ def _para_with_size(text: str, pt: float):
 class TestCheckerMapCompleteness:
     """确保 CHECKER_MAP 包含 field_defs 中所有 applicable_attributes 键"""
 
-    # T4.2 待补 checker 的 5 个 _pt 系列 attr。
+    # T4.2 待补 checker 的 _pt 系列 attr。
     # T2.1 已先行将它们加入 schema 的 applicable_attributes（schema 与 UI 优先），
     # checker 实现属于 T4.2 任务范围。中间态显式列出，T4.2 完成后必须清空此集合。
+    # T4.1 已实现 line_spacing_type / line_spacing_pt，已从豁免移除。
     _PENDING_CHECKERS_T42 = frozenset({
-        'para.line_spacing_type',
-        'para.line_spacing_pt',
         'para.first_line_indent_pt',
         'para.hanging_indent_pt',
         'para.letter_spacing_pt',
@@ -1548,3 +1547,88 @@ class TestTableHeaderBorderPtW5:
         doc = _doc_with_three_line_table(inside_h_sz=4)  # insideH=0.5pt，无 tcBorders
         # 原有路径：insideH sz=4 → 0.5pt
         assert check_table_header_border_pt(doc, 0.5) is None
+
+
+# ───────────────────────────────────────────────
+# T4.1: line_spacing checker 修 atLeast/exactly 漏判
+# ───────────────────────────────────────────────
+
+
+class TestCheckLineSpacingLineRule:
+    """T4.1: line_spacing checker 修 atLeast/exactly 漏判
+
+    背景：原 check_para_line_spacing 用 isinstance(ls, (int, float)) 判定，
+    python-docx 在 atLeast/exactly 模式下返回 Length 对象，被静默忽略
+    → 论文用"固定值 28 磅"时 detector 完全漏判。
+    本组测试构造带 OOXML <w:spacing w:lineRule w:line/> 的段落，
+    验证新增的 check_para_line_spacing_type / _pt 直接读 OOXML 区分 6 种状态。
+    """
+
+    def _make_para_with_line_rule(self, line_rule: str, line_value: int):
+        """构造带 OOXML <w:spacing w:lineRule="X" w:line="Y"/> 的 paragraph
+
+        参数说明：
+          line_rule: 'auto' / 'atLeast' / 'exact'（OOXML 原始值）
+          line_value: line 属性值，单位 twips（1/20 pt）
+        """
+        from docx import Document
+        from docx.oxml.ns import qn
+        from lxml import etree
+        doc = Document()
+        para = doc.add_paragraph('测试')
+        pPr = para._element.get_or_add_pPr()
+        spacing = etree.SubElement(pPr, qn('w:spacing'))
+        spacing.set(qn('w:lineRule'), line_rule)
+        spacing.set(qn('w:line'), str(line_value))
+        return para
+
+    def test_at_least_28pt_matches_at_least_28pt(self):
+        """atLeast 28pt（line=560 twips）vs expected atLeast 28pt → None"""
+        from thesis_worker.engine_v2.checkers import (
+            check_para_line_spacing_type,
+            check_para_line_spacing_pt,
+        )
+        para = self._make_para_with_line_rule('atLeast', 560)
+        assert check_para_line_spacing_type(para, 'atLeast') is None
+        assert check_para_line_spacing_pt(para, 28.0) is None
+
+    def test_at_least_28pt_vs_exactly_expected_returns_issue(self):
+        """atLeast 28pt vs expected exactly → issue（类型不同）"""
+        from thesis_worker.engine_v2.checkers import check_para_line_spacing_type
+        para = self._make_para_with_line_rule('atLeast', 560)
+        out = check_para_line_spacing_type(para, 'exactly')
+        assert out is not None
+        assert out['actual'] == 'atLeast'
+        assert out['expected'] == 'exactly'
+
+    def test_auto_240twips_is_single(self):
+        """auto + 240 twips → single 倍数（240/240 = 1.0）"""
+        from thesis_worker.engine_v2.checkers import check_para_line_spacing_type
+        para = self._make_para_with_line_rule('auto', 240)
+        assert check_para_line_spacing_type(para, 'single') is None
+
+    def test_auto_360twips_is_one_and_half(self):
+        """auto + 360 twips → oneAndHalf（360/240 = 1.5）"""
+        from thesis_worker.engine_v2.checkers import check_para_line_spacing_type
+        para = self._make_para_with_line_rule('auto', 360)
+        assert check_para_line_spacing_type(para, 'oneAndHalf') is None
+
+    def test_exact_value_in_pt(self):
+        """exact 30pt（line=600 twips）vs expected 30.0pt → None"""
+        from thesis_worker.engine_v2.checkers import check_para_line_spacing_pt
+        para = self._make_para_with_line_rule('exact', 600)
+        assert check_para_line_spacing_pt(para, 30.0) is None
+
+    def test_pt_tolerance_boundary(self):
+        """容差 0.5pt 边界：actual 28.4 vs expected 28.0 → None；28.6 → issue
+
+        判别力：568 twips = 28.4pt（差 0.4 < 0.5 容差），572 twips = 28.6pt（差 0.6 > 0.5）。
+        若 _pt checker 错误用更宽松容差（如 1.0pt），第二条 case 会误通过。
+        """
+        from thesis_worker.engine_v2.checkers import check_para_line_spacing_pt
+        para_a = self._make_para_with_line_rule('atLeast', 568)  # 28.4pt
+        assert check_para_line_spacing_pt(para_a, 28.0) is None
+        para_b = self._make_para_with_line_rule('atLeast', 572)  # 28.6pt
+        out = check_para_line_spacing_pt(para_b, 28.0)
+        assert out is not None
+

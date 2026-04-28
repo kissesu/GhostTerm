@@ -29,6 +29,7 @@ _TOL_SIZE_INCH = 0.05     # 页面尺寸容差（英寸）
 _TOL_LINE_SPACING = 0.05  # 行距倍数容差
 _TOL_SPACE_PT = 0.5       # 段前/段后间距容差（pt，对应 Word UI 显示精度）
 _TOL_OFFSET_CM = 0.05     # 页眉/页脚距边界容差（语义独立于 _TOL_MARGIN_CM，数值相同）
+_TOL_LINE_SPACING_PT = 0.5  # 行距 pt 容差（atLeast/exactly 模式，对应 Word UI 显示精度）
 
 # ───────────────────────────────────────────────
 # 内部工具函数
@@ -41,6 +42,12 @@ _W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
 def _w(tag: str) -> str:
     """生成带命名空间的 OOXML 标签，避免反复拼接字符串"""
     return f'{{{_W_NS}}}{tag}'
+
+
+# T4.1：line_spacing 直读 OOXML 所需的 attribute name 常量
+# w:lineRule（auto/atLeast/exact）+ w:line（twips 数值或倍数 ×240）
+_W_LINE_RULE = f'{{{_W_NS}}}lineRule'
+_W_LINE = f'{{{_W_NS}}}line'
 
 
 def _first_nonempty_run(para: Paragraph):
@@ -296,6 +303,91 @@ def check_para_letter_spacing_chars(
     if actual == expected:
         return None
     return {'attr': 'para.letter_spacing_chars', 'actual': actual, 'expected': expected}
+
+
+# ───────────────────────────────────────────────
+# T4.1: line_spacing 多状态识别（直读 OOXML，区分 atLeast/exactly/auto）
+# ───────────────────────────────────────────────
+# 业务背景：python-docx 的 paragraph_format.line_spacing 在 atLeast/exactly 模式下
+# 返回 Length 对象（不是 float），原 check_para_line_spacing 用 isinstance(int, float)
+# 判定 → 静默漏判。本组函数直读 OOXML <w:spacing w:lineRule w:line/>，
+# 6 种状态：single / oneAndHalf / double / multiple / atLeast / exactly。
+
+# auto 模式下 w:line 为 240 的整数倍：240=单倍 / 360=1.5倍 / 480=双倍
+_LINE_RULE_TWIPS_TO_TYPE = {
+    240: 'single',
+    360: 'oneAndHalf',
+    480: 'double',
+}
+
+
+def _read_line_rule_and_value(para: Paragraph) -> Optional[tuple]:
+    """读 <w:spacing w:lineRule w:line/> → (type, value_pt_or_factor) 或 None
+
+    返回值语义：
+      - auto + 已知 twips（240/360/480）：(具名 type, 倍数)，如 ('single', 1.0)
+      - auto + 其他 twips：('multiple', 倍数)，倍数 = twips / 240
+      - atLeast：('atLeast', pt 值)，pt = twips / 20
+      - exact：  ('exactly', pt 值)
+      - 未设置或非法：None
+    """
+    pPr = para._element.find(_w('pPr'))
+    if pPr is None:
+        return None
+    spacing = pPr.find(_w('spacing'))
+    if spacing is None:
+        return None
+    line_rule = spacing.get(_W_LINE_RULE)
+    line_val = spacing.get(_W_LINE)
+    if line_rule is None or line_val is None:
+        return None
+    try:
+        line_int = int(line_val)
+    except ValueError:
+        return None
+    if line_rule == 'auto':
+        if line_int in _LINE_RULE_TWIPS_TO_TYPE:
+            return (_LINE_RULE_TWIPS_TO_TYPE[line_int], line_int / 240.0)
+        return ('multiple', line_int / 240.0)
+    if line_rule == 'atLeast':
+        return ('atLeast', line_int / 20.0)
+    if line_rule == 'exact':
+        # OOXML 用 'exact'，UI/规范术语用 'exactly'，对外统一暴露 'exactly'
+        return ('exactly', line_int / 20.0)
+    return None
+
+
+def check_para_line_spacing_type(para: Paragraph, expected: str) -> Optional[dict]:
+    """检查行距类型 (single / oneAndHalf / double / atLeast / exactly / multiple)
+
+    与 check_para_line_spacing（数值倍数）互补：本函数判定模式类型，
+    对 atLeast/exactly 论文常见的"固定值 28 磅"场景可正确识别。
+    """
+    out = _read_line_rule_and_value(para)
+    if out is None:
+        return None
+    actual_type, _ = out
+    if actual_type == expected:
+        return None
+    return {'attr': 'para.line_spacing_type', 'actual': actual_type, 'expected': expected}
+
+
+def check_para_line_spacing_pt(para: Paragraph, expected: float) -> Optional[dict]:
+    """检查 atLeast/exactly 模式下的 pt 数值；其他模式（auto 倍数）返回 None
+
+    业务规则：
+    - 仅 atLeast/exactly 模式有 pt 数值含义，auto 模式 pt 不可比，跳过不报 issue
+    - 容差 _TOL_LINE_SPACING_PT = 0.5pt（对应 Word UI 显示精度）
+    """
+    out = _read_line_rule_and_value(para)
+    if out is None:
+        return None
+    actual_type, actual_value = out
+    if actual_type not in ('atLeast', 'exactly'):
+        return None
+    if abs(actual_value - expected) < _TOL_LINE_SPACING_PT:
+        return None
+    return {'attr': 'para.line_spacing_pt', 'actual': round(actual_value, 2), 'expected': expected}
 
 
 def check_page_new_page_before(para: Paragraph, expected: bool) -> Optional[dict]:
@@ -921,6 +1013,9 @@ CHECKER_MAP: dict[str, Any] = {
     'para.first_line_indent_chars':    check_para_first_line_indent_chars,
     'para.hanging_indent_chars':       check_para_hanging_indent_chars,
     'para.line_spacing':               check_para_line_spacing,
+    # T4.1: line_spacing 多状态识别（atLeast/exactly 直读 OOXML 修漏判）
+    'para.line_spacing_type':          check_para_line_spacing_type,
+    'para.line_spacing_pt':            check_para_line_spacing_pt,
     'para.space_before_lines':         check_para_space_before_lines,
     'para.space_after_lines':          check_para_space_after_lines,
     # T3.1: 段前/段后磅值版本（与 _lines 版本共存）
