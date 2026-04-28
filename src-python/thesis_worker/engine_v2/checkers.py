@@ -30,6 +30,7 @@ _TOL_LINE_SPACING = 0.05  # 行距倍数容差
 _TOL_SPACE_PT = 0.5       # 段前/段后间距容差（pt，对应 Word UI 显示精度）
 _TOL_OFFSET_CM = 0.05     # 页眉/页脚距边界容差（语义独立于 _TOL_MARGIN_CM，数值相同）
 _TOL_LINE_SPACING_PT = 0.5  # 行距 pt 容差（atLeast/exactly 模式，对应 Word UI 显示精度）
+_TOL_INDENT_PT = 0.5      # 缩进 pt 容差（首行/悬挂，对应 Word UI 显示精度）
 
 # ───────────────────────────────────────────────
 # 内部工具函数
@@ -303,6 +304,69 @@ def check_para_letter_spacing_chars(
     if actual == expected:
         return None
     return {'attr': 'para.letter_spacing_chars', 'actual': actual, 'expected': expected}
+
+
+# ───────────────────────────────────────────────
+# T4.2: 3 个 _pt 兄弟 attr checker
+# ───────────────────────────────────────────────
+# 业务背景：T2.1 schema 已加 first_line_indent_pt / hanging_indent_pt /
+# letter_spacing_pt 三个 attr key（与 _chars 版本共存，规范文本用"磅"描述时取 _pt）。
+# 本组函数为它们提供 checker，与 _chars 版本数据源相同（first_line_indent / OOXML w:spacing），
+# 但不除以 body_size_pt，直接保留 pt 数值。容差 0.5pt 对应 Word UI 显示精度。
+
+def check_para_first_line_indent_pt(para: Paragraph, expected: float) -> Optional[dict]:
+    """检查首行缩进 pt 值；hanging（< 0）记为 0，不属于本 checker"""
+    fli = para.paragraph_format.first_line_indent
+    if fli is None:
+        actual = 0.0
+    elif fli.pt < 0:
+        # 悬挂缩进由 check_para_hanging_indent_pt 处理，本 checker 视为 0
+        actual = 0.0
+    else:
+        actual = float(fli.pt)
+    if abs(actual - expected) < _TOL_INDENT_PT:
+        return None
+    return {'attr': 'para.first_line_indent_pt', 'actual': round(actual, 2), 'expected': expected}
+
+
+def check_para_hanging_indent_pt(para: Paragraph, expected: float) -> Optional[dict]:
+    """检查悬挂缩进 pt 值（first_line_indent 负值绝对值）"""
+    fli = para.paragraph_format.first_line_indent
+    if fli is None or fli.pt >= 0:
+        # 无缩进或为首行缩进（正值），悬挂 pt 视为 0
+        actual = 0.0
+    else:
+        actual = abs(float(fli.pt))
+    if abs(actual - expected) < _TOL_INDENT_PT:
+        return None
+    return {'attr': 'para.hanging_indent_pt', 'actual': round(actual, 2), 'expected': expected}
+
+
+def check_para_letter_spacing_pt(para: Paragraph, expected: float) -> Optional[dict]:
+    """检查字符间距 pt 值（OOXML rPr/spacing/@val 单位 1/20 pt）
+
+    与 letter_spacing_chars 共用数据源，但保留 pt 数值不换算字符。
+    容差复用 _TOL_LINE_SPACING_PT（0.5pt，对应 Word UI 显示精度）。
+    """
+    run = _first_nonempty_run(para)
+    if run is None:
+        return None
+    rpr = run._element.rPr
+    if rpr is None:
+        actual = 0.0
+    else:
+        spacing_el = rpr.find(_w('spacing'))
+        if spacing_el is None:
+            actual = 0.0
+        else:
+            val = spacing_el.get(_w('val'))
+            try:
+                actual = float(val) / 20.0 if val is not None else 0.0
+            except ValueError:
+                actual = 0.0
+    if abs(actual - expected) < _TOL_LINE_SPACING_PT:
+        return None
+    return {'attr': 'para.letter_spacing_pt', 'actual': round(actual, 2), 'expected': expected}
 
 
 # ───────────────────────────────────────────────
@@ -1022,6 +1086,10 @@ CHECKER_MAP: dict[str, Any] = {
     'para.space_before_pt':            check_para_space_before_pt,
     'para.space_after_pt':             check_para_space_after_pt,
     'para.letter_spacing_chars':       check_para_letter_spacing_chars,
+    # T4.2: 3 个 _pt 兄弟 attr（与 _chars 版本共存，规范用"磅"描述时取 _pt）
+    'para.first_line_indent_pt':       check_para_first_line_indent_pt,
+    'para.hanging_indent_pt':          check_para_hanging_indent_pt,
+    'para.letter_spacing_pt':          check_para_letter_spacing_pt,
     # page 分页/页面
     'page.new_page_before':            check_page_new_page_before,
     'page.size':                       check_page_size,

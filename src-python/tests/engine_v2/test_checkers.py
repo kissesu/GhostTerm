@@ -105,15 +105,10 @@ def _para_with_size(text: str, pt: float):
 class TestCheckerMapCompleteness:
     """确保 CHECKER_MAP 包含 field_defs 中所有 applicable_attributes 键"""
 
-    # T4.2 待补 checker 的 _pt 系列 attr。
-    # T2.1 已先行将它们加入 schema 的 applicable_attributes（schema 与 UI 优先），
-    # checker 实现属于 T4.2 任务范围。中间态显式列出，T4.2 完成后必须清空此集合。
-    # T4.1 已实现 line_spacing_type / line_spacing_pt，已从豁免移除。
-    _PENDING_CHECKERS_T42 = frozenset({
-        'para.first_line_indent_pt',
-        'para.hanging_indent_pt',
-        'para.letter_spacing_pt',
-    })
+    # T4.2 已清空豁免：first_line_indent_pt / hanging_indent_pt / letter_spacing_pt
+    # 三 checker 在 T4.2 实现完成后从此豁免清单移除。
+    # 保留空 frozenset 与 invariant 引用，作为未来再次中间态时的扩展点。
+    _PENDING_CHECKERS_T42 = frozenset()
 
     def test_all_applicable_attrs_have_checker(self):
         """field_defs 中每个属性 key 必须在 CHECKER_MAP 中有对应项
@@ -1631,4 +1626,71 @@ class TestCheckLineSpacingLineRule:
         para_b = self._make_para_with_line_rule('atLeast', 572)  # 28.6pt
         out = check_para_line_spacing_pt(para_b, 28.0)
         assert out is not None
+
+
+class TestCheckIndentPt:
+    """T4.2: first_line/hanging_indent_pt checker"""
+
+    def test_first_line_pt_match(self):
+        from docx import Document
+        from docx.shared import Pt
+        from thesis_worker.engine_v2.checkers import check_para_first_line_indent_pt
+        doc = Document()
+        para = doc.add_paragraph('测试')
+        para.paragraph_format.first_line_indent = Pt(24)
+        assert check_para_first_line_indent_pt(para, 24.0) is None
+
+    def test_first_line_pt_tolerance(self):
+        from docx import Document
+        from docx.shared import Pt
+        from thesis_worker.engine_v2.checkers import check_para_first_line_indent_pt
+        doc = Document()
+        para = doc.add_paragraph('测试')
+        para.paragraph_format.first_line_indent = Pt(24.4)
+        assert check_para_first_line_indent_pt(para, 24.0) is None  # 0.4 < 0.5 容差
+        para.paragraph_format.first_line_indent = Pt(24.6)
+        out = check_para_first_line_indent_pt(para, 24.0)
+        assert out is not None  # 0.6 超出
+
+    def test_hanging_pt_match(self):
+        from docx import Document
+        from docx.shared import Pt
+        from thesis_worker.engine_v2.checkers import check_para_hanging_indent_pt
+        doc = Document()
+        para = doc.add_paragraph('测试')
+        # hanging 用 first_line_indent 负值表示
+        para.paragraph_format.first_line_indent = Pt(-14)
+        assert check_para_hanging_indent_pt(para, 14.0) is None
+
+
+class TestCheckLetterSpacingPt:
+    """T4.2: letter_spacing_pt checker"""
+
+    def test_letter_spacing_pt_match(self):
+        from docx import Document
+        from docx.oxml.ns import qn
+        from lxml import etree
+        from thesis_worker.engine_v2.checkers import check_para_letter_spacing_pt
+        doc = Document()
+        para = doc.add_paragraph()
+        run = para.add_run('测试')
+        rPr = run._element.get_or_add_rPr()
+        spacing_el = etree.SubElement(rPr, qn('w:spacing'))
+        spacing_el.set(qn('w:val'), '20')  # 20 twips = 1pt
+        assert check_para_letter_spacing_pt(para, 1.0) is None
+
+    def test_letter_spacing_pt_mismatch(self):
+        from docx import Document
+        from docx.oxml.ns import qn
+        from lxml import etree
+        from thesis_worker.engine_v2.checkers import check_para_letter_spacing_pt
+        doc = Document()
+        para = doc.add_paragraph()
+        run = para.add_run('测试')
+        rPr = run._element.get_or_add_rPr()
+        spacing_el = etree.SubElement(rPr, qn('w:spacing'))
+        spacing_el.set(qn('w:val'), '40')  # 2pt
+        out = check_para_letter_spacing_pt(para, 1.0)
+        assert out is not None
+        assert out['actual'] == 2.0
 
