@@ -78,3 +78,41 @@ class TestPatternConstants:
         assert rx.search('1 光年') is None
         # 单纯数字无单位也不应匹配
         assert rx.search('数字 100 无单位') is None
+
+
+class TestExtractParaSpacing:
+    """T3.1: 段前/段后多单位自然语言抽取"""
+
+    def test_space_before_6_pt(self):
+        from thesis_worker.extractor.patterns import extract_para_spacing
+        # "段前 6 磅" → ('para.space_before_pt', 6.0)
+        assert extract_para_spacing('段前 6 磅') == ('para.space_before_pt', 6.0)
+
+    def test_space_before_1_line(self):
+        from thesis_worker.extractor.patterns import extract_para_spacing
+        # "段前 1 行" → ('para.space_before_lines', 1.0)
+        assert extract_para_spacing('段前 1 行') == ('para.space_before_lines', 1.0)
+
+    def test_space_after_0_5_cm(self):
+        import pytest
+        from thesis_worker.extractor.patterns import extract_para_spacing
+        # "段后 0.5 厘米" → ('para.space_after_pt', 14.17)
+        out = extract_para_spacing('段后 0.5 厘米')
+        assert out is not None
+        assert out[0] == 'para.space_after_pt'
+        assert out[1] == pytest.approx(14.17, abs=0.01)
+
+    def test_fullwidth_space_supported(self):
+        """全角空格兼容"""
+        from thesis_worker.extractor.patterns import extract_para_spacing
+        assert extract_para_spacing('段前　6　磅') == ('para.space_before_pt', 6.0)
+
+    def test_no_space_keyword_returns_none(self):
+        from thesis_worker.extractor.patterns import extract_para_spacing
+        assert extract_para_spacing('居中对齐') is None
+
+    def test_discriminating_before_vs_after(self):
+        """同样的数值在 before/after 不同 sink；删 prefix 判定逻辑两 case 互换"""
+        from thesis_worker.extractor.patterns import extract_para_spacing
+        assert extract_para_spacing('段前 12 磅')[0] == 'para.space_before_pt'
+        assert extract_para_spacing('段后 12 磅')[0] == 'para.space_after_pt'

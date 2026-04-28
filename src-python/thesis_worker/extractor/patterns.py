@@ -130,3 +130,49 @@ def find_quoted_field(text: str) -> Optional[tuple[str, str]]:
     field_name = match.group(1)
     rest = match.group(3)
     return (field_name, rest)
+
+
+# ============================================================
+# T3.1: 段前/段后多单位自然语言抽取
+# 单位枚举：行 + 5 种长度单位（与 _LENGTH_UNIT_PATTERN 对齐）
+# 全角空格 U+3000 必须显式纳入，覆盖"段前　6　磅"式中文排版
+# ============================================================
+
+# 段前/段后单位枚举：行 + 5 种长度单位
+_PARA_SPACING_UNITS = r'(?:行|磅|pt|点|英寸|inch|in|厘米|cm|毫米|mm)'
+_RE_PARA_SPACING = re.compile(
+    r'(段前|段后)[\s　]*(\d+(?:\.\d+)?)[\s　]*(' + _PARA_SPACING_UNITS + r')',
+    re.IGNORECASE,
+)
+
+
+def extract_para_spacing(text: str) -> Optional[tuple[str, float]]:
+    """从文本里抽段前/段后值 → (sink_attr_key, pt_or_lines_value)。
+
+    业务逻辑：
+    1. 正则识别 "段前"/"段后" + 数值 + 单位
+    2. 单位为"行" → 走 _lines 兄弟 attr（值保留原始数）
+    3. 单位为长度（磅/cm/mm/in/pt）→ 转 pt 走 _pt 兄弟 attr
+
+    @example
+        extract_para_spacing('段前 6 磅')   → ('para.space_before_pt', 6.0)
+        extract_para_spacing('段前 1 行')   → ('para.space_before_lines', 1.0)
+        extract_para_spacing('段后 0.5 厘米') → ('para.space_after_pt', 14.17)
+    """
+    from .units import length_to_pt
+    m = _RE_PARA_SPACING.search(text)
+    if not m:
+        return None
+    prefix = m.group(1)  # '段前' / '段后'
+    val = float(m.group(2))
+    unit = m.group(3)
+
+    suffix = 'before' if prefix == '段前' else 'after'
+
+    if unit == '行':
+        return (f'para.space_{suffix}_lines', val)
+
+    pt = length_to_pt(val, unit)
+    if pt is None:
+        return None
+    return (f'para.space_{suffix}_pt', round(pt, 2))
