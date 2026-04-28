@@ -14,9 +14,6 @@ pub mod pty_manager;
 pub mod fs_backend;
 pub mod git_backend;
 pub mod project_manager;
-pub mod sidecar;
-pub mod backup_cmd;
-pub mod template_cmd;
 
 // PBI-1 Commands
 use pty_manager::{spawn_pty_cmd, kill_pty_cmd, resize_pty_cmd, reconnect_pty_cmd, get_default_shell_cmd};
@@ -35,16 +32,6 @@ use project_manager::{list_recent_projects_cmd, open_project_cmd, close_project_
 use git_backend::{git_status_cmd, git_stage_cmd, git_unstage_cmd, git_diff_cmd,
                   git_current_branch_cmd, worktree_switch_cmd};
 use git_backend::worktree::{worktree_list_cmd, worktree_add_cmd, worktree_remove_cmd};
-
-// P3: 备份/undo Commands
-use backup_cmd::{backup_create_cmd, backup_restore_cmd, backup_list_cmd};
-
-// P3: 模板 CRUD Commands
-use template_cmd::{
-    template_list_cmd, template_get_cmd, template_save_cmd,
-    template_delete_cmd, template_import_cmd, template_export_cmd,
-    template_restore_builtin_cmd,
-};
 
 // ============================================
 // "打开方式"启动时暂存的文件路径队列
@@ -72,14 +59,10 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         // 进程管理 - 更新安装完成后重启应用
         .plugin(tauri_plugin_process::init())
-        // Sidecar 管理 - spawn Python 工具进程（ghostterm-thesis）并 NDJSON 通信
-        .plugin(tauri_plugin_shell::init())
         // E2E 测试支持（PBI-6 使用）
         .plugin(tauri_plugin_webdriver_automation::init())
         // 注册"打开方式"文件队列状态
         .manage(PendingFiles(Mutex::new(Vec::new())))
-        // 注册 sidecar 状态（lazy init，首次 invoke 时才 spawn 进程）
-        .manage(sidecar::SidecarState::default())
         // ============================================
         // macOS: 禁用 WKWebView 弹性滚动 + 设置深色背景
         // 通过原生 NSScrollView API 设置 scrollElasticity = None
@@ -155,27 +138,6 @@ pub fn run() {
                 }
             }
 
-            // ============================================
-            // P3: 启动时异步清理 30 天前的过期备份
-            // 不阻塞 setup 主线程，清理失败静默忽略（非关键路径）
-            // ============================================
-            let app_handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                if let Ok(dir) = backup_cmd::ghostterm_dir(&app_handle) {
-                    let _ = backup_cmd::cleanup_old_backups(&dir.join(".bak"));
-                }
-            });
-
-            // ============================================
-            // P3: 启动时确保内置模板存在
-            // 同步调用（仅创建单个文件，极快），失败时 eprintln 不 panic
-            // 参照 feedback_no_panic_in_setup.md：extern C 中 panic 会 abort
-            // ============================================
-            let app_handle = app.handle().clone();
-            if let Err(e) = template_cmd::ensure_builtin(&app_handle) {
-                eprintln!("[setup] ensure_builtin failed: {e}");
-            }
-
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -218,21 +180,6 @@ pub fn run() {
             worktree_switch_cmd,
             // 打开方式：获取启动时传入的文件路径
             get_startup_files_cmd,
-            // P2: Sidecar NDJSON 通信
-            sidecar::tools_sidecar_invoke,
-            sidecar::tools_sidecar_restart,
-            // P3: 备份/undo
-            backup_create_cmd,
-            backup_restore_cmd,
-            backup_list_cmd,
-            // P3: 模板 CRUD
-            template_list_cmd,
-            template_get_cmd,
-            template_save_cmd,
-            template_delete_cmd,
-            template_import_cmd,
-            template_export_cmd,
-            template_restore_builtin_cmd,
         ])
         // ============================================
         // 改用 build().run() 以便在 RunEvent 回调中处理 macOS"打开方式"事件

@@ -10,9 +10,8 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useSidebarStore, useProjectStore } from '../features/sidebar';
 import { useKeyboardShortcuts } from '../shared/hooks/useKeyboardShortcuts';
 import WindowTitleBar from '../shared/components/WindowTitleBar';
-import { TabNav } from '../shared/components/TabNav';
 import { useSettingsStore } from '../shared/stores/settingsStore';
-import { WorkspaceRouter } from './WorkspaceRouter';
+import { ProjectWorkspace } from './ProjectWorkspace';
 
 // 侧边栏自动折叠阈值（px）：窗口宽度小于此值时自动隐藏侧边栏
 const SIDEBAR_AUTO_COLLAPSE_WIDTH = 800;
@@ -107,7 +106,6 @@ export default function AppLayout() {
       }}
     >
       <WindowTitleBar
-        tabs={<TabNav />}
         right={
           <button
             type="button"
@@ -125,7 +123,7 @@ export default function AppLayout() {
           </button>
         }
       />
-      <WorkspaceRouter sidebarVisible={sidebarVisible} />
+      <ProjectWorkspace sidebarVisible={sidebarVisible} />
     </div>
   );
 }

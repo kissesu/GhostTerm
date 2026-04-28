@@ -21,8 +21,6 @@ tauri-plugin-opener = "2"
 tauri-plugin-updater = "2"
 # 进程操作 - 用于自动更新安装完成后重启应用
 tauri-plugin-process = "2"
-# Sidecar 管理 - spawn Python 工具进程（ghostterm-thesis）+ NDJSON 通信
-tauri-plugin-shell = "2"
 
 # 序列化/反序列化 - 用于 Tauri Commands 数据传输和持久化
 serde = { version = "1", features = ["derive"] }
@@ -69,14 +67,6 @@ infer = "0.16"
 
 # Base64 编码 - 用于图片文件读取后转为 data URL，供前端 <img> 直接渲染
 base64 = "0.22"
-
-# P3 备份模块依赖
-# SHA-256 哈希 - 将原文件路径 hash 前 12 位作为备份子目录名，避免路径冲突
-sha2 = "0.10"
-# 文件 mtime 操作 - 用于备份 30 天过期判断和测试中模拟过期文件
-filetime = "0.2"
-# 时间戳格式化 - 备份文件名使用 ISO 8601 时间戳（v{n}_{时间}.docx 格式）
-chrono = { version = "0.4", features = ["clock"] }
 
 # E2E 测试支持 - tauri-webdriver + WebdriverIO 集成（PBI-6 使用）
 tauri-plugin-webdriver-automation = "0.1"

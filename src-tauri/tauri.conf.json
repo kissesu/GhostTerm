@@ -32,7 +32,6 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "externalBin": ["binaries/ghostterm-thesis"],
     "createUpdaterArtifacts": true,
     "fileAssociations": [
       {

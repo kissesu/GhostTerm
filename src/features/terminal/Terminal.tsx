@@ -197,7 +197,7 @@ export default function Terminal({ projectPath, className }: TerminalProps) {
     termRef.current.options.fontSize = terminalSettings.fontSize;
     termRef.current.options.fontFamily = terminalSettings.fontFamily;
     termRef.current.options.cursorStyle = terminalSettings.cursorStyle;
-    // 容器 0×0（tools/progress tab 切换后的 display:none 状态）时 xterm renderer
+    // 容器 0×0（如 display:none 或父级未布局完成）时 xterm renderer
     // 读 dimensions 会拿到 undefined，fit() 抛 TypeError。只在容器可见时 fit。
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect || rect.width === 0 || rect.height === 0) return;
