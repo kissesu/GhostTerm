@@ -76,9 +76,27 @@ class TestChineseSizeNames:
     def test_existing_entries_unchanged(self):
         """既有 14 项不变（确保不破坏 backward compat）"""
         from thesis_worker.utils.size import name_to_pt
-        assert name_to_pt('初号') == 42.0
-        assert name_to_pt('小四') == 12.0
-        assert name_to_pt('小六') == 6.5
+        # 既有 14 项数据快照（T1.2 之前），任一项 pt 值漂移会立即挂
+        # 数据来源：src-python/thesis_worker/utils/size.py CHINESE_SIZE_MAP
+        existing = {
+            '初号': 42.0,
+            '小初': 36.0,
+            '一号': 26.0,
+            '小一': 24.0,
+            '二号': 22.0,
+            '小二': 18.0,
+            '三号': 16.0,
+            '小三': 15.0,
+            '四号': 14.0,
+            '小四': 12.0,
+            '五号': 10.5,
+            '小五': 9.0,
+            '六号': 7.5,
+            '小六': 6.5,
+        }
+        for name, expected_pt in existing.items():
+            assert name_to_pt(name) == expected_pt, \
+                f'{name} pt 漂移：实际 {name_to_pt(name)} ≠ 期望 {expected_pt}'
 
     def test_reverse_lookup_qihao(self):
         from thesis_worker.utils.size import pt_to_name
