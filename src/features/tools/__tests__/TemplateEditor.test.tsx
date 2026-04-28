@@ -44,7 +44,7 @@ import type { TemplateJson } from '../templates/TemplateStore';
 
 const builtinTpl: TemplateJson = {
   schema_version: 2,
-  id: '_builtin-gbt7714',
+  id: '_builtin-gbt7714-v2',
   name: 'GB/T 7714 内置',
   source: { type: 'builtin' },
   updated_at: '2026-01-01T00:00:00.000Z',
@@ -149,7 +149,7 @@ describe('TemplateManager', () => {
   it('渲染所有模板行', () => {
     render(<TemplateManager isOpen onClose={vi.fn()} />);
     // 两个模板都应出现
-    expect(screen.getByTestId('template-row-_builtin-gbt7714')).toBeTruthy();
+    expect(screen.getByTestId('template-row-_builtin-gbt7714-v2')).toBeTruthy();
     expect(screen.getByTestId('template-row-user-apa')).toBeTruthy();
   });
 
@@ -162,7 +162,7 @@ describe('TemplateManager', () => {
     render(<TemplateManager isOpen onClose={vi.fn()} />);
 
     // 点击内置模板行的编辑按钮
-    const editBtn = screen.getByTestId('edit-btn-_builtin-gbt7714');
+    const editBtn = screen.getByTestId('edit-btn-_builtin-gbt7714-v2');
     fireEvent.click(editBtn);
 
     // TemplateEditor 出现
@@ -173,14 +173,48 @@ describe('TemplateManager', () => {
 
   it('内置模板不显示删除按钮，显示恢复默认', () => {
     render(<TemplateManager isOpen onClose={vi.fn()} />);
-    expect(screen.queryByTestId('delete-btn-_builtin-gbt7714')).toBeNull();
-    expect(screen.getByTestId('restore-btn-_builtin-gbt7714')).toBeTruthy();
+    expect(screen.queryByTestId('delete-btn-_builtin-gbt7714-v2')).toBeNull();
+    expect(screen.getByTestId('restore-btn-_builtin-gbt7714-v2')).toBeTruthy();
   });
 
   it('非内置模板显示删除按钮，不显示恢复默认', () => {
     render(<TemplateManager isOpen onClose={vi.fn()} />);
     expect(screen.getByTestId('delete-btn-user-apa')).toBeTruthy();
     expect(screen.queryByTestId('restore-btn-user-apa')).toBeNull();
+  });
+
+  // T-fix BUILTIN_ID 错配回归：保证 BUILTIN_ID 严格匹配 v2，不是模糊前缀
+  // 若把 BUILTIN_TEMPLATE_ID 改回 '_builtin-gbt7714' 此 case 必挂——
+  //   v1 残留模板会被误识为内置 → 删除按钮消失 → queryByTestId 不再为 null
+  it('v1 残留模板（id=_builtin-gbt7714）应被视为自定义，显示删除按钮', () => {
+    // 真实场景：用户库可能存有旧版 v1 残留 JSON 文件
+    const v1Stale: TemplateJson = {
+      schema_version: 2,
+      id: '_builtin-gbt7714',
+      name: '旧版 v1 残留',
+      source: { type: 'manual' },
+      updated_at: '2026-01-01T00:00:00.000Z',
+      rules: { 'font.body': { enabled: false, value: { family: '宋体', size_pt: 12 } } },
+    };
+    useTemplateStore.setState({
+      templates: [builtinTpl, v1Stale, userTpl],
+      loading: false,
+      load: vi.fn().mockResolvedValue(undefined),
+      update: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+      restoreBuiltin: vi.fn().mockResolvedValue(undefined),
+    });
+
+    render(<TemplateManager isOpen onClose={vi.fn()} />);
+
+    // v2 真内置：不显示删除，显示恢复默认
+    expect(screen.queryByTestId('delete-btn-_builtin-gbt7714-v2')).toBeNull();
+    expect(screen.getByTestId('restore-btn-_builtin-gbt7714-v2')).toBeTruthy();
+
+    // v1 残留：被视为自定义 → 显示删除，不显示恢复默认
+    // 这一对断言是 v1/v2 严格匹配的判别力来源
+    expect(screen.getByTestId('delete-btn-_builtin-gbt7714')).toBeTruthy();
+    expect(screen.queryByTestId('restore-btn-_builtin-gbt7714')).toBeNull();
   });
 
   it('保存失败时停留在编辑器并弹 alert', async () => {

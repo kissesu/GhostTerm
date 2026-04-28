@@ -16,6 +16,7 @@ import type { TemplateJson } from './TemplateStore';
 import { TemplateEditor } from './TemplateEditor';
 import { RuleTemplateWorkspace } from './RuleTemplateWorkspace';
 import { NamePromptModal } from './NamePromptModal';
+import { BUILTIN_TEMPLATE_ID as BUILTIN_ID } from './builtinTemplate';
 
 // 从文件路径中提取文件名（兼容 macOS / Windows 路径分隔符）
 function basename(p: string): string {
@@ -26,9 +27,6 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
 }
-
-// 内置模板 ID，仅此模板显示"恢复默认"按钮
-const BUILTIN_ID = '_builtin-gbt7714';
 
 // source type 中文标签
 const SOURCE_LABELS: Record<string, string> = {

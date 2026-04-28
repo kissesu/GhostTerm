@@ -25,7 +25,7 @@ const mockedInvoke = vi.mocked(invoke);
 // ─── 测试用内置模板 fixture ───────────────────
 const builtinTemplate: TemplateJson = {
   schema_version: 2,
-  id: '_builtin-gbt7714',
+  id: '_builtin-gbt7714-v2',
   name: 'GB/T 7714 内置',
   source: { type: 'builtin' },
   updated_at: '2026-01-01T00:00:00.000Z',
@@ -52,7 +52,7 @@ describe('load', () => {
 
     expect(mockedInvoke).toHaveBeenCalledWith('template_list_cmd');
     expect(useTemplateStore.getState().templates).toHaveLength(1);
-    expect(useTemplateStore.getState().templates[0].id).toBe('_builtin-gbt7714');
+    expect(useTemplateStore.getState().templates[0].id).toBe('_builtin-gbt7714-v2');
   });
 
   it('loading 标志在请求期间为 true，完成后为 false', async () => {
@@ -147,7 +147,7 @@ describe('深拷贝隔离', () => {
     await useTemplateStore.getState().create('user copy');
 
     // 此时修改内存中 builtin 的 rules 值（模拟后续调用可能修改）
-    const storeBuiltin = useTemplateStore.getState().templates.find((t) => t.id === '_builtin-gbt7714')!;
+    const storeBuiltin = useTemplateStore.getState().templates.find((t) => t.id === '_builtin-gbt7714-v2')!;
     storeBuiltin.rules['cjk_ascii_space'].value = { allowed: true }; // 直接修改内存
 
     // 验证：写入磁盘的用户模板 rules 不受影响（深拷贝已在 create 时发生）
@@ -213,6 +213,62 @@ describe('migrateNewRules', () => {
 
     const saveCalls = mockedInvoke.mock.calls.filter(([cmd]) => cmd === 'template_save_cmd');
     expect(saveCalls).toHaveLength(0);
+  });
+});
+
+// ─────────────────────────────────────────────
+// Case 5: BUILTIN_ID 共享常量 v1/v2 错配回归
+// 历史 bug：前端硬编码 v1，Rust 端是 v2 → create 在仅 v2 库中 throw missing；
+//          自定义模板的删除链路因 BUILTIN_ID 比对错位而被 Rust 自动重建误判。
+// 本组测试保证：
+//   - 自定义模板 remove() 后 reload 列表不再含该模板（命中 BUILTIN_ID 比对真分支）
+//   - create() 在仅有 v2 builtin 的库中能找到 builtin 不抛 missing
+// 判别力：临时把 BUILTIN_TEMPLATE_ID 还原为 '_builtin-gbt7714'，下面两个 case 必挂。
+// ─────────────────────────────────────────────
+describe('T-fix BUILTIN_ID 共享常量同步', () => {
+  it('自定义模板 remove() 后 reload 列表不再含该模板', async () => {
+    // 第一步：填入 v2 内置 + 一个自定义模板
+    const customTpl: TemplateJson = {
+      schema_version: 2,
+      id: 'user-custom-xyz',
+      name: '我的自定义模板',
+      source: { type: 'manual' },
+      updated_at: '2026-01-01T00:00:00.000Z',
+      rules: { 'font.body': { enabled: true, value: { family: '黑体', size_pt: 12 } } },
+    };
+    useTemplateStore.setState({ templates: [builtinTemplate, customTpl] });
+
+    // 第二步：mock template_delete_cmd 成功 + 后续 template_list_cmd 返回过滤后的列表
+    // 注意：参考"自定义模板可删"的现实行为——Rust 端只在 id == BUILTIN_ID 时重建，
+    //       customTpl.id 不等于 BUILTIN_ID 因此 reload 应不含它
+    mockedInvoke.mockResolvedValueOnce(undefined); // template_delete_cmd
+    mockedInvoke.mockResolvedValueOnce([builtinTemplate]); // template_list_cmd（过滤后）
+
+    await useTemplateStore.getState().remove('user-custom-xyz');
+
+    // 第三步：断言 store.templates 不再含 user-custom-xyz
+    const ids = useTemplateStore.getState().templates.map((t) => t.id);
+    expect(ids).not.toContain('user-custom-xyz');
+    expect(ids).toContain('_builtin-gbt7714-v2');
+
+    // 验证 invoke 链路完整：先删后 list
+    const deleteCall = mockedInvoke.mock.calls.find(([cmd]) => cmd === 'template_delete_cmd');
+    expect(deleteCall).toBeDefined();
+    expect(deleteCall![1]).toEqual({ id: 'user-custom-xyz' });
+  });
+
+  it('create() 在仅有 v2 builtin 的库中能找到 builtin 不抛 missing', async () => {
+    // 模拟用户库只有 v2 builtin（没有 v1 残留）
+    mockedInvoke.mockResolvedValueOnce([builtinTemplate]);
+    await useTemplateStore.getState().load();
+
+    // create 应能找到 builtin 完成深拷贝；save + reload 走完整链路
+    mockedInvoke.mockResolvedValueOnce(undefined); // template_save_cmd
+    mockedInvoke.mockResolvedValueOnce([builtinTemplate]); // reload
+
+    // 关键断言：不抛 'Builtin template missing'
+    // 临时把 BUILTIN_TEMPLATE_ID 改回 '_builtin-gbt7714' 此处 rejects.toThrow('Builtin template missing')
+    await expect(useTemplateStore.getState().create('我的模板')).resolves.toMatch(/^/);
   });
 });
 

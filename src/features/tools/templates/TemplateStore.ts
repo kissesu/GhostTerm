@@ -10,6 +10,7 @@
 
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
+import { BUILTIN_TEMPLATE_ID } from './builtinTemplate';
 
 // ─────────────────────────────────────────────
 // 类型定义（与 Rust TemplateJson 字段对齐）
@@ -149,7 +150,7 @@ export const useTemplateStore = create<TemplateStoreState>((set, get) => ({
     if (options?.explicitRules) {
       deepCloned = JSON.parse(JSON.stringify(options.explicitRules)) as TemplateJson['rules'];
     } else {
-      const builtin = get().templates.find((t) => t.id === '_builtin-gbt7714');
+      const builtin = get().templates.find((t) => t.id === BUILTIN_TEMPLATE_ID);
       if (!builtin) throw new Error('Builtin template missing');
       deepCloned = JSON.parse(JSON.stringify(builtin.rules)) as TemplateJson['rules'];
     }
