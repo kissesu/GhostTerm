@@ -297,3 +297,43 @@ class TestFieldDefs:
         attrs = applicable_attrs('formula_block')
         assert set(attrs) == {'para.align', 'numbering.formula_style'}
         assert len(attrs) == 2
+
+
+class TestT4UnitsExpansion:
+    """批 4：单位扩展新增 5 个 attr 的字段绑定断言"""
+
+    def test_line_spacing_type_in_4_fields(self):
+        """abstract_zh_body / abstract_en_body / body_para / line_spacing_global"""
+        from thesis_worker.engine_v2.field_defs import applicable_attrs
+        for fid in ('abstract_zh_body', 'abstract_en_body', 'body_para', 'line_spacing_global'):
+            assert 'para.line_spacing_type' in applicable_attrs(fid), f'{fid} 缺 line_spacing_type'
+            assert 'para.line_spacing_pt' in applicable_attrs(fid), f'{fid} 缺 line_spacing_pt'
+
+    def test_line_spacing_type_not_in_unrelated_fields(self):
+        """title_zh / chapter_title 不应绑定行距类型"""
+        from thesis_worker.engine_v2.field_defs import applicable_attrs
+        assert 'para.line_spacing_type' not in applicable_attrs('title_zh')
+        assert 'para.line_spacing_type' not in applicable_attrs('chapter_title')
+
+    def test_first_line_indent_pt_in_5_fields(self):
+        """abstract_zh_body / abstract_en_body / body_para / ack_body / appendix_body"""
+        from thesis_worker.engine_v2.field_defs import applicable_attrs
+        for fid in ('abstract_zh_body', 'abstract_en_body', 'body_para', 'ack_body', 'appendix_body'):
+            assert 'para.first_line_indent_pt' in applicable_attrs(fid), f'{fid} 缺 first_line_indent_pt'
+
+    def test_hanging_indent_pt_only_in_reference_entry(self):
+        from thesis_worker.engine_v2.field_defs import applicable_attrs
+        assert 'para.hanging_indent_pt' in applicable_attrs('reference_entry')
+        # 反向：其他字段不应有
+        assert 'para.hanging_indent_pt' not in applicable_attrs('body_para')
+
+    def test_letter_spacing_pt_in_4_fields(self):
+        """abstract_zh_title / abstract_en_title / ack_title / appendix_title"""
+        from thesis_worker.engine_v2.field_defs import applicable_attrs
+        for fid in ('abstract_zh_title', 'abstract_en_title', 'ack_title', 'appendix_title'):
+            assert 'para.letter_spacing_pt' in applicable_attrs(fid), f'{fid} 缺 letter_spacing_pt'
+
+    def test_field_count_unchanged_at_37(self):
+        """新加 attr 不增字段"""
+        from thesis_worker.engine_v2.field_defs import FIELD_DEFS
+        assert len(FIELD_DEFS) == 37

@@ -29,6 +29,11 @@
                     figure_caption.applicable_attributes 追加 numbering.figure_style /
                     numbering.subfigure_style，共 6 attr；
                     formula_block.applicable_attributes 追加 numbering.formula_style，共 2 attr。
+              T4.单位扩展: 全 schema 追加 5 个磅级 attr：
+                - para.line_spacing_type (enum: single/oneAndHalf/double/atLeast/exactly/multiple)
+                - para.line_spacing_pt (atLeast/exactly 模式存值)
+                - para.first_line_indent_pt / para.hanging_indent_pt (chars 兄弟)
+                - para.letter_spacing_pt (chars 兄弟)
 @author: Atlas.oi
 @date: 2026-04-28
 """
@@ -42,11 +47,13 @@ FIELD_DEFS: list[dict] = [
     },
     {
         'id': 'abstract_zh_title', 'label': '中文「摘要」标题', 'group': 'front', 'order': 2,
-        'applicable_attributes': ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.letter_spacing_chars', 'content.specific_text'],
+        # T4: 末尾追加 letter_spacing_pt（与 letter_spacing_chars 共存，按规范文本描述选填）
+        'applicable_attributes': ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.letter_spacing_chars', 'content.specific_text', 'para.letter_spacing_pt'],
     },
     {
         'id': 'abstract_zh_body', 'label': '中文摘要正文', 'group': 'front', 'order': 3,
-        'applicable_attributes': ['font.cjk', 'font.size_pt', 'para.first_line_indent_chars', 'para.line_spacing', 'content.char_count_min', 'content.char_count_max', 'mixed_script.ascii_is_tnr'],
+        # T4: 末尾追加 line_spacing_type / line_spacing_pt / first_line_indent_pt
+        'applicable_attributes': ['font.cjk', 'font.size_pt', 'para.first_line_indent_chars', 'para.line_spacing', 'content.char_count_min', 'content.char_count_max', 'mixed_script.ascii_is_tnr', 'para.line_spacing_type', 'para.line_spacing_pt', 'para.first_line_indent_pt'],
     },
     {
         'id': 'keywords_zh_label', 'label': '中文关键词标签', 'group': 'front', 'order': 4,
@@ -62,11 +69,13 @@ FIELD_DEFS: list[dict] = [
     },
     {
         'id': 'abstract_en_title', 'label': '「Abstract」标题', 'group': 'front', 'order': 7,
-        'applicable_attributes': ['font.ascii', 'font.size_pt', 'font.bold', 'para.align', 'para.letter_spacing_chars', 'content.specific_text'],
+        # T4: 末尾追加 letter_spacing_pt
+        'applicable_attributes': ['font.ascii', 'font.size_pt', 'font.bold', 'para.align', 'para.letter_spacing_chars', 'content.specific_text', 'para.letter_spacing_pt'],
     },
     {
         'id': 'abstract_en_body', 'label': '英文摘要正文', 'group': 'front', 'order': 8,
-        'applicable_attributes': ['font.ascii', 'font.size_pt', 'para.first_line_indent_chars', 'para.line_spacing', 'content.char_count_min', 'content.char_count_max', 'mixed_script.ascii_is_tnr'],
+        # T4: 末尾追加 line_spacing_type / line_spacing_pt / first_line_indent_pt
+        'applicable_attributes': ['font.ascii', 'font.size_pt', 'para.first_line_indent_chars', 'para.line_spacing', 'content.char_count_min', 'content.char_count_max', 'mixed_script.ascii_is_tnr', 'para.line_spacing_type', 'para.line_spacing_pt', 'para.first_line_indent_pt'],
     },
     {
         'id': 'keywords_en_label', 'label': '「Key Words」标签', 'group': 'front', 'order': 9,
@@ -117,7 +126,8 @@ FIELD_DEFS: list[dict] = [
     },
     {
         'id': 'body_para', 'label': '正文段落', 'group': 'body', 'order': 18,
-        'applicable_attributes': ['font.cjk', 'font.ascii', 'font.size_pt', 'para.first_line_indent_chars', 'para.line_spacing', 'mixed_script.ascii_is_tnr'],
+        # T4: 末尾追加 line_spacing_type / line_spacing_pt / first_line_indent_pt
+        'applicable_attributes': ['font.cjk', 'font.ascii', 'font.size_pt', 'para.first_line_indent_chars', 'para.line_spacing', 'mixed_script.ascii_is_tnr', 'para.line_spacing_type', 'para.line_spacing_pt', 'para.first_line_indent_pt'],
     },
     {
         'id': 'figure_caption', 'label': '图题', 'group': 'body', 'order': 19,
@@ -178,23 +188,28 @@ FIELD_DEFS: list[dict] = [
     },
     {
         'id': 'reference_entry', 'label': '参考文献条目', 'group': 'back', 'order': 27,
-        'applicable_attributes': ['font.cjk', 'font.ascii', 'font.size_pt', 'para.hanging_indent_chars', 'citation.style'],
+        # T4: 末尾追加 hanging_indent_pt（与 hanging_indent_chars 兄弟）
+        'applicable_attributes': ['font.cjk', 'font.ascii', 'font.size_pt', 'para.hanging_indent_chars', 'citation.style', 'para.hanging_indent_pt'],
     },
     {
         'id': 'ack_title', 'label': '致谢标题', 'group': 'back', 'order': 28,
-        'applicable_attributes': ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.letter_spacing_chars', 'page.new_page_before'],
+        # T4: 末尾追加 letter_spacing_pt
+        'applicable_attributes': ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.letter_spacing_chars', 'page.new_page_before', 'para.letter_spacing_pt'],
     },
     {
         'id': 'ack_body', 'label': '致谢正文', 'group': 'back', 'order': 29,
-        'applicable_attributes': ['font.cjk', 'font.size_pt', 'para.first_line_indent_chars'],
+        # T4: 末尾追加 first_line_indent_pt
+        'applicable_attributes': ['font.cjk', 'font.size_pt', 'para.first_line_indent_chars', 'para.first_line_indent_pt'],
     },
     {
         'id': 'appendix_title', 'label': '附录标题', 'group': 'back', 'order': 30,
-        'applicable_attributes': ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.letter_spacing_chars', 'page.new_page_before'],
+        # T4: 末尾追加 letter_spacing_pt
+        'applicable_attributes': ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.letter_spacing_chars', 'page.new_page_before', 'para.letter_spacing_pt'],
     },
     {
         'id': 'appendix_body', 'label': '附录正文', 'group': 'back', 'order': 31,
-        'applicable_attributes': ['font.cjk', 'font.size_pt', 'para.first_line_indent_chars'],
+        # T4: 末尾追加 first_line_indent_pt
+        'applicable_attributes': ['font.cjk', 'font.size_pt', 'para.first_line_indent_chars', 'para.first_line_indent_pt'],
     },
     # 页面级全局（6 字段：order 32-37）
     {
@@ -221,7 +236,8 @@ FIELD_DEFS: list[dict] = [
     },
     {
         'id': 'line_spacing_global', 'label': '全文行距', 'group': 'global', 'order': 36,
-        'applicable_attributes': ['para.line_spacing'],
+        # T4: 末尾追加 line_spacing_type / line_spacing_pt（atLeast/exactly 模式存值）
+        'applicable_attributes': ['para.line_spacing', 'para.line_spacing_type', 'para.line_spacing_pt'],
     },
     {
         'id': 'mixed_script_global', 'label': '数字/西文字体全局', 'group': 'global', 'order': 37,

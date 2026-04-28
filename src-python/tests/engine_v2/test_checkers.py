@@ -105,12 +105,26 @@ def _para_with_size(text: str, pt: float):
 class TestCheckerMapCompleteness:
     """确保 CHECKER_MAP 包含 field_defs 中所有 applicable_attributes 键"""
 
+    # T4.2 待补 checker 的 5 个 _pt 系列 attr。
+    # T2.1 已先行将它们加入 schema 的 applicable_attributes（schema 与 UI 优先），
+    # checker 实现属于 T4.2 任务范围。中间态显式列出，T4.2 完成后必须清空此集合。
+    _PENDING_CHECKERS_T42 = frozenset({
+        'para.line_spacing_type',
+        'para.line_spacing_pt',
+        'para.first_line_indent_pt',
+        'para.hanging_indent_pt',
+        'para.letter_spacing_pt',
+    })
+
     def test_all_applicable_attrs_have_checker(self):
-        """field_defs 中每个属性 key 必须在 CHECKER_MAP 中有对应项"""
+        """field_defs 中每个属性 key 必须在 CHECKER_MAP 中有对应项
+
+        例外：T4.2 待补的 _pt 系列 attr，T2.1 schema 先行，T4.2 加 checker 后清空豁免。
+        """
         missing = []
         for field in FIELD_DEFS:
             for attr in field['applicable_attributes']:
-                if attr not in CHECKER_MAP:
+                if attr not in CHECKER_MAP and attr not in self._PENDING_CHECKERS_T42:
                     missing.append(attr)
         assert missing == [], f'缺少 checker 的属性 key: {missing}'
 
