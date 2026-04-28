@@ -393,15 +393,17 @@ function AlignSelect({ value, onChange }: { value: string; onChange: (v: unknown
 // P4 子编辑器：通用数值输入
 // ─────────────────────────────────────────────
 
-function NumberInput({ value, onChange, step = 1, min, testId }: {
+function NumberInput({ value, onChange, step = 1, min, testId, inputId }: {
   value: number;
   onChange: (v: unknown) => void;
   step?: number;
   min?: number;
   testId?: string;
+  inputId?: string;
 }) {
   return (
     <input
+      id={inputId}
       data-testid={testId ?? 'attr-number'}
       style={{ ...inputStyle, width: 80 }}
       type="number"
@@ -417,13 +419,15 @@ function NumberInput({ value, onChange, step = 1, min, testId }: {
 // P4 子编辑器：通用文本输入
 // ─────────────────────────────────────────────
 
-function TextInput({ value, onChange, testId }: {
+function TextInput({ value, onChange, testId, inputId }: {
   value: string;
   onChange: (v: unknown) => void;
   testId?: string;
+  inputId?: string;
 }) {
   return (
     <input
+      id={inputId}
       data-testid={testId ?? 'attr-text'}
       style={inputStyle}
       type="text"
@@ -437,14 +441,16 @@ function TextInput({ value, onChange, testId }: {
 // P4 子编辑器：枚举下拉（通用）
 // ─────────────────────────────────────────────
 
-function EnumSelect({ value, onChange, options, testId }: {
+function EnumSelect({ value, onChange, options, testId, inputId }: {
   value: string;
   onChange: (v: unknown) => void;
   options: { value: string; label: string }[];
   testId?: string;
+  inputId?: string;
 }) {
   return (
     <select
+      id={inputId}
       data-testid={testId ?? 'attr-enum'}
       style={selectStyle}
       value={value ?? options[0]?.value ?? ''}
@@ -456,6 +462,73 @@ function EnumSelect({ value, onChange, options, testId }: {
 }
 
 // ─────────────────────────────────────────────
+// Info 修复：EnumSelect options 提至模块级常量，避免每次 re-render 重建
+// page.size / pagination / numbering 等枚举选项稳定，不依赖运行时状态
+// ─────────────────────────────────────────────
+
+const PAGE_SIZE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'A4', label: 'A4 (210×297mm)' },
+  { value: 'B5', label: 'B5 (176×250mm)' },
+  { value: 'Letter', label: 'Letter (216×279mm)' },
+];
+
+const PRINT_MODE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'single', label: '单面打印' },
+  { value: 'double', label: '双面打印' },
+];
+
+const PAGINATION_FRONT_OPTIONS: { value: string; label: string }[] = [
+  { value: 'roman', label: 'I II III（罗马）' },
+  { value: 'arabic', label: '1 2 3（阿拉伯）' },
+  { value: 'none', label: '无页码' },
+];
+
+const PAGINATION_BODY_OPTIONS: { value: string; label: string }[] = [
+  { value: 'arabic', label: '1 2 3（阿拉伯）' },
+  { value: 'roman', label: 'I II III（罗马）' },
+  { value: 'none', label: '无页码' },
+];
+
+const CITATION_STYLE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'gbt7714', label: 'GB/T 7714' },
+  { value: 'apa', label: 'APA' },
+  { value: 'mla', label: 'MLA' },
+];
+
+const LAYOUT_POSITION_OPTIONS: { value: string; label: string }[] = [
+  { value: 'above', label: '之上' },
+  { value: 'below', label: '之下' },
+];
+
+const FIGURE_STYLE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'continuous', label: '连续编号（图1/图2）' },
+  { value: 'chapter_based', label: '章节式（图1-1/图2-3）' },
+];
+
+const SUBFIGURE_STYLE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'a_b_c', label: '(a)(b)(c)' },
+  { value: '1_2_3', label: '.1/.2/.3' },
+];
+
+const FORMULA_STYLE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'continuous', label: '连续编号（(1)/(2)）' },
+  { value: 'chapter_based', label: '章节式（(1-1)/(2-3)）' },
+];
+
+// T2.3: 行距类型枚举（OOXML w:lineRule 6 类型）
+// single/oneAndHalf/double 是固定倍数；atLeast/exactly 配合 line_spacing_pt；
+// multiple 配合 line_spacing 倍数。规范文本中常见"1.5 倍行距"对应 oneAndHalf，
+// "20 磅"对应 exactly+pt，"多倍 1.25"对应 multiple。
+const LINE_SPACING_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'single', label: '单倍行距' },
+  { value: 'oneAndHalf', label: '1.5 倍行距' },
+  { value: 'double', label: '2 倍行距' },
+  { value: 'atLeast', label: '最小值' },
+  { value: 'exactly', label: '固定值' },
+  { value: 'multiple', label: '多倍行距' },
+];
+
+// ─────────────────────────────────────────────
 // P4 主组件：按属性 key 分发（22+ case）
 // ─────────────────────────────────────────────
 
@@ -463,6 +536,8 @@ export interface RuleValueEditorByAttrProps {
   attr: string;
   value: unknown;
   onChange: (next: unknown) => void;
+  /** W7 修复：透传给底层 input/select 的 id，供 label[for] 关联 */
+  inputId?: string;
 }
 
 /**
@@ -471,9 +546,10 @@ export interface RuleValueEditorByAttrProps {
  * 业务逻辑：
  * 1. attr 对应 fieldDefs.ts 中 applicable_attributes 的条目
  * 2. 每个 case 处理一种属性类型，向上报 onChange(newValue)
- * 3. default 用 JSON 预览兜底，不隐藏未知属性
+ * 3. W7 修复：inputId 透传给底层 input/select，供 FieldList 的 label[for] 关联
+ * 4. default 用 JSON 预览兜底，不隐藏未知属性
  */
-export function RuleValueEditorByAttr({ attr, value, onChange }: RuleValueEditorByAttrProps) {
+export function RuleValueEditorByAttr({ attr, value, onChange, inputId }: RuleValueEditorByAttrProps) {
   switch (attr) {
     // ── 字体属性 ──────────────────────────────
     case 'font.cjk':
@@ -501,7 +577,7 @@ export function RuleValueEditorByAttr({ attr, value, onChange }: RuleValueEditor
     case 'para.first_line_indent_chars':
       return (
         <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <NumberInput value={value as number} onChange={onChange} step={0.5} min={0} testId="attr-indent" />
+          <NumberInput value={value as number} onChange={onChange} step={0.5} min={0} testId="attr-indent" inputId={inputId} />
           <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>字符</span>
         </span>
       );
@@ -509,7 +585,7 @@ export function RuleValueEditorByAttr({ attr, value, onChange }: RuleValueEditor
     case 'para.hanging_indent_chars':
       return (
         <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <NumberInput value={value as number} onChange={onChange} step={0.5} min={0} testId="attr-hanging-indent" />
+          <NumberInput value={value as number} onChange={onChange} step={0.5} min={0} testId="attr-hanging-indent" inputId={inputId} />
           <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>字符</span>
         </span>
       );
@@ -517,23 +593,71 @@ export function RuleValueEditorByAttr({ attr, value, onChange }: RuleValueEditor
     case 'para.line_spacing':
       return (
         <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <NumberInput value={value as number} onChange={onChange} step={0.05} min={1} testId="attr-line-spacing" />
+          <NumberInput value={value as number} onChange={onChange} step={0.05} min={1} testId="attr-line-spacing" inputId={inputId} />
           <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>倍</span>
+        </span>
+      );
+
+    // T2.3: 行距类型（OOXML w:lineRule，6 枚举值）
+    case 'para.line_spacing_type':
+      return (
+        <EnumSelect
+          value={value as string}
+          onChange={onChange}
+          options={LINE_SPACING_TYPE_OPTIONS}
+          testId="attr-line-spacing-type"
+          inputId={inputId}
+        />
+      );
+
+    // T2.3: 行距磅值（atLeast/exactly 配合此字段；multiple/single 等忽略）
+    case 'para.line_spacing_pt':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.5} min={0} testId="attr-line-spacing-pt" inputId={inputId} />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>pt</span>
+        </span>
+      );
+
+    // T2.3: 首行缩进磅值（与 _chars 共存；规范写"21 磅"时用此项）
+    case 'para.first_line_indent_pt':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.5} min={0} testId="attr-first-line-indent-pt" inputId={inputId} />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>pt</span>
+        </span>
+      );
+
+    // T2.3: 悬挂缩进磅值（参考文献条目第二行起的悬挂量，规范常写"21 磅"）
+    case 'para.hanging_indent_pt':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.5} min={0} testId="attr-hanging-indent-pt" inputId={inputId} />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>pt</span>
         </span>
       );
 
     case 'para.letter_spacing_chars':
       return (
         <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <NumberInput value={value as number} onChange={onChange} step={0.5} min={0} testId="attr-letter-spacing" />
+          <NumberInput value={value as number} onChange={onChange} step={0.5} min={0} testId="attr-letter-spacing" inputId={inputId} />
           <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>字符</span>
+        </span>
+      );
+
+    // T2.3: 字符间距磅值（"摘 要"两字间距 2 磅等场景，与 _chars 共存）
+    case 'para.letter_spacing_pt':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.1} min={0} testId="attr-letter-spacing-pt" inputId={inputId} />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>pt</span>
         </span>
       );
 
     case 'para.space_before_lines':
       return (
         <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <NumberInput value={value as number} onChange={onChange} step={0.5} min={0} testId="attr-space-before" />
+          <NumberInput value={value as number} onChange={onChange} step={0.5} min={0} testId="attr-space-before" inputId={inputId} />
           <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>行</span>
         </span>
       );
@@ -541,29 +665,46 @@ export function RuleValueEditorByAttr({ attr, value, onChange }: RuleValueEditor
     case 'para.space_after_lines':
       return (
         <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <NumberInput value={value as number} onChange={onChange} step={0.5} min={0} testId="attr-space-after" />
+          <NumberInput value={value as number} onChange={onChange} step={0.5} min={0} testId="attr-space-after" inputId={inputId} />
           <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>行</span>
+        </span>
+      );
+
+    // T3.1: 段前/段后磅值（与 _lines 版本共存，规范写"磅"时用此两项）
+    case 'para.space_before_pt':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.5} min={0} testId="attr-space-before-pt" inputId={inputId} />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>pt</span>
+        </span>
+      );
+
+    case 'para.space_after_pt':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.5} min={0} testId="attr-space-after-pt" inputId={inputId} />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>pt</span>
         </span>
       );
 
     // ── 内容属性 ──────────────────────────────
     case 'content.specific_text':
-      return <TextInput value={value as string} onChange={onChange} testId="attr-specific-text" />;
+      return <TextInput value={value as string} onChange={onChange} testId="attr-specific-text" inputId={inputId} />;
 
     case 'content.char_count_min':
-      return <NumberInput value={value as number} onChange={onChange} step={1} min={0} testId="attr-char-min" />;
+      return <NumberInput value={value as number} onChange={onChange} step={1} min={0} testId="attr-char-min" inputId={inputId} />;
 
     case 'content.char_count_max':
-      return <NumberInput value={value as number} onChange={onChange} step={1} min={0} testId="attr-char-max" />;
+      return <NumberInput value={value as number} onChange={onChange} step={1} min={0} testId="attr-char-max" inputId={inputId} />;
 
     case 'content.item_count_min':
-      return <NumberInput value={value as number} onChange={onChange} step={1} min={0} testId="attr-item-min" />;
+      return <NumberInput value={value as number} onChange={onChange} step={1} min={0} testId="attr-item-min" inputId={inputId} />;
 
     case 'content.item_count_max':
-      return <NumberInput value={value as number} onChange={onChange} step={1} min={0} testId="attr-item-max" />;
+      return <NumberInput value={value as number} onChange={onChange} step={1} min={0} testId="attr-item-max" inputId={inputId} />;
 
     case 'content.item_separator':
-      return <TextInput value={value as string} onChange={onChange} testId="attr-item-sep" />;
+      return <TextInput value={value as string} onChange={onChange} testId="attr-item-sep" inputId={inputId} />;
 
     // ── 页面属性 ──────────────────────────────
     case 'page.size':
@@ -572,18 +713,15 @@ export function RuleValueEditorByAttr({ attr, value, onChange }: RuleValueEditor
           value={value as string}
           onChange={onChange}
           testId="attr-page-size"
-          options={[
-            { value: 'A4', label: 'A4 (210×297mm)' },
-            { value: 'B5', label: 'B5 (176×250mm)' },
-            { value: 'Letter', label: 'Letter (216×279mm)' },
-          ]}
+          inputId={inputId}
+          options={PAGE_SIZE_OPTIONS}
         />
       );
 
     case 'page.margin_top_cm':
       return (
         <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <NumberInput value={value as number} onChange={onChange} step={0.1} min={0} testId="attr-margin-top" />
+          <NumberInput value={value as number} onChange={onChange} step={0.1} min={0} testId="attr-margin-top" inputId={inputId} />
           <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>cm</span>
         </span>
       );
@@ -591,7 +729,7 @@ export function RuleValueEditorByAttr({ attr, value, onChange }: RuleValueEditor
     case 'page.margin_bottom_cm':
       return (
         <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <NumberInput value={value as number} onChange={onChange} step={0.1} min={0} testId="attr-margin-bottom" />
+          <NumberInput value={value as number} onChange={onChange} step={0.1} min={0} testId="attr-margin-bottom" inputId={inputId} />
           <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>cm</span>
         </span>
       );
@@ -599,7 +737,7 @@ export function RuleValueEditorByAttr({ attr, value, onChange }: RuleValueEditor
     case 'page.margin_left_cm':
       return (
         <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <NumberInput value={value as number} onChange={onChange} step={0.1} min={0} testId="attr-margin-left" />
+          <NumberInput value={value as number} onChange={onChange} step={0.1} min={0} testId="attr-margin-left" inputId={inputId} />
           <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>cm</span>
         </span>
       );
@@ -607,9 +745,48 @@ export function RuleValueEditorByAttr({ attr, value, onChange }: RuleValueEditor
     case 'page.margin_right_cm':
       return (
         <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <NumberInput value={value as number} onChange={onChange} step={0.1} min={0} testId="attr-margin-right" />
+          <NumberInput value={value as number} onChange={onChange} step={0.1} min={0} testId="attr-margin-right" inputId={inputId} />
           <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>cm</span>
         </span>
+      );
+
+    // T3.1: 装订线宽度
+    case 'page.margin_gutter_cm':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.1} min={0} testId="attr-margin-gutter" inputId={inputId} />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>cm</span>
+        </span>
+      );
+
+    // T3.1: 页眉距页面边界
+    case 'page.header_offset_cm':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.1} min={0} testId="attr-header-offset" inputId={inputId} />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>cm</span>
+        </span>
+      );
+
+    // T3.1: 页脚距页面边界
+    case 'page.footer_offset_cm':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.1} min={0} testId="attr-footer-offset" inputId={inputId} />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>cm</span>
+        </span>
+      );
+
+    // T3.1: 打印模式（单面/双面，严格枚举）
+    case 'page.print_mode':
+      return (
+        <EnumSelect
+          value={value as string}
+          onChange={onChange}
+          testId="attr-print-mode"
+          inputId={inputId}
+          options={PRINT_MODE_OPTIONS}
+        />
       );
 
     case 'page.new_page_before':
@@ -628,11 +805,8 @@ export function RuleValueEditorByAttr({ attr, value, onChange }: RuleValueEditor
           value={value as string}
           onChange={onChange}
           testId="attr-pagination-front"
-          options={[
-            { value: 'roman', label: 'I II III（罗马）' },
-            { value: 'arabic', label: '1 2 3（阿拉伯）' },
-            { value: 'none', label: '无页码' },
-          ]}
+          inputId={inputId}
+          options={PAGINATION_FRONT_OPTIONS}
         />
       );
 
@@ -642,11 +816,8 @@ export function RuleValueEditorByAttr({ attr, value, onChange }: RuleValueEditor
           value={value as string}
           onChange={onChange}
           testId="attr-pagination-body"
-          options={[
-            { value: 'arabic', label: '1 2 3（阿拉伯）' },
-            { value: 'roman', label: 'I II III（罗马）' },
-            { value: 'none', label: '无页码' },
-          ]}
+          inputId={inputId}
+          options={PAGINATION_BODY_OPTIONS}
         />
       );
 
@@ -657,11 +828,8 @@ export function RuleValueEditorByAttr({ attr, value, onChange }: RuleValueEditor
           value={value as string}
           onChange={onChange}
           testId="attr-citation-style"
-          options={[
-            { value: 'gbt7714', label: 'GB/T 7714' },
-            { value: 'apa', label: 'APA' },
-            { value: 'mla', label: 'MLA' },
-          ]}
+          inputId={inputId}
+          options={CITATION_STYLE_OPTIONS}
         />
       );
 
@@ -672,11 +840,84 @@ export function RuleValueEditorByAttr({ attr, value, onChange }: RuleValueEditor
           value={value as string}
           onChange={onChange}
           testId="attr-layout-position"
-          options={[
-            { value: 'above', label: '之上' },
-            { value: 'below', label: '之下' },
-          ]}
+          inputId={inputId}
+          options={LAYOUT_POSITION_OPTIONS}
         />
+      );
+
+    // ── 编号风格属性（T3.3）──────────────────────
+    // T3.3: 图编号风格（连续式 vs 章节式）
+    case 'numbering.figure_style':
+      return (
+        <EnumSelect
+          value={value as string}
+          onChange={onChange}
+          testId="attr-fig-numbering"
+          inputId={inputId}
+          options={FIGURE_STYLE_OPTIONS}
+        />
+      );
+
+    // T3.3: 分图编号风格（字母 vs 数字点号）
+    case 'numbering.subfigure_style':
+      return (
+        <EnumSelect
+          value={value as string}
+          onChange={onChange}
+          testId="attr-subfig-numbering"
+          inputId={inputId}
+          options={SUBFIGURE_STYLE_OPTIONS}
+        />
+      );
+
+    // T3.3: 公式编号风格（连续式 vs 章节式）
+    case 'numbering.formula_style':
+      return (
+        <EnumSelect
+          value={value as string}
+          onChange={onChange}
+          testId="attr-formula-numbering"
+          inputId={inputId}
+          options={FORMULA_STYLE_OPTIONS}
+        />
+      );
+
+    // ── 表格结构属性（T3.2）──────────────────────
+    // T3.2: 三线表开关（布尔，Toggle）
+    case 'table.is_three_line':
+      return (
+        <Toggle
+          testId="attr-three-line"
+          checked={(value as boolean) ?? false}
+          onChange={onChange}
+        />
+      );
+
+    // T3.2: 表格上边框线宽（pt，数值输入）
+    case 'table.border_top_pt':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.1} min={0} testId="attr-border-top" inputId={inputId} />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>pt</span>
+        </span>
+      );
+
+    // T3.2: 表格下边框线宽（pt，数值输入）
+    case 'table.border_bottom_pt':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.1} min={0} testId="attr-border-bottom" inputId={inputId} />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>pt</span>
+        </span>
+      );
+
+    // T3.2: 表头下边框线宽（pt，数值输入）
+    case 'table.header_border_pt':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.1} min={0} testId="attr-border-header" inputId={inputId} />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>pt</span>
+        </span>
       );
 
     // ── 混排属性 ──────────────────────────────

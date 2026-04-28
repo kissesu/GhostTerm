@@ -13,8 +13,19 @@
  *   T2.4: 新增 footnote(order=25)，spec1 规定脚注宋体小五号，属于独立版面元素；
  *         applicable_attributes 仅 font.cjk + font.size_pt；
  *         后续字段全部 +1（references_title 25→26，...，mixed_script_global 36→37）。
+ *   T3.1: 补齐 B 类 6 个高频缺失 attr key：
+ *         chapter_title + toc_title 追加 para.space_before_pt / para.space_after_pt；
+ *         page_margin 追加 page.margin_gutter_cm / page.header_offset_cm /
+ *         page.footer_offset_cm / page.print_mode（并入而非新建字段）。
+ *   T3.2: 新增 table.* namespace 4 attr，table_header 追加：
+ *         table.is_three_line / table.border_top_pt / table.border_bottom_pt /
+ *         table.header_border_pt（共 8 attr）；table_caption / table_inner_text 不变。
+ *   T3.3: 新增 numbering.* namespace 3 attr：
+ *         figure_caption 追加 numbering.figure_style / numbering.subfigure_style（共 6 attr）；
+ *         formula_block 追加 numbering.formula_style（共 2 attr）。
+ *   T4.单位扩展: 11 字段追加 5 attr 镜像 Python；line_spacing_type 是 enum，其余 _pt 是 number。
  * @author Atlas.oi
- * @date 2026-04-27
+ * @date 2026-04-28
  */
 
 export interface FieldDef {
@@ -42,14 +53,14 @@ export const FIELD_DEFS: FieldDef[] = [
     label: '中文「摘要」标题',
     group: 'front',
     order: 2,
-    applicable_attributes: ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.letter_spacing_chars', 'content.specific_text'],
+    applicable_attributes: ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.letter_spacing_chars', 'content.specific_text', 'para.letter_spacing_pt'],
   },
   {
     id: 'abstract_zh_body',
     label: '中文摘要正文',
     group: 'front',
     order: 3,
-    applicable_attributes: ['font.cjk', 'font.size_pt', 'para.first_line_indent_chars', 'para.line_spacing', 'content.char_count_min', 'content.char_count_max', 'mixed_script.ascii_is_tnr'],
+    applicable_attributes: ['font.cjk', 'font.size_pt', 'para.first_line_indent_chars', 'para.line_spacing', 'content.char_count_min', 'content.char_count_max', 'mixed_script.ascii_is_tnr', 'para.line_spacing_type', 'para.line_spacing_pt', 'para.first_line_indent_pt'],
   },
   {
     id: 'keywords_zh_label',
@@ -77,14 +88,14 @@ export const FIELD_DEFS: FieldDef[] = [
     label: '「Abstract」标题',
     group: 'front',
     order: 7,
-    applicable_attributes: ['font.ascii', 'font.size_pt', 'font.bold', 'para.align', 'para.letter_spacing_chars', 'content.specific_text'],
+    applicable_attributes: ['font.ascii', 'font.size_pt', 'font.bold', 'para.align', 'para.letter_spacing_chars', 'content.specific_text', 'para.letter_spacing_pt'],
   },
   {
     id: 'abstract_en_body',
     label: '英文摘要正文',
     group: 'front',
     order: 8,
-    applicable_attributes: ['font.ascii', 'font.size_pt', 'para.first_line_indent_chars', 'para.line_spacing', 'content.char_count_min', 'content.char_count_max', 'mixed_script.ascii_is_tnr'],
+    applicable_attributes: ['font.ascii', 'font.size_pt', 'para.first_line_indent_chars', 'para.line_spacing', 'content.char_count_min', 'content.char_count_max', 'mixed_script.ascii_is_tnr', 'para.line_spacing_type', 'para.line_spacing_pt', 'para.first_line_indent_pt'],
   },
   {
     id: 'keywords_en_label',
@@ -105,7 +116,8 @@ export const FIELD_DEFS: FieldDef[] = [
     label: '目录标题',
     group: 'front',
     order: 11,
-    applicable_attributes: ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.space_before_lines', 'para.space_after_lines'],
+    // T3.1: 追加 para.space_before_pt / para.space_after_pt（与 _lines 系列共存）
+    applicable_attributes: ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.space_before_lines', 'para.space_after_lines', 'para.space_before_pt', 'para.space_after_pt'],
   },
   {
     // T2.2: 从 toc_entry 拆出一级目录条目独立字段。
@@ -144,7 +156,9 @@ export const FIELD_DEFS: FieldDef[] = [
     label: '一级章节标题',
     group: 'body',
     order: 15,
-    applicable_attributes: ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.space_before_lines', 'para.space_after_lines', 'page.new_page_before'],
+    // T3.1: 追加 para.space_before_pt / para.space_after_pt（与 _lines 系列共存，
+    // 规范文本描述"磅"时用 _pt，描述"行"时用 _lines，两者互不冲突）
+    applicable_attributes: ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.space_before_lines', 'para.space_after_lines', 'para.space_before_pt', 'para.space_after_pt', 'page.new_page_before'],
   },
   {
     id: 'section_title',
@@ -165,14 +179,18 @@ export const FIELD_DEFS: FieldDef[] = [
     label: '正文段落',
     group: 'body',
     order: 18,
-    applicable_attributes: ['font.cjk', 'font.ascii', 'font.size_pt', 'para.first_line_indent_chars', 'para.line_spacing', 'mixed_script.ascii_is_tnr'],
+    applicable_attributes: ['font.cjk', 'font.ascii', 'font.size_pt', 'para.first_line_indent_chars', 'para.line_spacing', 'mixed_script.ascii_is_tnr', 'para.line_spacing_type', 'para.line_spacing_pt', 'para.first_line_indent_pt'],
   },
   {
     id: 'figure_caption',
     label: '图题',
     group: 'body',
     order: 19,
-    applicable_attributes: ['font.cjk', 'font.size_pt', 'para.align', 'layout.position'],
+    // T3.3: 追加 numbering.figure_style / numbering.subfigure_style 两项
+    applicable_attributes: [
+      'font.cjk', 'font.size_pt', 'para.align', 'layout.position',
+      'numbering.figure_style', 'numbering.subfigure_style',
+    ],
   },
   {
     id: 'figure_inner_text',
@@ -193,11 +211,15 @@ export const FIELD_DEFS: FieldDef[] = [
     // 规范层对表头（首行格式/下边框线）与表内容（小五宋体）是分开规定的两件事，
     // 合并为 table_inner_text 会导致规范校验无法区分两者。
     // T2.2 后 order 由 20 → 22
+    // T3.2: 追加 4 个 table.* attr（三线表判定 + 三条边框线宽 pt）
     id: 'table_header',
     label: '表头',
     group: 'body',
     order: 22,
-    applicable_attributes: ['font.cjk', 'font.size_pt', 'font.bold', 'para.align'],
+    applicable_attributes: [
+      'font.cjk', 'font.size_pt', 'font.bold', 'para.align',
+      'table.is_three_line', 'table.border_top_pt', 'table.border_bottom_pt', 'table.header_border_pt',
+    ],
   },
   {
     id: 'table_inner_text',
@@ -210,13 +232,12 @@ export const FIELD_DEFS: FieldDef[] = [
   {
     // T2.3: 新增公式字段。理工科规范对公式格式规定详细（居中另起一行、编号圆括号靠右、
     // 等号处转行），属于独立可校验的版面元素，合并在 body_para 无法单独施加约束。
-    // applicable_attributes 本 task 只加 para.align；
-    // numbering.formula_style 等 T3.3 新增 numbering namespace 时再补。
+    // T3.3: 追加 numbering.formula_style（连续/章节式），规范文本常见"(1-1)"或"(1)"两种。
     id: 'formula_block',
     label: '公式',
     group: 'body',
     order: 24,
-    applicable_attributes: ['para.align'],
+    applicable_attributes: ['para.align', 'numbering.formula_style'],
   },
   {
     // T2.4: 新增脚注字段。spec1 规定"注释列于当前页脚注位置，宋体小五号"，
@@ -246,35 +267,35 @@ export const FIELD_DEFS: FieldDef[] = [
     label: '参考文献条目',
     group: 'back',
     order: 27,
-    applicable_attributes: ['font.cjk', 'font.ascii', 'font.size_pt', 'para.hanging_indent_chars', 'citation.style'],
+    applicable_attributes: ['font.cjk', 'font.ascii', 'font.size_pt', 'para.hanging_indent_chars', 'citation.style', 'para.hanging_indent_pt'],
   },
   {
     id: 'ack_title',
     label: '致谢标题',
     group: 'back',
     order: 28,
-    applicable_attributes: ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.letter_spacing_chars', 'page.new_page_before'],
+    applicable_attributes: ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.letter_spacing_chars', 'page.new_page_before', 'para.letter_spacing_pt'],
   },
   {
     id: 'ack_body',
     label: '致谢正文',
     group: 'back',
     order: 29,
-    applicable_attributes: ['font.cjk', 'font.size_pt', 'para.first_line_indent_chars'],
+    applicable_attributes: ['font.cjk', 'font.size_pt', 'para.first_line_indent_chars', 'para.first_line_indent_pt'],
   },
   {
     id: 'appendix_title',
     label: '附录标题',
     group: 'back',
     order: 30,
-    applicable_attributes: ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.letter_spacing_chars', 'page.new_page_before'],
+    applicable_attributes: ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.letter_spacing_chars', 'page.new_page_before', 'para.letter_spacing_pt'],
   },
   {
     id: 'appendix_body',
     label: '附录正文',
     group: 'back',
     order: 31,
-    applicable_attributes: ['font.cjk', 'font.size_pt', 'para.first_line_indent_chars'],
+    applicable_attributes: ['font.cjk', 'font.size_pt', 'para.first_line_indent_chars', 'para.first_line_indent_pt'],
   },
 
   // ────────────────────────────────────────────
@@ -294,7 +315,11 @@ export const FIELD_DEFS: FieldDef[] = [
     label: '页边距',
     group: 'global',
     order: 33,
-    applicable_attributes: ['page.margin_top_cm', 'page.margin_bottom_cm', 'page.margin_left_cm', 'page.margin_right_cm'],
+    // T3.1: 追加装订线/页眉距/页脚距/打印模式 4 项，并入而非新建字段
+    applicable_attributes: [
+      'page.margin_top_cm', 'page.margin_bottom_cm', 'page.margin_left_cm', 'page.margin_right_cm',
+      'page.margin_gutter_cm', 'page.header_offset_cm', 'page.footer_offset_cm', 'page.print_mode',
+    ],
   },
   {
     id: 'page_header',
@@ -315,7 +340,7 @@ export const FIELD_DEFS: FieldDef[] = [
     label: '全文行距',
     group: 'global',
     order: 36,
-    applicable_attributes: ['para.line_spacing'],
+    applicable_attributes: ['para.line_spacing', 'para.line_spacing_type', 'para.line_spacing_pt'],
   },
   {
     id: 'mixed_script_global',

@@ -150,6 +150,343 @@ describe('FieldList', () => {
     expect(uncaptured.length).toBeGreaterThan(0);
   });
 
+  // ─────────────────────────────────────────────
+  // T3.1: 验证 chapter_title 渲染管线包含新增 attr 的编辑器
+  // ─────────────────────────────────────────────
+
+  it('T3.1: chapter_title 渲染管线包含 para.space_before_pt 和 para.space_after_pt 编辑器', () => {
+    // chapter_title 的 applicable_attributes T3.1 后包含 para.space_before_pt / para.space_after_pt
+    const fields = [
+      {
+        id: 'chapter_title',
+        label: '一级章节标题',
+        status: 'done' as const,
+        confidence: 0.9,
+        value: { 'para.space_before_pt': 12, 'para.space_after_pt': 6 },
+      },
+    ];
+    render(
+      <FieldList
+        fields={fields}
+        currentFieldId={null}
+        onJump={vi.fn()}
+        onSkip={vi.fn()}
+        onAttrChange={vi.fn()}
+      />
+    );
+    // attr-space-before-pt 对应 RuleValueEditorByAttr case 'para.space_before_pt'
+    expect(screen.getByTestId('attr-space-before-pt')).toBeInTheDocument();
+    expect(screen.getByTestId('attr-space-after-pt')).toBeInTheDocument();
+  });
+
+  it('T3.1: page_margin 渲染管线包含 page.print_mode 编辑器', () => {
+    // page_margin.applicable_attributes T3.1 后包含 page.print_mode
+    const fields = [
+      {
+        id: 'page_margin',
+        label: '页边距',
+        status: 'partial' as const,
+        confidence: 0.7,
+        value: { 'page.print_mode': 'single' },
+      },
+    ];
+    render(
+      <FieldList
+        fields={fields}
+        currentFieldId={null}
+        onJump={vi.fn()}
+        onSkip={vi.fn()}
+        onAttrChange={vi.fn()}
+      />
+    );
+    // attr-print-mode 对应 RuleValueEditorByAttr case 'page.print_mode'
+    expect(screen.getByTestId('attr-print-mode')).toBeInTheDocument();
+  });
+
+  it('T3.1: page_margin 渲染管线包含 margin-gutter / header-offset / footer-offset 三个 cm 输入框', () => {
+    // page_margin.applicable_attributes T3.1 后包含三个 cm 类型属性：
+    // page.margin_gutter_cm / page.header_offset_cm / page.footer_offset_cm
+    const fields = [
+      {
+        id: 'page_margin',
+        label: '页边距',
+        status: 'partial' as const,
+        confidence: 0.7,
+        value: {
+          'page.margin_gutter_cm': 1.0,
+          'page.header_offset_cm': 1.5,
+          'page.footer_offset_cm': 1.75,
+        },
+      },
+    ];
+    render(
+      <FieldList
+        fields={fields}
+        currentFieldId={null}
+        onJump={vi.fn()}
+        onSkip={vi.fn()}
+        onAttrChange={vi.fn()}
+      />
+    );
+    // 三个 NumberInput 编辑器应渲染；testId 来自 RuleValueEditor.tsx T3.1 新增 case
+    expect(screen.getByTestId('attr-margin-gutter')).toBeInTheDocument();
+    expect(screen.getByTestId('attr-header-offset')).toBeInTheDocument();
+    expect(screen.getByTestId('attr-footer-offset')).toBeInTheDocument();
+  });
+
+  // ─────────────────────────────────────────────
+  // T3.2: table.* namespace attr 渲染断言
+  // ─────────────────────────────────────────────
+
+  it('T3.2: table_header 渲染管线包含 4 个 table.* attr 的编辑器', () => {
+    // table_header.applicable_attributes T3.2 后包含 4 个 table.* attr
+    const fields = [
+      {
+        id: 'table_header',
+        label: '表头',
+        status: 'done' as const,
+        confidence: 0.9,
+        value: {
+          'table.is_three_line': true,
+          'table.border_top_pt': 1.5,
+          'table.border_bottom_pt': 1.5,
+          'table.header_border_pt': 0.5,
+        },
+      },
+    ];
+    render(
+      <FieldList
+        fields={fields}
+        currentFieldId={null}
+        onJump={vi.fn()}
+        onSkip={vi.fn()}
+        onAttrChange={vi.fn()}
+      />
+    );
+    // attr-three-line → Toggle（table.is_three_line）
+    expect(screen.getByTestId('attr-three-line')).toBeInTheDocument();
+    // attr-border-top → NumberInput（table.border_top_pt）
+    expect(screen.getByTestId('attr-border-top')).toBeInTheDocument();
+    // attr-border-bottom → NumberInput（table.border_bottom_pt）
+    expect(screen.getByTestId('attr-border-bottom')).toBeInTheDocument();
+    // attr-border-header → NumberInput（table.header_border_pt）
+    expect(screen.getByTestId('attr-border-header')).toBeInTheDocument();
+  });
+
+  // ─────────────────────────────────────────────
+  // T3.3: numbering.* namespace attr 渲染断言
+  // ─────────────────────────────────────────────
+
+  it('T3.3: figure_caption 渲染管线包含 2 个 numbering.* attr 的编辑器', () => {
+    const fields = [
+      {
+        id: 'figure_caption',
+        label: '图题',
+        status: 'done' as const,
+        confidence: 0.9,
+        value: {
+          'numbering.figure_style': 'continuous',
+          'numbering.subfigure_style': 'a_b_c',
+        },
+      },
+    ];
+    render(
+      <FieldList
+        fields={fields}
+        currentFieldId={null}
+        onJump={vi.fn()}
+        onSkip={vi.fn()}
+        onAttrChange={vi.fn()}
+      />
+    );
+    // attr-fig-numbering → EnumSelect（numbering.figure_style）
+    expect(screen.getByTestId('attr-fig-numbering')).toBeInTheDocument();
+    // attr-subfig-numbering → EnumSelect（numbering.subfigure_style）
+    expect(screen.getByTestId('attr-subfig-numbering')).toBeInTheDocument();
+  });
+
+  it('T3.3: formula_block 渲染管线包含 numbering.formula_style 编辑器', () => {
+    const fields = [
+      {
+        id: 'formula_block',
+        label: '公式',
+        status: 'done' as const,
+        confidence: 0.9,
+        value: {
+          'numbering.formula_style': 'chapter_based',
+        },
+      },
+    ];
+    render(
+      <FieldList
+        fields={fields}
+        currentFieldId={null}
+        onJump={vi.fn()}
+        onSkip={vi.fn()}
+        onAttrChange={vi.fn()}
+      />
+    );
+    // attr-formula-numbering → EnumSelect（numbering.formula_style）
+    expect(screen.getByTestId('attr-formula-numbering')).toBeInTheDocument();
+  });
+
+  // ─────────────────────────────────────────────
+  // W7 修复：a11y — label[for] 与 input[id] 关联测试
+  // ─────────────────────────────────────────────
+
+  it('W7: getByLabelText 能通过标签文字找到对应 input（label[for]/id 关联）', () => {
+    // 验证 W7 修复核心：<label htmlFor=...> 与底层 input id 配对
+    // 用 page_margin 字段的 para.space_before_pt（NumberInput），标签="段前（pt）"
+    const fields = [
+      {
+        id: 'chapter_title',
+        label: '一级章节标题',
+        status: 'done' as const,
+        confidence: 0.9,
+        value: { 'para.space_before_pt': 12 },
+      },
+    ];
+    render(
+      <FieldList
+        fields={fields}
+        currentFieldId={null}
+        onJump={vi.fn()}
+        onSkip={vi.fn()}
+        onAttrChange={vi.fn()}
+      />
+    );
+    // W7 修复后：label htmlFor 与 input id 关联，getByLabelText 应能找到 input
+    // 屏幕阅读器通过此关联识别输入控件的语义
+    const input = screen.getByLabelText('段前（pt）');
+    expect(input).toBeInTheDocument();
+    // 确认找到的确实是 input 元素（data-testid=attr-space-before-pt）
+    expect(input).toHaveAttribute('data-testid', 'attr-space-before-pt');
+  });
+
+  it('W7: inputId 格式含 fieldId 前缀（命名空间隔离验证）', () => {
+    // 验证：生成的 input id = "attr-input-{fieldId}-{attrKey}" 格式，
+    // 以 chapter_title 字段的 para.space_before_pt 为例，
+    // 确认 input id 包含 fieldId 前缀（不只是 attr key）
+    const fields = [
+      {
+        id: 'chapter_title',
+        label: '一级章节标题',
+        status: 'done' as const,
+        confidence: 0.9,
+        value: { 'para.space_before_pt': 12 },
+      },
+    ];
+    const { container } = render(
+      <FieldList
+        fields={fields}
+        currentFieldId={null}
+        onJump={vi.fn()}
+        onSkip={vi.fn()}
+        onAttrChange={vi.fn()}
+      />
+    );
+    // 用 getElementById 查找（id 中点号合法，避免 CSS 选择器转义问题）
+    const input = container.ownerDocument.getElementById(
+      'attr-input-chapter_title-para.space_before_pt'
+    );
+    // id 格式正确：含 fieldId 前缀 + attrKey
+    expect(input).toBeInTheDocument();
+    // data-testid 验证找到的是正确的 input 子组件
+    expect(input).toHaveAttribute('data-testid', 'attr-space-before-pt');
+  });
+
+  // ─────────────────────────────────────────────
+  // T2.3: 5 个新 attr 渲染管线断言
+  // body_para / reference_entry / abstract_zh_title 三个字段覆盖
+  // line_spacing_type / line_spacing_pt / first_line_indent_pt /
+  // hanging_indent_pt / letter_spacing_pt 五个新属性
+  // ─────────────────────────────────────────────
+
+  it('T2.3: body_para 渲染 line_spacing_type / line_spacing_pt / first_line_indent_pt 三个新编辑器', () => {
+    // body_para.applicable_attributes 包含 5 attr 中的三个：
+    // para.line_spacing_type（EnumSelect）/ para.line_spacing_pt / para.first_line_indent_pt（NumberInput）
+    const fields = [
+      {
+        id: 'body_para',
+        label: '正文段落',
+        status: 'done' as const,
+        confidence: 0.9,
+        value: {
+          'para.line_spacing_type': 'multiple',
+          'para.line_spacing_pt': 22,
+          'para.first_line_indent_pt': 24,
+        },
+      },
+    ];
+    render(
+      <FieldList
+        fields={fields}
+        currentFieldId={null}
+        onJump={vi.fn()}
+        onSkip={vi.fn()}
+        onAttrChange={vi.fn()}
+      />
+    );
+    // attr-line-spacing-type → EnumSelect（para.line_spacing_type）
+    expect(screen.getByTestId('attr-line-spacing-type')).toBeInTheDocument();
+    // attr-line-spacing-pt → NumberInput（para.line_spacing_pt）
+    expect(screen.getByTestId('attr-line-spacing-pt')).toBeInTheDocument();
+    // attr-first-line-indent-pt → NumberInput（para.first_line_indent_pt）
+    expect(screen.getByTestId('attr-first-line-indent-pt')).toBeInTheDocument();
+  });
+
+  it('T2.3: reference_entry 渲染 hanging_indent_pt 编辑器', () => {
+    // reference_entry.applicable_attributes 含 para.hanging_indent_pt
+    const fields = [
+      {
+        id: 'reference_entry',
+        label: '参考文献条目',
+        status: 'done' as const,
+        confidence: 0.9,
+        value: {
+          'para.hanging_indent_pt': 21,
+        },
+      },
+    ];
+    render(
+      <FieldList
+        fields={fields}
+        currentFieldId={null}
+        onJump={vi.fn()}
+        onSkip={vi.fn()}
+        onAttrChange={vi.fn()}
+      />
+    );
+    // attr-hanging-indent-pt → NumberInput（para.hanging_indent_pt）
+    expect(screen.getByTestId('attr-hanging-indent-pt')).toBeInTheDocument();
+  });
+
+  it('T2.3: abstract_zh_title 渲染 letter_spacing_pt 编辑器', () => {
+    // abstract_zh_title.applicable_attributes 含 para.letter_spacing_pt
+    const fields = [
+      {
+        id: 'abstract_zh_title',
+        label: '中文「摘要」标题',
+        status: 'done' as const,
+        confidence: 0.9,
+        value: {
+          'para.letter_spacing_pt': 2,
+        },
+      },
+    ];
+    render(
+      <FieldList
+        fields={fields}
+        currentFieldId={null}
+        onJump={vi.fn()}
+        onSkip={vi.fn()}
+        onAttrChange={vi.fn()}
+      />
+    );
+    // attr-letter-spacing-pt → NumberInput（para.letter_spacing_pt）
+    expect(screen.getByTestId('attr-letter-spacing-pt')).toBeInTheDocument();
+  });
+
   it('calls onAttrChange with correct args when editor value changes', () => {
     // 构造一个字段，只测试 font.cjk（CjkFontSelect，select 元素可 fireEvent.change）
     const fields = [

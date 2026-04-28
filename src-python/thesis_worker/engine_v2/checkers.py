@@ -6,10 +6,11 @@
               分三类：
                 A — 段落级 (para, expected) -> Optional[dict]
                 B — 文档级 (doc, expected) -> Optional[dict]
-                C — 延后存根，暂不支持，固定返回 None
+                C — 实现完成（v3 阶段：layout/citation/pagination）
 @author: Atlas.oi
 @date: 2026-04-18
 """
+import re
 from typing import Any, Optional
 
 from docx.document import Document
@@ -17,7 +18,7 @@ from docx.text.paragraph import Paragraph
 
 # 复用 extractor 中已实现的全文启发式扫描，避免重复维护两份正则+阈值
 # extractor 包不依赖 engine_v2，反向 import 无循环
-from ..extractor.pipeline import _detect_punct_space_after
+from ..extractor.pipeline import _detect_punct_space_after, _read_numbering_styles
 
 # ───────────────────────────────────────────────
 # 容差常量（用于浮点属性的近似匹配）
@@ -26,6 +27,11 @@ _TOL_FONT_PT = 0.10       # 字号容差（pt）
 _TOL_MARGIN_CM = 0.05     # 页边距容差（cm）
 _TOL_SIZE_INCH = 0.05     # 页面尺寸容差（英寸）
 _TOL_LINE_SPACING = 0.05  # 行距倍数容差
+_TOL_SPACE_PT = 0.5       # 段前/段后间距容差（pt，对应 Word UI 显示精度）
+_TOL_OFFSET_CM = 0.05     # 页眉/页脚距边界容差（语义独立于 _TOL_MARGIN_CM，数值相同）
+_TOL_LINE_SPACING_PT = 0.5  # 行距 pt 容差（atLeast/exactly 模式，对应 Word UI 显示精度）
+_TOL_INDENT_PT = 0.5      # 缩进 pt 容差（首行/悬挂，对应 Word UI 显示精度）
+_TOL_LETTER_SPACING_PT = 0.1  # 字符间距 pt 容差（WPS UI 精度 0.1pt，小值场景需更严，避免 0.5pt 容差吞掉"加宽 0.5pt"等小值差异）
 
 # ───────────────────────────────────────────────
 # 内部工具函数
@@ -38,6 +44,12 @@ _W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
 def _w(tag: str) -> str:
     """生成带命名空间的 OOXML 标签，避免反复拼接字符串"""
     return f'{{{_W_NS}}}{tag}'
+
+
+# T4.1：line_spacing 直读 OOXML 所需的 attribute name 常量
+# w:lineRule（auto/atLeast/exact）+ w:line（twips 数值或倍数 ×240）
+_W_LINE_RULE = f'{{{_W_NS}}}lineRule'
+_W_LINE = f'{{{_W_NS}}}line'
 
 
 def _first_nonempty_run(para: Paragraph):
@@ -242,6 +254,29 @@ def check_para_space_after_lines(
     return {'attr': 'para.space_after_lines', 'actual': actual, 'expected': expected}
 
 
+def check_para_space_before_pt(para: Paragraph, expected: float) -> Optional[dict]:
+    """检查段前间距（磅值）；space_before 为 None 时视为 0；容差 0.5pt
+
+    与 check_para_space_before_lines 使用同一数据源（para.paragraph_format.space_before），
+    但不除以行基准值，直接保留 pt 数值。规范文本用"磅"描述时用本检查器，
+    用"行"描述时用 _lines 版本，两者互不冲突。
+    """
+    sb = para.paragraph_format.space_before
+    actual = round(sb.pt, 1) if sb is not None else 0.0
+    if abs(actual - expected) < _TOL_SPACE_PT:
+        return None
+    return {'attr': 'para.space_before_pt', 'actual': actual, 'expected': expected}
+
+
+def check_para_space_after_pt(para: Paragraph, expected: float) -> Optional[dict]:
+    """检查段后间距（磅值）；space_after 为 None 时视为 0；容差 0.5pt"""
+    sa = para.paragraph_format.space_after
+    actual = round(sa.pt, 1) if sa is not None else 0.0
+    if abs(actual - expected) < _TOL_SPACE_PT:
+        return None
+    return {'attr': 'para.space_after_pt', 'actual': actual, 'expected': expected}
+
+
 def check_para_letter_spacing_chars(
     para: Paragraph,
     expected: int,
@@ -270,6 +305,155 @@ def check_para_letter_spacing_chars(
     if actual == expected:
         return None
     return {'attr': 'para.letter_spacing_chars', 'actual': actual, 'expected': expected}
+
+
+# ───────────────────────────────────────────────
+# T4.2: 3 个 _pt 兄弟 attr checker
+# ───────────────────────────────────────────────
+# 业务背景：T2.1 schema 已加 first_line_indent_pt / hanging_indent_pt /
+# letter_spacing_pt 三个 attr key（与 _chars 版本共存，规范文本用"磅"描述时取 _pt）。
+# 本组函数为它们提供 checker，与 _chars 版本数据源相同（first_line_indent / OOXML w:spacing），
+# 但不除以 body_size_pt，直接保留 pt 数值。容差 0.5pt 对应 Word UI 显示精度。
+
+def check_para_first_line_indent_pt(para: Paragraph, expected: float) -> Optional[dict]:
+    """检查首行缩进 pt 值；hanging（< 0）记为 0，不属于本 checker"""
+    fli = para.paragraph_format.first_line_indent
+    if fli is None:
+        actual = 0.0
+    elif fli.pt < 0:
+        # 悬挂缩进由 check_para_hanging_indent_pt 处理，本 checker 视为 0
+        actual = 0.0
+    else:
+        actual = float(fli.pt)
+    if abs(actual - expected) < _TOL_INDENT_PT:
+        return None
+    return {'attr': 'para.first_line_indent_pt', 'actual': round(actual, 2), 'expected': expected}
+
+
+def check_para_hanging_indent_pt(para: Paragraph, expected: float) -> Optional[dict]:
+    """检查悬挂缩进 pt 值（first_line_indent 负值绝对值）"""
+    fli = para.paragraph_format.first_line_indent
+    if fli is None or fli.pt >= 0:
+        # 无缩进或为首行缩进（正值），悬挂 pt 视为 0
+        actual = 0.0
+    else:
+        actual = abs(float(fli.pt))
+    if abs(actual - expected) < _TOL_INDENT_PT:
+        return None
+    return {'attr': 'para.hanging_indent_pt', 'actual': round(actual, 2), 'expected': expected}
+
+
+def check_para_letter_spacing_pt(para: Paragraph, expected: float) -> Optional[dict]:
+    """检查字符间距 pt 值（OOXML rPr/spacing/@val 单位 1/20 pt）
+
+    与 letter_spacing_chars 共用数据源，但保留 pt 数值不换算字符。
+    容差用 _TOL_LETTER_SPACING_PT（0.1pt，对应 WPS UI 精度）；
+    字符间距小值场景（如"加宽 0.5pt"）不能用 0.5pt 行距容差吞掉。
+    """
+    run = _first_nonempty_run(para)
+    if run is None:
+        return None
+    rpr = run._element.rPr
+    if rpr is None:
+        actual = 0.0
+    else:
+        spacing_el = rpr.find(_w('spacing'))
+        if spacing_el is None:
+            actual = 0.0
+        else:
+            val = spacing_el.get(_w('val'))
+            try:
+                actual = float(val) / 20.0 if val is not None else 0.0
+            except ValueError:
+                actual = 0.0
+    if abs(actual - expected) < _TOL_LETTER_SPACING_PT:
+        return None
+    return {'attr': 'para.letter_spacing_pt', 'actual': round(actual, 2), 'expected': expected}
+
+
+# ───────────────────────────────────────────────
+# T4.1: line_spacing 多状态识别（直读 OOXML，区分 atLeast/exactly/auto）
+# ───────────────────────────────────────────────
+# 业务背景：python-docx 的 paragraph_format.line_spacing 在 atLeast/exactly 模式下
+# 返回 Length 对象（不是 float），原 check_para_line_spacing 用 isinstance(int, float)
+# 判定 → 静默漏判。本组函数直读 OOXML <w:spacing w:lineRule w:line/>，
+# 6 种状态：single / oneAndHalf / double / multiple / atLeast / exactly。
+
+# auto 模式下 w:line 为 240 的整数倍：240=单倍 / 360=1.5倍 / 480=双倍
+_LINE_RULE_TWIPS_TO_TYPE = {
+    240: 'single',
+    360: 'oneAndHalf',
+    480: 'double',
+}
+
+
+def _read_line_rule_and_value(para: Paragraph) -> Optional[tuple]:
+    """读 <w:spacing w:lineRule w:line/> → (type, value_pt_or_factor) 或 None
+
+    返回值语义：
+      - auto + 已知 twips（240/360/480）：(具名 type, 倍数)，如 ('single', 1.0)
+      - auto + 其他 twips：('multiple', 倍数)，倍数 = twips / 240
+      - atLeast：('atLeast', pt 值)，pt = twips / 20
+      - exact：  ('exactly', pt 值)
+      - 未设置或非法：None
+    """
+    pPr = para._element.find(_w('pPr'))
+    if pPr is None:
+        return None
+    spacing = pPr.find(_w('spacing'))
+    if spacing is None:
+        return None
+    line_rule = spacing.get(_W_LINE_RULE)
+    line_val = spacing.get(_W_LINE)
+    if line_rule is None or line_val is None:
+        return None
+    try:
+        line_int = int(line_val)
+    except ValueError:
+        return None
+    if line_rule == 'auto':
+        if line_int in _LINE_RULE_TWIPS_TO_TYPE:
+            return (_LINE_RULE_TWIPS_TO_TYPE[line_int], line_int / 240.0)
+        return ('multiple', line_int / 240.0)
+    if line_rule == 'atLeast':
+        return ('atLeast', line_int / 20.0)
+    if line_rule == 'exact':
+        # OOXML 用 'exact'，UI/规范术语用 'exactly'，对外统一暴露 'exactly'
+        return ('exactly', line_int / 20.0)
+    return None
+
+
+def check_para_line_spacing_type(para: Paragraph, expected: str) -> Optional[dict]:
+    """检查行距类型 (single / oneAndHalf / double / atLeast / exactly / multiple)
+
+    与 check_para_line_spacing（数值倍数）互补：本函数判定模式类型，
+    对 atLeast/exactly 论文常见的"固定值 28 磅"场景可正确识别。
+    """
+    out = _read_line_rule_and_value(para)
+    if out is None:
+        return None
+    actual_type, _ = out
+    if actual_type == expected:
+        return None
+    return {'attr': 'para.line_spacing_type', 'actual': actual_type, 'expected': expected}
+
+
+def check_para_line_spacing_pt(para: Paragraph, expected: float) -> Optional[dict]:
+    """检查 atLeast/exactly 模式下的 pt 数值；其他模式（auto 倍数）返回 None
+
+    业务规则：
+    - 仅 atLeast/exactly 模式有 pt 数值含义，auto 模式 pt 不可比，跳过不报 issue
+    - 容差 _TOL_LINE_SPACING_PT = 0.5pt（对应 Word UI 显示精度）
+    """
+    out = _read_line_rule_and_value(para)
+    if out is None:
+        return None
+    actual_type, actual_value = out
+    if actual_type not in ('atLeast', 'exactly'):
+        return None
+    if abs(actual_value - expected) < _TOL_LINE_SPACING_PT:
+        return None
+    return {'attr': 'para.line_spacing_pt', 'actual': round(actual_value, 2), 'expected': expected}
 
 
 def check_page_new_page_before(para: Paragraph, expected: bool) -> Optional[dict]:
@@ -405,6 +589,56 @@ def check_page_margin_right_cm(doc: Document, expected: float) -> Optional[dict]
     return {'attr': 'page.margin_right_cm', 'actual': round(actual, 2), 'expected': expected}
 
 
+def check_page_margin_gutter_cm(doc: Document, expected: float) -> Optional[dict]:
+    """检查装订线宽度（cm）；容差 0.05cm
+
+    gutter 为 0 也是有效值（表示无装订线），不做 None 特殊处理。
+    python-docx sections[0].gutter.cm 直接读取 OOXML w:pgMar/@w:gutter 属性。
+    """
+    actual = doc.sections[0].gutter.cm
+    if abs(actual - expected) < _TOL_OFFSET_CM:
+        return None
+    return {'attr': 'page.margin_gutter_cm', 'actual': round(actual, 2), 'expected': expected}
+
+
+def check_page_header_offset_cm(doc: Document, expected: float) -> Optional[dict]:
+    """检查页眉距页面边界的距离（cm）；容差 0.05cm
+
+    对应 OOXML w:pgMar/@w:header 属性，Word 中称"页眉边距"。
+    """
+    actual = doc.sections[0].header_distance.cm
+    if abs(actual - expected) < _TOL_OFFSET_CM:
+        return None
+    return {'attr': 'page.header_offset_cm', 'actual': round(actual, 2), 'expected': expected}
+
+
+def check_page_footer_offset_cm(doc: Document, expected: float) -> Optional[dict]:
+    """检查页脚距页面边界的距离（cm）；容差 0.05cm
+
+    对应 OOXML w:pgMar/@w:footer 属性，Word 中称"页脚边距"。
+    """
+    actual = doc.sections[0].footer_distance.cm
+    if abs(actual - expected) < _TOL_OFFSET_CM:
+        return None
+    return {'attr': 'page.footer_offset_cm', 'actual': round(actual, 2), 'expected': expected}
+
+
+def check_page_print_mode(doc: Document, expected: str) -> Optional[dict]:
+    """检查打印模式（'single' 单面 / 'double' 双面）；严格相等，无容差
+
+    判别方式：检测 w:settings 根元素是否含 w:evenAndOddHeaders 子元素。
+    存在该元素 → 文档启用奇偶页眉分设（双面打印模式）→ 'double'；
+    不存在 → 'single'。这是 Word 保存双面打印设置时的标准 OOXML 语义。
+    """
+    from docx.oxml.ns import qn
+    settings_el = doc.settings.element
+    even_odd = settings_el.find(qn('w:evenAndOddHeaders'))
+    actual = 'double' if even_odd is not None else 'single'
+    if actual == expected:
+        return None
+    return {'attr': 'page.print_mode', 'actual': actual, 'expected': expected}
+
+
 def check_mixed_script_ascii_is_tnr(doc: Document, expected: bool) -> Optional[dict]:
     """
     检查文档西文/数字字体是否全局使用 Times New Roman（TNR）。
@@ -447,39 +681,381 @@ def check_mixed_script_punct_space_after(doc: Document, expected: bool) -> Optio
 
 
 # ───────────────────────────────────────────────
-# 类别 C：延后存根（deferred to v3）
+# 类别 B（续）：T3.2 table.* namespace（表格线宽/三线表）
 # ───────────────────────────────────────────────
 
+def _read_tbl_borders(doc: Document) -> dict[str, float]:
+    """从文档第一个表格读取 OOXML tblBorders 各方向线宽（单位 pt）。
+
+    业务逻辑：
+    1. 检查 doc.tables 是否为空，空则返回空字典（不报错）
+    2. 取第一个表格，找 tblPr/tblBorders 元素
+    3. 遍历子元素，读 w:sz 属性（eighth-points 单位，除以 8 得 pt）
+    4. 返回 {tag: pt} 字典，只含能读到 sz 的方向
+
+    注意：OOXML w:sz 单位为 eighth-points（1/8 pt），不是 twips（1/20 pt）。
+    """
+    from docx.oxml.ns import qn
+    borders: dict[str, float] = {}
+    if not doc.tables:
+        return borders
+    tbl = doc.tables[0]
+    tbl_pr = tbl._element.find(qn('w:tblPr'))
+    if tbl_pr is None:
+        return borders
+    tbl_borders = tbl_pr.find(qn('w:tblBorders'))
+    if tbl_borders is None:
+        return borders
+    for child in tbl_borders:
+        # 去掉命名空间前缀，取 localname（如 'top'/'bottom'/'insideH' 等）
+        local = child.tag.split('}')[-1] if '}' in child.tag else child.tag
+        sz_val = child.get(qn('w:sz'))
+        if sz_val is not None:
+            try:
+                # eighth-points → pt：除以 8
+                borders[local] = int(sz_val) / 8.0
+            except ValueError:
+                pass  # sz 值非法，跳过
+    return borders
+
+
+def _read_first_row_bottom_border_checker(doc: Document) -> 'float | None':
+    """从文档第一个表格的第一行 tcBorders/bottom 读线宽（eighth-points → pt），取众数。
+
+    W5 修复：checker 侧与 pipeline 侧保持同口径——
+    table.header_border_pt 优先读第一行 tcBorders/bottom，fallback 到 insideH。
+    此函数是 check_table_header_border_pt 的核心读取逻辑。
+
+    @param doc - python-docx Document 对象
+    @returns 第一行 tc bottom border 众数（pt），无则返回 None（触发 insideH fallback）
+    """
+    from docx.oxml.ns import qn
+    from collections import Counter
+    if not doc.tables:
+        return None
+    tbl = doc.tables[0]
+    rows = tbl._element.findall(qn('w:tr'))
+    if not rows:
+        return None
+    first_row = rows[0]
+    cells = first_row.findall(qn('w:tc'))
+    if not cells:
+        return None
+    sizes: list[float] = []
+    for tc in cells:
+        tc_pr = tc.find(qn('w:tcPr'))
+        if tc_pr is None:
+            continue
+        tc_borders = tc_pr.find(qn('w:tcBorders'))
+        if tc_borders is None:
+            continue
+        bottom = tc_borders.find(qn('w:bottom'))
+        if bottom is None:
+            continue
+        sz_val = bottom.get(qn('w:sz'))
+        if sz_val:
+            try:
+                sizes.append(int(sz_val) / 8.0)
+            except ValueError:
+                continue
+    if not sizes:
+        return None
+    return Counter(sizes).most_common(1)[0][0]
+
+
+def check_table_is_three_line(doc: Document, expected: bool) -> 'Optional[dict]':
+    """检查文档第一个表格是否符合三线表规范。
+
+    W4 修复：三线表判定加 left/right == 0（排除带左右外框的误判）。
+    带左右边框但无 insideV 的表不是三线表，原版漏检此场景。
+
+    三线表判定逻辑：
+    - top > 0（有上边框）
+    - bottom > 0（有下边框）
+    - insideV == 0（无竖向内线，即无纵格线）
+    - left == 0 且 right == 0（无左右外侧竖线）
+    若 doc 无表格，视为"不是三线表"（返回 False 与 expected 比对）。
+    """
+    borders = _read_tbl_borders(doc)
+    # 统一走数值判定，不区分"无 tblBorders"与"sz 全缺"两种情况。
+    # 两者结果均为 top=0/bottom=0 → actual=False，业务语义上都不能确认为三线表。
+    # 这消除了"空 dict 被误判为无 tblBorders"的混淆，与 check_table_border_* 行为对齐。
+    top_pt = borders.get('top', 0.0)
+    bottom_pt = borders.get('bottom', 0.0)
+    inside_v_pt = borders.get('insideV', 0.0)
+    # W4 修复：额外检查 left/right 外侧竖线（也必须为 0）
+    left_pt = borders.get('left', 0.0)
+    right_pt = borders.get('right', 0.0)
+    actual = (
+        top_pt > 0 and bottom_pt > 0
+        and inside_v_pt == 0.0 and left_pt == 0.0 and right_pt == 0.0
+    )
+    if actual == expected:
+        return None
+    return {'attr': 'table.is_three_line', 'actual': actual, 'expected': expected}
+
+
+def check_table_border_top_pt(doc: Document, expected: float) -> 'Optional[dict]':
+    """检查文档第一个表格上边框线宽（pt），容差 0.1pt。
+
+    若 doc 无表格或无 tblBorders，actual 视为 0.0。
+    """
+    borders = _read_tbl_borders(doc)
+    actual = borders.get('top', 0.0)
+    if abs(actual - expected) < _TOL_FONT_PT:
+        return None
+    return {'attr': 'table.border_top_pt', 'actual': actual, 'expected': expected}
+
+
+def check_table_border_bottom_pt(doc: Document, expected: float) -> 'Optional[dict]':
+    """检查文档第一个表格下边框线宽（pt），容差 0.1pt。
+
+    若 doc 无表格或无 tblBorders，actual 视为 0.0。
+    """
+    borders = _read_tbl_borders(doc)
+    actual = borders.get('bottom', 0.0)
+    if abs(actual - expected) < _TOL_FONT_PT:
+        return None
+    return {'attr': 'table.border_bottom_pt', 'actual': actual, 'expected': expected}
+
+
+def check_table_header_border_pt(doc: Document, expected: float) -> 'Optional[dict]':
+    """检查文档第一个表格表头下边框线宽（pt），容差 0.1pt。
+
+    W5 修复：优先读第一行 tcBorders/bottom，无则 fallback 到 tblBorders/insideH。
+    原因：Word 三线表惯例是表头下线写在第一行 tcBorders/bottom，
+    而非 tblBorders/insideH——两者保存在不同位置。
+    此改动与 pipeline._read_table_attrs 口径保持一致。
+
+    若 doc 无表格，actual 视为 0.0。
+    """
+    # 优先路径：第一行 tcBorders/bottom
+    tc_bottom = _read_first_row_bottom_border_checker(doc)
+    if tc_bottom is not None:
+        actual = tc_bottom
+    else:
+        # fallback：tblBorders/insideH（原有逻辑）
+        borders = _read_tbl_borders(doc)
+        actual = borders.get('insideH', 0.0)
+    if abs(actual - expected) < _TOL_FONT_PT:
+        return None
+    return {'attr': 'table.header_border_pt', 'actual': actual, 'expected': expected}
+
+
+# ───────────────────────────────────────────────
+# 类别 B（续）：T3.3 numbering.* namespace（编号风格）
+# ───────────────────────────────────────────────
+
+def check_numbering_figure_style(doc: Document, expected: str) -> Optional[dict]:
+    """检查图编号风格是否符合预期（'continuous' 连续 / 'chapter_based' 章节式）。
+
+    复用 pipeline._read_numbering_styles 的启发式多数票算法，
+    返回 None 表示：符合规范 OR 样本不足无法判定（两者均不报 issue）。
+    样本不足（< 2 个图题）时视为无法判定，保守处理不报违规。
+    """
+    styles = _read_numbering_styles(doc)
+    actual = styles.get('numbering.figure_style')
+    if actual is None:
+        # 样本不足，无法判定，不报 issue
+        return None
+    if actual == expected:
+        return None
+    return {'attr': 'numbering.figure_style', 'actual': actual, 'expected': expected}
+
+
+def check_numbering_subfigure_style(doc: Document, expected: str) -> Optional[dict]:
+    """检查分图编号风格是否符合预期（'a_b_c' 字母 / '1_2_3' 数字点号）。
+
+    subfigure_style 仅在 figure_style 已确定时由 pipeline 推断；
+    若返回 None 表示文档无子图标记，视为无法判定，不报 issue。
+    """
+    styles = _read_numbering_styles(doc)
+    actual = styles.get('numbering.subfigure_style')
+    if actual is None:
+        return None
+    if actual == expected:
+        return None
+    return {'attr': 'numbering.subfigure_style', 'actual': actual, 'expected': expected}
+
+
+def check_numbering_formula_style(doc: Document, expected: str) -> Optional[dict]:
+    """检查公式编号风格是否符合预期（'continuous' 连续 / 'chapter_based' 章节式）。
+
+    复用 pipeline._read_numbering_styles 多数票推断；
+    样本不足（< 2 个公式编号）时返回 None，不报 issue。
+    """
+    styles = _read_numbering_styles(doc)
+    actual = styles.get('numbering.formula_style')
+    if actual is None:
+        return None
+    if actual == expected:
+        return None
+    return {'attr': 'numbering.formula_style', 'actual': actual, 'expected': expected}
+
+
+# ───────────────────────────────────────────────
+# 类别 C：T4.1 实现 deferred checker
+# ───────────────────────────────────────────────
+
+# 用于判断段落是否含图（w:drawing）或表（w:tbl）的 OOXML 标签名
+_DRAWING_TAG = _w('drawing')
+_TBL_TAG = _w('tbl')
+
+
+def _para_el_contains_figure_or_table(el) -> bool:
+    """判断给定 XML 元素（段落 _element 或其 r 元素）是否包含图片（w:drawing）或表格（w:tbl）。
+
+    入口判定：el 自身就是 tbl/drawing 时直接返回 True；
+    body 直接子节点为独立 w:tbl 时，调用方传入的 el 就是 tbl 本身，
+    不加此检查会漏检。
+    """
+    # el 自身就是目标元素（body 级独立表格/drawing 最常见此情形）
+    if el.tag in (_DRAWING_TAG, _TBL_TAG):
+        return True
+    for child in el:
+        if child.tag in (_DRAWING_TAG, _TBL_TAG):
+            return True
+        if _para_el_contains_figure_or_table(child):
+            return True
+    return False
+
+
 def check_layout_position(para: Paragraph, expected: str) -> Optional[dict]:
+    """T4.1 实现：检查图题/表题的位置（'above'/'below'）。
+
+    业务逻辑：
+    1. 通过 para._element 找到它在文档 body 中的索引
+    2. 检查前驱元素（previous sibling）是否含 w:drawing 或 w:tbl
+       - 前驱含图/表 → caption 在图/表"下方"（below）
+    3. 检查后继元素（next sibling）是否含 w:drawing 或 w:tbl
+       - 后继含图/表 → caption 在图/表"上方"（above）
+    4. 前后都没有图/表邻接 → 无法判定，返回 None
+
+    注意：只检查直接相邻的段落级元素（一步之遥），
+    不做跨段落的深度搜索，避免误判。
     """
-    [延后 v3] 检查图题/表题位置（'above'/'below'）。
-    需要解析段落与图/表的相对位置关系，当前能力范围之外，固定返回 None（不评判）。
-    """
+    el = para._element
+    parent = el.getparent()
+    if parent is None:
+        # 段落无父节点（异常文档结构），无法判定
+        return None
+
+    children = list(parent)
+    try:
+        idx = children.index(el)
+    except ValueError:
+        return None
+
+    # 检查前驱段落（index - 1）
+    if idx > 0 and _para_el_contains_figure_or_table(children[idx - 1]):
+        # 前驱是图/表 → caption 在图/表下方
+        actual = 'below'
+        if actual == expected:
+            return None
+        return {'attr': 'layout.position', 'actual': actual, 'expected': expected}
+
+    # 检查后继段落（index + 1）
+    if idx < len(children) - 1 and _para_el_contains_figure_or_table(children[idx + 1]):
+        # 后继是图/表 → caption 在图/表上方
+        actual = 'above'
+        if actual == expected:
+            return None
+        return {'attr': 'layout.position', 'actual': actual, 'expected': expected}
+
+    # 前后都不是图/表（独立 caption 段落），无法判定
     return None
+
+
+# 引用风格判定正则
+# GB/T 7714 特征：序号 [N] 开头
+_RE_GBT7714 = re.compile(r'^\[\d+\]')
+# APA 特征：含括号包围年份 (YYYY)
+_RE_APA = re.compile(r'\(\d{4}\)')
 
 
 def check_citation_style(para: Paragraph, expected: str) -> Optional[dict]:
+    """T4.1 实现：检查参考文献条目的引用风格（'gbt7714' / 'apa' / 'mla'）。
+
+    启发式判定规则（保守）：
+    - 文本以 [N] 开头（regex ^\\[\\d+\\]）→ actual='gbt7714'
+    - 文本含 (YYYY) 括号年份（regex \\(\\d{4}\\)）→ actual='apa'
+    - 两条都不符合 → actual=None，视为无法判定，不报 issue
+
+    MLA 格式无简单特征正则可判别，保守处理为 None（不报违规）。
     """
-    [延后 v3] 检查参考文献条目是否符合 GB/T 7714 格式。
-    需要复杂正则 + 格式解析，当前固定返回 None（不评判）。
+    text = para.text.strip()
+    if not text:
+        # 空段落，无法判定
+        return None
+
+    if _RE_GBT7714.match(text):
+        actual: Optional[str] = 'gbt7714'
+    elif _RE_APA.search(text):
+        actual = 'apa'
+    else:
+        # 无法推断风格（含 MLA），保守处理
+        actual = None
+
+    if actual is None:
+        return None
+    if actual == expected:
+        return None
+    return {'attr': 'citation.style', 'actual': actual, 'expected': expected}
+
+
+def _read_pgnumtype_fmt(section_pr) -> Optional[str]:
+    """从 sectPr XML 元素读取 w:pgNumType/@w:fmt 属性值。
+
+    返回 OOXML 原始 fmt 字符串（如 'lowerRoman'/'upperRoman'/'decimal'），
+    若不存在则返回 None（表示使用默认值 decimal/阿拉伯数字）。
     """
-    return None
+    from docx.oxml.ns import qn
+    pg_num_type = section_pr.find(qn('w:pgNumType'))
+    if pg_num_type is None:
+        return None
+    return pg_num_type.get(qn('w:fmt'))
+
+
+def _ooxml_fmt_to_style(fmt: Optional[str]) -> str:
+    """将 OOXML w:pgNumType fmt 值映射为业务风格字符串。
+
+    映射表：
+    - 'lowerRoman' / 'upperRoman' → 'roman'
+    - 'decimal' / None（默认）     → 'arabic'
+    """
+    if fmt in ('lowerRoman', 'upperRoman'):
+        return 'roman'
+    # decimal 或不存在（Word 默认为阿拉伯数字）
+    return 'arabic'
 
 
 def check_pagination_front_style(doc: Document, expected: str) -> Optional[dict]:
+    """T4.1 实现：检查前置页码样式（'roman' / 'arabic' / 'none'）。
+
+    从第一个 section 的 sectPr 读 w:pgNumType/@w:fmt：
+    - lowerRoman / upperRoman → 'roman'
+    - decimal 或不存在       → 'arabic'
     """
-    [延后 v3] 检查前置页码样式（'roman' 罗马数字 / 'arabic' 阿拉伯数字）。
-    需要读取 section 的页码格式 XML，当前固定返回 None（不评判）。
-    """
-    return None
+    section_pr = doc.sections[0]._sectPr
+    fmt = _read_pgnumtype_fmt(section_pr)
+    actual = _ooxml_fmt_to_style(fmt)
+    if actual == expected:
+        return None
+    return {'attr': 'pagination.front_style', 'actual': actual, 'expected': expected}
 
 
 def check_pagination_body_style(doc: Document, expected: str) -> Optional[dict]:
+    """T4.1 实现：检查正文页码样式（'arabic' / 'roman'）。
+
+    从最后一个 section 的 sectPr 读 w:pgNumType/@w:fmt。
+    若文档只有 1 个 section，front 和 body 样式相同。
     """
-    [延后 v3] 检查正文页码样式（'arabic' 阿拉伯数字）。
-    同 check_pagination_front_style，固定返回 None（不评判）。
-    """
-    return None
+    section_pr = doc.sections[-1]._sectPr
+    fmt = _read_pgnumtype_fmt(section_pr)
+    actual = _ooxml_fmt_to_style(fmt)
+    if actual == expected:
+        return None
+    return {'attr': 'pagination.body_style', 'actual': actual, 'expected': expected}
 
 
 # ───────────────────────────────────────────────
@@ -503,9 +1079,19 @@ CHECKER_MAP: dict[str, Any] = {
     'para.first_line_indent_chars':    check_para_first_line_indent_chars,
     'para.hanging_indent_chars':       check_para_hanging_indent_chars,
     'para.line_spacing':               check_para_line_spacing,
+    # T4.1: line_spacing 多状态识别（atLeast/exactly 直读 OOXML 修漏判）
+    'para.line_spacing_type':          check_para_line_spacing_type,
+    'para.line_spacing_pt':            check_para_line_spacing_pt,
     'para.space_before_lines':         check_para_space_before_lines,
     'para.space_after_lines':          check_para_space_after_lines,
+    # T3.1: 段前/段后磅值版本（与 _lines 版本共存）
+    'para.space_before_pt':            check_para_space_before_pt,
+    'para.space_after_pt':             check_para_space_after_pt,
     'para.letter_spacing_chars':       check_para_letter_spacing_chars,
+    # T4.2: 3 个 _pt 兄弟 attr（与 _chars 版本共存，规范用"磅"描述时取 _pt）
+    'para.first_line_indent_pt':       check_para_first_line_indent_pt,
+    'para.hanging_indent_pt':          check_para_hanging_indent_pt,
+    'para.letter_spacing_pt':          check_para_letter_spacing_pt,
     # page 分页/页面
     'page.new_page_before':            check_page_new_page_before,
     'page.size':                       check_page_size,
@@ -513,6 +1099,11 @@ CHECKER_MAP: dict[str, Any] = {
     'page.margin_bottom_cm':           check_page_margin_bottom_cm,
     'page.margin_left_cm':             check_page_margin_left_cm,
     'page.margin_right_cm':            check_page_margin_right_cm,
+    # T3.1: 装订线/页眉脚距/打印模式（文档级）
+    'page.margin_gutter_cm':           check_page_margin_gutter_cm,
+    'page.header_offset_cm':           check_page_header_offset_cm,
+    'page.footer_offset_cm':           check_page_footer_offset_cm,
+    'page.print_mode':                 check_page_print_mode,
     # content 内容
     'content.char_count_min':          check_content_char_count_min,
     'content.char_count_max':          check_content_char_count_max,
@@ -523,7 +1114,16 @@ CHECKER_MAP: dict[str, Any] = {
     # mixed_script 中西混排
     'mixed_script.ascii_is_tnr':       check_mixed_script_ascii_is_tnr,
     'mixed_script.punct_space_after':  check_mixed_script_punct_space_after,
-    # layout / citation / pagination（延后存根）
+    # T3.2: table namespace（三线表判定 + 三条边框线宽）
+    'table.is_three_line':             check_table_is_three_line,
+    'table.border_top_pt':             check_table_border_top_pt,
+    'table.border_bottom_pt':          check_table_border_bottom_pt,
+    'table.header_border_pt':          check_table_header_border_pt,
+    # T3.3: numbering namespace（图/分图/公式编号风格，文档级启发式推断）
+    'numbering.figure_style':          check_numbering_figure_style,
+    'numbering.subfigure_style':       check_numbering_subfigure_style,
+    'numbering.formula_style':         check_numbering_formula_style,
+    # layout / citation / pagination
     'layout.position':                 check_layout_position,
     'citation.style':                  check_citation_style,
     'pagination.front_style':          check_pagination_front_style,
@@ -537,8 +1137,22 @@ DOC_LEVEL_KEYS: frozenset[str] = frozenset({
     'page.margin_bottom_cm',
     'page.margin_left_cm',
     'page.margin_right_cm',
+    # T3.1: 新增 4 个文档级 page key
+    'page.margin_gutter_cm',
+    'page.header_offset_cm',
+    'page.footer_offset_cm',
+    'page.print_mode',
     'mixed_script.ascii_is_tnr',
     'mixed_script.punct_space_after',
     'pagination.front_style',
     'pagination.body_style',
+    # T3.2: table namespace 4 个文档级 key（表格结构属于文档级，不依赖段落）
+    'table.is_three_line',
+    'table.border_top_pt',
+    'table.border_bottom_pt',
+    'table.header_border_pt',
+    # T3.3: numbering namespace 3 个文档级 key（全文启发式扫描，不依赖单段落）
+    'numbering.figure_style',
+    'numbering.subfigure_style',
+    'numbering.formula_style',
 })

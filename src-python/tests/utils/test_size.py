@@ -31,8 +31,9 @@ class TestPtToName:
 
 
 class TestMap:
-    def test_has_14_entries(self):
-        assert len(CHINESE_SIZE_MAP) == 14
+    def test_has_16_entries(self):
+        # T1.2 之后扩展到 16 项（原 14 + 七号 + 八号）；新增字号需同步本断言
+        assert len(CHINESE_SIZE_MAP) == 16
 
     def test_all_values_are_numeric(self):
         for name, pt in CHINESE_SIZE_MAP.items():

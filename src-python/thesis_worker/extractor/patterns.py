@@ -35,6 +35,12 @@ def _build_size_name_pattern() -> re.Pattern:
 
 _SIZE_NAME_RE: re.Pattern = _build_size_name_pattern()
 
+# 共享长度单位正则模式（与 units.py 同步）；按长度从长到短避免短前缀吞掉长后缀
+# inch 必须排在 in 前，否则 'inch' 会被识别为 'in' + 'ch'
+# ASCII 短单位（inch/in/cm/mm/pt）加 (?<![A-Za-z]) / (?![A-Za-z]) / (?![\s　]+[a-z]) 三层词界保护，
+# 避免在英文上下文（'1 input' / '1cmm' / 'click 1 in form'）误匹配
+_LENGTH_UNIT_PATTERN = r'(?:磅|点|英寸|厘米|毫米|(?<![A-Za-z])(?:inch|in|cm|mm|pt)(?![A-Za-z])(?![\s　]+[a-z]))'
+
 # 纯数字 pt 字号：匹配 "12pt" / "15 磅" / "10.5pt"
 _SIZE_PT_RE = re.compile(r'(\d+(?:\.\d+)?)\s*(?:pt|磅|点)', re.IGNORECASE)
 
@@ -126,3 +132,219 @@ def find_quoted_field(text: str) -> Optional[tuple[str, str]]:
     field_name = match.group(1)
     rest = match.group(3)
     return (field_name, rest)
+
+
+# ============================================================
+# T3.1: 段前/段后多单位自然语言抽取
+# 单位枚举：行 + 5 种长度单位（与 _LENGTH_UNIT_PATTERN 对齐）
+# 全角空格 U+3000 必须显式纳入，覆盖"段前　6　磅"式中文排版
+# ============================================================
+
+# 段前/段后单位枚举：行 + 5 种长度单位
+# ASCII 短单位加词界保护，与 _LENGTH_UNIT_PATTERN 同口径
+_PARA_SPACING_UNITS = r'(?:行|磅|点|英寸|厘米|毫米|(?<![A-Za-z])(?:inch|in|cm|mm|pt)(?![A-Za-z])(?![\s　]+[a-z]))'
+_RE_PARA_SPACING = re.compile(
+    r'(段前|段后)[\s　]*(\d+(?:\.\d+)?)[\s　]*(' + _PARA_SPACING_UNITS + r')',
+    re.IGNORECASE,
+)
+
+
+def extract_para_spacing(text: str) -> Optional[tuple[str, float]]:
+    """从文本里抽段前/段后值 → (sink_attr_key, pt_or_lines_value)。
+
+    业务逻辑：
+    1. 正则识别 "段前"/"段后" + 数值 + 单位
+    2. 单位为"行" → 走 _lines 兄弟 attr（值保留原始数）
+    3. 单位为长度（磅/cm/mm/in/pt）→ 转 pt 走 _pt 兄弟 attr
+
+    @example
+        extract_para_spacing('段前 6 磅')   → ('para.space_before_pt', 6.0)
+        extract_para_spacing('段前 1 行')   → ('para.space_before_lines', 1.0)
+        extract_para_spacing('段后 0.5 厘米') → ('para.space_after_pt', 14.17)
+    """
+    from .units import length_to_pt
+    m = _RE_PARA_SPACING.search(text)
+    if not m:
+        return None
+    prefix = m.group(1)  # '段前' / '段后'
+    val = float(m.group(2))
+    unit = m.group(3)
+
+    suffix = 'before' if prefix == '段前' else 'after'
+
+    if unit == '行':
+        return (f'para.space_{suffix}_lines', val)
+
+    pt = length_to_pt(val, unit)
+    if pt is None:
+        return None
+    return (f'para.space_{suffix}_pt', round(pt, 2))
+
+
+# ============================================================
+# T3.2: 首行/悬挂缩进多单位自然语言抽取
+# 单位枚举：字符 + 5 种长度单位（无"行"，缩进不以行为单位）
+# 全角空格 U+3000 必须显式纳入，覆盖中文排版式空格
+# ============================================================
+
+# 缩进单位：字符 + 5 长度单位（无"行"）
+# ASCII 短单位加词界保护，与 _LENGTH_UNIT_PATTERN 同口径
+_INDENT_UNITS = r'(?:字符|磅|点|英寸|厘米|毫米|(?<![A-Za-z])(?:inch|in|cm|mm|pt)(?![A-Za-z])(?![\s　]+[a-z]))'
+_RE_INDENT = re.compile(
+    r'(首行缩进|悬挂缩进)[\s　]*(\d+(?:\.\d+)?)[\s　]*(' + _INDENT_UNITS + r')',
+    re.IGNORECASE,
+)
+
+
+def extract_indent(text: str) -> Optional[tuple[str, float]]:
+    """抽首行/悬挂缩进值 → (sink_attr_key, chars_or_pt_value)。
+
+    业务逻辑：
+    1. 正则识别 "首行缩进"/"悬挂缩进" + 数值 + 单位
+    2. 单位"字符" → _chars 兄弟 attr
+    3. 长度单位 → _pt 兄弟 attr（转 pt）
+
+    @example
+        extract_indent('首行缩进 2 字符')   → ('para.first_line_indent_chars', 2.0)
+        extract_indent('悬挂缩进 14 磅')    → ('para.hanging_indent_pt', 14.0)
+        extract_indent('首行缩进 0.74 厘米') → ('para.first_line_indent_pt', 20.97)
+    """
+    from .units import length_to_pt
+    m = _RE_INDENT.search(text)
+    if not m:
+        return None
+    kind = m.group(1)  # '首行缩进' / '悬挂缩进'
+    val = float(m.group(2))
+    unit = m.group(3)
+
+    prefix = 'first_line' if kind == '首行缩进' else 'hanging'
+
+    if unit == '字符':
+        return (f'para.{prefix}_indent_chars', val)
+
+    pt = length_to_pt(val, unit)
+    if pt is None:
+        return None
+    return (f'para.{prefix}_indent_pt', round(pt, 2))
+
+
+# ============================================================
+# T3.3: 行距 6 类型识别
+# WPS/Word 行距共 6 种：单倍/1.5倍/2倍/最小值/固定值/多倍
+# 类型 + 值是绑定语义对，必须返回多 attr dict 同时给出
+# ============================================================
+
+# 行距类型识别正则（按从精确到模糊顺序）
+# 全角空格 U+3000 显式纳入，覆盖中文排版式空格
+_RE_LS_AT_LEAST = re.compile(r'最小值[\s　]*(\d+(?:\.\d+)?)[\s　]*磅?', re.IGNORECASE)
+_RE_LS_EXACTLY = re.compile(r'固定值[\s　]*(\d+(?:\.\d+)?)[\s　]*磅?', re.IGNORECASE)
+_RE_LS_ONE_AND_HALF = re.compile(r'1[\s　]*\.[\s　]*5[\s　]*倍行距', re.IGNORECASE)
+# 负向 lookbehind：避免在 "1.5 倍行距" 或 "12 倍行距" 中错误匹配 "2"
+_RE_LS_DOUBLE = re.compile(r'(?<![1-9\.])2[\s　]*倍行距', re.IGNORECASE)
+_RE_LS_MULTIPLE = re.compile(r'多倍行距[\s　]*(\d+(?:\.\d+)?)', re.IGNORECASE)
+
+
+def extract_line_spacing(text: str) -> Optional[dict]:
+    """识别 6 种行距类型。
+
+    业务逻辑（按精确度降序匹配）：
+    1. 最小值/固定值 N 磅 → atLeast/exactly + line_spacing_pt
+    2. 1.5 倍行距 → oneAndHalf + line_spacing=1.5
+    3. 2 倍行距 → double + line_spacing=2.0
+    4. 多倍行距 N → multiple + line_spacing=N
+    5. 单倍行距 → single + line_spacing=1.0
+    6. 都不命中 → None
+
+    返回多 attr dict，因为类型 + 值是绑定的语义对，
+    必须同时给出才能完整表达"固定值 28 磅"这类规范。
+
+    @example
+        extract_line_spacing('单倍行距')
+            → {'para.line_spacing_type': 'single', 'para.line_spacing': 1.0}
+        extract_line_spacing('固定值 28 磅')
+            → {'para.line_spacing_type': 'exactly', 'para.line_spacing_pt': 28.0}
+        extract_line_spacing('多倍行距 2.5')
+            → {'para.line_spacing_type': 'multiple', 'para.line_spacing': 2.5}
+    """
+    if m := _RE_LS_AT_LEAST.search(text):
+        return {'para.line_spacing_type': 'atLeast', 'para.line_spacing_pt': float(m.group(1))}
+    if m := _RE_LS_EXACTLY.search(text):
+        return {'para.line_spacing_type': 'exactly', 'para.line_spacing_pt': float(m.group(1))}
+    if _RE_LS_ONE_AND_HALF.search(text):
+        return {'para.line_spacing_type': 'oneAndHalf', 'para.line_spacing': 1.5}
+    if _RE_LS_DOUBLE.search(text):
+        return {'para.line_spacing_type': 'double', 'para.line_spacing': 2.0}
+    if m := _RE_LS_MULTIPLE.search(text):
+        return {'para.line_spacing_type': 'multiple', 'para.line_spacing': float(m.group(1))}
+    if '单倍行距' in text:
+        return {'para.line_spacing_type': 'single', 'para.line_spacing': 1.0}
+    return None
+
+
+# ============================================================
+# T3.4a: 字符间距多单位
+# 单位：字符 + 4 长度单位（无"行"）
+# 与缩进类似，但 sink 走 letter_spacing 而非 first_line/hanging
+# ============================================================
+
+# 字符间距单位：字符 + 4 长度单位（无"行"）
+# ASCII 短单位加词界保护，与 _LENGTH_UNIT_PATTERN 同口径
+_LS_UNITS = r'(?:字符|磅|点|英寸|厘米|毫米|(?<![A-Za-z])(?:inch|in|cm|mm|pt)(?![A-Za-z])(?![\s　]+[a-z]))'
+_RE_LETTER_SPACING = re.compile(
+    r'字符?间距[^\d]*?(\d+(?:\.\d+)?)[\s　]*(' + _LS_UNITS + r')',
+    re.IGNORECASE,
+)
+
+
+def extract_letter_spacing(text: str) -> Optional[tuple[str, float]]:
+    """抽字符间距 → (sink_attr_key, value)。
+
+    @example
+        extract_letter_spacing('字符间距 加宽 1 磅') → ('para.letter_spacing_pt', 1.0)
+        extract_letter_spacing('字符间距 2 字符')    → ('para.letter_spacing_chars', 2.0)
+    """
+    from .units import length_to_pt
+    m = _RE_LETTER_SPACING.search(text)
+    if not m:
+        return None
+    val = float(m.group(1))
+    unit = m.group(2)
+    if unit == '字符':
+        return ('para.letter_spacing_chars', val)
+    pt = length_to_pt(val, unit)
+    if pt is None:
+        return None
+    return ('para.letter_spacing_pt', round(pt, 2))
+
+
+# ============================================================
+# T3.4b: 表线规范关键词抽取
+# 三线表 / 上下表线 / 表头下线 三类关键词
+# 上下表线一次设两 attr（顶+底），表头下线设独立 attr
+# ============================================================
+
+# 表线规范关键词正则
+_RE_TABLE_THREE_LINE = re.compile(r'三线表', re.IGNORECASE)
+_RE_TABLE_TOP_BOTTOM = re.compile(r'上下表线[\s　]*(\d+(?:\.\d+)?)[\s　]*磅', re.IGNORECASE)
+_RE_TABLE_HEADER_LINE = re.compile(r'表头下线[\s　]*(\d+(?:\.\d+)?)[\s　]*磅', re.IGNORECASE)
+
+
+def extract_table_borders_text(text: str) -> dict:
+    """抽表格规范关键词与线宽。
+
+    返回的字典含已识别的 attr；无任何关键词时返回 {}。
+
+    @example
+        extract_table_borders_text('三线表，上下表线 1.5 磅，表头下线 0.5 磅')
+          → {'table.is_three_line': True, 'table.border_top_pt': 1.5, 'table.border_bottom_pt': 1.5, 'table.header_border_pt': 0.5}
+    """
+    out: dict = {}
+    if _RE_TABLE_THREE_LINE.search(text):
+        out['table.is_three_line'] = True
+    if m := _RE_TABLE_TOP_BOTTOM.search(text):
+        val = float(m.group(1))
+        out['table.border_top_pt'] = val
+        out['table.border_bottom_pt'] = val
+    if m := _RE_TABLE_HEADER_LINE.search(text):
+        out['table.header_border_pt'] = float(m.group(1))
+    return out

@@ -60,16 +60,48 @@ function formatAttr(key: string, value: unknown): string {
       return ALIGN_LABEL[String(value)] ?? String(value);
     case 'para.line_spacing':
       return `行距 ${value}`;
+    // T2.4: 行距类型枚举（OOXML w:lineRule 取值）
+    // single/oneAndHalf/double 表示倍数模式；atLeast/exactly 通常配合 line_spacing_pt 使用
+    case 'para.line_spacing_type': {
+      const LABELS: Record<string, string> = {
+        single: '单倍行距',
+        oneAndHalf: '1.5 倍行距',
+        double: '2 倍行距',
+        atLeast: '最小值',
+        exactly: '固定值',
+        multiple: '多倍行距',
+      };
+      return LABELS[String(value)] ?? String(value);
+    }
+    // T2.4: 行距 pt 值（与 line_spacing_type 配对：atLeast 28pt / exactly 28pt）
+    // 加"行距"前缀与同伴 _pt（首行缩进/悬挂缩进/字距）保持一致；
+    // combined 时与 type 共显："最小值 · 行距 28pt"
+    case 'para.line_spacing_pt':
+      return `行距 ${value}pt`;
     case 'para.first_line_indent_chars':
       return `首行缩进 ${value} 字`;
+    // T2.4: 首行缩进 pt 值（部分规范用磅而非"字"描述缩进量）
+    case 'para.first_line_indent_pt':
+      return `首行缩进 ${value}pt`;
     case 'para.hanging_indent_chars':
       return `悬挂缩进 ${value} 字`;
+    // T2.4: 悬挂缩进 pt 值
+    case 'para.hanging_indent_pt':
+      return `悬挂缩进 ${value}pt`;
     case 'para.letter_spacing_chars':
       return `字距 ${value} 字`;
+    // T2.4: 字符间距 pt 值（OOXML w:spacing 字符级间距）
+    case 'para.letter_spacing_pt':
+      return `字距 ${value}pt`;
     case 'para.space_before_lines':
       return `段前 ${value} 行`;
     case 'para.space_after_lines':
       return `段后 ${value} 行`;
+    // T3.1: 段前/段后磅值版本（规范文本用"磅"描述时显示此格式）
+    case 'para.space_before_pt':
+      return `段前 ${value}pt`;
+    case 'para.space_after_pt':
+      return `段后 ${value}pt`;
     case 'content.specific_text':
       return `文本「${value}」`;
     case 'content.char_count_min':
@@ -92,6 +124,15 @@ function formatAttr(key: string, value: unknown): string {
       return `左 ${value}cm`;
     case 'page.margin_right_cm':
       return `右 ${value}cm`;
+    // T3.1: 装订线/页眉脚距/打印模式
+    case 'page.margin_gutter_cm':
+      return `装订线 ${value}cm`;
+    case 'page.header_offset_cm':
+      return `页眉距边界 ${value}cm`;
+    case 'page.footer_offset_cm':
+      return `页脚距边界 ${value}cm`;
+    case 'page.print_mode':
+      return String(value) === 'double' ? '双面打印' : '单面打印';
     case 'page.new_page_before':
       return value === true ? '另起一页' : '';
     case 'pagination.front_style':
@@ -107,6 +148,23 @@ function formatAttr(key: string, value: unknown): string {
       return LAYOUT_POSITION_LABEL[String(value)] ?? String(value);
     case 'citation.style':
       return `引文样式：${value}`;
+    // T3.3: numbering namespace（图/分图/公式编号风格）
+    case 'numbering.figure_style':
+      return String(value) === 'continuous' ? '图编号：连续' : '图编号：章节式';
+    case 'numbering.subfigure_style':
+      return String(value) === 'a_b_c' ? '分图 (a)(b)(c)' : '分图 .1/.2/.3';
+    case 'numbering.formula_style':
+      return String(value) === 'continuous' ? '公式：连续' : '公式：章节式';
+    // T3.2: table namespace（三线表 + 边框线宽）
+    case 'table.is_three_line':
+      // 仅 true 时输出中文标签，false 不输出（避免"不是三线表"的负向描述污染摘要行）
+      return value === true ? '三线表' : '';
+    case 'table.border_top_pt':
+      return `表格上线 ${value}pt`;
+    case 'table.border_bottom_pt':
+      return `表格下线 ${value}pt`;
+    case 'table.header_border_pt':
+      return `表头下线 ${value}pt`;
     default:
       // 未识别 key：保持原样展示，便于 debug + 不丢信息
       return `${key}=${String(value)}`;

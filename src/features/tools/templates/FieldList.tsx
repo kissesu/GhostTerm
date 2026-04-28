@@ -41,6 +41,28 @@ const ATTR_LABEL: Record<string, string> = {
   'mixed_script.punct_space_after': '英文标点后空一字符',
   'layout.position': '图表位置',
   'citation.style': '引文样式',
+  // T3.1: 补齐磅值段间距 + 装订线/页眉脚距/打印模式
+  'para.space_before_pt': '段前（pt）',
+  'para.space_after_pt': '段后（pt）',
+  'page.margin_gutter_cm': '装订线',
+  'page.header_offset_cm': '页眉边距',
+  'page.footer_offset_cm': '页脚边距',
+  'page.print_mode': '打印模式',
+  // T3.2: table namespace
+  'table.is_three_line': '三线表',
+  'table.border_top_pt': '上边框（pt）',
+  'table.border_bottom_pt': '下边框（pt）',
+  'table.header_border_pt': '表头下线（pt）',
+  // T3.3: numbering namespace
+  'numbering.figure_style': '图编号风格',
+  'numbering.subfigure_style': '分图编号风格',
+  'numbering.formula_style': '公式编号风格',
+  // T2.4: 行距/缩进/字距单位扩展（pt 维度补齐"字"维度）
+  'para.line_spacing_type': '行距类型',
+  'para.line_spacing_pt': '行距 pt',
+  'para.first_line_indent_pt': '首行缩进 pt',
+  'para.hanging_indent_pt': '悬挂缩进 pt',
+  'para.letter_spacing_pt': '字符间距 pt',
 };
 
 // 字段状态类型：done=已填写，partial=部分填写，empty=待填写，skipped=已跳过
@@ -231,8 +253,10 @@ export function FieldList({ fields, currentFieldId, onJump, onSkip, onAttrChange
                           padding: '4px 10px 4px 30px',
                         }}
                       >
-                        {/* 属性标签：title 兜底，列宽不够时用户 hover 可看完整文字 */}
-                        <span
+                        {/* W7 修复：改用 <label htmlFor> 关联对应 input，
+                            屏幕阅读器可通过 label 识别输入控件 */}
+                        <label
+                          htmlFor={`attr-input-${f.id}-${attr}`}
                           title={attrLabel}
                           style={{
                             fontSize: 12,
@@ -240,16 +264,19 @@ export function FieldList({ fields, currentFieldId, onJump, onSkip, onAttrChange
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
+                            cursor: 'default',
                           }}
                         >
                           {attrLabel}
-                        </span>
+                        </label>
 
-                        {/* 行内编辑器：onChange 触发 onAttrChange 将改动同步到 Workspace */}
+                        {/* 行内编辑器：onChange 触发 onAttrChange 将改动同步到 Workspace
+                            inputId 透传给底层 input，与上方 label htmlFor 配对 */}
                         <RuleValueEditorByAttr
                           attr={attr}
                           value={f.value?.[attr]}
                           onChange={(next) => onAttrChange(f.id, attr, next)}
+                          inputId={`attr-input-${f.id}-${attr}`}
                         />
 
                         {/* 右侧状态标记：已识别到显示绿色勾，未识别到显示灰色提示 */}

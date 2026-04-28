@@ -1,8 +1,11 @@
 """
 @file: test_field_defs.py
-@description: 37 字段定义测试（T2.1 新增 table_header / T2.2 拆分 toc_entry 为 l1/l2/l3 / T2.3 新增 formula_block / T2.4 新增 footnote）
+@description: 37 字段定义测试（T2.1 新增 table_header / T2.2 拆分 toc_entry 为 l1/l2/l3 /
+              T2.3 新增 formula_block / T2.4 新增 footnote / T3.1 追加 6 个 attr key /
+              T3.2 table_header 追加 4 个 table.* attr /
+              T3.3 figure_caption +2 numbering attr / formula_block +1 numbering attr）
 @author: Atlas.oi
-@date: 2026-04-27
+@date: 2026-04-28
 """
 from thesis_worker.engine_v2.field_defs import FIELD_DEFS, get_field, applicable_attrs
 
@@ -49,10 +52,13 @@ class TestFieldDefs:
         assert f['order'] == 22
 
     def test_table_header_applicable_attributes(self):
-        # 白名单精确：规范层对表头的约束仅 4 项，不多不少
+        # T3.2: table_header 追加 4 个 table.* attr 后共 8 个，白名单精确
         attrs = applicable_attrs('table_header')
-        assert set(attrs) == {'font.cjk', 'font.size_pt', 'font.bold', 'para.align'}
-        assert len(attrs) == 4
+        assert set(attrs) == {
+            'font.cjk', 'font.size_pt', 'font.bold', 'para.align',
+            'table.is_three_line', 'table.border_top_pt', 'table.border_bottom_pt', 'table.header_border_pt',
+        }
+        assert len(attrs) == 8
 
     def test_table_inner_text_order_is_23(self):
         # T2.2 后 table_inner_text 由 21 → 23
@@ -135,10 +141,11 @@ class TestFieldDefs:
         assert f['order'] == 24
 
     def test_formula_block_applicable_attributes(self):
-        # T2.3 只加 para.align；numbering.formula_style 等 T3.3 再补
+        # T3.3: formula_block 包含 para.align（T2.3）+ numbering.formula_style（T3.3）
         attrs = applicable_attrs('formula_block')
-        assert attrs == ['para.align']
-        assert len(attrs) == 1
+        assert 'para.align' in attrs
+        assert 'numbering.formula_style' in attrs
+        assert len(attrs) == 2
 
     def test_references_title_order_26(self):
         # T2.4 新增 footnote(order=25) 后 references_title 由 25 → 26
@@ -172,3 +179,161 @@ class TestFieldDefs:
         attrs = applicable_attrs('footnote')
         assert set(attrs) == {'font.cjk', 'font.size_pt'}
         assert len(attrs) == 2
+
+    # ─────────────────────────────────────────────
+    # T3.1: 6 个新 attr key 绑定断言
+    # ─────────────────────────────────────────────
+
+    def test_toc_title_has_space_pt_attrs(self):
+        # toc_title 追加 para.space_before_pt / para.space_after_pt
+        attrs = applicable_attrs('toc_title')
+        assert 'para.space_before_pt' in attrs
+        assert 'para.space_after_pt' in attrs
+        # 原有 _lines 系列保留，与新 _pt 系列共存
+        assert 'para.space_before_lines' in attrs
+        assert 'para.space_after_lines' in attrs
+
+    def test_chapter_title_has_space_pt_attrs(self):
+        # chapter_title 追加 para.space_before_pt / para.space_after_pt
+        attrs = applicable_attrs('chapter_title')
+        assert 'para.space_before_pt' in attrs
+        assert 'para.space_after_pt' in attrs
+        # 原有 _lines 系列保留
+        assert 'para.space_before_lines' in attrs
+        assert 'para.space_after_lines' in attrs
+
+    def test_page_margin_has_t31_attrs(self):
+        # page_margin 追加装订线/页眉距/页脚距/打印模式 4 项
+        attrs = applicable_attrs('page_margin')
+        assert 'page.margin_gutter_cm' in attrs
+        assert 'page.header_offset_cm' in attrs
+        assert 'page.footer_offset_cm' in attrs
+        assert 'page.print_mode' in attrs
+        # 原有 4 个 margin_*_cm 保留
+        assert 'page.margin_top_cm' in attrs
+        assert 'page.margin_bottom_cm' in attrs
+        assert 'page.margin_left_cm' in attrs
+        assert 'page.margin_right_cm' in attrs
+        # 总计 8 个 attr
+        assert len(attrs) == 8
+
+    def test_section_title_not_changed(self):
+        # section_title 未被 T3.1 修改（无 spacing attrs，不对称则不追加）
+        attrs = applicable_attrs('section_title')
+        assert 'para.space_before_pt' not in attrs
+        assert 'para.space_after_pt' not in attrs
+
+    def test_subsection_title_not_changed(self):
+        # subsection_title 未被 T3.1 修改
+        attrs = applicable_attrs('subsection_title')
+        assert 'para.space_before_pt' not in attrs
+        assert 'para.space_after_pt' not in attrs
+
+    # ─────────────────────────────────────────────
+    # T3.2: table.* namespace 4 attr 绑定断言
+    # ─────────────────────────────────────────────
+
+    def test_table_header_has_table_namespace_attrs(self):
+        # T3.2: table_header 必须含 4 个 table.* attr
+        attrs = applicable_attrs('table_header')
+        assert 'table.is_three_line' in attrs
+        assert 'table.border_top_pt' in attrs
+        assert 'table.border_bottom_pt' in attrs
+        assert 'table.header_border_pt' in attrs
+        # 原有 4 个 font/para attr 保留
+        assert 'font.cjk' in attrs
+        assert 'font.size_pt' in attrs
+        assert 'font.bold' in attrs
+        assert 'para.align' in attrs
+        # 总数为 8，确保无多余字段
+        assert len(attrs) == 8
+
+    def test_table_caption_not_changed_by_t32(self):
+        # table_caption 不受 T3.2 影响：线宽属于表格结构，不挂在表题字段
+        attrs = applicable_attrs('table_caption')
+        assert 'table.is_three_line' not in attrs
+        assert 'table.border_top_pt' not in attrs
+        assert set(attrs) == {'font.cjk', 'font.size_pt', 'para.align', 'layout.position'}
+
+    def test_table_inner_text_not_changed_by_t32(self):
+        # table_inner_text 不受 T3.2 影响
+        attrs = applicable_attrs('table_inner_text')
+        assert 'table.is_three_line' not in attrs
+        assert 'table.border_top_pt' not in attrs
+        assert set(attrs) == {'font.cjk', 'font.size_pt'}
+
+    # ─────────────────────────────────────────────
+    # T3.3: numbering.* namespace 绑定断言
+    # ─────────────────────────────────────────────
+
+    def test_figure_caption_has_numbering_attrs(self):
+        # T3.3: figure_caption 追加 numbering.figure_style + numbering.subfigure_style 后共 6 个
+        attrs = applicable_attrs('figure_caption')
+        assert 'numbering.figure_style' in attrs
+        assert 'numbering.subfigure_style' in attrs
+        # 原有 4 个 attr 保留
+        assert 'font.cjk' in attrs
+        assert 'font.size_pt' in attrs
+        assert 'para.align' in attrs
+        assert 'layout.position' in attrs
+        assert len(attrs) == 6
+
+    def test_formula_block_has_formula_style_attr(self):
+        # T3.3: formula_block 追加 numbering.formula_style 后共 2 个
+        attrs = applicable_attrs('formula_block')
+        assert 'numbering.formula_style' in attrs
+        # 原有 para.align 保留
+        assert 'para.align' in attrs
+        assert len(attrs) == 2
+
+    def test_figure_inner_text_not_changed_by_t33(self):
+        # figure_inner_text 不受 T3.3 影响（编号约束挂在 caption，不在图内文字）
+        attrs = applicable_attrs('figure_inner_text')
+        assert 'numbering.figure_style' not in attrs
+        assert 'numbering.subfigure_style' not in attrs
+
+    def test_formula_block_applicable_attributes_exact(self):
+        # T3.3 后 formula_block 精确白名单：para.align + numbering.formula_style
+        attrs = applicable_attrs('formula_block')
+        assert set(attrs) == {'para.align', 'numbering.formula_style'}
+        assert len(attrs) == 2
+
+
+class TestT4UnitsExpansion:
+    """批 4：单位扩展新增 5 个 attr 的字段绑定断言"""
+
+    def test_line_spacing_type_in_4_fields(self):
+        """abstract_zh_body / abstract_en_body / body_para / line_spacing_global"""
+        from thesis_worker.engine_v2.field_defs import applicable_attrs
+        for fid in ('abstract_zh_body', 'abstract_en_body', 'body_para', 'line_spacing_global'):
+            assert 'para.line_spacing_type' in applicable_attrs(fid), f'{fid} 缺 line_spacing_type'
+            assert 'para.line_spacing_pt' in applicable_attrs(fid), f'{fid} 缺 line_spacing_pt'
+
+    def test_line_spacing_type_not_in_unrelated_fields(self):
+        """title_zh / chapter_title 不应绑定行距类型"""
+        from thesis_worker.engine_v2.field_defs import applicable_attrs
+        assert 'para.line_spacing_type' not in applicable_attrs('title_zh')
+        assert 'para.line_spacing_type' not in applicable_attrs('chapter_title')
+
+    def test_first_line_indent_pt_in_5_fields(self):
+        """abstract_zh_body / abstract_en_body / body_para / ack_body / appendix_body"""
+        from thesis_worker.engine_v2.field_defs import applicable_attrs
+        for fid in ('abstract_zh_body', 'abstract_en_body', 'body_para', 'ack_body', 'appendix_body'):
+            assert 'para.first_line_indent_pt' in applicable_attrs(fid), f'{fid} 缺 first_line_indent_pt'
+
+    def test_hanging_indent_pt_only_in_reference_entry(self):
+        from thesis_worker.engine_v2.field_defs import applicable_attrs
+        assert 'para.hanging_indent_pt' in applicable_attrs('reference_entry')
+        # 反向：其他字段不应有
+        assert 'para.hanging_indent_pt' not in applicable_attrs('body_para')
+
+    def test_letter_spacing_pt_in_4_fields(self):
+        """abstract_zh_title / abstract_en_title / ack_title / appendix_title"""
+        from thesis_worker.engine_v2.field_defs import applicable_attrs
+        for fid in ('abstract_zh_title', 'abstract_en_title', 'ack_title', 'appendix_title'):
+            assert 'para.letter_spacing_pt' in applicable_attrs(fid), f'{fid} 缺 letter_spacing_pt'
+
+    def test_field_count_unchanged_at_37(self):
+        """新加 attr 不增字段"""
+        from thesis_worker.engine_v2.field_defs import FIELD_DEFS
+        assert len(FIELD_DEFS) == 37

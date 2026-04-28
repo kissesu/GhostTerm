@@ -96,7 +96,11 @@ describe('FIELD_DEFS', () => {
     expect(f).toBeDefined();
     expect(f?.group).toBe('body');
     expect(f?.order).toBe(22);
-    expect(f?.applicable_attributes).toEqual(['font.cjk', 'font.size_pt', 'font.bold', 'para.align']);
+    // T3.2: table_header 追加 4 个 table.* attr 后共 8 个
+    expect(f?.applicable_attributes).toEqual([
+      'font.cjk', 'font.size_pt', 'font.bold', 'para.align',
+      'table.is_three_line', 'table.border_top_pt', 'table.border_bottom_pt', 'table.header_border_pt',
+    ]);
   });
 
   it('table_inner_text order 已升至 23', () => {
@@ -105,13 +109,14 @@ describe('FIELD_DEFS', () => {
   });
 
   it('formula_block 在正文部分且 order=24', () => {
-    // T2.3: 公式字段插在 body 末尾
+    // T2.3: 公式字段插在 body 末尾；T3.3: 追加 numbering.formula_style 后共 2 个 attr
     const f = getField('formula_block');
     expect(f).toBeDefined();
     expect(f?.group).toBe('body');
     expect(f?.order).toBe(24);
     expect(f?.label).toBe('公式');
-    expect(f?.applicable_attributes).toEqual(['para.align']);
+    // T3.3: para.align（T2.3）+ numbering.formula_style（T3.3）
+    expect(f?.applicable_attributes).toEqual(['para.align', 'numbering.formula_style']);
   });
 
   it('后置部分 6 个（order 26-31，T2.4 后整体 +1）', () => {
@@ -184,5 +189,40 @@ describe('applicableAttrs', () => {
 
   it('不存在的字段返回空数组', () => {
     expect(applicableAttrs('ghost_field')).toEqual([]);
+  });
+});
+
+describe('T4 单位扩展 5 attr 镜像 Python', () => {
+  it('para.line_spacing_type 加到 4 字段', () => {
+    for (const fid of ['abstract_zh_body', 'abstract_en_body', 'body_para', 'line_spacing_global']) {
+      const f = FIELD_DEFS.find((x) => x.id === fid);
+      expect(f?.applicable_attributes).toContain('para.line_spacing_type');
+      expect(f?.applicable_attributes).toContain('para.line_spacing_pt');
+    }
+  });
+
+  it('para.first_line_indent_pt 加到 5 字段', () => {
+    for (const fid of ['abstract_zh_body', 'abstract_en_body', 'body_para', 'ack_body', 'appendix_body']) {
+      const f = FIELD_DEFS.find((x) => x.id === fid);
+      expect(f?.applicable_attributes).toContain('para.first_line_indent_pt');
+    }
+  });
+
+  it('para.hanging_indent_pt 仅在 reference_entry', () => {
+    const ref = FIELD_DEFS.find((x) => x.id === 'reference_entry');
+    expect(ref?.applicable_attributes).toContain('para.hanging_indent_pt');
+    const body = FIELD_DEFS.find((x) => x.id === 'body_para');
+    expect(body?.applicable_attributes).not.toContain('para.hanging_indent_pt');
+  });
+
+  it('para.letter_spacing_pt 加到 4 标题字段', () => {
+    for (const fid of ['abstract_zh_title', 'abstract_en_title', 'ack_title', 'appendix_title']) {
+      const f = FIELD_DEFS.find((x) => x.id === fid);
+      expect(f?.applicable_attributes).toContain('para.letter_spacing_pt');
+    }
+  });
+
+  it('字段总数仍 37', () => {
+    expect(FIELD_DEFS).toHaveLength(37);
   });
 });
