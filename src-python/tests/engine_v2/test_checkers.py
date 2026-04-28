@@ -1627,6 +1627,22 @@ class TestCheckLineSpacingLineRule:
         out = check_para_line_spacing_pt(para_b, 28.0)
         assert out is not None
 
+    def test_exact_lineRule_normalizes_to_exactly(self):
+        """T-fix2: OOXML w:lineRule=exact 必须归一化为 type 字符串 'exactly'
+
+        判别力：删除 checkers.py:419-420 'exact' → 'exactly' 归一化即挂。
+        既有 test_exact_value_in_pt 仅间接覆盖；本 case 正反两侧直接断言。
+        """
+        from thesis_worker.engine_v2.checkers import check_para_line_spacing_type
+        para = self._make_para_with_line_rule('exact', 600)  # 30pt exactly
+        # 期望 'exactly' 应通过（无归一化则 actual='exact' ≠ expected → 误报 issue）
+        assert check_para_line_spacing_type(para, 'exactly') is None
+        # 反例：期望 'exact'（OOXML 原值）应 issue（对外统一暴露 'exactly'）
+        out = check_para_line_spacing_type(para, 'exact')
+        assert out is not None
+        assert out['actual'] == 'exactly'
+        assert out['expected'] == 'exact'
+
 
 class TestCheckIndentPt:
     """T4.2: first_line/hanging_indent_pt checker"""
