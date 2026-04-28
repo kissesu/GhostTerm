@@ -369,13 +369,18 @@ def _read_section_attrs(doc) -> dict[str, Any]:
     section = doc.sections[0]
 
     # 装订线宽度（cm）
-    attrs['page.margin_gutter_cm'] = round(section.gutter.cm, 2)
+    # python-docx 对未显式设置的 section 属性返回 None 而非 0，
+    # 真实 docx（尤其 textutil 从 .doc 转换）大量触发此情况，必须守卫
+    if section.gutter is not None:
+        attrs['page.margin_gutter_cm'] = round(section.gutter.cm, 2)
 
     # 页眉距页面顶端距离（cm）
-    attrs['page.header_offset_cm'] = round(section.header_distance.cm, 2)
+    if section.header_distance is not None:
+        attrs['page.header_offset_cm'] = round(section.header_distance.cm, 2)
 
     # 页脚距页面底端距离（cm）
-    attrs['page.footer_offset_cm'] = round(section.footer_distance.cm, 2)
+    if section.footer_distance is not None:
+        attrs['page.footer_offset_cm'] = round(section.footer_distance.cm, 2)
 
     # 打印模式：检测 w:evenAndOddHeaders 元素是否存在
     # 存在 → 奇偶页眉分设（双面打印） → 'double'；不存在 → 'single'

@@ -563,3 +563,49 @@ class TestW6FieldWhitelistFilter:
         # 全部 4 个 attr 属于 page_margin 白名单，应全部保留
         for key in attrs:
             assert key in result, f'{key!r} 不应被过滤（在 page_margin 白名单内）；result={result}'
+
+
+class TestNullSectionAttrs:
+    """修复回归：python-docx 未显式设置的 section 属性返回 None，真实 docx 必须不崩溃。
+
+    T3.1 加入的 gutter/header_distance/footer_distance 假设非 None，
+    textutil 从 .doc 转换的文档会触发 AttributeError: 'NoneType'.cm，
+    本 class 验证修复后的 None 路径不抛异常。
+    """
+
+    def test_extract_all_handles_none_section_attrs(self, tmp_path):
+        """构造未设任何 section attr 的 docx，extract_all 不应崩溃。
+
+        判别力：临时把 _read_section_attrs 里的 None 守卫删掉，本 case 会抛
+        AttributeError('NoneType' object has no attribute 'cm')。
+        """
+        from docx import Document
+        doc = Document()
+        doc.add_paragraph('测试内容：第一章 引言')
+        # 不主动设置 gutter / header_distance / footer_distance，
+        # 保持 python-docx 默认状态（新建文档这三项通常为 None）
+        docx_path = tmp_path / 'no_section_attrs.docx'
+        doc.save(str(docx_path))
+
+        # 核心断言：不应抛 AttributeError
+        result = extract_all(str(docx_path))
+        assert isinstance(result, dict), '返回值应为 dict'
+        assert 'rules' in result, '应包含 rules 键'
+
+    def test_extract_all_handles_paragraph_with_no_spacing(self, tmp_path):
+        """构造未设 space_before/space_after 的段落，extract_all 不应崩溃。
+
+        判别力：若 _read_paragraph_style_attrs 在 None 守卫外写入 _pt，
+        本 case 会抛 AttributeError('NoneType'.pt)。
+        """
+        from docx import Document
+        doc = Document()
+        # 添加纯文本段落，不设任何段间距
+        para = doc.add_paragraph('摘要：本文研究了相关问题。')
+        # 不调用 para.paragraph_format.space_before = ... 等
+        docx_path = tmp_path / 'no_para_spacing.docx'
+        doc.save(str(docx_path))
+
+        result = extract_all(str(docx_path))
+        assert isinstance(result, dict), '返回值应为 dict'
+        assert 'rules' in result, '应包含 rules 键'
