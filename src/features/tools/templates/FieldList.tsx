@@ -57,6 +57,12 @@ const ATTR_LABEL: Record<string, string> = {
   'numbering.figure_style': '图编号风格',
   'numbering.subfigure_style': '分图编号风格',
   'numbering.formula_style': '公式编号风格',
+  // T2.4: 行距/缩进/字距单位扩展（pt 维度补齐"字"维度）
+  'para.line_spacing_type': '行距类型',
+  'para.line_spacing_pt': '行距 pt',
+  'para.first_line_indent_pt': '首行缩进 pt',
+  'para.hanging_indent_pt': '悬挂缩进 pt',
+  'para.letter_spacing_pt': '字符间距 pt',
 };
 
 // 字段状态类型：done=已填写，partial=部分填写，empty=待填写，skipped=已跳过

@@ -60,12 +60,37 @@ function formatAttr(key: string, value: unknown): string {
       return ALIGN_LABEL[String(value)] ?? String(value);
     case 'para.line_spacing':
       return `行距 ${value}`;
+    // T2.4: 行距类型枚举（OOXML w:lineRule 取值）
+    // single/oneAndHalf/double 表示倍数模式；atLeast/exactly 通常配合 line_spacing_pt 使用
+    case 'para.line_spacing_type': {
+      const LABELS: Record<string, string> = {
+        single: '单倍行距',
+        oneAndHalf: '1.5 倍行距',
+        double: '2 倍行距',
+        atLeast: '最小值',
+        exactly: '固定值',
+        multiple: '多倍行距',
+      };
+      return LABELS[String(value)] ?? String(value);
+    }
+    // T2.4: 行距 pt 值（与 line_spacing_type 配对：atLeast 28pt / exactly 28pt）
+    case 'para.line_spacing_pt':
+      return `${value}pt`;
     case 'para.first_line_indent_chars':
       return `首行缩进 ${value} 字`;
+    // T2.4: 首行缩进 pt 值（部分规范用磅而非"字"描述缩进量）
+    case 'para.first_line_indent_pt':
+      return `首行缩进 ${value}pt`;
     case 'para.hanging_indent_chars':
       return `悬挂缩进 ${value} 字`;
+    // T2.4: 悬挂缩进 pt 值
+    case 'para.hanging_indent_pt':
+      return `悬挂缩进 ${value}pt`;
     case 'para.letter_spacing_chars':
       return `字距 ${value} 字`;
+    // T2.4: 字符间距 pt 值（OOXML w:spacing 字符级间距）
+    case 'para.letter_spacing_pt':
+      return `字距 ${value}pt`;
     case 'para.space_before_lines':
       return `段前 ${value} 行`;
     case 'para.space_after_lines':

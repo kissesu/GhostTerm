@@ -164,4 +164,32 @@ describe('formatFieldValue', () => {
     const result = formatFieldValue({ 'numbering.formula_style': 'chapter_based' });
     expect(result).toContain('公式：章节式');
   });
+
+  // ── T2.4: 单位扩展 5 attr 中文片段输出 ──────────────────────
+  describe('T4 单位扩展 5 attr 中文片段', () => {
+    it('line_spacing_type single → "单倍行距"', () => {
+      expect(formatFieldValue({ 'para.line_spacing_type': 'single' })).toBe('单倍行距');
+    });
+
+    it('line_spacing_type atLeast + line_spacing_pt → 含"最小值"和"28pt"', () => {
+      const out = formatFieldValue({
+        'para.line_spacing_type': 'atLeast',
+        'para.line_spacing_pt': 28,
+      });
+      expect(out).toContain('最小值');
+      expect(out).toContain('28pt');
+    });
+
+    it('first_line_indent_pt → "首行缩进 14pt"', () => {
+      expect(formatFieldValue({ 'para.first_line_indent_pt': 14 })).toBe('首行缩进 14pt');
+    });
+
+    it('hanging_indent_pt → "悬挂缩进 14pt"', () => {
+      expect(formatFieldValue({ 'para.hanging_indent_pt': 14 })).toBe('悬挂缩进 14pt');
+    });
+
+    it('letter_spacing_pt → "字距 1pt"', () => {
+      expect(formatFieldValue({ 'para.letter_spacing_pt': 1 })).toBe('字距 1pt');
+    });
+  });
 });
