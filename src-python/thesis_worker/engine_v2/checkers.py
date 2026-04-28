@@ -561,13 +561,61 @@ def _read_tbl_borders(doc: Document) -> dict[str, float]:
     return borders
 
 
+def _read_first_row_bottom_border_checker(doc: Document) -> 'float | None':
+    """从文档第一个表格的第一行 tcBorders/bottom 读线宽（eighth-points → pt），取众数。
+
+    W5 修复：checker 侧与 pipeline 侧保持同口径——
+    table.header_border_pt 优先读第一行 tcBorders/bottom，fallback 到 insideH。
+    此函数是 check_table_header_border_pt 的核心读取逻辑。
+
+    @param doc - python-docx Document 对象
+    @returns 第一行 tc bottom border 众数（pt），无则返回 None（触发 insideH fallback）
+    """
+    from docx.oxml.ns import qn
+    from collections import Counter
+    if not doc.tables:
+        return None
+    tbl = doc.tables[0]
+    rows = tbl._element.findall(qn('w:tr'))
+    if not rows:
+        return None
+    first_row = rows[0]
+    cells = first_row.findall(qn('w:tc'))
+    if not cells:
+        return None
+    sizes: list[float] = []
+    for tc in cells:
+        tc_pr = tc.find(qn('w:tcPr'))
+        if tc_pr is None:
+            continue
+        tc_borders = tc_pr.find(qn('w:tcBorders'))
+        if tc_borders is None:
+            continue
+        bottom = tc_borders.find(qn('w:bottom'))
+        if bottom is None:
+            continue
+        sz_val = bottom.get(qn('w:sz'))
+        if sz_val:
+            try:
+                sizes.append(int(sz_val) / 8.0)
+            except ValueError:
+                continue
+    if not sizes:
+        return None
+    return Counter(sizes).most_common(1)[0][0]
+
+
 def check_table_is_three_line(doc: Document, expected: bool) -> 'Optional[dict]':
     """检查文档第一个表格是否符合三线表规范。
 
-    三线表判定逻辑（简化版）：
+    W4 修复：三线表判定加 left/right == 0（排除带左右外框的误判）。
+    带左右边框但无 insideV 的表不是三线表，原版漏检此场景。
+
+    三线表判定逻辑：
     - top > 0（有上边框）
     - bottom > 0（有下边框）
-    - insideV 不存在或 insideV.sz == 0（无竖向内线，即无纵格线）
+    - insideV == 0（无竖向内线，即无纵格线）
+    - left == 0 且 right == 0（无左右外侧竖线）
     若 doc 无表格，视为"不是三线表"（返回 False 与 expected 比对）。
     """
     borders = _read_tbl_borders(doc)
@@ -577,8 +625,13 @@ def check_table_is_three_line(doc: Document, expected: bool) -> 'Optional[dict]'
     top_pt = borders.get('top', 0.0)
     bottom_pt = borders.get('bottom', 0.0)
     inside_v_pt = borders.get('insideV', 0.0)
-    # 三线表：有顶线/底线，无竖向内线
-    actual = top_pt > 0 and bottom_pt > 0 and inside_v_pt == 0.0
+    # W4 修复：额外检查 left/right 外侧竖线（也必须为 0）
+    left_pt = borders.get('left', 0.0)
+    right_pt = borders.get('right', 0.0)
+    actual = (
+        top_pt > 0 and bottom_pt > 0
+        and inside_v_pt == 0.0 and left_pt == 0.0 and right_pt == 0.0
+    )
     if actual == expected:
         return None
     return {'attr': 'table.is_three_line', 'actual': actual, 'expected': expected}
@@ -611,12 +664,21 @@ def check_table_border_bottom_pt(doc: Document, expected: float) -> 'Optional[di
 def check_table_header_border_pt(doc: Document, expected: float) -> 'Optional[dict]':
     """检查文档第一个表格表头下边框线宽（pt），容差 0.1pt。
 
-    使用 insideH（水平内线宽度）作为表头下边框的简化代理值。
-    三线表中表头下线即内部水平线，此值与表头下边框线宽在绝大多数规范模板中一致。
-    若 doc 无表格或无 tblBorders，actual 视为 0.0。
+    W5 修复：优先读第一行 tcBorders/bottom，无则 fallback 到 tblBorders/insideH。
+    原因：Word 三线表惯例是表头下线写在第一行 tcBorders/bottom，
+    而非 tblBorders/insideH——两者保存在不同位置。
+    此改动与 pipeline._read_table_attrs 口径保持一致。
+
+    若 doc 无表格，actual 视为 0.0。
     """
-    borders = _read_tbl_borders(doc)
-    actual = borders.get('insideH', 0.0)
+    # 优先路径：第一行 tcBorders/bottom
+    tc_bottom = _read_first_row_bottom_border_checker(doc)
+    if tc_bottom is not None:
+        actual = tc_bottom
+    else:
+        # fallback：tblBorders/insideH（原有逻辑）
+        borders = _read_tbl_borders(doc)
+        actual = borders.get('insideH', 0.0)
     if abs(actual - expected) < _TOL_FONT_PT:
         return None
     return {'attr': 'table.header_border_pt', 'actual': actual, 'expected': expected}

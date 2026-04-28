@@ -330,6 +330,71 @@ describe('FieldList', () => {
     expect(screen.getByTestId('attr-formula-numbering')).toBeInTheDocument();
   });
 
+  // ─────────────────────────────────────────────
+  // W7 修复：a11y — label[for] 与 input[id] 关联测试
+  // ─────────────────────────────────────────────
+
+  it('W7: getByLabelText 能通过标签文字找到对应 input（label[for]/id 关联）', () => {
+    // 验证 W7 修复核心：<label htmlFor=...> 与底层 input id 配对
+    // 用 page_margin 字段的 para.space_before_pt（NumberInput），标签="段前（pt）"
+    const fields = [
+      {
+        id: 'chapter_title',
+        label: '一级章节标题',
+        status: 'done' as const,
+        confidence: 0.9,
+        value: { 'para.space_before_pt': 12 },
+      },
+    ];
+    render(
+      <FieldList
+        fields={fields}
+        currentFieldId={null}
+        onJump={vi.fn()}
+        onSkip={vi.fn()}
+        onAttrChange={vi.fn()}
+      />
+    );
+    // W7 修复后：label htmlFor 与 input id 关联，getByLabelText 应能找到 input
+    // 屏幕阅读器通过此关联识别输入控件的语义
+    const input = screen.getByLabelText('段前（pt）');
+    expect(input).toBeInTheDocument();
+    // 确认找到的确实是 input 元素（data-testid=attr-space-before-pt）
+    expect(input).toHaveAttribute('data-testid', 'attr-space-before-pt');
+  });
+
+  it('W7: inputId 格式含 fieldId 前缀（命名空间隔离验证）', () => {
+    // 验证：生成的 input id = "attr-input-{fieldId}-{attrKey}" 格式，
+    // 以 chapter_title 字段的 para.space_before_pt 为例，
+    // 确认 input id 包含 fieldId 前缀（不只是 attr key）
+    const fields = [
+      {
+        id: 'chapter_title',
+        label: '一级章节标题',
+        status: 'done' as const,
+        confidence: 0.9,
+        value: { 'para.space_before_pt': 12 },
+      },
+    ];
+    const { container } = render(
+      <FieldList
+        fields={fields}
+        currentFieldId={null}
+        onJump={vi.fn()}
+        onSkip={vi.fn()}
+        onAttrChange={vi.fn()}
+      />
+    );
+    // 用 getElementById 查找（id 中点号合法，避免 CSS 选择器转义问题）
+    const input = container.ownerDocument.getElementById(
+      'attr-input-chapter_title-para.space_before_pt'
+    );
+    // id 格式正确：含 fieldId 前缀 + attrKey
+    expect(input).toBeInTheDocument();
+    // data-testid 验证找到的是正确的 input 子组件
+    expect(input).toHaveAttribute('data-testid', 'attr-space-before-pt');
+  });
+
   it('calls onAttrChange with correct args when editor value changes', () => {
     // 构造一个字段，只测试 font.cjk（CjkFontSelect，select 元素可 fireEvent.change）
     const fields = [

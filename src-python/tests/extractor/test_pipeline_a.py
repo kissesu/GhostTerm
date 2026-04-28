@@ -383,3 +383,183 @@ class TestNumberingStylesIntegration:
             f'全角空格路径漏抓 figure_style；value={value}'
         )
         assert value['numbering.figure_style'] == 'continuous'
+
+    # ── W1 修复：APA 年份引用不应触发 formula 推断 ──────────────────────
+
+    def test_apa_year_citations_not_counted_as_formula(self, tmp_path):
+        """W1 修复：文档含 APA 年份引用 (2020)/(2021) 不应触发 formula_style 推断。
+
+        判别力：构造含 5 个 APA 年份括号但无等号/数学符号的段落，
+        旧版扫全文会将 (2020)(2021)(2022)(2023)(2024) 误计 5 票 continuous，
+        W1 修复后这些段落被 _looks_like_formula_paragraph 过滤，票数 < 2，
+        formula_block 字段不被写入（或不含 formula_style key）。
+
+        判别力：删除 _looks_like_formula_paragraph 过滤后，5 个 APA 引用
+        会触发 formula_block 写入且值为 'continuous'，断言"不存在"挂。
+        """
+        from docx import Document as DocxDocument
+        doc = DocxDocument()
+        # 5 个含 APA 年份引用的段落（无等号/数学符号/短编号）
+        for year in [2020, 2021, 2022, 2023, 2024]:
+            doc.add_paragraph(f'Smith et al. ({year}) 研究表明，该方法有效。')
+        docx_path = tmp_path / 'test_apa_no_formula.docx'
+        doc.save(str(docx_path))
+
+        result = extract_all(str(docx_path))
+        rules = result['rules']
+
+        # formula_block 字段不应写入（票数不足），或即使写入也不含 formula_style
+        if 'formula_block' in rules:
+            value = rules['formula_block']['value']
+            assert 'numbering.formula_style' not in value, (
+                f'W1 修复失效：APA 年份引用不应触发 formula_style 推断；value={value}'
+            )
+
+    # ── W2 修复：正文图引用不应计票，只对图题开头计票 ──────────────────
+
+    def test_inline_figure_ref_not_counted_as_caption(self, tmp_path):
+        """W2 修复：正文"如图1所示"/"见图2"不应参与图编号计票。
+
+        构造：10 个含"如图N所示"的正文段落（大量连续引用）
+        + 2 个段落开头"图1 真实图题"/"图2 另一图题"
+        期望 figure_style='continuous'（来自 2 个图题），不被 10 个正文引用污染计票。
+
+        判别力：删除 _RE_FIG_CAPTION_START.match 过滤后，所有正文"如图N"也计票，
+        连续票数 10 >> 图题 2，结果相同（continuous），但若图题是章节式而正文引用是连续式
+        则会被误判——此 case 验证过滤逻辑确实限定了开头匹配。
+
+        精确判别力 case：2 个章节式图题 + 10 个连续式正文引用：
+        无过滤 → continuous（10 >> 2），有过滤 → chapter_based（2 章节 vs 0 连续）。
+        """
+        from docx import Document as DocxDocument
+        doc = DocxDocument()
+        # 2 个真实图题（章节式，段落开头）
+        doc.add_paragraph('图1-1 系统架构图')
+        doc.add_paragraph('图1-2 数据流程图')
+        # 10 个正文引用（连续式，位于段落中间）
+        for i in range(1, 11):
+            doc.add_paragraph(f'如图{i}所示，系统的主要模块包括以下部分。')
+        docx_path = tmp_path / 'test_caption_only_counted.docx'
+        doc.save(str(docx_path))
+
+        result = extract_all(str(docx_path))
+        rules = result['rules']
+
+        # figure_caption 应存在，且 figure_style 应为 'chapter_based'（来自 2 个图题）
+        # 若正文引用也被计票，连续 10 > 章节 2，会误判 'continuous'
+        assert 'figure_caption' in rules, (
+            f'W2：figure_caption 未写入；rules keys={list(rules.keys())}'
+        )
+        value = rules['figure_caption']['value']
+        assert value.get('numbering.figure_style') == 'chapter_based', (
+            f"W2 修复失效：正文引用被计票，误判为连续式；实际 value={value}"
+        )
+
+    # ── W3 修复：数字子图 (1)(2)(3) 应推断为 1_2_3 ──────────────────
+
+    def test_numeric_subfigure_style_detected(self, tmp_path):
+        """W3 修复：5 个含数字子图标记的图题，应推断 subfigure_style='1_2_3'。
+
+        判别力：构造"图1(1)"/"图1(2)"等数字子图，
+        旧版只有 _RE_SUBFIG_LETTER（匹配字母），数字子图 actual=None，
+        W3 修复后 actual='1_2_3'。
+
+        删除 _RE_SUBFIG_NUMBER 正则后 number_count=0 < 2，
+        不写 subfigure_style，断言 value 中不含该 key，测试挂。
+        """
+        from docx import Document as DocxDocument
+        doc = DocxDocument()
+        # 5 个含数字子图标记的图题
+        for chap, sub in [(1, 1), (1, 2), (1, 3), (2, 1), (2, 2)]:
+            doc.add_paragraph(f'图{chap}-{sub}({sub}) 数字子图示例')
+        docx_path = tmp_path / 'test_numeric_subfig.docx'
+        doc.save(str(docx_path))
+
+        result = extract_all(str(docx_path))
+        rules = result['rules']
+
+        assert 'figure_caption' in rules, (
+            f'W3：figure_caption 未写入；rules keys={list(rules.keys())}'
+        )
+        value = rules['figure_caption']['value']
+        assert 'numbering.subfigure_style' in value, (
+            f'W3 修复失效：数字子图未被识别；value={value}'
+        )
+        assert value['numbering.subfigure_style'] == '1_2_3', (
+            f"W3：应为 '1_2_3' 不是 'a_b_c'；实际 value={value}"
+        )
+
+
+# ───────────────────────────────────────────────
+# W6 修复：_log_and_filter_unsupported 字段级白名单过滤测试
+# ───────────────────────────────────────────────
+
+class TestW6FieldWhitelistFilter:
+    """W6 修复：越界 attr（已知但不属于当前字段白名单）应被过滤。
+
+    原有 _log_and_filter_unsupported 只按全局 _KNOWN_ATTR_KEYS 过滤，
+    导致 section/table/numbering 全文注入可能把不属于该字段的 attr 写入。
+    W6 修复后改为字段级白名单，越界 attr 被剔除。
+    """
+
+    def test_out_of_whitelist_attr_filtered_for_field(self, tmp_path):
+        """注入 table.* attr 到 page_margin 字段，断言被字段白名单过滤掉。
+
+        page_margin 的 applicable_attributes 不含 table.is_three_line，
+        所以即使 attrs 里有这个 known attr，也应被过滤。
+
+        判别力：删除字段级白名单逻辑（回退到全局 _KNOWN_ATTR_KEYS）后，
+        table.is_three_line 是 known key，不会被过滤，断言 'not in value' 挂。
+        """
+        from thesis_worker.extractor import pipeline as p_module
+        from thesis_worker.extractor.pipeline import _log_and_filter_unsupported
+
+        # 构造越界 attrs：table.is_three_line 是已知 key，但不属于 page_margin 字段
+        attrs_with_cross_field = {
+            'page.margin_top_cm': 3.0,    # page_margin 白名单内
+            'table.is_three_line': True,   # 越界：已知 key 但属于 table_header 字段
+        }
+
+        # 对 page_margin 字段调用过滤
+        result = _log_and_filter_unsupported(
+            attrs_with_cross_field,
+            spec_file='test.docx',
+            field_id='page_margin',
+            context_snippet='[test context]',
+        )
+
+        # page.margin_top_cm 属于 page_margin 白名单，应保留
+        assert 'page.margin_top_cm' in result, (
+            f'page.margin_top_cm 不应被过滤（在白名单内）；result={result}'
+        )
+        # table.is_three_line 是越界 attr（known but not in page_margin），应被过滤
+        assert 'table.is_three_line' not in result, (
+            f'W6 修复失效：table.is_three_line 越界 attr 应被字段级白名单过滤；result={result}'
+        )
+
+    def test_known_attr_in_correct_field_preserved(self, tmp_path):
+        """在正确字段内的 attr 不应被过滤（无误杀）。
+
+        page_margin 字段注入 page.* attr，全部应保留。
+        删除字段白名单也不影响本 case——测试只验证正路径不误杀。
+        （判别力来自 test_out_of_whitelist_attr_filtered_for_field）
+        """
+        from thesis_worker.extractor.pipeline import _log_and_filter_unsupported
+
+        attrs = {
+            'page.margin_top_cm': 3.0,
+            'page.margin_bottom_cm': 2.5,
+            'page.margin_left_cm': 3.0,
+            'page.margin_right_cm': 3.0,
+        }
+
+        result = _log_and_filter_unsupported(
+            attrs,
+            spec_file='test.docx',
+            field_id='page_margin',
+            context_snippet='[test context]',
+        )
+
+        # 全部 4 个 attr 属于 page_margin 白名单，应全部保留
+        for key in attrs:
+            assert key in result, f'{key!r} 不应被过滤（在 page_margin 白名单内）；result={result}'

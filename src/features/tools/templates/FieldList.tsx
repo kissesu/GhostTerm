@@ -247,8 +247,10 @@ export function FieldList({ fields, currentFieldId, onJump, onSkip, onAttrChange
                           padding: '4px 10px 4px 30px',
                         }}
                       >
-                        {/* 属性标签：title 兜底，列宽不够时用户 hover 可看完整文字 */}
-                        <span
+                        {/* W7 修复：改用 <label htmlFor> 关联对应 input，
+                            屏幕阅读器可通过 label 识别输入控件 */}
+                        <label
+                          htmlFor={`attr-input-${f.id}-${attr}`}
                           title={attrLabel}
                           style={{
                             fontSize: 12,
@@ -256,16 +258,19 @@ export function FieldList({ fields, currentFieldId, onJump, onSkip, onAttrChange
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
+                            cursor: 'default',
                           }}
                         >
                           {attrLabel}
-                        </span>
+                        </label>
 
-                        {/* 行内编辑器：onChange 触发 onAttrChange 将改动同步到 Workspace */}
+                        {/* 行内编辑器：onChange 触发 onAttrChange 将改动同步到 Workspace
+                            inputId 透传给底层 input，与上方 label htmlFor 配对 */}
                         <RuleValueEditorByAttr
                           attr={attr}
                           value={f.value?.[attr]}
                           onChange={(next) => onAttrChange(f.id, attr, next)}
+                          inputId={`attr-input-${f.id}-${attr}`}
                         />
 
                         {/* 右侧状态标记：已识别到显示绿色勾，未识别到显示灰色提示 */}

@@ -1389,3 +1389,148 @@ class TestNumberingFormulaStyle:
         doc = _doc_with_formula_numbers('唯一公式 E = mc² (1)')
         assert check_numbering_formula_style(doc, 'continuous') is None
         assert check_numbering_formula_style(doc, 'chapter_based') is None
+
+
+# ───────────────────────────────────────────────
+# W4 修复：三线表判定加 left/right == 0 的新测试
+# ───────────────────────────────────────────────
+
+def _doc_with_four_border_table() -> Document:
+    """构造带 left/right 外侧竖线的表格（4 边框，非三线表）。
+
+    构造 top/bottom/left/right 均有值，insideV=0，
+    原版代码（只检查 insideV）会误判为三线表。
+    W4 修复后必须判 False。
+    """
+    from lxml import etree
+    doc = Document()
+    table = doc.add_table(rows=2, cols=2)
+    tbl_pr = table._element.find(qn('w:tblPr'))
+    borders = etree.SubElement(tbl_pr, qn('w:tblBorders'))
+    # top=12(1.5pt), bottom=12(1.5pt), left=8(1pt), right=8(1pt)，无 insideV
+    for tag, sz in [('top', 12), ('bottom', 12), ('left', 8), ('right', 8)]:
+        el = etree.SubElement(borders, qn(f'w:{tag}'))
+        el.set(qn('w:sz'), str(sz))
+        el.set(qn('w:val'), 'single')
+    return doc
+
+
+class TestTableIsThreeLineW4:
+    """W4 修复：三线表判定加 left/right == 0 的补充测试。
+
+    判别力设计：
+    - FAIL case：表有 top/bottom/left/right 但无 insideV → 原版误判 True，W4 修复后 actual=False。
+      删除 left_pt==0 or right_pt==0 的判定后 actual 变回 True，FAIL case 变 PASS，测试挂。
+    """
+
+    def test_table_with_left_right_borders_not_three_line(self):
+        """带 left/right 外侧竖线、无 insideV 的表格不是三线表（W4 核心修复）。
+
+        判别力：原版只检查 insideV，left/right 有值时 actual 仍为 True（误判）。
+        W4 修复后 actual=False；expected=True → issue（不符合三线表规范）。
+        """
+        doc = _doc_with_four_border_table()
+        issue = check_table_is_three_line(doc, True)
+        assert issue is not None, (
+            'W4 修复：带 left/right 外框的表不是三线表，应返回 issue'
+        )
+        assert issue['actual'] is False
+        assert issue['expected'] is True
+
+    def test_table_with_left_right_borders_expected_false_passes(self):
+        """带 left/right 外框的表（actual=False），expected=False → None（符合期望）。
+
+        判别力：actual=False 与 expected=False 相等 → None；
+        若删除 left/right 判定 actual 变 True != False → 会变成 issue，测试挂。
+        """
+        doc = _doc_with_four_border_table()
+        assert check_table_is_three_line(doc, False) is None
+
+    def test_standard_three_line_still_passes_after_w4(self):
+        """标准三线表（top/bottom/insideH，无 left/right/insideV）在 W4 修复后仍通过。
+
+        防回归：W4 不应影响正常三线表判定。
+        """
+        doc = _doc_with_three_line_table()
+        assert check_table_is_three_line(doc, True) is None
+
+
+# ───────────────────────────────────────────────
+# W5 修复：table.header_border_pt 优先读 tcBorders/bottom 的新测试
+# ───────────────────────────────────────────────
+
+def _doc_with_tc_bottom_border(tc_sz: int = 8) -> Document:
+    """构造第一行 tc 含 tcBorders/bottom 的表格文档（不设 tblBorders/insideH）。
+
+    W5 修复验证：checker 应优先从 tcBorders/bottom 读表头下线，
+    而非 tblBorders/insideH（原有 fallback）。
+    tc_sz=8 eighth-points → 1.0pt。
+    """
+    from lxml import etree
+    doc = Document()
+    table = doc.add_table(rows=2, cols=2)
+    # 只设 tblBorders top/bottom，不设 insideH（确保 fallback 路径返回 0）
+    tbl_pr = table._element.find(qn('w:tblPr'))
+    tbl_borders = etree.SubElement(tbl_pr, qn('w:tblBorders'))
+    for tag, sz in [('top', 12), ('bottom', 12)]:
+        el = etree.SubElement(tbl_borders, qn(f'w:{tag}'))
+        el.set(qn('w:sz'), str(sz))
+        el.set(qn('w:val'), 'single')
+    # 给第一行每个 tc 注入 tcBorders/bottom
+    rows = table._element.findall(qn('w:tr'))
+    first_row = rows[0]
+    for tc in first_row.findall(qn('w:tc')):
+        tc_pr = tc.find(qn('w:tcPr'))
+        if tc_pr is None:
+            tc_pr = etree.SubElement(tc, qn('w:tcPr'))
+        tc_borders = etree.SubElement(tc_pr, qn('w:tcBorders'))
+        bottom_el = etree.SubElement(tc_borders, qn('w:bottom'))
+        bottom_el.set(qn('w:sz'), str(tc_sz))
+        bottom_el.set(qn('w:val'), 'single')
+    return doc
+
+
+class TestTableHeaderBorderPtW5:
+    """W5 修复：table.header_border_pt 优先读 tcBorders/bottom 的补充测试。
+
+    判别力设计：
+    - 优先路径：tc_sz=8(1.0pt)，无 insideH → 读 tcBorders，actual=1.0。
+      删除 tcBorders 优先逻辑后 actual 变 0.0（insideH fallback 返回 0），
+      断言 actual≈1.0 → 挂。
+    - fallback 路径：有 insideH(sz=4=0.5pt)，无 tcBorders → fallback，actual=0.5。
+      与现有 test_pass_standard_half_pt 测试共用。
+    """
+
+    def test_tc_bottom_border_takes_priority_over_inside_h(self):
+        """tcBorders/bottom 存在时，优先读 tc 第一行 bottom（W5 核心）。
+
+        构造：tcBorders/bottom sz=8(1.0pt)；tblBorders 无 insideH（fallback 返回 0）。
+        期望 actual=1.0（来自 tcBorders），不是 0.0（来自 fallback）。
+        """
+        doc = _doc_with_tc_bottom_border(tc_sz=8)
+        # 应从 tcBorders/bottom 读到 1.0pt（sz=8/8=1.0）
+        assert check_table_header_border_pt(doc, 1.0) is None
+
+    def test_tc_bottom_border_fail_when_expected_wrong(self):
+        """tcBorders/bottom sz=8(1.0pt)，expected=0.5 → 差 0.5 > 0.1 → issue。
+
+        判别力：如果 actual 仍是 0.0（即 W5 未生效），则 abs(0.0-0.5)=0.5>0.1 也会 issue，
+        但 issue['actual'] 值不同（0.0 vs 1.0），可通过值断言区分。
+        """
+        doc = _doc_with_tc_bottom_border(tc_sz=8)
+        issue = check_table_header_border_pt(doc, 0.5)
+        assert issue is not None
+        assert issue['attr'] == 'table.header_border_pt'
+        # 关键：actual 必须是 1.0（来自 tcBorders），不是 0.0（fallback）
+        assert abs(issue['actual'] - 1.0) < 0.01, (
+            f"W5：actual 应为 1.0（tcBorders/bottom），实际为 {issue['actual']}"
+        )
+
+    def test_fallback_to_inside_h_when_no_tc_borders(self):
+        """无 tcBorders/bottom 时，fallback 到 tblBorders/insideH（原有路径）。
+
+        防回归：W5 不应破坏原 insideH fallback 逻辑。
+        """
+        doc = _doc_with_three_line_table(inside_h_sz=4)  # insideH=0.5pt，无 tcBorders
+        # 原有路径：insideH sz=4 → 0.5pt
+        assert check_table_header_border_pt(doc, 0.5) is None

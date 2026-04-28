@@ -278,29 +278,53 @@ def _log_and_filter_unsupported(
     field_id: str,
     context_snippet: str,
 ) -> dict[str, Any]:
-    """检测并过滤 attrs 中不在已知 schema 内的 attr key。
+    """检测并过滤 attrs 中不属于当前字段白名单的 attr key。
+
+    W6 修复：改为字段级白名单过滤（替代原全局 _KNOWN_ATTR_KEYS 并集过滤）。
+    原因：section/table/numbering 全文注入时，结果可能带有该字段未声明的 attr key
+    （例如 page_margin 字段注入了 table.* attr），违反 P4 白名单合约。
 
     业务逻辑：
-    1. 遍历 attrs 的 key，对比 _KNOWN_ATTR_KEYS 全集
-    2. 未知 key → 写 INFO 诊断日志（开发者可达，用户不可见）
-    3. 从返回的 attrs 中剔除未知 key，确保前端/响应数据不暴露
+    1. 从 field_defs 取该字段的 applicable_attributes 白名单
+    2. 对比每个 key：
+       a. 在白名单内 → 保留（写入 clean）
+       b. 不在白名单但在 _KNOWN_ATTR_KEYS（已知但越界）→ 写 attr_field_mismatch 诊断日志
+       c. 不在全局已知集（未知 attr）→ 写 unsupported_attr 诊断日志（原有逻辑）
+    3. 两种日志均为开发者诊断，不暴露给用户面板
 
-    此函数是 T1.2 的核心检测点：所有 extract_all / extract_from_selection
-    产出的最终 attrs 都必须经过此函数，才能写入 rules 或 response。
+    注意：field_id 未知（如 '' 或 None）时 applicable_attrs 返回空列表，
+    所有 key 会走 b/c 分支被过滤——这是正确行为（未知字段不应有任何属性）。
 
-    @param attrs          - 合并后的属性字典（可能含未知 key）
+    @param attrs          - 合并后的属性字典（可能含越界或未知 key）
     @param spec_file      - 来源规范文件名（用于日志定位）
-    @param field_id       - 当前字段 id（用于日志定位）
+    @param field_id       - 当前字段 id（用于字段级白名单查询和日志定位）
     @param context_snippet - 来源段落文本前 30 字（用于日志定位）
-    @returns 过滤掉未知 key 后的干净属性字典
+    @returns 过滤掉白名单外 key 后的干净属性字典
     """
+    from ..engine_v2.field_defs import applicable_attrs as _field_whitelist
+    # 取该字段声明的 attr key 白名单（未知字段返回空列表）
+    field_whitelist: frozenset[str] = frozenset(_field_whitelist(field_id))
     clean: dict[str, Any] = {}
     for key, val in attrs.items():
-        if key in _KNOWN_ATTR_KEYS:
+        if key in field_whitelist:
+            # 在字段白名单内：保留
             clean[key] = val
+        elif key in _KNOWN_ATTR_KEYS:
+            # 全局已知 attr，但不属于该字段白名单：attr 越界，写专项诊断日志
+            # 开发者可见，用于发现 section/table/numbering 全文注入越界问题
+            logger.info(
+                'attr_field_mismatch: key=%r is known but not in field=%r whitelist, will be dropped',
+                key,
+                field_id,
+                extra={
+                    'attr_key': key,
+                    'spec_file': spec_file,
+                    'context_snippet': context_snippet[:_LOG_SNIPPET_LEN],
+                    'suspected_field_id': field_id,
+                },
+            )
         else:
-            # 未知 attr key：写开发者诊断日志。
-            # 不作为 issue 暴露给用户——这是系统能力缺口，用户无法修复。
+            # 完全未知的 attr key（不在任何字段白名单中）：写原有 unsupported_attr 诊断日志
             logger.info(
                 'unsupported_attr: key=%r not in schema, will be dropped',
                 key,
@@ -362,6 +386,49 @@ def _read_section_attrs(doc) -> dict[str, Any]:
     return attrs
 
 
+def _read_first_row_bottom_border(tbl) -> 'float | None':
+    """读第一行所有 tc 的 tcBorders/bottom 线宽，取众数（eighth-points → pt）。
+
+    W5 修复：Word 三线表惯例是表头下边框写在第一行单元格的 tcBorders/bottom，
+    而不是 tblBorders/insideH。本函数优先读取 tcBorders/bottom，
+    作为 table.header_border_pt 的第一优先来源。
+
+    @param tbl - python-docx Table._element（OOXML 元素）
+    @returns 第一行 tc bottom border 众数（pt），无则返回 None（触发 insideH fallback）
+    """
+    from docx.oxml.ns import qn
+    from collections import Counter
+    rows = tbl.findall(qn('w:tr'))
+    if not rows:
+        return None
+    first_row = rows[0]
+    cells = first_row.findall(qn('w:tc'))
+    if not cells:
+        return None
+    sizes: list[float] = []
+    for tc in cells:
+        tc_pr = tc.find(qn('w:tcPr'))
+        if tc_pr is None:
+            continue
+        tc_borders = tc_pr.find(qn('w:tcBorders'))
+        if tc_borders is None:
+            continue
+        bottom = tc_borders.find(qn('w:bottom'))
+        if bottom is None:
+            continue
+        sz_val = bottom.get(qn('w:sz'))
+        if sz_val:
+            try:
+                # eighth-points → pt
+                sizes.append(int(sz_val) / 8.0)
+            except ValueError:
+                continue
+    if not sizes:
+        return None
+    # 取众数：三线表同行所有单元格通常一致，极端情况取多数值
+    return Counter(sizes).most_common(1)[0][0]
+
+
 def _read_table_attrs(doc) -> dict[str, Any]:
     """读取文档第一个表格的 OOXML tblBorders 线宽属性，返回 table.* attr 字典。
 
@@ -369,8 +436,9 @@ def _read_table_attrs(doc) -> dict[str, Any]:
     1. 若 doc.tables 为空，直接返回空字典（不报错，文档无表格是合理情况）
     2. 取第一个表格，查找 tblPr/tblBorders 子元素
     3. 读 top/bottom/insideH/insideV 各方向的 w:sz（eighth-points → pt 除以 8）
-    4. 三线表判定：top > 0 且 bottom > 0 且 insideV == 0
-    5. 返回 4 个 attr key；table.is_three_line 固定写入（即使为 False 也写，便于 UI 展示）
+    4. W4 修复：三线表判定加 left/right == 0（排除带左右外框的误判）
+    5. W5 修复：table.header_border_pt 优先读第一行 tcBorders/bottom，fallback insideH
+    6. 返回 4 个 attr key；table.is_three_line 固定写入（即使为 False 也写，便于 UI 展示）
 
     注意：OOXML w:sz 单位为 eighth-points（1/8 pt），除以 8 得磅值。
     """
@@ -403,13 +471,22 @@ def _read_table_attrs(doc) -> dict[str, Any]:
     top_pt = border_pt.get('top', 0.0)
     bottom_pt = border_pt.get('bottom', 0.0)
     inside_v_pt = border_pt.get('insideV', 0.0)
-    # 三线表判定：有顶线/底线，无竖向内线（无纵格线）
-    attrs['table.is_three_line'] = top_pt > 0 and bottom_pt > 0 and inside_v_pt == 0.0
+    # W4 修复：三线表额外检查左/右外侧竖线（left/right 也必须为 0）
+    # 带左右边框但无 insideV 的表应判 False，否则会误判为三线表
+    left_pt = border_pt.get('left', 0.0)
+    right_pt = border_pt.get('right', 0.0)
+    attrs['table.is_three_line'] = (
+        top_pt > 0 and bottom_pt > 0
+        and inside_v_pt == 0.0 and left_pt == 0.0 and right_pt == 0.0
+    )
     # 上下边框线宽（缺方向时填 0.0，与 checker 侧 fallback 对齐）
     attrs['table.border_top_pt'] = round(top_pt, 4)
     attrs['table.border_bottom_pt'] = round(bottom_pt, 4)
-    # 表头下边框：用 insideH 作为简化代理（水平内线 = 表头下线）
-    attrs['table.header_border_pt'] = round(border_pt.get('insideH', 0.0), 4)
+    # W5 修复：表头下边框优先读第一行 tcBorders/bottom，无则 fallback 到 insideH
+    # 原因：Word 三线表惯例是表头下线写在 tcBorders/bottom，而非 tblBorders/insideH
+    tc_bottom = _read_first_row_bottom_border(tbl._element)
+    header_pt = tc_bottom if tc_bottom is not None else border_pt.get('insideH', 0.0)
+    attrs['table.header_border_pt'] = round(header_pt, 4)
 
     return attrs
 
@@ -423,14 +500,57 @@ def _read_table_attrs(doc) -> dict[str, Any]:
 _RE_FIG_CONTINUOUS = re.compile(r'图[\s　]*(\d+)(?![\.\-\d])', re.UNICODE)
 # 章节式图编号：图1-1 / 图1.2 / 图 2-3
 _RE_FIG_CHAPTER = re.compile(r'图[\s　]*(\d+)[\.\-](\d+)', re.UNICODE)
+
+# W2 修复：图题开头锚定正则，只匹配段落行首的图题（排除"如图1所示"/"见图2"等正文引用）
+# 必须以 "图N" 模式开头才算图题计票，不匹配正文中间的 "图N" 引用
+_RE_FIG_CAPTION_START = re.compile(r'^图[\s　]*\d+', re.UNICODE)
+
 # 分图字母标记：图1(a) / 图2（b）/ 图1.2(c)
 _RE_SUBFIG_LETTER = re.compile(
     r'图[\s　]*\d+[\.\-]?\d*[\s　]*[\(（][a-zA-Z][\)）]', re.UNICODE
+)
+# W3 修复：分图数字标记：图1(1) / 图2（2）/ 图1.2(3)
+_RE_SUBFIG_NUMBER = re.compile(
+    r'图[\s　]*\d+[\.\-]?\d*[\s　]*[\(（]\d+[\)）]', re.UNICODE
 )
 # 连续公式编号：(1) / （2）
 _RE_FORMULA_CONTINUOUS = re.compile(r'[\(（][\s　]*(\d+)[\s　]*[\)）]')
 # 章节式公式编号：(1-1) / (2.3) / （1-2）
 _RE_FORMULA_CHAPTER = re.compile(r'[\(（][\s　]*(\d+)[\.\-](\d+)[\s　]*[\)）]')
+
+# W1 修复：含数学符号的正则，用于判断段落是否疑似公式
+# 含等号或常见数学运算符，表明该段落更可能是公式，而非引用/参考文献中的括号
+_RE_MATH_SYMBOLS = re.compile(r'[+\-×÷±∑∫√≤≥≠]', re.UNICODE)
+# 短行以编号结束（如 "... (1-1)" "... (2)"），判别力强于仅匹配括号
+_RE_FORMULA_TAIL = re.compile(r'[\(（](?:\d+[\.\-]?\d*)[\)）]\s*$', re.UNICODE)
+
+
+def _looks_like_formula_paragraph(text: str) -> bool:
+    """判断段落是否疑似公式段落，用于 W1 过滤非公式括号计票。
+
+    只有疑似公式段落才参与 formula_continuous/chapter 计票，
+    避免 APA 年份引用 (2020)/(2021) 等误触发公式编号推断。
+
+    判定条件（任一满足即为公式段落）：
+    1. 含等号 '=' 或常见数学运算符（+/×/∑/∫ 等）
+    2. 短行（<=30 字符）且以编号括号结束（如 "某公式 (1)" "E=mc² (1-1)"）
+
+    空段落或超长段落（>200 字符）直接排除，避免正文句子误匹配。
+
+    @param text - 段落文本（已 strip 之前的原始文本）
+    @returns True 表示疑似公式段落，False 表示跳过不计票
+    """
+    stripped = text.strip()
+    # 空段落或超长段落（>200字）排除：公式段落通常极短
+    if not stripped or len(stripped) > 200:
+        return False
+    # 条件1：含等号（公式核心特征）或常见数学运算符
+    if '=' in stripped or _RE_MATH_SYMBOLS.search(stripped):
+        return True
+    # 条件2：短行且以括号编号结束（编号标注在行末的纯编号行，如 "(1-1)"）
+    if len(stripped) <= 30 and _RE_FORMULA_TAIL.search(stripped):
+        return True
+    return False
 
 
 def _read_numbering_styles(doc) -> 'dict[str, str]':
@@ -438,12 +558,14 @@ def _read_numbering_styles(doc) -> 'dict[str, str]':
 
     业务逻辑：
     1. 遍历所有段落，用 _RE_FIG_* 正则匹配图题文本
+       - W2 修复：仅限段落开头以"图N"开始的行（排除"如图1所示"等正文引用）
        - 章节式（图1-1/图2.3）vs 连续式（图1/图2）各自计票
        - >=2 个样本时按多数票决定 figure_style；冲突时偏保守选 chapter_based
     2. 仅在 figure_style 已确定时推断 subfigure_style：
-       - 含 _RE_SUBFIG_LETTER 则 a_b_c，否则不写
+       - W3 修复：同时识别字母子图 (a)/(b) 和数字子图 (1)/(2)，多数票决定类型
     3. 用 _RE_FORMULA_* 正则匹配含编号括号的段落（可能在行末）
-       - 章节式（(1-1)/(1.2)）vs 连续式（(1)/(2)）多数票
+       - W1 修复：仅对疑似公式段落（含数学符号/等号/短行编号尾）计票
+         排除 APA 年份引用 (2020)/(2021) 等误触发
 
     @param doc - python-docx Document 对象
     @returns  { 'numbering.figure_style': str, 'numbering.subfigure_style': str,
@@ -452,7 +574,9 @@ def _read_numbering_styles(doc) -> 'dict[str, str]':
     # 图编号计票
     fig_continuous = 0
     fig_chapter = 0
-    subfig_letter_found = False
+    # W3 修复：分图标记分别计票（字母 vs 数字）
+    subfig_letter_count = 0
+    subfig_number_count = 0
 
     # 公式编号计票
     formula_continuous = 0
@@ -464,23 +588,33 @@ def _read_numbering_styles(doc) -> 'dict[str, str]':
             continue
 
         # ── 图题检测 ────────────────────────────────────────────
-        # 章节式优先判断（否则"图1-1"也会被连续式 regex 匹配前缀"图1"）
-        if _RE_FIG_CHAPTER.search(text):
-            fig_chapter += 1
-            # 同段检测子图字母标记
-            if _RE_SUBFIG_LETTER.search(text):
-                subfig_letter_found = True
-        elif _RE_FIG_CONTINUOUS.search(text):
-            fig_continuous += 1
-            if _RE_SUBFIG_LETTER.search(text):
-                subfig_letter_found = True
+        # W2 修复：只对段落开头以"图N"开始的行计票（排除正文"如图1所示"等引用）
+        stripped = text.strip()
+        if _RE_FIG_CAPTION_START.match(stripped):
+            # 章节式优先判断（否则"图1-1"也会被连续式 regex 匹配前缀"图1"）
+            if _RE_FIG_CHAPTER.search(text):
+                fig_chapter += 1
+                # 同段检测子图标记（W3：字母/数字分别计票）
+                if _RE_SUBFIG_LETTER.search(text):
+                    subfig_letter_count += 1
+                if _RE_SUBFIG_NUMBER.search(text):
+                    subfig_number_count += 1
+            elif _RE_FIG_CONTINUOUS.search(text):
+                fig_continuous += 1
+                if _RE_SUBFIG_LETTER.search(text):
+                    subfig_letter_count += 1
+                if _RE_SUBFIG_NUMBER.search(text):
+                    subfig_number_count += 1
 
         # ── 公式编号检测 ─────────────────────────────────────────
-        # 章节式先判（避免"(1-1)"被连续式错误匹配括号内数字）
-        if _RE_FORMULA_CHAPTER.search(text):
-            formula_chapter += 1
-        elif _RE_FORMULA_CONTINUOUS.search(text):
-            formula_continuous += 1
+        # W1 修复：只对疑似公式段落（含数学符号/等号/短行编号尾）计票
+        # 排除 APA 年份引用 (2020)/(2021) 等正文括号被误算为公式编号
+        if _looks_like_formula_paragraph(text):
+            # 章节式先判（避免"(1-1)"被连续式错误匹配括号内数字）
+            if _RE_FORMULA_CHAPTER.search(text):
+                formula_chapter += 1
+            elif _RE_FORMULA_CONTINUOUS.search(text):
+                formula_continuous += 1
 
     result: dict[str, str] = {}
 
@@ -496,9 +630,16 @@ def _read_numbering_styles(doc) -> 'dict[str, str]':
             # 票数相等：保守选 chapter_based
             result['numbering.figure_style'] = 'chapter_based'
 
-        # 仅在 figure_style 已确定时推断 subfigure_style
-        if subfig_letter_found:
-            result['numbering.subfigure_style'] = 'a_b_c'
+        # W3 修复：仅在 figure_style 已确定时推断 subfigure_style，多数票决定类型
+        total_subfig = subfig_letter_count + subfig_number_count
+        if total_subfig >= 2:
+            if subfig_letter_count > subfig_number_count:
+                result['numbering.subfigure_style'] = 'a_b_c'
+            elif subfig_number_count > subfig_letter_count:
+                result['numbering.subfigure_style'] = '1_2_3'
+            else:
+                # 票数相等：偏字母（a_b_c 更通用）
+                result['numbering.subfigure_style'] = 'a_b_c'
 
     # formula_style 多数票：至少 2 个样本
     total_formula = formula_continuous + formula_chapter
