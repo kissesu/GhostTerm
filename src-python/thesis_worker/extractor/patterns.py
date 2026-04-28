@@ -35,6 +35,10 @@ def _build_size_name_pattern() -> re.Pattern:
 
 _SIZE_NAME_RE: re.Pattern = _build_size_name_pattern()
 
+# 共享长度单位正则模式（与 units.py 同步）；按长度从长到短避免短前缀吞掉长后缀
+# inch 必须排在 in 前，否则 'inch' 会被识别为 'in' + 'ch'
+_LENGTH_UNIT_PATTERN = r'(?:磅|pt|点|英寸|inch|in|厘米|cm|毫米|mm)'
+
 # 纯数字 pt 字号：匹配 "12pt" / "15 磅" / "10.5pt"
 _SIZE_PT_RE = re.compile(r'(\d+(?:\.\d+)?)\s*(?:pt|磅|点)', re.IGNORECASE)
 

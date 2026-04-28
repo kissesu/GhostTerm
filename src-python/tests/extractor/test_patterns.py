@@ -58,3 +58,23 @@ class TestQuoted:
         result = find_quoted_field(text)
         assert result is not None
         assert result[0] == 'Abstract'
+
+
+class TestPatternConstants:
+    """T1.3: patterns 模块导出的 5 单位正则常量复用"""
+
+    def test_length_pattern_matches_all_5_units(self):
+        from thesis_worker.extractor.patterns import _LENGTH_UNIT_PATTERN
+        import re
+        rx = re.compile(rf'\d+(?:\.\d+)?[\s　]*({_LENGTH_UNIT_PATTERN})')
+        for unit in ('磅', 'pt', '点', '英寸', 'in', 'inch', '厘米', 'cm', '毫米', 'mm'):
+            assert rx.search(f'1 {unit}'), f'failed for unit={unit!r}'
+
+    def test_length_pattern_does_not_match_unrelated(self):
+        from thesis_worker.extractor.patterns import _LENGTH_UNIT_PATTERN
+        import re
+        rx = re.compile(rf'\d+(?:\.\d+)?[\s　]*({_LENGTH_UNIT_PATTERN})')
+        # "光年" 不在 5 单位内
+        assert rx.search('1 光年') is None
+        # 单纯数字无单位也不应匹配
+        assert rx.search('数字 100 无单位') is None
