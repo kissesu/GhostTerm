@@ -609,3 +609,47 @@ class TestNullSectionAttrs:
         result = extract_all(str(docx_path))
         assert isinstance(result, dict), '返回值应为 dict'
         assert 'rules' in result, '应包含 rules 键'
+
+
+class TestT3PipelineIntegration:
+    """T3.5: pipeline._extract_attributes_from_text 集成 5 个新抽取"""
+
+    def test_para_spacing_pt_in_pipeline(self):
+        from thesis_worker.extractor.pipeline import _extract_attributes_from_text
+        out = _extract_attributes_from_text('段前 6 磅，段后 3 磅')
+        assert out.get('para.space_before_pt') == 6.0
+        assert out.get('para.space_after_pt') == 3.0
+
+    def test_indent_chars_in_pipeline(self):
+        from thesis_worker.extractor.pipeline import _extract_attributes_from_text
+        out = _extract_attributes_from_text('首行缩进 2 字符')
+        assert out.get('para.first_line_indent_chars') == 2.0
+
+    def test_line_spacing_at_least_in_pipeline(self):
+        from thesis_worker.extractor.pipeline import _extract_attributes_from_text
+        out = _extract_attributes_from_text('行距：最小值 28 磅')
+        assert out.get('para.line_spacing_type') == 'atLeast'
+        assert out.get('para.line_spacing_pt') == 28.0
+
+    def test_letter_spacing_pt_in_pipeline(self):
+        from thesis_worker.extractor.pipeline import _extract_attributes_from_text
+        out = _extract_attributes_from_text('字符间距 加宽 1 磅')
+        assert out.get('para.letter_spacing_pt') == 1.0
+
+    def test_table_three_line_in_pipeline(self):
+        from thesis_worker.extractor.pipeline import _extract_attributes_from_text
+        out = _extract_attributes_from_text('三线表，上下表线 1.5 磅，表头下线 0.5 磅')
+        assert out.get('table.is_three_line') is True
+        assert out.get('table.border_top_pt') == 1.5
+        assert out.get('table.header_border_pt') == 0.5
+
+    def test_combined_paragraph(self):
+        from thesis_worker.extractor.pipeline import _extract_attributes_from_text
+        # 单段含多种规范
+        out = _extract_attributes_from_text('小三号黑体，居中，段前 6 磅，1.5 倍行距')
+        assert out.get('font.size_pt') == 15.0   # 小三 = 15pt
+        assert out.get('font.cjk') == '黑体'
+        assert out.get('para.align') == 'center'
+        assert out.get('para.space_before_pt') == 6.0
+        assert out.get('para.line_spacing_type') == 'oneAndHalf'
+        assert out.get('para.line_spacing') == 1.5

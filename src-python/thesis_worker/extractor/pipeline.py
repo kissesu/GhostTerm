@@ -8,7 +8,7 @@
 import os
 import re  # 用于空格占位 fallback 的正则匹配
 import logging
-from typing import Any
+from typing import Any, Optional
 from docx import Document
 
 from .gazetteer import find_font, find_align, is_bold_keyword
@@ -61,12 +61,16 @@ def _extract_attributes_from_text(text: str) -> dict[str, Any]:
     """
     attrs: dict[str, Any] = {}
 
-    # 字号（pt 数字优先，fallback 字号名）
-    pt = extract_size_pt_raw(text)
+    # 字号（字号名优先，fallback pt 数字）
+    # 调换原优先级原因：T3.5 集成段前/段后/字符间距等新抽取后，单段可能同时出现
+    # "小三号" + "段前 6 磅"——"6 磅"会被 extract_size_pt_raw 误识别为字号 6pt。
+    # 中文字号名（小三/小四/六号）语义无歧义，应优先；pt 数字仅作纯英文规范的兜底。
+    size_name = extract_size_name(text)
+    pt: Optional[float] = None
+    if size_name is not None:
+        pt = name_to_pt(size_name)
     if pt is None:
-        size_name = extract_size_name(text)
-        if size_name is not None:
-            pt = name_to_pt(size_name)
+        pt = extract_size_pt_raw(text)
     if pt is not None:
         attrs['font.size_pt'] = pt
 
@@ -87,6 +91,52 @@ def _extract_attributes_from_text(text: str) -> dict[str, Any]:
     align = find_align(text)
     if align is not None:
         attrs['para.align'] = align
+
+    # ============================================
+    # T3.5: 集成 5 个新自然语言抽取函数
+    # 段前/段后 / 缩进 / 行距 / 字符间距 / 表线
+    # 顺序无依赖；后写入会覆盖同 key（当前各函数 attr key 不冲突）
+    # ============================================
+    from .patterns import (
+        extract_indent,
+        extract_line_spacing,
+        extract_letter_spacing,
+        extract_table_borders_text,
+        _RE_PARA_SPACING,
+    )
+    from .units import length_to_pt
+
+    # 段前/段后：同段可能两个 prefix 同时出现（"段前 6 磅，段后 3 磅"），
+    # 用 finditer 扫描全部匹配，避免单匹配版本丢失第二个值
+    for m in _RE_PARA_SPACING.finditer(text):
+        prefix = m.group(1)
+        val = float(m.group(2))
+        unit = m.group(3)
+        suffix = 'before' if prefix == '段前' else 'after'
+        if unit == '行':
+            attrs[f'para.space_{suffix}_lines'] = val
+        else:
+            pt = length_to_pt(val, unit)
+            if pt is not None:
+                attrs[f'para.space_{suffix}_pt'] = round(pt, 2)
+
+    # 缩进（首行 / 悬挂，单匹配即可：同段同时出现首行+悬挂概率极低）
+    if (ind := extract_indent(text)) is not None:
+        sink_key, val = ind
+        attrs[sink_key] = val
+
+    # 行距类型 + 值（dict 形式，含两个绑定 key）
+    if (ls := extract_line_spacing(text)) is not None:
+        attrs.update(ls)
+
+    # 字符间距（单匹配，同段同时出现两种单位概率极低）
+    if (letter := extract_letter_spacing(text)) is not None:
+        sink_key, val = letter
+        attrs[sink_key] = val
+
+    # 表线规范关键词（三线表 / 上下表线 / 表头下线）
+    table_attrs = extract_table_borders_text(text)
+    attrs.update(table_attrs)
 
     return attrs
 
