@@ -23,6 +23,7 @@
  *   T3.3: 新增 numbering.* namespace 3 attr：
  *         figure_caption 追加 numbering.figure_style / numbering.subfigure_style（共 6 attr）；
  *         formula_block 追加 numbering.formula_style（共 2 attr）。
+ *   T4.单位扩展: 11 字段追加 5 attr 镜像 Python；line_spacing_type 是 enum，其余 _pt 是 number。
  * @author Atlas.oi
  * @date 2026-04-28
  */
@@ -52,14 +53,14 @@ export const FIELD_DEFS: FieldDef[] = [
     label: '中文「摘要」标题',
     group: 'front',
     order: 2,
-    applicable_attributes: ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.letter_spacing_chars', 'content.specific_text'],
+    applicable_attributes: ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.letter_spacing_chars', 'content.specific_text', 'para.letter_spacing_pt'],
   },
   {
     id: 'abstract_zh_body',
     label: '中文摘要正文',
     group: 'front',
     order: 3,
-    applicable_attributes: ['font.cjk', 'font.size_pt', 'para.first_line_indent_chars', 'para.line_spacing', 'content.char_count_min', 'content.char_count_max', 'mixed_script.ascii_is_tnr'],
+    applicable_attributes: ['font.cjk', 'font.size_pt', 'para.first_line_indent_chars', 'para.line_spacing', 'content.char_count_min', 'content.char_count_max', 'mixed_script.ascii_is_tnr', 'para.line_spacing_type', 'para.line_spacing_pt', 'para.first_line_indent_pt'],
   },
   {
     id: 'keywords_zh_label',
@@ -87,14 +88,14 @@ export const FIELD_DEFS: FieldDef[] = [
     label: '「Abstract」标题',
     group: 'front',
     order: 7,
-    applicable_attributes: ['font.ascii', 'font.size_pt', 'font.bold', 'para.align', 'para.letter_spacing_chars', 'content.specific_text'],
+    applicable_attributes: ['font.ascii', 'font.size_pt', 'font.bold', 'para.align', 'para.letter_spacing_chars', 'content.specific_text', 'para.letter_spacing_pt'],
   },
   {
     id: 'abstract_en_body',
     label: '英文摘要正文',
     group: 'front',
     order: 8,
-    applicable_attributes: ['font.ascii', 'font.size_pt', 'para.first_line_indent_chars', 'para.line_spacing', 'content.char_count_min', 'content.char_count_max', 'mixed_script.ascii_is_tnr'],
+    applicable_attributes: ['font.ascii', 'font.size_pt', 'para.first_line_indent_chars', 'para.line_spacing', 'content.char_count_min', 'content.char_count_max', 'mixed_script.ascii_is_tnr', 'para.line_spacing_type', 'para.line_spacing_pt', 'para.first_line_indent_pt'],
   },
   {
     id: 'keywords_en_label',
@@ -178,7 +179,7 @@ export const FIELD_DEFS: FieldDef[] = [
     label: '正文段落',
     group: 'body',
     order: 18,
-    applicable_attributes: ['font.cjk', 'font.ascii', 'font.size_pt', 'para.first_line_indent_chars', 'para.line_spacing', 'mixed_script.ascii_is_tnr'],
+    applicable_attributes: ['font.cjk', 'font.ascii', 'font.size_pt', 'para.first_line_indent_chars', 'para.line_spacing', 'mixed_script.ascii_is_tnr', 'para.line_spacing_type', 'para.line_spacing_pt', 'para.first_line_indent_pt'],
   },
   {
     id: 'figure_caption',
@@ -266,35 +267,35 @@ export const FIELD_DEFS: FieldDef[] = [
     label: '参考文献条目',
     group: 'back',
     order: 27,
-    applicable_attributes: ['font.cjk', 'font.ascii', 'font.size_pt', 'para.hanging_indent_chars', 'citation.style'],
+    applicable_attributes: ['font.cjk', 'font.ascii', 'font.size_pt', 'para.hanging_indent_chars', 'citation.style', 'para.hanging_indent_pt'],
   },
   {
     id: 'ack_title',
     label: '致谢标题',
     group: 'back',
     order: 28,
-    applicable_attributes: ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.letter_spacing_chars', 'page.new_page_before'],
+    applicable_attributes: ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.letter_spacing_chars', 'page.new_page_before', 'para.letter_spacing_pt'],
   },
   {
     id: 'ack_body',
     label: '致谢正文',
     group: 'back',
     order: 29,
-    applicable_attributes: ['font.cjk', 'font.size_pt', 'para.first_line_indent_chars'],
+    applicable_attributes: ['font.cjk', 'font.size_pt', 'para.first_line_indent_chars', 'para.first_line_indent_pt'],
   },
   {
     id: 'appendix_title',
     label: '附录标题',
     group: 'back',
     order: 30,
-    applicable_attributes: ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.letter_spacing_chars', 'page.new_page_before'],
+    applicable_attributes: ['font.cjk', 'font.size_pt', 'font.bold', 'para.align', 'para.letter_spacing_chars', 'page.new_page_before', 'para.letter_spacing_pt'],
   },
   {
     id: 'appendix_body',
     label: '附录正文',
     group: 'back',
     order: 31,
-    applicable_attributes: ['font.cjk', 'font.size_pt', 'para.first_line_indent_chars'],
+    applicable_attributes: ['font.cjk', 'font.size_pt', 'para.first_line_indent_chars', 'para.first_line_indent_pt'],
   },
 
   // ────────────────────────────────────────────
@@ -339,7 +340,7 @@ export const FIELD_DEFS: FieldDef[] = [
     label: '全文行距',
     group: 'global',
     order: 36,
-    applicable_attributes: ['para.line_spacing'],
+    applicable_attributes: ['para.line_spacing', 'para.line_spacing_type', 'para.line_spacing_pt'],
   },
   {
     id: 'mixed_script_global',

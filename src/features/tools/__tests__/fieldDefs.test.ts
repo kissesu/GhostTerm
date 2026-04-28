@@ -191,3 +191,38 @@ describe('applicableAttrs', () => {
     expect(applicableAttrs('ghost_field')).toEqual([]);
   });
 });
+
+describe('T4 单位扩展 5 attr 镜像 Python', () => {
+  it('para.line_spacing_type 加到 4 字段', () => {
+    for (const fid of ['abstract_zh_body', 'abstract_en_body', 'body_para', 'line_spacing_global']) {
+      const f = FIELD_DEFS.find((x) => x.id === fid);
+      expect(f?.applicable_attributes).toContain('para.line_spacing_type');
+      expect(f?.applicable_attributes).toContain('para.line_spacing_pt');
+    }
+  });
+
+  it('para.first_line_indent_pt 加到 5 字段', () => {
+    for (const fid of ['abstract_zh_body', 'abstract_en_body', 'body_para', 'ack_body', 'appendix_body']) {
+      const f = FIELD_DEFS.find((x) => x.id === fid);
+      expect(f?.applicable_attributes).toContain('para.first_line_indent_pt');
+    }
+  });
+
+  it('para.hanging_indent_pt 仅在 reference_entry', () => {
+    const ref = FIELD_DEFS.find((x) => x.id === 'reference_entry');
+    expect(ref?.applicable_attributes).toContain('para.hanging_indent_pt');
+    const body = FIELD_DEFS.find((x) => x.id === 'body_para');
+    expect(body?.applicable_attributes).not.toContain('para.hanging_indent_pt');
+  });
+
+  it('para.letter_spacing_pt 加到 4 标题字段', () => {
+    for (const fid of ['abstract_zh_title', 'abstract_en_title', 'ack_title', 'appendix_title']) {
+      const f = FIELD_DEFS.find((x) => x.id === fid);
+      expect(f?.applicable_attributes).toContain('para.letter_spacing_pt');
+    }
+  });
+
+  it('字段总数仍 37', () => {
+    expect(FIELD_DEFS).toHaveLength(37);
+  });
+});
