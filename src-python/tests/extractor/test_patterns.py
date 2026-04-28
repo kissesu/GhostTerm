@@ -145,3 +145,51 @@ class TestExtractIndent:
     def test_no_indent_keyword_returns_none(self):
         from thesis_worker.extractor.patterns import extract_indent
         assert extract_indent('段前 6 磅') is None
+
+
+class TestExtractLineSpacing:
+    """T3.3: 行距 6 类型识别"""
+
+    def test_single(self):
+        from thesis_worker.extractor.patterns import extract_line_spacing
+        assert extract_line_spacing('单倍行距') == {
+            'para.line_spacing_type': 'single',
+            'para.line_spacing': 1.0,
+        }
+
+    def test_one_and_half(self):
+        from thesis_worker.extractor.patterns import extract_line_spacing
+        out = extract_line_spacing('1.5 倍行距')
+        assert out == {'para.line_spacing_type': 'oneAndHalf', 'para.line_spacing': 1.5}
+
+    def test_double(self):
+        from thesis_worker.extractor.patterns import extract_line_spacing
+        out = extract_line_spacing('2 倍行距')
+        assert out == {'para.line_spacing_type': 'double', 'para.line_spacing': 2.0}
+
+    def test_at_least_28pt(self):
+        from thesis_worker.extractor.patterns import extract_line_spacing
+        out = extract_line_spacing('最小值 28 磅')
+        assert out == {'para.line_spacing_type': 'atLeast', 'para.line_spacing_pt': 28.0}
+
+    def test_exactly_28pt(self):
+        from thesis_worker.extractor.patterns import extract_line_spacing
+        out = extract_line_spacing('固定值 28 磅')
+        assert out == {'para.line_spacing_type': 'exactly', 'para.line_spacing_pt': 28.0}
+
+    def test_multiple_2_5(self):
+        from thesis_worker.extractor.patterns import extract_line_spacing
+        out = extract_line_spacing('多倍行距 2.5')
+        assert out == {'para.line_spacing_type': 'multiple', 'para.line_spacing': 2.5}
+
+    def test_no_spacing_keyword_returns_none(self):
+        from thesis_worker.extractor.patterns import extract_line_spacing
+        assert extract_line_spacing('居中对齐') is None
+
+    def test_priority_single_before_multiple(self):
+        """单倍行距 vs 多倍行距互斥，删一处必挂"""
+        from thesis_worker.extractor.patterns import extract_line_spacing
+        out = extract_line_spacing('单倍行距')
+        assert out['para.line_spacing_type'] == 'single'
+        out2 = extract_line_spacing('多倍行距 1.5')
+        assert out2['para.line_spacing_type'] == 'multiple'

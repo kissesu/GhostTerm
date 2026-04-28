@@ -222,3 +222,56 @@ def extract_indent(text: str) -> Optional[tuple[str, float]]:
     if pt is None:
         return None
     return (f'para.{prefix}_indent_pt', round(pt, 2))
+
+
+# ============================================================
+# T3.3: 行距 6 类型识别
+# WPS/Word 行距共 6 种：单倍/1.5倍/2倍/最小值/固定值/多倍
+# 类型 + 值是绑定语义对，必须返回多 attr dict 同时给出
+# ============================================================
+
+# 行距类型识别正则（按从精确到模糊顺序）
+# 全角空格 U+3000 显式纳入，覆盖中文排版式空格
+_RE_LS_AT_LEAST = re.compile(r'最小值[\s　]*(\d+(?:\.\d+)?)[\s　]*磅?', re.IGNORECASE)
+_RE_LS_EXACTLY = re.compile(r'固定值[\s　]*(\d+(?:\.\d+)?)[\s　]*磅?', re.IGNORECASE)
+_RE_LS_ONE_AND_HALF = re.compile(r'1[\s　]*\.[\s　]*5[\s　]*倍行距', re.IGNORECASE)
+# 负向 lookbehind：避免在 "1.5 倍行距" 或 "12 倍行距" 中错误匹配 "2"
+_RE_LS_DOUBLE = re.compile(r'(?<![1-9\.])2[\s　]*倍行距', re.IGNORECASE)
+_RE_LS_MULTIPLE = re.compile(r'多倍行距[\s　]*(\d+(?:\.\d+)?)', re.IGNORECASE)
+
+
+def extract_line_spacing(text: str) -> Optional[dict]:
+    """识别 6 种行距类型。
+
+    业务逻辑（按精确度降序匹配）：
+    1. 最小值/固定值 N 磅 → atLeast/exactly + line_spacing_pt
+    2. 1.5 倍行距 → oneAndHalf + line_spacing=1.5
+    3. 2 倍行距 → double + line_spacing=2.0
+    4. 多倍行距 N → multiple + line_spacing=N
+    5. 单倍行距 → single + line_spacing=1.0
+    6. 都不命中 → None
+
+    返回多 attr dict，因为类型 + 值是绑定的语义对，
+    必须同时给出才能完整表达"固定值 28 磅"这类规范。
+
+    @example
+        extract_line_spacing('单倍行距')
+            → {'para.line_spacing_type': 'single', 'para.line_spacing': 1.0}
+        extract_line_spacing('固定值 28 磅')
+            → {'para.line_spacing_type': 'exactly', 'para.line_spacing_pt': 28.0}
+        extract_line_spacing('多倍行距 2.5')
+            → {'para.line_spacing_type': 'multiple', 'para.line_spacing': 2.5}
+    """
+    if m := _RE_LS_AT_LEAST.search(text):
+        return {'para.line_spacing_type': 'atLeast', 'para.line_spacing_pt': float(m.group(1))}
+    if m := _RE_LS_EXACTLY.search(text):
+        return {'para.line_spacing_type': 'exactly', 'para.line_spacing_pt': float(m.group(1))}
+    if _RE_LS_ONE_AND_HALF.search(text):
+        return {'para.line_spacing_type': 'oneAndHalf', 'para.line_spacing': 1.5}
+    if _RE_LS_DOUBLE.search(text):
+        return {'para.line_spacing_type': 'double', 'para.line_spacing': 2.0}
+    if m := _RE_LS_MULTIPLE.search(text):
+        return {'para.line_spacing_type': 'multiple', 'para.line_spacing': float(m.group(1))}
+    if '单倍行距' in text:
+        return {'para.line_spacing_type': 'single', 'para.line_spacing': 1.0}
+    return None
