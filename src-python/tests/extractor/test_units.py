@@ -60,3 +60,27 @@ class TestExtractLengthWithUnit:
         assert a == (1.0, 'cm')
         assert b == (1.0, '厘米')
         assert length_to_pt(*a) == length_to_pt(*b)
+
+
+class TestChineseSizeNames:
+    """T1.2: 中文字号补全到 八号"""
+
+    def test_qihao_returns_5_5pt(self):
+        from thesis_worker.utils.size import name_to_pt
+        assert name_to_pt('七号') == 5.5
+
+    def test_bahao_returns_5_0pt(self):
+        from thesis_worker.utils.size import name_to_pt
+        assert name_to_pt('八号') == 5.0
+
+    def test_existing_entries_unchanged(self):
+        """既有 14 项不变（确保不破坏 backward compat）"""
+        from thesis_worker.utils.size import name_to_pt
+        assert name_to_pt('初号') == 42.0
+        assert name_to_pt('小四') == 12.0
+        assert name_to_pt('小六') == 6.5
+
+    def test_reverse_lookup_qihao(self):
+        from thesis_worker.utils.size import pt_to_name
+        assert pt_to_name(5.5) == '七号'
+        assert pt_to_name(5.0) == '八号'

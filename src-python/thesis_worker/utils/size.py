@@ -7,7 +7,7 @@
 """
 from typing import Optional
 
-# 字号名 → pt 值（14 项，静态表）
+# 字号名 → pt 值（16 项，静态表；T1.2 补 七号/八号）
 CHINESE_SIZE_MAP: dict[str, float] = {
     '初号': 42.0,
     '小初': 36.0,
@@ -23,6 +23,8 @@ CHINESE_SIZE_MAP: dict[str, float] = {
     '小五': 9.0,
     '六号': 7.5,
     '小六': 6.5,
+    '七号': 5.5,
+    '八号': 5.0,
 }
 
 # 反向查找表
