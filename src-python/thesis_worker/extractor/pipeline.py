@@ -199,12 +199,55 @@ def _read_paragraph_style_attrs(para) -> dict[str, Any]:
     fli = para.paragraph_format.first_line_indent
     if fli is not None:
         attrs['para.first_line_indent_chars'] = round(fli.pt / 12)
+        # T4.3: detector 走 OOXML 直读路径需要 _pt 单位 attr 才能 compare actual vs expected。
+        # python-docx first_line_indent 正值 = 首行缩进，负值 = 悬挂缩进，分别写不同 key
+        if fli.pt >= 0:
+            attrs['para.first_line_indent_pt'] = round(fli.pt, 2)
+        else:
+            attrs['para.hanging_indent_pt'] = round(abs(fli.pt), 2)
 
-    # 行距：paragraph_format.line_spacing 返回 float（倍数）或 Emu（固定值）
-    # 此处仅处理倍数模式（如 1.5 倍），固定值用 Emu 表示，暂不换算
-    ls = para.paragraph_format.line_spacing
-    if ls is not None and isinstance(ls, (int, float)):
-        attrs['para.line_spacing'] = round(float(ls), 2)
+    # T4.3: 行距 — 优先读 OOXML w:spacing/@w:lineRule（auto/atLeast/exact），
+    # 决定 line_spacing_type 与对应 _pt 兄弟 attr。理由：detector 比对 expected
+    # 行距类型时（"不小于 28 磅"等）需要 type + _pt 同时存在；高级 API 仅返回倍数。
+    pPr_el = para._element.find(f'{{{_W_NS}}}pPr')
+    line_rule_handled = False
+    if pPr_el is not None:
+        spacing_xml = pPr_el.find(f'{{{_W_NS}}}spacing')
+        if spacing_xml is not None:
+            line_rule = spacing_xml.get(f'{{{_W_NS}}}lineRule')
+            line_val = spacing_xml.get(f'{{{_W_NS}}}line')
+            if line_rule and line_val:
+                try:
+                    line_int = int(line_val)
+                except ValueError:
+                    line_int = None
+                if line_int is not None:
+                    if line_rule == 'auto':
+                        # auto = 倍数行距，w:line 单位 = 240 * 倍数
+                        type_map = {240: 'single', 360: 'oneAndHalf', 480: 'double'}
+                        if line_int in type_map:
+                            attrs['para.line_spacing_type'] = type_map[line_int]
+                            attrs['para.line_spacing'] = line_int / 240.0
+                        else:
+                            attrs['para.line_spacing_type'] = 'multiple'
+                            attrs['para.line_spacing'] = round(line_int / 240.0, 2)
+                        line_rule_handled = True
+                    elif line_rule == 'atLeast':
+                        # atLeast/exact 单位 = twips（1/20 pt）
+                        attrs['para.line_spacing_type'] = 'atLeast'
+                        attrs['para.line_spacing_pt'] = round(line_int / 20.0, 2)
+                        line_rule_handled = True
+                    elif line_rule == 'exact':
+                        attrs['para.line_spacing_type'] = 'exactly'
+                        attrs['para.line_spacing_pt'] = round(line_int / 20.0, 2)
+                        line_rule_handled = True
+
+    # OOXML 直读未命中时（无 pPr/无 w:spacing/无 lineRule），回退到 python-docx 高级 API。
+    # 高级 API 返回 float（倍数）或 Emu（固定值）；此处仅处理倍数，固定值留空（已被直读覆盖）
+    if not line_rule_handled:
+        ls = para.paragraph_format.line_spacing
+        if ls is not None and isinstance(ls, (int, float)):
+            attrs['para.line_spacing'] = round(float(ls), 2)
 
     # 段前行数：space_before 以 Emu 返回，除以 12pt 换算为行数
     # 12pt = 1 行基准（与首行缩进换算统一基准）

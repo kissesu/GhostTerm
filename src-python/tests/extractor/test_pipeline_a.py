@@ -653,3 +653,59 @@ class TestT3PipelineIntegration:
         assert out.get('para.space_before_pt') == 6.0
         assert out.get('para.line_spacing_type') == 'oneAndHalf'
         assert out.get('para.line_spacing') == 1.5
+
+
+class TestT4PipelineParaStyle:
+    """T4.3: _read_paragraph_style_attrs 同时写 _pt 兄弟 attr"""
+
+    def test_first_line_indent_pt_in_attrs(self):
+        from docx import Document
+        from docx.shared import Pt
+        from thesis_worker.extractor.pipeline import _read_paragraph_style_attrs
+        doc = Document()
+        para = doc.add_paragraph('测试')
+        para.paragraph_format.first_line_indent = Pt(24)
+        attrs = _read_paragraph_style_attrs(para)
+        assert attrs.get('para.first_line_indent_pt') == 24.0
+        # _chars 兄弟仍存在
+        assert attrs.get('para.first_line_indent_chars') == 2  # 24pt / 12pt = 2 字
+
+    def test_hanging_indent_pt_in_attrs(self):
+        from docx import Document
+        from docx.shared import Pt
+        from thesis_worker.extractor.pipeline import _read_paragraph_style_attrs
+        doc = Document()
+        para = doc.add_paragraph('测试')
+        para.paragraph_format.first_line_indent = Pt(-14)
+        attrs = _read_paragraph_style_attrs(para)
+        assert attrs.get('para.hanging_indent_pt') == 14.0
+
+    def test_line_spacing_type_at_least(self):
+        from docx import Document
+        from docx.oxml.ns import qn
+        from lxml import etree
+        from thesis_worker.extractor.pipeline import _read_paragraph_style_attrs
+        doc = Document()
+        para = doc.add_paragraph('测试')
+        pPr = para._element.get_or_add_pPr()
+        spacing = etree.SubElement(pPr, qn('w:spacing'))
+        spacing.set(qn('w:lineRule'), 'atLeast')
+        spacing.set(qn('w:line'), '560')  # 28pt
+        attrs = _read_paragraph_style_attrs(para)
+        assert attrs.get('para.line_spacing_type') == 'atLeast'
+        assert attrs.get('para.line_spacing_pt') == 28.0
+
+    def test_line_spacing_type_single_auto(self):
+        from docx import Document
+        from docx.oxml.ns import qn
+        from lxml import etree
+        from thesis_worker.extractor.pipeline import _read_paragraph_style_attrs
+        doc = Document()
+        para = doc.add_paragraph('测试')
+        pPr = para._element.get_or_add_pPr()
+        spacing = etree.SubElement(pPr, qn('w:spacing'))
+        spacing.set(qn('w:lineRule'), 'auto')
+        spacing.set(qn('w:line'), '240')
+        attrs = _read_paragraph_style_attrs(para)
+        assert attrs.get('para.line_spacing_type') == 'single'
+        assert attrs.get('para.line_spacing') == 1.0
