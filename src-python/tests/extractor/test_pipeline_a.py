@@ -709,3 +709,49 @@ class TestT4PipelineParaStyle:
         attrs = _read_paragraph_style_attrs(para)
         assert attrs.get('para.line_spacing_type') == 'single'
         assert attrs.get('para.line_spacing') == 1.0
+
+
+class TestRealDocxRegression:
+    """T5.1: 真实毕设规范模板抽取回归（依赖 /tmp/p4-real-test/spec.docx）"""
+
+    SPEC = '/tmp/p4-real-test/spec.docx'
+
+    def setup_method(self):
+        """跳过 if 文件不存在（CI 环境无文件）"""
+        import os
+        import pytest
+        if not os.path.exists(self.SPEC):
+            pytest.skip(f'真实规范模板未就位：{self.SPEC}（用 textutil 转换毕设 .doc）')
+
+    def test_extract_all_does_not_crash(self):
+        """真实模板不应崩溃（防 None 防护回归）"""
+        from thesis_worker.extractor.pipeline import extract_all
+        result = extract_all(self.SPEC)
+        assert isinstance(result, dict)
+        assert 'rules' in result
+
+    def test_real_docx_field_hit_rate_above_50pct(self):
+        """真实文档字段命中率应 ≥ 50%（之前 54%；改造后期望保持或提升）"""
+        from thesis_worker.extractor.pipeline import extract_all
+        result = extract_all(self.SPEC)
+        from thesis_worker.engine_v2.field_defs import FIELD_DEFS
+        hit_rate = len(result['rules']) / len(FIELD_DEFS)
+        assert hit_rate >= 0.50, f'命中率 {hit_rate:.1%} 低于 50%'
+
+    def test_natural_language_extraction_hits(self):
+        """规范文档"段前 N 磅"等关键词应触发 _pt attr"""
+        from thesis_worker.extractor.pipeline import extract_all
+        result = extract_all(self.SPEC)
+        # 至少一个字段应含本批新加的 attr
+        all_attrs = set()
+        for fid, cfg in result['rules'].items():
+            all_attrs.update(cfg.get('value', {}).keys())
+        new_attrs = {
+            'para.space_before_pt', 'para.space_after_pt',
+            'para.first_line_indent_pt', 'para.hanging_indent_pt',
+            'para.letter_spacing_pt',
+            'para.line_spacing_type', 'para.line_spacing_pt',
+        }
+        # 至少 1 个新 attr 命中
+        hit_new = all_attrs & new_attrs
+        assert len(hit_new) >= 1, f'真实规范模板应命中至少 1 个新 attr；实际新 attr 命中数=0；总抽取 attr 数={len(all_attrs)}'
