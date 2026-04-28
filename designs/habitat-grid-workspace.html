@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Habitat Grid / Workspace</title>
+    <style>
+      :root {
+        --bg: #ece8df;
+        --paper: rgba(255,255,255,0.68);
+        --line: rgba(42, 57, 91, 0.08);
+        --text: #22324e;
+        --muted: #6f809f;
+        --accent: #5e7cae;
+        --accent-soft: rgba(94,124,174,0.12);
+        --mint: #89a99a;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "SF Pro Display","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top right, rgba(94,124,174,0.12), transparent 22%),
+          radial-gradient(circle at bottom left, rgba(137,169,154,0.12), transparent 24%),
+          linear-gradient(180deg, #f2eee7, #e7e2d7);
+      }
+      .page {
+        width: min(1700px, calc(100vw - 48px));
+        margin: 0 auto;
+        padding: 28px 0 48px;
+      }
+      .hero {
+        display: flex;
+        justify-content: space-between;
+        align-items: end;
+        gap: 24px;
+        margin-bottom: 24px;
+      }
+      .eyebrow {
+        display: inline-flex;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(255,255,255,0.5);
+        border: 1px solid var(--line);
+        color: #536684;
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      h1 {
+        margin: 14px 0 10px;
+        font-size: clamp(42px, 5vw, 74px);
+        line-height: .94;
+        letter-spacing: -.06em;
+      }
+      .hero p {
+        max-width: 940px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 18px;
+        line-height: 1.8;
+      }
+      .window {
+        overflow: hidden;
+        border-radius: 30px;
+        border: 1px solid var(--line);
+        background: rgba(250,247,241,0.84);
+        box-shadow: 0 24px 80px rgba(55, 63, 84, 0.18);
+      }
+      .titlebar {
+        height: 60px;
+        padding: 0 16px;
+        display: grid;
+        grid-template-columns: 90px 1fr auto;
+        align-items: center;
+        border-bottom: 1px solid var(--line);
+        background: rgba(250,247,241,0.88);
+      }
+      .lights { display:flex; gap:8px; }
+      .lights span { width:12px; height:12px; border-radius:50%; display:block; }
+      .brand {
+        justify-self: center;
+        display:flex;
+        align-items:center;
+        gap:10px;
+        font-size: 13px;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+      .mark {
+        width: 16px;
+        height: 16px;
+        border-radius: 5px;
+        background: linear-gradient(135deg, #5d79ab, #97adba);
+      }
+      .nav { display:flex; gap:8px; }
+      .nav span {
+        padding: 8px 14px;
+        border-radius: 999px;
+        color: #4b5f83;
+        font-size: 12px;
+      }
+      .nav .active {
+        background: var(--accent-soft);
+        border: 1px solid rgba(94,124,174,0.16);
+      }
+      .shell {
+        display: grid;
+        grid-template-columns: 290px 1fr 290px;
+        min-height: 1040px;
+      }
+      .rail, .spine {
+        padding: 18px;
+        border-right: 1px solid var(--line);
+      }
+      .spine {
+        border-right: none;
+        border-left: 1px solid var(--line);
+      }
+      .main {
+        padding: 18px;
+        background:
+          radial-gradient(circle at top center, rgba(94,124,174,0.06), transparent 28%),
+          rgba(247,244,236,0.86);
+      }
+      .section {
+        margin-bottom: 16px;
+        padding: 16px;
+        border-radius: 24px;
+        background: var(--paper);
+        border: 1px solid var(--line);
+      }
+      .section-title {
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        margin-bottom: 12px;
+        color: #627493;
+        font-size: 11px;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+      }
+      .bay, .chip, .slab, .channel, .dock-item, .tray-item, .metric {
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: rgba(255,255,255,0.62);
+      }
+      .bay {
+        padding: 14px;
+        margin-bottom: 12px;
+      }
+      .bay strong {
+        display:block;
+        font-size: 15px;
+        margin-bottom: 6px;
+      }
+      .bay p, .metric p, .slab p, .channel p, .dock-item p, .tray-item p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.7;
+      }
+      .chip-row {
+        display:flex;
+        flex-wrap:wrap;
+        gap:8px;
+      }
+      .nav-list {
+        display:grid;
+        gap:10px;
+      }
+      .chip {
+        padding: 8px 10px;
+        font-size: 12px;
+        color: #4d6285;
+      }
+      .nav-item {
+        padding: 12px 13px;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: rgba(255,255,255,0.64);
+      }
+      .nav-item strong {
+        display:block;
+        margin-bottom:6px;
+        font-size:13px;
+      }
+      .nav-item p {
+        margin:0;
+        color: var(--muted);
+        font-size:12px;
+        line-height:1.7;
+      }
+      .core-grid {
+        display:grid;
+        grid-template-columns: 1.25fr .95fr;
+        gap: 14px;
+      }
+      .entry-grid {
+        display:grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .stack { display:grid; gap:12px; }
+      .slab, .channel, .dock-item, .tray-item, .metric {
+        padding: 14px;
+      }
+      .slab strong, .channel strong, .dock-item strong, .tray-item strong, .metric strong {
+        display:block;
+        margin-bottom: 6px;
+        font-size: 13px;
+      }
+      .slab-grid {
+        display:grid;
+        grid-template-columns: repeat(2, minmax(0,1fr));
+        gap: 12px;
+      }
+      .metrics {
+        display:grid;
+        grid-template-columns: repeat(2, minmax(0,1fr));
+        gap:12px;
+      }
+      .metric strong {
+        font-size: 26px;
+        letter-spacing: -.05em;
+      }
+      .mono {
+        font-family: "SF Mono","JetBrains Mono","Cascadia Code",monospace;
+        font-size: 11px;
+        line-height: 1.75;
+        color: #41546f;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <div>
+          <div class="eyebrow">Habitat Grid / Workspace</div>
+          <h1>工作区不是三栏，而是一个正在呼吸的工作栖息地</h1>
+          <p>项目是舱室，命令是通道，代码是 slab，上下文是 dock。用户面对的不是文件管理，而是“当前环境里有哪些活跃工作实体，以及它们彼此如何流动”。</p>
+        </div>
+      </section>
+
+      <section class="window">
+        <header class="titlebar">
+          <div class="lights">
+            <span style="background:#d56a63"></span>
+            <span style="background:#d0a246"></span>
+            <span style="background:#6a9f6d"></span>
+          </div>
+          <div class="brand"><span class="mark"></span><span>GhostTerm</span></div>
+          <div class="nav">
+            <span class="active">工作区</span>
+            <span>工具</span>
+            <span>进度</span>
+          </div>
+        </header>
+
+        <div class="shell">
+          <aside class="rail">
+            <div class="section">
+              <div class="section-title"><span>Project Bays</span><span>4 活跃舱</span></div>
+              <div class="bay">
+                <strong>GhostTerm 核心仓</strong>
+                <p>main / 3 通道 / 12 context packets / 4 patches</p>
+              </div>
+              <div class="bay">
+                <strong>论文规范实验仓</strong>
+                <p>tools-lab / 2 通道 / 8 specimen notes</p>
+              </div>
+              <div class="bay">
+                <strong>前端交互试验仓</strong>
+                <p>workspace-v2 / 1 通道 / 6 selected excerpts</p>
+              </div>
+              <div class="bay">
+                <strong>终端桥接修复仓</strong>
+                <p>pty-fix / idle / review pending</p>
+              </div>
+            </div>
+
+            <div class="section">
+              <div class="section-title"><span>Directory Spine</span><span>目录脊柱</span></div>
+              <div class="nav-list">
+                <div class="nav-item">
+                  <strong>Source Root</strong>
+                  <p>/src / layouts / features / shared / test</p>
+                </div>
+                <div class="nav-item">
+                  <strong>Tool Lab Root</strong>
+                  <p>/features/tools / templates / sidecar protocol</p>
+                </div>
+                <div class="nav-item">
+                  <strong>Design Root</strong>
+                  <p>/designs / habitat-grid-workspace.html / tools / progress</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="section">
+              <div class="section-title"><span>Search Current</span><span>Probe</span></div>
+              <div class="chip-row">
+                <div class="chip">project selector</div>
+                <div class="chip">terminal focus</div>
+                <div class="chip">group mapping</div>
+                <div class="chip">docx preview</div>
+              </div>
+            </div>
+          </aside>
+
+          <section class="main">
+            <div class="section">
+              <div class="section-title"><span>Active Habitat / GhostTerm 核心仓</span><span>Now</span></div>
+              <div class="chip-row">
+                <div class="chip">Codex attached</div>
+                <div class="chip">3 命令在轨</div>
+                <div class="chip">左侧面板 redesign</div>
+                <div class="chip">review tray active</div>
+              </div>
+            </div>
+
+            <div class="section">
+              <div class="section-title"><span>Workspace Entrances</span><span>显式入口</span></div>
+              <div class="entry-grid">
+                <div class="tray-item">
+                  <strong>项目目录入口</strong>
+                  <p>从 Project Bay 下钻到对应目录脊柱，而不是展开传统文件树。</p>
+                </div>
+                <div class="tray-item">
+                  <strong>项目文件入口</strong>
+                  <p>从 File Dock 选择文件对象，再拖入当前主舱形成工作 slab。</p>
+                </div>
+                <div class="tray-item">
+                  <strong>代码对象入口</strong>
+                  <p>代码片段、完整文件、搜索命中都以 code slab 进入环境，可并列比较。</p>
+                </div>
+                <div class="tray-item">
+                  <strong>终端入口</strong>
+                  <p>每个项目舱可创建多个 command channel，绑定该项目上下文独立运行。</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="core-grid">
+              <div class="stack">
+                <div class="section">
+                  <div class="section-title"><span>File Dock</span><span>项目文件入口</span></div>
+                  <div class="slab-grid">
+                    <div class="slab">
+                      <strong>src/features/sidebar/ProjectSelector.tsx</strong>
+                      <p>当前从项目目录脊柱调入的活跃文件，可继续拖入代码对象堆。</p>
+                    </div>
+                    <div class="slab">
+                      <strong>src/features/tools/ToolsWorkspace.tsx</strong>
+                      <p>工具舱入口文件，作为跨空间跳转的桥接对象。</p>
+                    </div>
+                    <div class="slab">
+                      <strong>designs/habitat-grid-workspace.html</strong>
+                      <p>当前设计稿本体，非代码对象也可以进入主舱工作流。</p>
+                    </div>
+                    <div class="slab">
+                      <strong>src/layouts/WorkspaceRouter.tsx</strong>
+                      <p>系统骨架对象，可直接作为结构入口打开。</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="section">
+                  <div class="section-title"><span>Code Slabs</span><span>代码对象堆</span></div>
+                  <div class="slab-grid">
+                    <div class="slab">
+                      <strong>ProjectSelector.tsx</strong>
+                      <p>当前被拖入主环境的活跃代码 slab。突出“作用中的对象”，不是 tab。</p>
+                    </div>
+                    <div class="slab">
+                      <strong>projectGroupingStore.ts</strong>
+                      <p>分组映射与筛选逻辑，已挂接到当前 patch flow。</p>
+                    </div>
+                    <div class="slab">
+                      <strong>Workspace notes</strong>
+                      <p>设计意图、用户反馈、禁止回到传统 IDE 框架的约束，一样作为工作对象存在。</p>
+                    </div>
+                    <div class="slab">
+                      <strong>Search excerpt bundle</strong>
+                      <p>由搜索探针投递到当前舱内的代码片段集合。</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="section">
+                  <div class="section-title"><span>Command Channels</span><span>命令通道</span></div>
+                  <div class="stack">
+                    <div class="channel">
+                      <strong>Channel A / codex session</strong>
+                      <p class="mono">$ codex run redesign-workspace
+context packets: 12
+pending patch: 4 files
+verdict: draft-ready</p>
+                    </div>
+                    <div class="channel">
+                      <strong>Channel B / test orbit</strong>
+                      <p class="mono">$ pnpm test
+398 passed / 1 skipped
+canvas warnings retained
+design spec green</p>
+                    </div>
+                    <div class="channel">
+                      <strong>Channel C / project shell</strong>
+                      <p class="mono">$ git status
+M src/features/sidebar/ProjectSelector.tsx
+M designs/habitat-grid-workspace.html
+?? designs/habitat-grid-tools.html</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="stack">
+                <div class="section">
+                  <div class="section-title"><span>Context Dock</span><span>停靠台</span></div>
+                  <div class="stack">
+                    <div class="dock-item">
+                      <strong>Image Packet / sidebar-top.png</strong>
+                      <p>用户上传截图，作为空间关系约束被固定在当前环境。</p>
+                    </div>
+                    <div class="dock-item">
+                      <strong>Issue Packet / “别像传统 IDE”</strong>
+                      <p>高优先级体验约束，影响当前所有环境编排。</p>
+                    </div>
+                    <div class="dock-item">
+                      <strong>Selection Bundle / 3 excerpts</strong>
+                      <p>来自 project selector、layout、tools workspace 的代码片段。</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="section">
+                  <div class="section-title"><span>Review Tray</span><span>审查托盘</span></div>
+                  <div class="stack">
+                    <div class="tray-item">
+                      <strong>Patch Cluster / grouped-projects</strong>
+                      <p>7 files changed / compile green / design behavior aligned</p>
+                    </div>
+                    <div class="tray-item">
+                      <strong>Behavior Check / session memory</strong>
+                      <p>项目切换后 scrollback 保留；当前环境引用关系未断裂。</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <aside class="spine">
+            <div class="section">
+              <div class="section-title"><span>Environment Spine</span><span>状态脊柱</span></div>
+              <div class="metrics">
+                <div class="metric">
+                  <strong>12</strong>
+                  <p>context packets</p>
+                </div>
+                <div class="metric">
+                  <strong>03</strong>
+                  <p>active channels</p>
+                </div>
+                <div class="metric">
+                  <strong>04</strong>
+                  <p>patch clusters</p>
+                </div>
+                <div class="metric">
+                  <strong>91%</strong>
+                  <p>focus climate</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="section">
+              <div class="section-title"><span>Next Action</span><span>建议</span></div>
+              <div class="stack">
+                <div class="tray-item">
+                  <strong>将 Tools 检测样本拖入当前舱</strong>
+                  <p>把论文 issue 结果转成上下文对象，而不是单独切页处理。</p>
+                </div>
+                <div class="tray-item">
+                  <strong>合并重复 context packets</strong>
+                  <p>当前有 3 个截图包指向同一问题，可合并为 1 个证据束。</p>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

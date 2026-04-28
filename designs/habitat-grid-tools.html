@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Habitat Grid / Tools</title>
+    <style>
+      :root {
+        --bg: #eeebe4;
+        --lab: rgba(255,255,255,0.74);
+        --line: rgba(42, 57, 91, 0.08);
+        --text: #22324e;
+        --muted: #6f809f;
+        --accent: #5f7aae;
+        --signal: #8b9f8f;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "SF Pro Display","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top right, rgba(95,122,174,0.11), transparent 24%),
+          radial-gradient(circle at bottom left, rgba(139,159,143,0.12), transparent 25%),
+          linear-gradient(180deg, #f3f0ea, #e7e2d7);
+      }
+      .page { width:min(1700px,calc(100vw - 48px)); margin:0 auto; padding:28px 0 48px; }
+      .eyebrow {
+        display:inline-flex; padding:8px 12px; border-radius:999px; border:1px solid var(--line);
+        background:rgba(255,255,255,0.56); color:#566983; font-size:12px; letter-spacing:.12em; text-transform:uppercase;
+      }
+      h1 { margin:14px 0 10px; font-size:clamp(42px,5vw,74px); line-height:.94; letter-spacing:-.06em; }
+      .lead { max-width:980px; color:var(--muted); font-size:18px; line-height:1.8; margin-bottom:24px; }
+      .window {
+        overflow:hidden; border-radius:30px; border:1px solid var(--line); background:rgba(249,246,241,.88);
+        box-shadow:0 24px 80px rgba(55,63,84,.18);
+      }
+      .titlebar {
+        height:60px; padding:0 16px; display:grid; grid-template-columns:90px 1fr auto; align-items:center;
+        border-bottom:1px solid var(--line); background:rgba(250,247,241,.9);
+      }
+      .lights { display:flex; gap:8px; } .lights span { width:12px; height:12px; border-radius:50%; display:block; }
+      .brand { justify-self:center; display:flex; gap:10px; align-items:center; font-size:13px; letter-spacing:.08em; text-transform:uppercase; font-weight:700; }
+      .mark { width:16px; height:16px; border-radius:5px; background:linear-gradient(135deg,#5d79ab,#97adba); }
+      .nav { display:flex; gap:8px; } .nav span { padding:8px 14px; border-radius:999px; color:#4b5f83; font-size:12px; }
+      .nav .active { background:rgba(95,122,174,.12); border:1px solid rgba(95,122,174,.16); }
+      .shell { display:grid; grid-template-columns:300px 1fr 360px; min-height:1060px; }
+      .intake, .compare { padding:18px; border-right:1px solid var(--line); }
+      .compare { border-right:none; border-left:1px solid var(--line); }
+      .lab-main { padding:18px; background:rgba(247,244,236,.86); }
+      .block { margin-bottom:16px; padding:16px; border-radius:24px; border:1px solid var(--line); background:var(--lab); }
+      .block-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; color:#627493; font-size:11px; letter-spacing:.12em; text-transform:uppercase; }
+      .queue, .shelf, .ledger, .compare-stack, .specimen-grid { display:grid; gap:12px; }
+      .chip-row { display:flex; flex-wrap:wrap; gap:8px; }
+      .chip, .vial, .specimen, .record, .panel {
+        border-radius:18px; border:1px solid var(--line); background:rgba(255,255,255,.66);
+      }
+      .chip { padding:8px 10px; font-size:12px; color:#4f6280; }
+      .vial, .record, .panel { padding:14px; }
+      .vial strong, .record strong, .panel strong, .specimen strong { display:block; margin-bottom:6px; font-size:13px; }
+      .vial p, .record p, .panel p, .specimen p { margin:0; color:var(--muted); font-size:12px; line-height:1.7; }
+      .specimen-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .specimen { padding:14px; min-height:168px; }
+      .specimen.active { outline:2px solid rgba(95,122,174,.18); box-shadow:0 14px 28px rgba(69,85,119,.1); }
+      .specimen .state { display:inline-flex; margin-top:10px; padding:6px 10px; border-radius:999px; background:rgba(95,122,174,.1); color:#536684; font-size:11px; }
+      .mono { font-family:"SF Mono","JetBrains Mono","Cascadia Code",monospace; font-size:11px; line-height:1.75; color:#40536d; white-space:pre-wrap; }
+      .compare-dual { display:grid; gap:12px; }
+      .compare-box { min-height:260px; padding:14px; border-radius:20px; border:1px solid var(--line); background:rgba(255,255,255,.62); }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <div class="eyebrow">Habitat Grid / Tools</div>
+      <h1>工具不是页面，而是检验证据、修复样本、回写结果的实验室</h1>
+      <p class="lead">论文规范检测被重构成 `Forensic Tool Lab`。问题不再是表格行，而是样本；模板不再是下拉，而是试剂架；diff 不再是普通双栏，而是对照仓。</p>
+
+      <section class="window">
+        <header class="titlebar">
+          <div class="lights">
+            <span style="background:#d56a63"></span>
+            <span style="background:#d0a246"></span>
+            <span style="background:#6a9f6d"></span>
+          </div>
+          <div class="brand"><span class="mark"></span><span>GhostTerm</span></div>
+          <div class="nav">
+            <span>工作区</span>
+            <span class="active">工具</span>
+            <span>进度</span>
+          </div>
+        </header>
+
+        <div class="shell">
+          <aside class="intake">
+            <div class="block">
+              <div class="block-head"><span>Specimen Intake</span><span>样本入口</span></div>
+              <div class="queue">
+                <div class="panel">
+                  <strong>当前样本</strong>
+                  <p>本科毕业论文.docx<br />模板：sjtu-2024 / 最近检测：22:04</p>
+                </div>
+                <div class="chip-row">
+                  <div class="chip">上传 docx</div>
+                  <div class="chip">选择模板</div>
+                  <div class="chip">运行检测</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="block">
+              <div class="block-head"><span>Rule Shelf</span><span>规则试剂架</span></div>
+              <div class="shelf">
+                <div class="vial">
+                  <strong>sjtu-2024</strong>
+                  <p>32 规则 / extracted / active</p>
+                </div>
+                <div class="vial">
+                  <strong>gbt7714-core</strong>
+                  <p>12 规则 / builtin / reference</p>
+                </div>
+                <div class="vial">
+                  <strong>thesis-light</strong>
+                  <p>18 规则 / custom / last edited today</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="block">
+              <div class="block-head"><span>Audit Ledger</span><span>审计账本</span></div>
+              <div class="ledger">
+                <div class="record">
+                  <strong>22:06 / 批量修复</strong>
+                  <p>中英文空格异常 14 处 / backup 已写入</p>
+                </div>
+                <div class="record">
+                  <strong>21:58 / 单条修复</strong>
+                  <p>图注位置错误 / specimen B / write-back success</p>
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          <section class="lab-main">
+            <div class="block">
+              <div class="block-head"><span>Forensic Tool Lab</span><span>Analysis Bench</span></div>
+              <div class="specimen-grid">
+                <div class="specimen active">
+                  <strong>Specimen A / 标题层级污染</strong>
+                  <p>第 2.3 节标题样式被正文样式污染。影响 H2 层级一致性。</p>
+                  <span class="state">已取样 / 可自动修复</span>
+                </div>
+                <div class="specimen">
+                  <strong>Specimen B / 图注位移</strong>
+                  <p>图注与图片对象断连，规则要求图下注释，当前定位错误。</p>
+                  <span class="state">待检视 / 结构型问题</span>
+                </div>
+                <div class="specimen">
+                  <strong>Specimen C / 空格异变</strong>
+                  <p>检测到 14 处中英文混排异常，支持批量处理与抽样复核。</p>
+                  <span class="state">批量候选</span>
+                </div>
+                <div class="specimen">
+                  <strong>Specimen D / 引用括号偏差</strong>
+                  <p>第 6 条参考文献使用半角样式，需回归 GB/T 7714 模板签名。</p>
+                  <span class="state">待修复</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="block">
+              <div class="block-head"><span>Patch Lab</span><span>修复台</span></div>
+              <div class="chip-row">
+                <div class="chip">修复当前样本</div>
+                <div class="chip">送入批量修复</div>
+                <div class="chip">撤销上一步</div>
+                <div class="chip">导出修复报告</div>
+              </div>
+              <div class="panel" style="margin-top:12px;">
+                <strong>当前修复批次</strong>
+                <p class="mono">batch.id = THESIS-0427-03
+specimens = [A, C]
+preview = ready
+write_back = guarded
+backup = .bak/本科毕业论文-22-06.docx</p>
+              </div>
+            </div>
+          </section>
+
+          <aside class="compare">
+            <div class="block">
+              <div class="block-head"><span>Compare Chamber</span><span>对照仓</span></div>
+              <div class="compare-dual">
+                <div class="compare-box">
+                  <strong>原样本 / Source Specimen</strong>
+                  <p class="mono">2.3 系统设计
+
+当前段落：
+- 标题字号 14pt
+- 样式被正文污染
+- 与 H2 模板不匹配
+
+关联证据：
+style.signature = body.normal</p>
+                </div>
+                <div class="compare-box">
+                  <strong>修复预览 / Fixed Specimen</strong>
+                  <p class="mono">2.3 系统设计
+
+修复后：
++ 标题字号 16pt
++ 样式恢复到 H2.template
++ 间距恢复为 chapter spacing
+
+status = ready-to-apply</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="block">
+              <div class="block-head"><span>Lab Notes</span><span>实验说明</span></div>
+              <div class="panel">
+                <strong>选中样本被视为“物证”</strong>
+                <p>工具区的视觉重心不是 issue 列表，而是样本在实验台与对照仓之间的流动。</p>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

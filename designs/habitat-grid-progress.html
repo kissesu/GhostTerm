@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Habitat Grid / Progress</title>
+    <style>
+      :root {
+        --bg: #ece8df;
+        --paper: rgba(255,255,255,0.68);
+        --line: rgba(42,57,91,0.08);
+        --text: #22324e;
+        --muted: #6f809f;
+        --accent: #607caf;
+        --moss: #90a58f;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin:0;
+        font-family:"SF Pro Display","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+        color:var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(96,124,175,0.1), transparent 22%),
+          radial-gradient(circle at bottom right, rgba(144,165,143,0.11), transparent 25%),
+          linear-gradient(180deg, #f3f0ea, #e6e1d6);
+      }
+      .page { width:min(1700px,calc(100vw - 48px)); margin:0 auto; padding:28px 0 48px; }
+      .eyebrow {
+        display:inline-flex; padding:8px 12px; border-radius:999px; border:1px solid var(--line);
+        background:rgba(255,255,255,0.55); color:#556881; font-size:12px; letter-spacing:.12em; text-transform:uppercase;
+      }
+      h1 { margin:14px 0 10px; font-size:clamp(42px,5vw,74px); line-height:.94; letter-spacing:-.06em; }
+      .lead { max-width:980px; color:var(--muted); font-size:18px; line-height:1.8; margin-bottom:24px; }
+      .window {
+        overflow:hidden; border-radius:30px; border:1px solid var(--line); background:rgba(249,246,241,.88);
+        box-shadow:0 24px 80px rgba(55,63,84,.18);
+      }
+      .titlebar {
+        height:60px; padding:0 16px; display:grid; grid-template-columns:90px 1fr auto; align-items:center;
+        border-bottom:1px solid var(--line); background:rgba(250,247,241,.9);
+      }
+      .lights { display:flex; gap:8px; } .lights span { width:12px; height:12px; border-radius:50%; display:block; }
+      .brand { justify-self:center; display:flex; gap:10px; align-items:center; font-size:13px; letter-spacing:.08em; text-transform:uppercase; font-weight:700; }
+      .mark { width:16px; height:16px; border-radius:5px; background:linear-gradient(135deg,#5d79ab,#97adba); }
+      .nav { display:flex; gap:8px; } .nav span { padding:8px 14px; border-radius:999px; color:#4b5f83; font-size:12px; }
+      .nav .active { background:rgba(96,124,175,.12); border:1px solid rgba(96,124,175,.16); }
+      .shell { display:grid; grid-template-columns:280px 1fr 320px; min-height:1060px; }
+      .left, .right { padding:18px; border-right:1px solid var(--line); }
+      .right { border-right:none; border-left:1px solid var(--line); }
+      .main { padding:18px; background:rgba(247,244,236,.86); }
+      .block { margin-bottom:16px; padding:16px; border-radius:24px; border:1px solid var(--line); background:var(--paper); }
+      .head { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; color:#627493; font-size:11px; letter-spacing:.12em; text-transform:uppercase; }
+      .region, .obs, .node, .metric {
+        border-radius:18px; border:1px solid var(--line); background:rgba(255,255,255,.66);
+      }
+      .region, .obs, .node, .metric { padding:14px; }
+      .region strong, .obs strong, .node strong, .metric strong { display:block; margin-bottom:6px; font-size:13px; }
+      .region p, .obs p, .node p, .metric p { margin:0; color:var(--muted); font-size:12px; line-height:1.7; }
+      .terrain { position:relative; min-height:760px; border-radius:24px; border:1px solid var(--line); overflow:hidden; background:
+        linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px) 0 0 / 56px 56px,
+        linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px) 0 0 / 56px 56px,
+        radial-gradient(circle at top center, rgba(96,124,175,0.09), transparent 26%),
+        rgba(255,255,255,.42);
+      }
+      .lane {
+        position:absolute;
+        height:3px;
+        border-radius:999px;
+        background: linear-gradient(90deg, rgba(96,124,175,0.6), rgba(144,165,143,0.3));
+      }
+      .node {
+        position:absolute;
+        width:148px;
+        box-shadow:0 14px 28px rgba(69,85,119,.08);
+      }
+      .node .state {
+        display:inline-flex;
+        margin-top:8px;
+        padding:6px 10px;
+        border-radius:999px;
+        background:rgba(96,124,175,.1);
+        color:#536684;
+        font-size:11px;
+      }
+      .metrics { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+      .metric strong { font-size:26px; letter-spacing:-.05em; }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <div class="eyebrow">Habitat Grid / Progress</div>
+      <h1>进度不是看板，而是跨项目远征图</h1>
+      <p class="lead">`Progress` 不是任务列表，而是整座工作栖息地的地形图。它显示你在不同项目舱之间的迁移、阻塞、加速、修复与回忆路径。</p>
+
+      <section class="window">
+        <header class="titlebar">
+          <div class="lights">
+            <span style="background:#d56a63"></span>
+            <span style="background:#d0a246"></span>
+            <span style="background:#6a9f6d"></span>
+          </div>
+          <div class="brand"><span class="mark"></span><span>GhostTerm</span></div>
+          <div class="nav">
+            <span>工作区</span>
+            <span>工具</span>
+            <span class="active">进度</span>
+          </div>
+        </header>
+
+        <div class="shell">
+          <aside class="left">
+            <div class="block">
+              <div class="head"><span>Focus Regions</span><span>聚焦区域</span></div>
+              <div class="region">
+                <strong>GhostTerm 核心仓</strong>
+                <p>左侧面板重构 / 上下文编排 / 设计静态稿</p>
+              </div>
+              <div class="region" style="margin-top:12px;">
+                <strong>论文实验仓</strong>
+                <p>specimen 检测 / compare chamber / patch lab</p>
+              </div>
+              <div class="region" style="margin-top:12px;">
+                <strong>终端桥接仓</strong>
+                <p>pty / websocket / scrollback retain</p>
+              </div>
+            </div>
+
+            <div class="block">
+              <div class="head"><span>Mission Horizon</span><span>今日视野</span></div>
+              <div class="region">
+                <strong>Now</strong>
+                <p>Habitat Grid 详细设计落图中 / 2 个环境待合并</p>
+              </div>
+            </div>
+          </aside>
+
+          <section class="main">
+            <div class="block">
+              <div class="head"><span>Expedition Map</span><span>远征地形</span></div>
+              <div class="terrain">
+                <div class="lane" style="left:70px; top:148px; width:540px;"></div>
+                <div class="lane" style="left:110px; top:364px; width:470px;"></div>
+                <div class="lane" style="left:200px; top:580px; width:360px;"></div>
+
+                <div class="node" style="left:38px; top:100px;">
+                  <strong>进入 GhostTerm 仓</strong>
+                  <p>加载 project bays / attach context packets</p>
+                  <span class="state">start</span>
+                </div>
+                <div class="node" style="left:250px; top:112px;">
+                  <strong>运行设计探索</strong>
+                  <p>否定传统 IDE 框架 / 转入 Habitat Grid</p>
+                  <span class="state">decision</span>
+                </div>
+                <div class="node" style="left:492px; top:96px;">
+                  <strong>产出独立设计页</strong>
+                  <p>workspace/tools/progress 三张静态稿</p>
+                  <span class="state">build</span>
+                </div>
+
+                <div class="node" style="left:86px; top:316px;">
+                  <strong>进入论文实验仓</strong>
+                  <p>specimen intake / rule shelf / compare chamber</p>
+                  <span class="state">branch</span>
+                </div>
+                <div class="node" style="left:318px; top:332px;">
+                  <strong>样本修复链路</strong>
+                  <p>从 issue list 变为 forensic specimens</p>
+                  <span class="state">evolve</span>
+                </div>
+                <div class="node" style="left:542px; top:302px;">
+                  <strong>审计回写</strong>
+                  <p>backup / patch lab / audit ledger</p>
+                  <span class="state">verify</span>
+                </div>
+
+                <div class="node" style="left:170px; top:540px;">
+                  <strong>跨项目回跳</strong>
+                  <p>从进度节点回到对应 workspace 舱室</p>
+                  <span class="state">recall</span>
+                </div>
+                <div class="node" style="left:430px; top:524px;">
+                  <strong>阻塞观测</strong>
+                  <p>识别断裂点、残留尾项、未审查 patch</p>
+                  <span class="state">observe</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <aside class="right">
+            <div class="block">
+              <div class="head"><span>Bottleneck Observatory</span><span>阻塞观测台</span></div>
+              <div class="obs">
+                <strong>断裂点 / 设计方向验证</strong>
+                <p>用户拒绝传统 IDE 框架，需保持 Habitat Grid 的独立性。</p>
+              </div>
+              <div class="obs" style="margin-top:12px;">
+                <strong>残留项 / 页面整合</strong>
+                <p>工作区、工具、进度三稿仍需统一导航与组件语言。</p>
+              </div>
+            </div>
+
+            <div class="block">
+              <div class="head"><span>Momentum</span><span>推进动量</span></div>
+              <div class="metrics">
+                <div class="metric">
+                  <strong>06</strong>
+                  <p>active expedition nodes</p>
+                </div>
+                <div class="metric">
+                  <strong>02</strong>
+                  <p>open blockers</p>
+                </div>
+                <div class="metric">
+                  <strong>78%</strong>
+                  <p>concept cohesion</p>
+                </div>
+                <div class="metric">
+                  <strong>11</strong>
+                  <p>recoverable contexts</p>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

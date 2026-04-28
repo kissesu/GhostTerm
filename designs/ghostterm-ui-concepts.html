@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GhostTerm UI Concepts</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0f16;
+        --panel: rgba(18, 23, 34, 0.92);
+        --line: rgba(255, 255, 255, 0.08);
+        --text: #eef3ff;
+        --muted: #98a4c6;
+        --shadow: 0 28px 70px rgba(0, 0, 0, 0.38);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "SF Pro Display", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(66, 109, 191, 0.2), transparent 28%),
+          radial-gradient(circle at top right, rgba(132, 83, 34, 0.12), transparent 22%),
+          linear-gradient(180deg, #0a0f17 0%, #06080d 100%);
+      }
+
+      .page {
+        width: min(1980px, calc(100vw - 48px));
+        margin: 0 auto;
+        padding: 42px 0 64px;
+      }
+
+      .hero {
+        margin-bottom: 28px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.03);
+        color: #dbe4ff;
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 18px 0 14px;
+        font-size: clamp(44px, 5vw, 76px);
+        line-height: 0.95;
+        letter-spacing: -0.05em;
+      }
+
+      .hero p {
+        max-width: 1080px;
+        margin: 0;
+        color: #a7b3d3;
+        font-size: 18px;
+        line-height: 1.8;
+      }
+
+      .board {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 22px;
+        align-items: start;
+      }
+
+      .concept {
+        padding: 18px;
+        border-radius: 30px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.025);
+        backdrop-filter: blur(8px);
+        box-shadow: var(--shadow);
+      }
+
+      .concept h2 {
+        margin: 0;
+        font-size: 24px;
+        letter-spacing: -0.04em;
+      }
+
+      .concept .subtitle {
+        margin: 10px 0 14px;
+        color: #9faccc;
+        font-size: 14px;
+        line-height: 1.7;
+      }
+
+      .window {
+        overflow: hidden;
+        min-height: 1260px;
+        border-radius: 26px;
+        border: 1px solid rgba(255, 255, 255, 0.09);
+      }
+
+      .titlebar {
+        height: 54px;
+        display: grid;
+        grid-template-columns: 90px 1fr auto;
+        align-items: center;
+        padding: 0 14px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .lights {
+        display: flex;
+        gap: 8px;
+      }
+
+      .lights span {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        display: block;
+      }
+
+      .brand {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      .mark {
+        width: 16px;
+        height: 16px;
+        border-radius: 5px;
+      }
+
+      .nav {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .nav span {
+        padding: 8px 12px;
+        border-radius: 999px;
+        font-size: 12px;
+      }
+
+      .stack {
+        display: grid;
+        gap: 16px;
+        padding: 16px;
+      }
+
+      .card {
+        border-radius: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 16px 10px;
+        color: #b0bddf;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .card-body {
+        padding: 0 16px 16px;
+      }
+
+      .pill-row,
+      .tag-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .pill,
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 11px;
+        border-radius: 999px;
+        font-size: 12px;
+      }
+
+      .metric-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .metric {
+        padding: 12px;
+        border-radius: 18px;
+      }
+
+      .metric strong {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 22px;
+        letter-spacing: -0.05em;
+      }
+
+      .metric span {
+        color: inherit;
+        opacity: 0.78;
+        font-size: 11px;
+        line-height: 1.5;
+      }
+
+      .micro {
+        font-family: "SF Mono", "JetBrains Mono", "Cascadia Code", monospace;
+        font-size: 11px;
+        line-height: 1.7;
+      }
+
+      .atlas {
+        background:
+          radial-gradient(circle at top left, rgba(72, 119, 255, 0.18), transparent 32%),
+          linear-gradient(180deg, #0f1523 0%, #0a0f18 100%);
+      }
+
+      .atlas .titlebar {
+        background: rgba(8, 13, 22, 0.88);
+      }
+
+      .atlas .mark {
+        background: linear-gradient(135deg, #4b85ff, #80e5ff);
+      }
+
+      .atlas .nav .active {
+        background: rgba(81, 132, 255, 0.2);
+        border: 1px solid rgba(81, 132, 255, 0.34);
+      }
+
+      .atlas .card,
+      .atlas .metric,
+      .atlas .pill,
+      .atlas .tag {
+        background: linear-gradient(180deg, rgba(18, 26, 40, 0.95), rgba(12, 18, 28, 0.96));
+      }
+
+      .orbital {
+        position: relative;
+        height: 330px;
+        margin-top: 8px;
+      }
+
+      .ring {
+        position: absolute;
+        inset: 50%;
+        width: 252px;
+        height: 252px;
+        margin: -126px;
+        border-radius: 50%;
+        border: 1px solid rgba(129, 165, 255, 0.16);
+        box-shadow: inset 0 0 40px rgba(60, 103, 190, 0.1);
+      }
+
+      .core {
+        position: absolute;
+        inset: 50%;
+        width: 148px;
+        height: 148px;
+        margin: -74px;
+        border-radius: 50%;
+        background:
+          radial-gradient(circle at 30% 30%, rgba(123, 180, 255, 0.35), transparent 40%),
+          linear-gradient(180deg, rgba(27, 40, 67, 0.96), rgba(14, 24, 40, 0.98));
+        border: 1px solid rgba(128, 165, 255, 0.22);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        font-size: 12px;
+        line-height: 1.6;
+        box-shadow: 0 0 50px rgba(65, 114, 214, 0.2);
+      }
+
+      .node {
+        position: absolute;
+        width: 142px;
+        min-height: 84px;
+        padding: 12px;
+        border-radius: 20px;
+        background: rgba(17, 25, 37, 0.94);
+        border: 1px solid rgba(110, 150, 240, 0.14);
+        box-shadow: 0 18px 34px rgba(0, 0, 0, 0.24);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      .node strong {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: #cae0ff;
+      }
+
+      .tools-grid {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 12px;
+      }
+
+      .issue-list,
+      .settings-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .issue,
+      .setting {
+        padding: 12px 13px;
+        border-radius: 18px;
+      }
+
+      .issue strong,
+      .setting strong {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 13px;
+      }
+
+      .issue span,
+      .setting span {
+        font-size: 11px;
+        color: #98a4c6;
+        line-height: 1.6;
+      }
+
+      .diff {
+        min-height: 230px;
+        padding: 14px;
+        border-radius: 20px;
+      }
+
+      .loom {
+        background:
+          radial-gradient(circle at top center, rgba(232, 145, 89, 0.12), transparent 26%),
+          linear-gradient(180deg, #171214 0%, #110d10 100%);
+      }
+
+      .loom .titlebar {
+        background: rgba(25, 17, 18, 0.9);
+      }
+
+      .loom .mark {
+        background: linear-gradient(135deg, #f49d56, #c65c74);
+      }
+
+      .loom .nav .active {
+        background: linear-gradient(135deg, rgba(239, 148, 79, 0.2), rgba(199, 83, 102, 0.22));
+        border: 1px solid rgba(242, 157, 99, 0.22);
+      }
+
+      .loom .card,
+      .loom .metric,
+      .loom .pill,
+      .loom .tag {
+        background: linear-gradient(180deg, rgba(38, 24, 28, 0.94), rgba(24, 17, 21, 0.98));
+      }
+
+      .loom-canvas {
+        position: relative;
+        min-height: 348px;
+        border-radius: 24px;
+        overflow: hidden;
+        background:
+          linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px) 0 0 / 48px 48px,
+          linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px) 0 0 / 48px 48px,
+          radial-gradient(circle at center, rgba(197, 91, 87, 0.1), transparent 54%),
+          #160f13;
+      }
+
+      .thread {
+        position: absolute;
+        background: linear-gradient(90deg, rgba(242, 154, 103, 0.26), rgba(255, 255, 255, 0.02));
+        transform-origin: left center;
+        border-radius: 999px;
+      }
+
+      .weave {
+        position: absolute;
+        width: 152px;
+        padding: 12px;
+        border-radius: 18px;
+        background: rgba(45, 28, 33, 0.95);
+        border: 1px solid rgba(255, 167, 112, 0.14);
+        box-shadow: 0 22px 36px rgba(0, 0, 0, 0.25);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      .weave strong {
+        display: block;
+        margin-bottom: 4px;
+        color: #ffe0c6;
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .habitat {
+        color-scheme: light;
+        background:
+          radial-gradient(circle at top right, rgba(109, 133, 168, 0.1), transparent 25%),
+          linear-gradient(180deg, #eeebe4 0%, #e5e1d8 100%);
+        color: #22324e;
+      }
+
+      .habitat .titlebar {
+        background: rgba(248, 245, 239, 0.88);
+        border-bottom: 1px solid rgba(31, 48, 82, 0.08);
+      }
+
+      .habitat .mark {
+        background: linear-gradient(135deg, #4d6796, #8ea7b4);
+      }
+
+      .habitat .nav span {
+        color: #354666;
+      }
+
+      .habitat .nav .active {
+        background: rgba(71, 101, 166, 0.1);
+        border: 1px solid rgba(71, 101, 166, 0.12);
+      }
+
+      .habitat .card,
+      .habitat .metric,
+      .habitat .pill,
+      .habitat .tag,
+      .habitat .issue,
+      .habitat .setting,
+      .habitat .diff {
+        background: rgba(255, 255, 255, 0.64);
+        border: 1px solid rgba(37, 56, 93, 0.08);
+        color: #22324e;
+      }
+
+      .habitat .card-head,
+      .habitat .issue span,
+      .habitat .setting span {
+        color: #67789a;
+      }
+
+      .cells {
+        display: grid;
+        grid-template-columns: 1.15fr 0.85fr;
+        gap: 12px;
+      }
+
+      .cell-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .cell {
+        min-height: 112px;
+        padding: 14px;
+        border-radius: 20px;
+      }
+
+      .cell strong {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 12px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .cell p {
+        margin: 0;
+        font-size: 12px;
+        line-height: 1.7;
+      }
+
+      .legend {
+        margin-top: 14px;
+        color: #97a5c8;
+        font-size: 13px;
+        line-height: 1.8;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <div class="eyebrow">GhostTerm / UI Concepts / Non-IDE Directions</div>
+        <h1>不是编译器，不是编辑器壳子，而是三种全新的 AI CLI 桌面工作形态</h1>
+        <p>
+          这不是在传统 IDE 框架上换皮。三套设计都把“文件树-编辑器-终端”降级为局部能力，转而把 GhostTerm 定义成
+          会话、上下文、执行、修复、切换、记忆共同构成的桌面操作环境。每套都包含 Workspace / Tools / Settings，
+          但组织逻辑完全不同。
+        </p>
+      </section>
+
+      <section class="board">
+        <article class="concept">
+          <h2>Atlas Chamber</h2>
+          <p class="subtitle">
+            把 GhostTerm 做成“操作舱”。不是打开文件后开始写，而是先进入一个活跃会话室：项目状态、终端运行、上下文包、修复动作都围绕中央操作核旋转。
+          </p>
+          <div class="window atlas">
+            <div class="titlebar">
+              <div class="lights">
+                <span style="background:#fb5f57"></span>
+                <span style="background:#febc2e"></span>
+                <span style="background:#28c840"></span>
+              </div>
+              <div class="brand">
+                <span class="mark"></span>
+                <span>GhostTerm</span>
+              </div>
+              <div class="nav">
+                <span class="active">Workspace</span>
+                <span>Tools</span>
+                <span>Settings</span>
+              </div>
+            </div>
+            <div class="stack">
+              <section class="card">
+                <div class="card-head">
+                  <span>Workspace Chamber</span>
+                  <span>Session Orbit / Project States / Live Execution</span>
+                </div>
+                <div class="card-body">
+                  <div class="pill-row">
+                    <div class="pill">论文项目组 / 15</div>
+                    <div class="pill">Active Session / thesis-fix-run</div>
+                    <div class="pill">AI Context Pack / 8 attached</div>
+                  </div>
+                  <div class="orbital">
+                    <div class="ring"></div>
+                    <div class="core">
+                      GhostTerm<br />
+                      Session Core<br />
+                      Run / Inspect / Patch / Verify
+                    </div>
+                    <div class="node" style="left:10px; top:26px;">
+                      <strong>Project Pod</strong>
+                      毕设-校园问答系统<br />
+                      3 文件已修改 / PTY 存活
+                    </div>
+                    <div class="node" style="right:14px; top:40px;">
+                      <strong>Context Packet</strong>
+                      screenshot-2.png<br />
+                      选区 / prompt / issue-note
+                    </div>
+                    <div class="node" style="left:22px; bottom:26px;">
+                      <strong>Patch Stream</strong>
+                      sidebar regrouping<br />
+                      4 commits pending review
+                    </div>
+                    <div class="node" style="right:20px; bottom:38px;">
+                      <strong>Terminal Pulse</strong>
+                      codex --model gpt-5.5<br />
+                      2 jobs / 1 watch / 0 fail
+                    </div>
+                    <div class="node" style="left:50%; margin-left:-72px; top:0;">
+                      <strong>Search Vector</strong>
+                      Cmd+P / “project selector”<br />
+                      12 matches / 2 hotspots
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="card">
+                <div class="card-head">
+                  <span>Workspace Evidence</span>
+                  <span>文档片段、代码片段、命令片段都只是证据对象</span>
+                </div>
+                <div class="card-body">
+                  <div class="metric-grid">
+                    <div class="metric">
+                      <strong>12</strong>
+                      <span>活跃文档对象，不以 tab 为主入口，而以状态优先</span>
+                    </div>
+                    <div class="metric">
+                      <strong>03</strong>
+                      <span>并行终端脉冲，分别绑定三个项目舱</span>
+                    </div>
+                    <div class="metric">
+                      <strong>27</strong>
+                      <span>AI CLI 上下文附件，支持截图、选区、搜索结果、issue</span>
+                    </div>
+                  </div>
+                  <div class="diff micro" style="margin-top:12px;">
+workspace.log
+
+[session/open] project=GhostTerm mode=refactor
+[context/add] type=selection file=ProjectSelector.tsx
+[context/add] type=image note=sidebar screenshot
+[pty/attach] pid=3 retain_scrollback=true
+[agent/run] prompt="重构左侧项目分组入口"
+[patch/outcome] 7 files changed / tests green
+                  </div>
+                </div>
+              </section>
+
+              <section class="card">
+                <div class="card-head">
+                  <span>Tools Bay</span>
+                  <span>论文规范检测不是列表页，而是修复指挥舱</span>
+                </div>
+                <div class="card-body tools-grid">
+                  <div class="issue-list">
+                    <div class="issue">
+                      <strong>标题字号失配</strong>
+                      <span>第 2 章 / H1 / 与模板 sjtu-2024 不一致，可一键修复并记录变更。</span>
+                    </div>
+                    <div class="issue">
+                      <strong>图注位置错误</strong>
+                      <span>Figure 3-2 当前在图上方，规则要求位于图下，受影响对象 1。</span>
+                    </div>
+                    <div class="issue">
+                      <strong>中英文空格异常</strong>
+                      <span>检测到 14 处，支持批量修复与抽样复核。</span>
+                    </div>
+                  </div>
+                  <div class="diff micro">
+fix.preview
+
+- 标题“系统设计”字号 14pt
++ 标题“系统设计”字号 16pt
+
+- 图 3-2 标题位于图前
++ 图 3-2 标题位于图后
+
+status: ready-to-apply
+backup: .bak/thesis-2026-04-27.docx
+                  </div>
+                </div>
+              </section>
+
+              <section class="card">
+                <div class="card-head">
+                  <span>Settings Console</span>
+                  <span>设置被看作舱内物理参数，而不是普通表单</span>
+                </div>
+                <div class="card-body settings-list">
+                  <div class="setting">
+                    <strong>Terminal Chamber</strong>
+                    <span>system shell / JetBrains Mono / block cursor / retain scrollback</span>
+                  </div>
+                  <div class="setting">
+                    <strong>Appearance Field</strong>
+                    <span>mineral dark / cold signal blue / high-density mode / low motion</span>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+          <div class="legend">
+            方向关键词：操作舱、会话核、轨道对象、证据流、修复指挥。
+          </div>
+        </article>
+
+        <article class="concept">
+          <h2>Loom Engine</h2>
+          <p class="subtitle">
+            把 GhostTerm 做成“编织台”。每一次 AI CLI 工作都不是开一个工程，而是在织一张工作网：代码、命令、截图、issue、修复结果都通过线束被拉紧。
+          </p>
+          <div class="window loom">
+            <div class="titlebar">
+              <div class="lights">
+                <span style="background:#fb5f57"></span>
+                <span style="background:#febc2e"></span>
+                <span style="background:#28c840"></span>
+              </div>
+              <div class="brand">
+                <span class="mark"></span>
+                <span>GhostTerm</span>
+              </div>
+              <div class="nav">
+                <span class="active">Workspace</span>
+                <span>Tools</span>
+                <span>Settings</span>
+              </div>
+            </div>
+            <div class="stack">
+              <section class="card">
+                <div class="card-head">
+                  <span>Workspace Fabric</span>
+                  <span>工作对象通过线束关系连成一张会话布</span>
+                </div>
+                <div class="card-body">
+                  <div class="tag-row" style="margin-bottom:12px;">
+                    <div class="tag">Group / 自研</div>
+                    <div class="tag">Prompt / “修复左侧体验”</div>
+                    <div class="tag">Flow Time / 46 min</div>
+                  </div>
+                  <div class="loom-canvas">
+                    <div class="thread" style="left:124px; top:74px; width:152px; height:2px; transform:rotate(18deg);"></div>
+                    <div class="thread" style="left:240px; top:136px; width:160px; height:2px; transform:rotate(-12deg);"></div>
+                    <div class="thread" style="left:120px; top:226px; width:188px; height:2px; transform:rotate(-19deg);"></div>
+                    <div class="thread" style="left:300px; top:222px; width:144px; height:2px; transform:rotate(14deg);"></div>
+                    <div class="weave" style="left:22px; top:38px;">
+                      <strong>Project Thread</strong>
+                      GhostTerm / grouped projects / search / tabs
+                    </div>
+                    <div class="weave" style="left:236px; top:92px;">
+                      <strong>Prompt Knot</strong>
+                      “不要像传统 IDE，重做左侧交互骨架”
+                    </div>
+                    <div class="weave" style="left:430px; top:56px;">
+                      <strong>Screen Fragment</strong>
+                      sidebar-top.png / overlap issue / density note
+                    </div>
+                    <div class="weave" style="left:104px; top:238px;">
+                      <strong>Terminal Weft</strong>
+                      pnpm test / cargo test / patch apply / watch
+                    </div>
+                    <div class="weave" style="right:26px; top:232px;">
+                      <strong>Patch Result</strong>
+                      selector reflow / project grouping / compile green
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="card">
+                <div class="card-head">
+                  <span>Focus Weaves</span>
+                  <span>代码不是中心画布，而是被拉入会话网中的一种织片</span>
+                </div>
+                <div class="card-body">
+                  <div class="metric-grid">
+                    <div class="metric">
+                      <strong>08</strong>
+                      <span>活跃上下文织片，包括图片、选区、差异、命令输出。</span>
+                    </div>
+                    <div class="metric">
+                      <strong>05</strong>
+                      <span>并排 weave lanes，对应不同项目流与修复链路。</span>
+                    </div>
+                    <div class="metric">
+                      <strong>92%</strong>
+                      <span>当前会话聚焦度，用于控制视觉噪声和建议频率。</span>
+                    </div>
+                  </div>
+                  <div class="diff micro" style="margin-top:12px;">
+flow.notes
+
+project ─ prompt ─ screenshot ─ terminal
+        └ issue ─ fix preview ─ patch
+
+editor snippet becomes a woven fragment:
+- component intent
+- changed lines
+- review comments
+                  </div>
+                </div>
+              </section>
+
+              <section class="card">
+                <div class="card-head">
+                  <span>Tools Loom</span>
+                  <span>论文工具区被设计成缺陷线束与修复线束的织机</span>
+                </div>
+                <div class="card-body tools-grid">
+                  <div class="issue-list">
+                    <div class="issue">
+                      <strong>引用样式偏移线</strong>
+                      <span>第 6 条参考文献括号样式偏离模板；建议转成全角中括号。</span>
+                    </div>
+                    <div class="issue">
+                      <strong>段首缩进张力失衡</strong>
+                      <span>摘要与正文段首缩进规则不同步，影响整体版式节奏。</span>
+                    </div>
+                    <div class="issue">
+                      <strong>图表说明线中断</strong>
+                      <span>2 处图注被识别为正文，需重新编织结构标记。</span>
+                    </div>
+                  </div>
+                  <div class="diff micro">
+loom.diff
+
+issue-thread: citation.format
+before: [4]
+after : ［4］
+
+issue-thread: paragraph.indent
+before: first_line_chars=0
+after : first_line_chars=2
+                  </div>
+                </div>
+              </section>
+
+              <section class="card">
+                <div class="card-head">
+                  <span>Settings Instrument Rail</span>
+                  <span>设置被转译成可调的线张力与环境阻尼</span>
+                </div>
+                <div class="card-body settings-list">
+                  <div class="setting">
+                    <strong>Execution Tension</strong>
+                    <span>fast feedback / retain command traces / merge related outputs</span>
+                  </div>
+                  <div class="setting">
+                    <strong>Surface Tone</strong>
+                    <span>ember charcoal / paper accent / low glare / cinematic contrast</span>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+          <div class="legend">
+            方向关键词：编织台、线束关系、会话织片、聚焦张力、修复织机。
+          </div>
+        </article>
+
+        <article class="concept">
+          <h2>Habitat Grid</h2>
+          <p class="subtitle">
+            把 GhostTerm 做成“工作栖息地”。项目不是树节点，而是舱室；终端不是黑框，而是能量通道；工具区像检验实验室；设置像气候系统。
+          </p>
+          <div class="window habitat">
+            <div class="titlebar">
+              <div class="lights">
+                <span style="background:#d56a63"></span>
+                <span style="background:#d0a246"></span>
+                <span style="background:#6a9f6d"></span>
+              </div>
+              <div class="brand">
+                <span class="mark"></span>
+                <span>GhostTerm</span>
+              </div>
+              <div class="nav">
+                <span class="active">Workspace</span>
+                <span>Tools</span>
+                <span>Settings</span>
+              </div>
+            </div>
+            <div class="stack">
+              <section class="card">
+                <div class="card-head">
+                  <span>Workspace Habitat</span>
+                  <span>项目、命令、文档、AI 上下文被视为可停靠的舱室</span>
+                </div>
+                <div class="card-body cells">
+                  <div class="cell-grid">
+                    <div class="cell">
+                      <strong>Project Bay A</strong>
+                      <p>GhostTerm 核心仓。包含状态历史、编辑 slab、运行通道、review tray。</p>
+                    </div>
+                    <div class="cell">
+                      <strong>Project Bay B</strong>
+                      <p>论文检测系统。与模板库和 sidecar 实验室直接相连。</p>
+                    </div>
+                    <div class="cell">
+                      <strong>Context Dock</strong>
+                      <p>截图、选区、diff、issue 被吸附在统一上下文停靠台。</p>
+                    </div>
+                    <div class="cell">
+                      <strong>Command Channel</strong>
+                      <p>执行流像管道一样贯穿栖息地，而不是一个孤立终端框。</p>
+                    </div>
+                  </div>
+                  <div class="diff micro">
+habitat.status
+
+bay.ghostterm = warm
+channel.codex = streaming
+dock.context = 11 packets
+lab.thesis = 3 issues queued
+climate.focus = deep
+                  </div>
+                </div>
+              </section>
+
+              <section class="card">
+                <div class="card-head">
+                  <span>Habitat Metrics</span>
+                  <span>把工作环境状态化，而不是只展示文件状态</span>
+                </div>
+                <div class="card-body">
+                  <div class="metric-grid">
+                    <div class="metric">
+                      <strong>04</strong>
+                      <span>已启用项目舱，切换不丢失命令通道与记忆。</span>
+                    </div>
+                    <div class="metric">
+                      <strong>11</strong>
+                      <span>已停靠上下文包，作为 AI CLI 会话的环境燃料。</span>
+                    </div>
+                    <div class="metric">
+                      <strong>02</strong>
+                      <span>活跃实验室：规则检测实验室与差异审查实验室。</span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="card">
+                <div class="card-head">
+                  <span>Forensic Tool Lab</span>
+                  <span>论文规范工具区被做成证据检验仓，不是普通 issue 表</span>
+                </div>
+                <div class="card-body tools-grid">
+                  <div class="issue-list">
+                    <div class="issue">
+                      <strong>Specimen A / 标题层级污染</strong>
+                      <span>第 2.3 节标题样式被正文样式污染，建议恢复 H2 模板签名。</span>
+                    </div>
+                    <div class="issue">
+                      <strong>Specimen B / 图注位移</strong>
+                      <span>图注对象与图像对象失去粘连，需重新归位。</span>
+                    </div>
+                    <div class="issue">
+                      <strong>Specimen C / 空格异变</strong>
+                      <span>检测到 14 处中英文混排间距异常，建议批量清洗。</span>
+                    </div>
+                  </div>
+                  <div class="diff micro">
+lab.compare
+
+source specimen vs fixed specimen
+
+caption.position: top -> bottom
+indent.signature: broken -> restored
+reference.style: halfwidth -> fullwidth
+                  </div>
+                </div>
+              </section>
+
+              <section class="card">
+                <div class="card-head">
+                  <span>Climate Controls</span>
+                  <span>设置页被翻译成环境控制系统</span>
+                </div>
+                <div class="card-body settings-list">
+                  <div class="setting">
+                    <strong>Terminal Climate</strong>
+                    <span>system shell / scrollback preserve / compact command channel / low glare ink</span>
+                  </div>
+                  <div class="setting">
+                    <strong>Behavior Climate</strong>
+                    <span>session memory on / grouped projects by habitat / tools lab auto resume</span>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+          <div class="legend">
+            方向关键词：栖息地、项目舱、能量通道、检验证据仓、环境控制。
+          </div>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>
