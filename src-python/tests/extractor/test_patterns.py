@@ -193,3 +193,52 @@ class TestExtractLineSpacing:
         assert out['para.line_spacing_type'] == 'single'
         out2 = extract_line_spacing('多倍行距 1.5')
         assert out2['para.line_spacing_type'] == 'multiple'
+
+
+class TestExtractLetterSpacing:
+    """T3.4a: 字符间距多单位"""
+
+    def test_letter_spacing_1_pt(self):
+        from thesis_worker.extractor.patterns import extract_letter_spacing
+        # "字符间距 加宽 1 磅" → ('para.letter_spacing_pt', 1.0)
+        assert extract_letter_spacing('字符间距 加宽 1 磅') == ('para.letter_spacing_pt', 1.0)
+
+    def test_letter_spacing_2_chars(self):
+        from thesis_worker.extractor.patterns import extract_letter_spacing
+        assert extract_letter_spacing('字符间距 2 字符') == ('para.letter_spacing_chars', 2.0)
+
+    def test_no_keyword_returns_none(self):
+        from thesis_worker.extractor.patterns import extract_letter_spacing
+        assert extract_letter_spacing('段前 6 磅') is None
+
+
+class TestExtractTableBordersText:
+    """T3.4b: 表线 / 三线表自然语言"""
+
+    def test_three_line_table_keyword(self):
+        from thesis_worker.extractor.patterns import extract_table_borders_text
+        out = extract_table_borders_text('表格使用三线表')
+        assert out['table.is_three_line'] is True
+
+    def test_top_bottom_border_combined(self):
+        from thesis_worker.extractor.patterns import extract_table_borders_text
+        out = extract_table_borders_text('上下表线 1.5 磅')
+        assert out['table.border_top_pt'] == 1.5
+        assert out['table.border_bottom_pt'] == 1.5
+
+    def test_header_border(self):
+        from thesis_worker.extractor.patterns import extract_table_borders_text
+        out = extract_table_borders_text('表头下线 0.5 磅')
+        assert out['table.header_border_pt'] == 0.5
+
+    def test_combined_3_borders(self):
+        from thesis_worker.extractor.patterns import extract_table_borders_text
+        out = extract_table_borders_text('三线表，上下表线 1.5 磅，表头下线 0.5 磅')
+        assert out['table.is_three_line'] is True
+        assert out['table.border_top_pt'] == 1.5
+        assert out['table.border_bottom_pt'] == 1.5
+        assert out['table.header_border_pt'] == 0.5
+
+    def test_no_keyword_returns_empty(self):
+        from thesis_worker.extractor.patterns import extract_table_borders_text
+        assert extract_table_borders_text('居中对齐') == {}

@@ -275,3 +275,71 @@ def extract_line_spacing(text: str) -> Optional[dict]:
     if '单倍行距' in text:
         return {'para.line_spacing_type': 'single', 'para.line_spacing': 1.0}
     return None
+
+
+# ============================================================
+# T3.4a: 字符间距多单位
+# 单位：字符 + 4 长度单位（无"行"）
+# 与缩进类似，但 sink 走 letter_spacing 而非 first_line/hanging
+# ============================================================
+
+# 字符间距单位：字符 + 4 长度单位（无"行"）
+_LS_UNITS = r'(?:字符|磅|pt|点|英寸|inch|in|厘米|cm|毫米|mm)'
+_RE_LETTER_SPACING = re.compile(
+    r'字符?间距[^\d]*?(\d+(?:\.\d+)?)[\s　]*(' + _LS_UNITS + r')',
+    re.IGNORECASE,
+)
+
+
+def extract_letter_spacing(text: str) -> Optional[tuple[str, float]]:
+    """抽字符间距 → (sink_attr_key, value)。
+
+    @example
+        extract_letter_spacing('字符间距 加宽 1 磅') → ('para.letter_spacing_pt', 1.0)
+        extract_letter_spacing('字符间距 2 字符')    → ('para.letter_spacing_chars', 2.0)
+    """
+    from .units import length_to_pt
+    m = _RE_LETTER_SPACING.search(text)
+    if not m:
+        return None
+    val = float(m.group(1))
+    unit = m.group(2)
+    if unit == '字符':
+        return ('para.letter_spacing_chars', val)
+    pt = length_to_pt(val, unit)
+    if pt is None:
+        return None
+    return ('para.letter_spacing_pt', round(pt, 2))
+
+
+# ============================================================
+# T3.4b: 表线规范关键词抽取
+# 三线表 / 上下表线 / 表头下线 三类关键词
+# 上下表线一次设两 attr（顶+底），表头下线设独立 attr
+# ============================================================
+
+# 表线规范关键词正则
+_RE_TABLE_THREE_LINE = re.compile(r'三线表', re.IGNORECASE)
+_RE_TABLE_TOP_BOTTOM = re.compile(r'上下表线[\s　]*(\d+(?:\.\d+)?)[\s　]*磅', re.IGNORECASE)
+_RE_TABLE_HEADER_LINE = re.compile(r'表头下线[\s　]*(\d+(?:\.\d+)?)[\s　]*磅', re.IGNORECASE)
+
+
+def extract_table_borders_text(text: str) -> dict:
+    """抽表格规范关键词与线宽。
+
+    返回的字典含已识别的 attr；无任何关键词时返回 {}。
+
+    @example
+        extract_table_borders_text('三线表，上下表线 1.5 磅，表头下线 0.5 磅')
+          → {'table.is_three_line': True, 'table.border_top_pt': 1.5, 'table.border_bottom_pt': 1.5, 'table.header_border_pt': 0.5}
+    """
+    out: dict = {}
+    if _RE_TABLE_THREE_LINE.search(text):
+        out['table.is_three_line'] = True
+    if m := _RE_TABLE_TOP_BOTTOM.search(text):
+        val = float(m.group(1))
+        out['table.border_top_pt'] = val
+        out['table.border_bottom_pt'] = val
+    if m := _RE_TABLE_HEADER_LINE.search(text):
+        out['table.header_border_pt'] = float(m.group(1))
+    return out
