@@ -191,5 +191,10 @@ describe('formatFieldValue', () => {
     it('letter_spacing_pt → "字距 1pt"', () => {
       expect(formatFieldValue({ 'para.letter_spacing_pt': 1 })).toBe('字距 1pt');
     });
+
+    // T-fix4: line_spacing_pt 单独显示加 "行距" 前缀，与同伴 _pt 一致
+    it('line_spacing_pt 单独显示带 "行距" 前缀', () => {
+      expect(formatFieldValue({ 'para.line_spacing_pt': 28 })).toBe('行距 28pt');
+    });
   });
 });

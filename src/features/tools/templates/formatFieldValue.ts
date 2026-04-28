@@ -74,8 +74,10 @@ function formatAttr(key: string, value: unknown): string {
       return LABELS[String(value)] ?? String(value);
     }
     // T2.4: 行距 pt 值（与 line_spacing_type 配对：atLeast 28pt / exactly 28pt）
+    // 加"行距"前缀与同伴 _pt（首行缩进/悬挂缩进/字距）保持一致；
+    // combined 时与 type 共显："最小值 · 行距 28pt"
     case 'para.line_spacing_pt':
-      return `${value}pt`;
+      return `行距 ${value}pt`;
     case 'para.first_line_indent_chars':
       return `首行缩进 ${value} 字`;
     // T2.4: 首行缩进 pt 值（部分规范用磅而非"字"描述缩进量）
