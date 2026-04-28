@@ -54,6 +54,10 @@ from thesis_worker.engine_v2.checkers import (
     check_table_border_top_pt,
     check_table_border_bottom_pt,
     check_table_header_border_pt,
+    # T3.3: numbering.* namespace
+    check_numbering_figure_style,
+    check_numbering_subfigure_style,
+    check_numbering_formula_style,
 )
 from thesis_worker.engine_v2.field_defs import FIELD_DEFS
 
@@ -901,3 +905,179 @@ class TestTableHeaderBorderPt:
         # 判别力：将 abs<容差 改为严格相等后，0.5 != 0.55 → 测试挂。
         doc = _doc_with_three_line_table(inside_h_sz=4)
         assert check_table_header_border_pt(doc, 0.55) is None
+
+
+# ───────────────────────────────────────────────
+# T3.3: numbering.* namespace checker 测试
+# ───────────────────────────────────────────────
+
+def _doc_with_figure_captions(*captions: str) -> Document:
+    """构造含多个图题段落的文档辅助函数。
+
+    直接在段落文本中写入图题字符串（如"图1 系统架构"/"图1-1 数据流"），
+    _read_numbering_styles 从文本正则推断风格，不依赖 Word 样式名。
+    """
+    doc = Document()
+    for cap in captions:
+        doc.add_paragraph(cap)
+    return doc
+
+
+def _doc_with_formula_numbers(*texts: str) -> Document:
+    """构造含多个公式编号的文档辅助函数。
+
+    段落文本末尾含括号编号（如"E = mc² (1)"/"F = ma (1-1)"）。
+    """
+    doc = Document()
+    for text in texts:
+        doc.add_paragraph(text)
+    return doc
+
+
+class TestNumberingFigureStyle:
+    """图编号风格检查器测试。
+
+    判别力设计：
+    - PASS：5 个连续图题 + expected='continuous' → actual='continuous' → None。
+    - FAIL：5 个连续图题 + expected='chapter_based' → actual='continuous' → issue。
+    - None path（样本不足）：只有 1 个图题（< 2）→ actual=None → None。
+    删除 check_numbering_figure_style 主体逻辑后 PASS/FAIL case 互换结果，测试必挂。
+    """
+
+    def test_continuous_passes(self):
+        # 5 个"图N"格式图题 → actual=continuous，expected=continuous → None
+        doc = _doc_with_figure_captions(
+            '图1 系统架构图', '图2 数据流图', '图3 模块关系',
+            '图4 时序图', '图5 部署图',
+        )
+        assert check_numbering_figure_style(doc, 'continuous') is None
+
+    def test_continuous_mismatch_chapter_based(self):
+        # 5 个连续图题，但 expected=chapter_based → actual 与 expected 互斥 → issue
+        doc = _doc_with_figure_captions(
+            '图1 系统架构图', '图2 数据流图', '图3 模块关系',
+            '图4 时序图', '图5 部署图',
+        )
+        issue = check_numbering_figure_style(doc, 'chapter_based')
+        assert issue is not None
+        assert issue['attr'] == 'numbering.figure_style'
+        assert issue['actual'] == 'continuous'
+        assert issue['expected'] == 'chapter_based'
+
+    def test_chapter_based_passes(self):
+        # 5 个"图N-M"格式图题 → actual=chapter_based，expected=chapter_based → None
+        doc = _doc_with_figure_captions(
+            '图1-1 总体架构', '图1-2 子系统架构',
+            '图2-1 数据模型', '图2-2 ER图', '图3-1 时序图',
+        )
+        assert check_numbering_figure_style(doc, 'chapter_based') is None
+
+    def test_chapter_based_mismatch_continuous(self):
+        # 5 个章节式图题，expected=continuous → actual 与 expected 互斥 → issue
+        doc = _doc_with_figure_captions(
+            '图1-1 总体架构', '图1-2 子系统架构',
+            '图2-1 数据模型', '图2-2 ER图', '图3-1 时序图',
+        )
+        issue = check_numbering_figure_style(doc, 'continuous')
+        assert issue is not None
+        assert issue['actual'] == 'chapter_based'
+        assert issue['expected'] == 'continuous'
+
+    def test_insufficient_sample_returns_none(self):
+        # 只有 1 个图题（样本不足），actual=None → 不报 issue（无法判定）
+        doc = _doc_with_figure_captions('图1 唯一图题')
+        assert check_numbering_figure_style(doc, 'continuous') is None
+        assert check_numbering_figure_style(doc, 'chapter_based') is None
+
+
+class TestNumberingSubfigureStyle:
+    """分图编号风格检查器测试。
+
+    判别力设计：
+    - PASS：含字母标记"图1(a)""图1(b)" + expected='a_b_c' → actual='a_b_c' → None。
+    - FAIL：同样含字母标记，expected='1_2_3' → actual='a_b_c' → issue。
+    - None path：图题无子图标记 → subfigure_style 不写入 → actual=None → None。
+    """
+
+    def test_letter_style_passes(self):
+        # 含"图1(a)""图1(b)"分图标记，共有 >=2 个图题，expected=a_b_c → None
+        doc = _doc_with_figure_captions(
+            '图1(a) 方案A架构', '图1(b) 方案B架构',
+            '图2 总体对比', '图3 详细流程',
+        )
+        assert check_numbering_subfigure_style(doc, 'a_b_c') is None
+
+    def test_letter_style_mismatch(self):
+        # 含字母分图标记，但 expected='1_2_3' → actual 与 expected 互斥 → issue
+        doc = _doc_with_figure_captions(
+            '图1(a) 方案A架构', '图1(b) 方案B架构',
+            '图2 总体对比', '图3 详细流程',
+        )
+        issue = check_numbering_subfigure_style(doc, '1_2_3')
+        assert issue is not None
+        assert issue['attr'] == 'numbering.subfigure_style'
+        assert issue['actual'] == 'a_b_c'
+        assert issue['expected'] == '1_2_3'
+
+    def test_no_subfigure_returns_none(self):
+        # 无子图标记（普通图题），actual=None → 不报 issue（无法判定）
+        doc = _doc_with_figure_captions(
+            '图1 系统架构图', '图2 数据流图', '图3 模块关系',
+        )
+        assert check_numbering_subfigure_style(doc, 'a_b_c') is None
+        assert check_numbering_subfigure_style(doc, '1_2_3') is None
+
+
+class TestNumberingFormulaStyle:
+    """公式编号风格检查器测试。
+
+    判别力设计：
+    - PASS：5 个"(N)"形式编号 + expected='continuous' → actual='continuous' → None。
+    - FAIL：5 个连续编号，expected='chapter_based' → actual 与 expected 互斥 → issue。
+    - None path：只有 1 个公式编号（< 2）→ actual=None → None。
+    """
+
+    def test_continuous_passes(self):
+        # 5 个"(N)"连续编号，expected=continuous → None
+        doc = _doc_with_formula_numbers(
+            'E = mc² (1)', 'F = ma (2)', 'P = mv (3)',
+            'W = Fs (4)', 'Q = mc△T (5)',
+        )
+        assert check_numbering_formula_style(doc, 'continuous') is None
+
+    def test_continuous_mismatch_chapter_based(self):
+        # 5 个连续编号，expected=chapter_based → actual 与 expected 互斥 → issue
+        doc = _doc_with_formula_numbers(
+            'E = mc² (1)', 'F = ma (2)', 'P = mv (3)',
+            'W = Fs (4)', 'Q = mc△T (5)',
+        )
+        issue = check_numbering_formula_style(doc, 'chapter_based')
+        assert issue is not None
+        assert issue['attr'] == 'numbering.formula_style'
+        assert issue['actual'] == 'continuous'
+        assert issue['expected'] == 'chapter_based'
+
+    def test_chapter_based_passes(self):
+        # 5 个"(N-M)"章节式编号，expected=chapter_based → None
+        doc = _doc_with_formula_numbers(
+            'E = mc² (1-1)', 'F = ma (1-2)', 'P = mv (2-1)',
+            'W = Fs (2-2)', 'Q = mc△T (3-1)',
+        )
+        assert check_numbering_formula_style(doc, 'chapter_based') is None
+
+    def test_chapter_based_mismatch_continuous(self):
+        # 5 个章节式编号，expected=continuous → actual 与 expected 互斥 → issue
+        doc = _doc_with_formula_numbers(
+            'E = mc² (1-1)', 'F = ma (1-2)', 'P = mv (2-1)',
+            'W = Fs (2-2)', 'Q = mc△T (3-1)',
+        )
+        issue = check_numbering_formula_style(doc, 'continuous')
+        assert issue is not None
+        assert issue['actual'] == 'chapter_based'
+        assert issue['expected'] == 'continuous'
+
+    def test_insufficient_sample_returns_none(self):
+        # 只有 1 个公式编号（样本不足），actual=None → 不报 issue
+        doc = _doc_with_formula_numbers('唯一公式 E = mc² (1)')
+        assert check_numbering_formula_style(doc, 'continuous') is None
+        assert check_numbering_formula_style(doc, 'chapter_based') is None

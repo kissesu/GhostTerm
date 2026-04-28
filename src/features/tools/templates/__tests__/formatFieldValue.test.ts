@@ -133,4 +133,35 @@ describe('formatFieldValue', () => {
     const result = formatFieldValue({ 'table.header_border_pt': 0.5 });
     expect(result).toContain('表头下线 0.5pt');
   });
+
+  // ── T3.3: numbering.* namespace attr 中文片段输出 ──────────────────
+  it('numbering.figure_style continuous → 图编号：连续', () => {
+    const result = formatFieldValue({ 'numbering.figure_style': 'continuous' });
+    expect(result).toContain('图编号：连续');
+  });
+
+  it('numbering.figure_style chapter_based → 图编号：章节式', () => {
+    const result = formatFieldValue({ 'numbering.figure_style': 'chapter_based' });
+    expect(result).toContain('图编号：章节式');
+  });
+
+  it('numbering.subfigure_style a_b_c → 分图 (a)(b)(c)', () => {
+    const result = formatFieldValue({ 'numbering.subfigure_style': 'a_b_c' });
+    expect(result).toContain('分图 (a)(b)(c)');
+  });
+
+  it('numbering.subfigure_style 1_2_3 → 分图 .1/.2/.3', () => {
+    const result = formatFieldValue({ 'numbering.subfigure_style': '1_2_3' });
+    expect(result).toContain('分图 .1/.2/.3');
+  });
+
+  it('numbering.formula_style continuous → 公式：连续', () => {
+    const result = formatFieldValue({ 'numbering.formula_style': 'continuous' });
+    expect(result).toContain('公式：连续');
+  });
+
+  it('numbering.formula_style chapter_based → 公式：章节式', () => {
+    const result = formatFieldValue({ 'numbering.formula_style': 'chapter_based' });
+    expect(result).toContain('公式：章节式');
+  });
 });

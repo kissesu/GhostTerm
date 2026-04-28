@@ -53,6 +53,10 @@ const ATTR_LABEL: Record<string, string> = {
   'table.border_top_pt': '上边框（pt）',
   'table.border_bottom_pt': '下边框（pt）',
   'table.header_border_pt': '表头下线（pt）',
+  // T3.3: numbering namespace
+  'numbering.figure_style': '图编号风格',
+  'numbering.subfigure_style': '分图编号风格',
+  'numbering.formula_style': '公式编号风格',
 };
 
 // 字段状态类型：done=已填写，partial=部分填写，empty=待填写，skipped=已跳过

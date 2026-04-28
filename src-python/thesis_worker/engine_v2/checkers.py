@@ -17,7 +17,7 @@ from docx.text.paragraph import Paragraph
 
 # 复用 extractor 中已实现的全文启发式扫描，避免重复维护两份正则+阈值
 # extractor 包不依赖 engine_v2，反向 import 无循环
-from ..extractor.pipeline import _detect_punct_space_after
+from ..extractor.pipeline import _detect_punct_space_after, _read_numbering_styles
 
 # ───────────────────────────────────────────────
 # 容差常量（用于浮点属性的近似匹配）
@@ -622,6 +622,57 @@ def check_table_header_border_pt(doc: Document, expected: float) -> 'Optional[di
 
 
 # ───────────────────────────────────────────────
+# 类别 B（续）：T3.3 numbering.* namespace（编号风格）
+# ───────────────────────────────────────────────
+
+def check_numbering_figure_style(doc: Document, expected: str) -> Optional[dict]:
+    """检查图编号风格是否符合预期（'continuous' 连续 / 'chapter_based' 章节式）。
+
+    复用 pipeline._read_numbering_styles 的启发式多数票算法，
+    返回 None 表示：符合规范 OR 样本不足无法判定（两者均不报 issue）。
+    样本不足（< 2 个图题）时视为无法判定，保守处理不报违规。
+    """
+    styles = _read_numbering_styles(doc)
+    actual = styles.get('numbering.figure_style')
+    if actual is None:
+        # 样本不足，无法判定，不报 issue
+        return None
+    if actual == expected:
+        return None
+    return {'attr': 'numbering.figure_style', 'actual': actual, 'expected': expected}
+
+
+def check_numbering_subfigure_style(doc: Document, expected: str) -> Optional[dict]:
+    """检查分图编号风格是否符合预期（'a_b_c' 字母 / '1_2_3' 数字点号）。
+
+    subfigure_style 仅在 figure_style 已确定时由 pipeline 推断；
+    若返回 None 表示文档无子图标记，视为无法判定，不报 issue。
+    """
+    styles = _read_numbering_styles(doc)
+    actual = styles.get('numbering.subfigure_style')
+    if actual is None:
+        return None
+    if actual == expected:
+        return None
+    return {'attr': 'numbering.subfigure_style', 'actual': actual, 'expected': expected}
+
+
+def check_numbering_formula_style(doc: Document, expected: str) -> Optional[dict]:
+    """检查公式编号风格是否符合预期（'continuous' 连续 / 'chapter_based' 章节式）。
+
+    复用 pipeline._read_numbering_styles 多数票推断；
+    样本不足（< 2 个公式编号）时返回 None，不报 issue。
+    """
+    styles = _read_numbering_styles(doc)
+    actual = styles.get('numbering.formula_style')
+    if actual is None:
+        return None
+    if actual == expected:
+        return None
+    return {'attr': 'numbering.formula_style', 'actual': actual, 'expected': expected}
+
+
+# ───────────────────────────────────────────────
 # 类别 C：延后存根（deferred to v3）
 # ───────────────────────────────────────────────
 
@@ -711,6 +762,10 @@ CHECKER_MAP: dict[str, Any] = {
     'table.border_top_pt':             check_table_border_top_pt,
     'table.border_bottom_pt':          check_table_border_bottom_pt,
     'table.header_border_pt':          check_table_header_border_pt,
+    # T3.3: numbering namespace（图/分图/公式编号风格，文档级启发式推断）
+    'numbering.figure_style':          check_numbering_figure_style,
+    'numbering.subfigure_style':       check_numbering_subfigure_style,
+    'numbering.formula_style':         check_numbering_formula_style,
     # layout / citation / pagination（延后存根）
     'layout.position':                 check_layout_position,
     'citation.style':                  check_citation_style,
@@ -739,4 +794,8 @@ DOC_LEVEL_KEYS: frozenset[str] = frozenset({
     'table.border_top_pt',
     'table.border_bottom_pt',
     'table.header_border_pt',
+    # T3.3: numbering namespace 3 个文档级 key（全文启发式扫描，不依赖单段落）
+    'numbering.figure_style',
+    'numbering.subfigure_style',
+    'numbering.formula_style',
 })

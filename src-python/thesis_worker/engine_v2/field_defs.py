@@ -25,6 +25,10 @@
                     table_header.applicable_attributes 末尾追加 table.is_three_line /
                     table.border_top_pt / table.border_bottom_pt / table.header_border_pt，
                     共 8 attr；table_caption / table_inner_text 不变。
+              T3.3: 新增 numbering.* namespace（3 个 attr），覆盖图序/分图/公式编号风格：
+                    figure_caption.applicable_attributes 追加 numbering.figure_style /
+                    numbering.subfigure_style，共 6 attr；
+                    formula_block.applicable_attributes 追加 numbering.formula_style，共 2 attr。
 @author: Atlas.oi
 @date: 2026-04-28
 """
@@ -117,7 +121,13 @@ FIELD_DEFS: list[dict] = [
     },
     {
         'id': 'figure_caption', 'label': '图题', 'group': 'body', 'order': 19,
-        'applicable_attributes': ['font.cjk', 'font.size_pt', 'para.align', 'layout.position'],
+        # T3.3: 追加 numbering.figure_style / numbering.subfigure_style 两项。
+        # 编号风格属于图题的核心规范约束（连续编号 vs 章节式），
+        # 与字体/对齐合并到同一字段，避免新增字段扩大总数。
+        'applicable_attributes': [
+            'font.cjk', 'font.size_pt', 'para.align', 'layout.position',
+            'numbering.figure_style', 'numbering.subfigure_style',
+        ],
     },
     {
         'id': 'figure_inner_text', 'label': '图内文字/图例', 'group': 'body', 'order': 20,
@@ -150,10 +160,9 @@ FIELD_DEFS: list[dict] = [
     {
         # T2.3: 新增公式字段。理工科规范对公式格式规定详细（居中另起一行、编号圆括号靠右、
         # 等号处转行），属于独立可校验的版面元素，合并在 body_para 无法单独施加约束。
-        # applicable_attributes 本 task 只加 para.align；
-        # numbering.formula_style 等 T3.3 新增 numbering namespace 时再补。
+        # T3.3: 追加 numbering.formula_style（连续/章节式），规范文本常见"(1-1)"或"(1)"两种。
         'id': 'formula_block', 'label': '公式', 'group': 'body', 'order': 24,
-        'applicable_attributes': ['para.align'],
+        'applicable_attributes': ['para.align', 'numbering.formula_style'],
     },
     {
         # T2.4: 新增脚注字段。spec1 规定"注释列于当前页脚注位置，宋体小五号"，

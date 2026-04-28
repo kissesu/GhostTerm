@@ -737,6 +737,49 @@ export function RuleValueEditorByAttr({ attr, value, onChange }: RuleValueEditor
         />
       );
 
+    // ── 编号风格属性（T3.3）──────────────────────
+    // T3.3: 图编号风格（连续式 vs 章节式）
+    case 'numbering.figure_style':
+      return (
+        <EnumSelect
+          value={value as string}
+          onChange={onChange}
+          testId="attr-fig-numbering"
+          options={[
+            { value: 'continuous', label: '连续编号（图1/图2）' },
+            { value: 'chapter_based', label: '章节式（图1-1/图2-3）' },
+          ]}
+        />
+      );
+
+    // T3.3: 分图编号风格（字母 vs 数字点号）
+    case 'numbering.subfigure_style':
+      return (
+        <EnumSelect
+          value={value as string}
+          onChange={onChange}
+          testId="attr-subfig-numbering"
+          options={[
+            { value: 'a_b_c', label: '(a)(b)(c)' },
+            { value: '1_2_3', label: '.1/.2/.3' },
+          ]}
+        />
+      );
+
+    // T3.3: 公式编号风格（连续式 vs 章节式）
+    case 'numbering.formula_style':
+      return (
+        <EnumSelect
+          value={value as string}
+          onChange={onChange}
+          testId="attr-formula-numbering"
+          options={[
+            { value: 'continuous', label: '连续编号（图1/图2）' },
+            { value: 'chapter_based', label: '章节式（图1-1/图2-3）' },
+          ]}
+        />
+      );
+
     // ── 表格结构属性（T3.2）──────────────────────
     // T3.2: 三线表开关（布尔，Toggle）
     case 'table.is_three_line':

@@ -121,6 +121,13 @@ function formatAttr(key: string, value: unknown): string {
       return LAYOUT_POSITION_LABEL[String(value)] ?? String(value);
     case 'citation.style':
       return `引文样式：${value}`;
+    // T3.3: numbering namespace（图/分图/公式编号风格）
+    case 'numbering.figure_style':
+      return String(value) === 'continuous' ? '图编号：连续' : '图编号：章节式';
+    case 'numbering.subfigure_style':
+      return String(value) === 'a_b_c' ? '分图 (a)(b)(c)' : '分图 .1/.2/.3';
+    case 'numbering.formula_style':
+      return String(value) === 'continuous' ? '公式：连续' : '公式：章节式';
     // T3.2: table namespace（三线表 + 边框线宽）
     case 'table.is_three_line':
       // 仅 true 时输出中文标签，false 不输出（避免"不是三线表"的负向描述污染摘要行）

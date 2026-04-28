@@ -414,6 +414,106 @@ def _read_table_attrs(doc) -> dict[str, Any]:
     return attrs
 
 
+# ───────────────────────────────────────────────────────────────────
+# T3.3: 编号风格推断正则（模块级常量，避免每次调用重复编译）
+# 全部含 [\s　] 以兼容全角空格（U+3000），参 feedback_regex_fullwidth_space.md
+# ───────────────────────────────────────────────────────────────────
+
+# 连续图编号：图1 / 图 2 / 图3，后面不跟 . 或 -（排除章节式前缀）
+_RE_FIG_CONTINUOUS = re.compile(r'图[\s　]*(\d+)(?![\.\-\d])', re.UNICODE)
+# 章节式图编号：图1-1 / 图1.2 / 图 2-3
+_RE_FIG_CHAPTER = re.compile(r'图[\s　]*(\d+)[\.\-](\d+)', re.UNICODE)
+# 分图字母标记：图1(a) / 图2（b）/ 图1.2(c)
+_RE_SUBFIG_LETTER = re.compile(
+    r'图[\s　]*\d+[\.\-]?\d*[\s　]*[\(（][a-zA-Z][\)）]', re.UNICODE
+)
+# 连续公式编号：(1) / （2）
+_RE_FORMULA_CONTINUOUS = re.compile(r'[\(（][\s　]*(\d+)[\s　]*[\)）]')
+# 章节式公式编号：(1-1) / (2.3) / （1-2）
+_RE_FORMULA_CHAPTER = re.compile(r'[\(（][\s　]*(\d+)[\.\-](\d+)[\s　]*[\)）]')
+
+
+def _read_numbering_styles(doc) -> 'dict[str, str]':
+    """从文档图题和公式段落推断编号风格（启发式多数票算法）。
+
+    业务逻辑：
+    1. 遍历所有段落，用 _RE_FIG_* 正则匹配图题文本
+       - 章节式（图1-1/图2.3）vs 连续式（图1/图2）各自计票
+       - >=2 个样本时按多数票决定 figure_style；冲突时偏保守选 chapter_based
+    2. 仅在 figure_style 已确定时推断 subfigure_style：
+       - 含 _RE_SUBFIG_LETTER 则 a_b_c，否则不写
+    3. 用 _RE_FORMULA_* 正则匹配含编号括号的段落（可能在行末）
+       - 章节式（(1-1)/(1.2)）vs 连续式（(1)/(2)）多数票
+
+    @param doc - python-docx Document 对象
+    @returns  { 'numbering.figure_style': str, 'numbering.subfigure_style': str,
+                'numbering.formula_style': str }，仅写入有足够样本的 key
+    """
+    # 图编号计票
+    fig_continuous = 0
+    fig_chapter = 0
+    subfig_letter_found = False
+
+    # 公式编号计票
+    formula_continuous = 0
+    formula_chapter = 0
+
+    for para in doc.paragraphs:
+        text = para.text
+        if not text.strip():
+            continue
+
+        # ── 图题检测 ────────────────────────────────────────────
+        # 章节式优先判断（否则"图1-1"也会被连续式 regex 匹配前缀"图1"）
+        if _RE_FIG_CHAPTER.search(text):
+            fig_chapter += 1
+            # 同段检测子图字母标记
+            if _RE_SUBFIG_LETTER.search(text):
+                subfig_letter_found = True
+        elif _RE_FIG_CONTINUOUS.search(text):
+            fig_continuous += 1
+            if _RE_SUBFIG_LETTER.search(text):
+                subfig_letter_found = True
+
+        # ── 公式编号检测 ─────────────────────────────────────────
+        # 章节式先判（避免"(1-1)"被连续式错误匹配括号内数字）
+        if _RE_FORMULA_CHAPTER.search(text):
+            formula_chapter += 1
+        elif _RE_FORMULA_CONTINUOUS.search(text):
+            formula_continuous += 1
+
+    result: dict[str, str] = {}
+
+    # figure_style 多数票：需要至少 2 个样本才做判断
+    total_fig = fig_continuous + fig_chapter
+    if total_fig >= 2:
+        if fig_chapter > fig_continuous:
+            # 章节式占多数，或相等时保守选章节式
+            result['numbering.figure_style'] = 'chapter_based'
+        elif fig_continuous > fig_chapter:
+            result['numbering.figure_style'] = 'continuous'
+        else:
+            # 票数相等：保守选 chapter_based
+            result['numbering.figure_style'] = 'chapter_based'
+
+        # 仅在 figure_style 已确定时推断 subfigure_style
+        if subfig_letter_found:
+            result['numbering.subfigure_style'] = 'a_b_c'
+
+    # formula_style 多数票：至少 2 个样本
+    total_formula = formula_continuous + formula_chapter
+    if total_formula >= 2:
+        if formula_chapter > formula_continuous:
+            result['numbering.formula_style'] = 'chapter_based'
+        elif formula_continuous > formula_chapter:
+            result['numbering.formula_style'] = 'continuous'
+        else:
+            # 票数相等：保守选 chapter_based
+            result['numbering.formula_style'] = 'chapter_based'
+
+    return result
+
+
 def _detect_punct_space_after(doc) -> 'bool | None':
     """检测英文标点后是否规范地空一字符。
 
@@ -555,6 +655,45 @@ def extract_all(file: str) -> dict[str, Any]:
         if table_attrs:
             rules.setdefault('table_header', {'enabled': True, 'value': {}})
             rules['table_header']['value'].update(table_attrs)
+
+    # ============================================
+    # T3.3: 编号风格抽取（图/分图/公式，启发式全文扫描）
+    # 编号风格无法通过段落级 field_matcher 命中，需独立扫全文推断
+    # figure_style + subfigure_style → figure_caption 字段
+    # formula_style → formula_block 字段
+    # ============================================
+    numbering_styles = _read_numbering_styles(doc)
+    if numbering_styles:
+        # figure_caption 相关属性（figure_style + subfigure_style）
+        fig_attrs: dict[str, Any] = {}
+        for key in ('numbering.figure_style', 'numbering.subfigure_style'):
+            if key in numbering_styles:
+                fig_attrs[key] = numbering_styles[key]
+        if fig_attrs:
+            fig_attrs = _log_and_filter_unsupported(
+                fig_attrs,
+                spec_file=os.path.basename(file),
+                field_id='figure_caption',
+                context_snippet='[numbering-figure attrs]',
+            )
+            if fig_attrs:
+                rules.setdefault('figure_caption', {'enabled': True, 'value': {}})
+                rules['figure_caption']['value'].update(fig_attrs)
+
+        # formula_block 相关属性（formula_style）
+        if 'numbering.formula_style' in numbering_styles:
+            formula_attrs: dict[str, Any] = {
+                'numbering.formula_style': numbering_styles['numbering.formula_style'],
+            }
+            formula_attrs = _log_and_filter_unsupported(
+                formula_attrs,
+                spec_file=os.path.basename(file),
+                field_id='formula_block',
+                context_snippet='[numbering-formula attrs]',
+            )
+            if formula_attrs:
+                rules.setdefault('formula_block', {'enabled': True, 'value': {}})
+                rules['formula_block']['value'].update(formula_attrs)
 
     return {
         'rules': rules,

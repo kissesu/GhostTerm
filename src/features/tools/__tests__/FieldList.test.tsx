@@ -273,6 +273,63 @@ describe('FieldList', () => {
     expect(screen.getByTestId('attr-border-header')).toBeInTheDocument();
   });
 
+  // ─────────────────────────────────────────────
+  // T3.3: numbering.* namespace attr 渲染断言
+  // ─────────────────────────────────────────────
+
+  it('T3.3: figure_caption 渲染管线包含 2 个 numbering.* attr 的编辑器', () => {
+    const fields = [
+      {
+        id: 'figure_caption',
+        label: '图题',
+        status: 'done' as const,
+        confidence: 0.9,
+        value: {
+          'numbering.figure_style': 'continuous',
+          'numbering.subfigure_style': 'a_b_c',
+        },
+      },
+    ];
+    render(
+      <FieldList
+        fields={fields}
+        currentFieldId={null}
+        onJump={vi.fn()}
+        onSkip={vi.fn()}
+        onAttrChange={vi.fn()}
+      />
+    );
+    // attr-fig-numbering → EnumSelect（numbering.figure_style）
+    expect(screen.getByTestId('attr-fig-numbering')).toBeInTheDocument();
+    // attr-subfig-numbering → EnumSelect（numbering.subfigure_style）
+    expect(screen.getByTestId('attr-subfig-numbering')).toBeInTheDocument();
+  });
+
+  it('T3.3: formula_block 渲染管线包含 numbering.formula_style 编辑器', () => {
+    const fields = [
+      {
+        id: 'formula_block',
+        label: '公式',
+        status: 'done' as const,
+        confidence: 0.9,
+        value: {
+          'numbering.formula_style': 'chapter_based',
+        },
+      },
+    ];
+    render(
+      <FieldList
+        fields={fields}
+        currentFieldId={null}
+        onJump={vi.fn()}
+        onSkip={vi.fn()}
+        onAttrChange={vi.fn()}
+      />
+    );
+    // attr-formula-numbering → EnumSelect（numbering.formula_style）
+    expect(screen.getByTestId('attr-formula-numbering')).toBeInTheDocument();
+  });
+
   it('calls onAttrChange with correct args when editor value changes', () => {
     // 构造一个字段，只测试 font.cjk（CjkFontSelect，select 元素可 fireEvent.change）
     const fields = [

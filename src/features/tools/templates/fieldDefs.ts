@@ -20,6 +20,9 @@
  *   T3.2: 新增 table.* namespace 4 attr，table_header 追加：
  *         table.is_three_line / table.border_top_pt / table.border_bottom_pt /
  *         table.header_border_pt（共 8 attr）；table_caption / table_inner_text 不变。
+ *   T3.3: 新增 numbering.* namespace 3 attr：
+ *         figure_caption 追加 numbering.figure_style / numbering.subfigure_style（共 6 attr）；
+ *         formula_block 追加 numbering.formula_style（共 2 attr）。
  * @author Atlas.oi
  * @date 2026-04-28
  */
@@ -182,7 +185,11 @@ export const FIELD_DEFS: FieldDef[] = [
     label: '图题',
     group: 'body',
     order: 19,
-    applicable_attributes: ['font.cjk', 'font.size_pt', 'para.align', 'layout.position'],
+    // T3.3: 追加 numbering.figure_style / numbering.subfigure_style 两项
+    applicable_attributes: [
+      'font.cjk', 'font.size_pt', 'para.align', 'layout.position',
+      'numbering.figure_style', 'numbering.subfigure_style',
+    ],
   },
   {
     id: 'figure_inner_text',
@@ -224,13 +231,12 @@ export const FIELD_DEFS: FieldDef[] = [
   {
     // T2.3: 新增公式字段。理工科规范对公式格式规定详细（居中另起一行、编号圆括号靠右、
     // 等号处转行），属于独立可校验的版面元素，合并在 body_para 无法单独施加约束。
-    // applicable_attributes 本 task 只加 para.align；
-    // numbering.formula_style 等 T3.3 新增 numbering namespace 时再补。
+    // T3.3: 追加 numbering.formula_style（连续/章节式），规范文本常见"(1-1)"或"(1)"两种。
     id: 'formula_block',
     label: '公式',
     group: 'body',
     order: 24,
-    applicable_attributes: ['para.align'],
+    applicable_attributes: ['para.align', 'numbering.formula_style'],
   },
   {
     // T2.4: 新增脚注字段。spec1 规定"注释列于当前页脚注位置，宋体小五号"，

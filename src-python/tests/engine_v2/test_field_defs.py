@@ -2,7 +2,8 @@
 @file: test_field_defs.py
 @description: 37 字段定义测试（T2.1 新增 table_header / T2.2 拆分 toc_entry 为 l1/l2/l3 /
               T2.3 新增 formula_block / T2.4 新增 footnote / T3.1 追加 6 个 attr key /
-              T3.2 table_header 追加 4 个 table.* attr）
+              T3.2 table_header 追加 4 个 table.* attr /
+              T3.3 figure_caption +2 numbering attr / formula_block +1 numbering attr）
 @author: Atlas.oi
 @date: 2026-04-28
 """
@@ -140,10 +141,11 @@ class TestFieldDefs:
         assert f['order'] == 24
 
     def test_formula_block_applicable_attributes(self):
-        # T2.3 只加 para.align；numbering.formula_style 等 T3.3 再补
+        # T3.3: formula_block 包含 para.align（T2.3）+ numbering.formula_style（T3.3）
         attrs = applicable_attrs('formula_block')
-        assert attrs == ['para.align']
-        assert len(attrs) == 1
+        assert 'para.align' in attrs
+        assert 'numbering.formula_style' in attrs
+        assert len(attrs) == 2
 
     def test_references_title_order_26(self):
         # T2.4 新增 footnote(order=25) 后 references_title 由 25 → 26
@@ -259,3 +261,39 @@ class TestFieldDefs:
         assert 'table.is_three_line' not in attrs
         assert 'table.border_top_pt' not in attrs
         assert set(attrs) == {'font.cjk', 'font.size_pt'}
+
+    # ─────────────────────────────────────────────
+    # T3.3: numbering.* namespace 绑定断言
+    # ─────────────────────────────────────────────
+
+    def test_figure_caption_has_numbering_attrs(self):
+        # T3.3: figure_caption 追加 numbering.figure_style + numbering.subfigure_style 后共 6 个
+        attrs = applicable_attrs('figure_caption')
+        assert 'numbering.figure_style' in attrs
+        assert 'numbering.subfigure_style' in attrs
+        # 原有 4 个 attr 保留
+        assert 'font.cjk' in attrs
+        assert 'font.size_pt' in attrs
+        assert 'para.align' in attrs
+        assert 'layout.position' in attrs
+        assert len(attrs) == 6
+
+    def test_formula_block_has_formula_style_attr(self):
+        # T3.3: formula_block 追加 numbering.formula_style 后共 2 个
+        attrs = applicable_attrs('formula_block')
+        assert 'numbering.formula_style' in attrs
+        # 原有 para.align 保留
+        assert 'para.align' in attrs
+        assert len(attrs) == 2
+
+    def test_figure_inner_text_not_changed_by_t33(self):
+        # figure_inner_text 不受 T3.3 影响（编号约束挂在 caption，不在图内文字）
+        attrs = applicable_attrs('figure_inner_text')
+        assert 'numbering.figure_style' not in attrs
+        assert 'numbering.subfigure_style' not in attrs
+
+    def test_formula_block_applicable_attributes_exact(self):
+        # T3.3 后 formula_block 精确白名单：para.align + numbering.formula_style
+        attrs = applicable_attrs('formula_block')
+        assert set(attrs) == {'para.align', 'numbering.formula_style'}
+        assert len(attrs) == 2

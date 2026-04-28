@@ -109,13 +109,14 @@ describe('FIELD_DEFS', () => {
   });
 
   it('formula_block 在正文部分且 order=24', () => {
-    // T2.3: 公式字段插在 body 末尾
+    // T2.3: 公式字段插在 body 末尾；T3.3: 追加 numbering.formula_style 后共 2 个 attr
     const f = getField('formula_block');
     expect(f).toBeDefined();
     expect(f?.group).toBe('body');
     expect(f?.order).toBe(24);
     expect(f?.label).toBe('公式');
-    expect(f?.applicable_attributes).toEqual(['para.align']);
+    // T3.3: para.align（T2.3）+ numbering.formula_style（T3.3）
+    expect(f?.applicable_attributes).toEqual(['para.align', 'numbering.formula_style']);
   });
 
   it('后置部分 6 个（order 26-31，T2.4 后整体 +1）', () => {

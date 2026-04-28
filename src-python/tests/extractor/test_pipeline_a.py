@@ -279,3 +279,79 @@ class TestT32TableAttrsExtraction:
         assert 'font.bold' not in result['value'], (
             f"run 隔离失败：font.bold 不应被报告，但实际 value={result['value']}"
         )
+
+
+# ───────────────────────────────────────────────
+# T3.3: numbering.* 集成测试（_read_numbering_styles via extract_all）
+# ───────────────────────────────────────────────
+
+class TestNumberingStylesIntegration:
+    """extract_all 中 numbering 风格抽取的端到端集成测试。
+
+    不依赖 spec_template_a.docx（该文档无图题，无法触发 numbering 路径），
+    而是用 tmp_path 构造含图题/公式编号的合成文档进行验证。
+    """
+
+    def test_continuous_figure_style_in_extract_all(self, tmp_path):
+        """5 个连续图题 → extract_all 后 figure_caption.value 含 figure_style='continuous'。
+
+        判别力：构造 5 个"图N"格式图题，continuous 多数票必然命中。
+        删除 pipeline 中 _read_numbering_styles 调用后，figure_caption.value 中
+        不含 numbering.figure_style 键，断言 key in value 必挂。
+        """
+        from docx import Document as DocxDocument
+        doc = DocxDocument()
+        for i in range(1, 6):
+            doc.add_paragraph(f'图{i} 这是图题文本')
+        docx_path = tmp_path / 'test_fig_continuous.docx'
+        doc.save(str(docx_path))
+
+        result = extract_all(str(docx_path))
+        rules = result['rules']
+
+        # figure_caption 字段必须存在（由 numbering 全文扫描写入）
+        assert 'figure_caption' in rules, f'figure_caption 未在 rules 中，rules keys={list(rules.keys())}'
+        value = rules['figure_caption']['value']
+        assert 'numbering.figure_style' in value, f'figure_style 未写入 value={value}'
+        assert value['numbering.figure_style'] == 'continuous'
+
+    def test_chapter_based_figure_style_in_extract_all(self, tmp_path):
+        """5 个章节式图题 → extract_all 后 figure_caption.value 含 figure_style='chapter_based'。
+
+        判别力：章节式（图N-M）与连续式（图N）各自命中路径互斥，删除判断分支后
+        全部落入另一路径，断言 actual=='chapter_based' 必挂。
+        """
+        from docx import Document as DocxDocument
+        doc = DocxDocument()
+        for chap, seq in [(1, 1), (1, 2), (2, 1), (2, 2), (3, 1)]:
+            doc.add_paragraph(f'图{chap}-{seq} 这是章节图题')
+        docx_path = tmp_path / 'test_fig_chapter.docx'
+        doc.save(str(docx_path))
+
+        result = extract_all(str(docx_path))
+        rules = result['rules']
+
+        assert 'figure_caption' in rules
+        value = rules['figure_caption']['value']
+        assert value.get('numbering.figure_style') == 'chapter_based'
+
+    def test_formula_style_in_extract_all(self, tmp_path):
+        """5 个连续公式编号 → extract_all 后 formula_block.value 含 formula_style='continuous'。
+
+        判别力：连续与章节式路径互斥，且仅在 >=2 个样本时写入。
+        删除 numbering 合入逻辑后 formula_block.value 中无该 key，断言挂。
+        """
+        from docx import Document as DocxDocument
+        doc = DocxDocument()
+        for i in range(1, 6):
+            doc.add_paragraph(f'这是公式 E = mc² ({i})')
+        docx_path = tmp_path / 'test_formula_continuous.docx'
+        doc.save(str(docx_path))
+
+        result = extract_all(str(docx_path))
+        rules = result['rules']
+
+        assert 'formula_block' in rules, f'formula_block 未写入，rules keys={list(rules.keys())}'
+        value = rules['formula_block']['value']
+        assert 'numbering.formula_style' in value, f'formula_style 未写入 value={value}'
+        assert value['numbering.formula_style'] == 'continuous'
