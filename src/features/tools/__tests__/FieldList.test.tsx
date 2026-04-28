@@ -395,6 +395,98 @@ describe('FieldList', () => {
     expect(input).toHaveAttribute('data-testid', 'attr-space-before-pt');
   });
 
+  // ─────────────────────────────────────────────
+  // T2.3: 5 个新 attr 渲染管线断言
+  // body_para / reference_entry / abstract_zh_title 三个字段覆盖
+  // line_spacing_type / line_spacing_pt / first_line_indent_pt /
+  // hanging_indent_pt / letter_spacing_pt 五个新属性
+  // ─────────────────────────────────────────────
+
+  it('T2.3: body_para 渲染 line_spacing_type / line_spacing_pt / first_line_indent_pt 三个新编辑器', () => {
+    // body_para.applicable_attributes 包含 5 attr 中的三个：
+    // para.line_spacing_type（EnumSelect）/ para.line_spacing_pt / para.first_line_indent_pt（NumberInput）
+    const fields = [
+      {
+        id: 'body_para',
+        label: '正文段落',
+        status: 'done' as const,
+        confidence: 0.9,
+        value: {
+          'para.line_spacing_type': 'multiple',
+          'para.line_spacing_pt': 22,
+          'para.first_line_indent_pt': 24,
+        },
+      },
+    ];
+    render(
+      <FieldList
+        fields={fields}
+        currentFieldId={null}
+        onJump={vi.fn()}
+        onSkip={vi.fn()}
+        onAttrChange={vi.fn()}
+      />
+    );
+    // attr-line-spacing-type → EnumSelect（para.line_spacing_type）
+    expect(screen.getByTestId('attr-line-spacing-type')).toBeInTheDocument();
+    // attr-line-spacing-pt → NumberInput（para.line_spacing_pt）
+    expect(screen.getByTestId('attr-line-spacing-pt')).toBeInTheDocument();
+    // attr-first-line-indent-pt → NumberInput（para.first_line_indent_pt）
+    expect(screen.getByTestId('attr-first-line-indent-pt')).toBeInTheDocument();
+  });
+
+  it('T2.3: reference_entry 渲染 hanging_indent_pt 编辑器', () => {
+    // reference_entry.applicable_attributes 含 para.hanging_indent_pt
+    const fields = [
+      {
+        id: 'reference_entry',
+        label: '参考文献条目',
+        status: 'done' as const,
+        confidence: 0.9,
+        value: {
+          'para.hanging_indent_pt': 21,
+        },
+      },
+    ];
+    render(
+      <FieldList
+        fields={fields}
+        currentFieldId={null}
+        onJump={vi.fn()}
+        onSkip={vi.fn()}
+        onAttrChange={vi.fn()}
+      />
+    );
+    // attr-hanging-indent-pt → NumberInput（para.hanging_indent_pt）
+    expect(screen.getByTestId('attr-hanging-indent-pt')).toBeInTheDocument();
+  });
+
+  it('T2.3: abstract_zh_title 渲染 letter_spacing_pt 编辑器', () => {
+    // abstract_zh_title.applicable_attributes 含 para.letter_spacing_pt
+    const fields = [
+      {
+        id: 'abstract_zh_title',
+        label: '中文「摘要」标题',
+        status: 'done' as const,
+        confidence: 0.9,
+        value: {
+          'para.letter_spacing_pt': 2,
+        },
+      },
+    ];
+    render(
+      <FieldList
+        fields={fields}
+        currentFieldId={null}
+        onJump={vi.fn()}
+        onSkip={vi.fn()}
+        onAttrChange={vi.fn()}
+      />
+    );
+    // attr-letter-spacing-pt → NumberInput（para.letter_spacing_pt）
+    expect(screen.getByTestId('attr-letter-spacing-pt')).toBeInTheDocument();
+  });
+
   it('calls onAttrChange with correct args when editor value changes', () => {
     // 构造一个字段，只测试 font.cjk（CjkFontSelect，select 元素可 fireEvent.change）
     const fields = [

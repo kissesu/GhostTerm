@@ -515,6 +515,19 @@ const FORMULA_STYLE_OPTIONS: { value: string; label: string }[] = [
   { value: 'chapter_based', label: '章节式（(1-1)/(2-3)）' },
 ];
 
+// T2.3: 行距类型枚举（OOXML w:lineRule 6 类型）
+// single/oneAndHalf/double 是固定倍数；atLeast/exactly 配合 line_spacing_pt；
+// multiple 配合 line_spacing 倍数。规范文本中常见"1.5 倍行距"对应 oneAndHalf，
+// "20 磅"对应 exactly+pt，"多倍 1.25"对应 multiple。
+const LINE_SPACING_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'single', label: '单倍行距' },
+  { value: 'oneAndHalf', label: '1.5 倍行距' },
+  { value: 'double', label: '2 倍行距' },
+  { value: 'atLeast', label: '最小值' },
+  { value: 'exactly', label: '固定值' },
+  { value: 'multiple', label: '多倍行距' },
+];
+
 // ─────────────────────────────────────────────
 // P4 主组件：按属性 key 分发（22+ case）
 // ─────────────────────────────────────────────
@@ -585,11 +598,59 @@ export function RuleValueEditorByAttr({ attr, value, onChange, inputId }: RuleVa
         </span>
       );
 
+    // T2.3: 行距类型（OOXML w:lineRule，6 枚举值）
+    case 'para.line_spacing_type':
+      return (
+        <EnumSelect
+          value={value as string}
+          onChange={onChange}
+          options={LINE_SPACING_TYPE_OPTIONS}
+          testId="attr-line-spacing-type"
+          inputId={inputId}
+        />
+      );
+
+    // T2.3: 行距磅值（atLeast/exactly 配合此字段；multiple/single 等忽略）
+    case 'para.line_spacing_pt':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.5} min={0} testId="attr-line-spacing-pt" inputId={inputId} />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>pt</span>
+        </span>
+      );
+
+    // T2.3: 首行缩进磅值（与 _chars 共存；规范写"21 磅"时用此项）
+    case 'para.first_line_indent_pt':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.5} min={0} testId="attr-first-line-indent-pt" inputId={inputId} />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>pt</span>
+        </span>
+      );
+
+    // T2.3: 悬挂缩进磅值（参考文献条目第二行起的悬挂量，规范常写"21 磅"）
+    case 'para.hanging_indent_pt':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.5} min={0} testId="attr-hanging-indent-pt" inputId={inputId} />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>pt</span>
+        </span>
+      );
+
     case 'para.letter_spacing_chars':
       return (
         <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
           <NumberInput value={value as number} onChange={onChange} step={0.5} min={0} testId="attr-letter-spacing" inputId={inputId} />
           <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>字符</span>
+        </span>
+      );
+
+    // T2.3: 字符间距磅值（"摘 要"两字间距 2 磅等场景，与 _chars 共存）
+    case 'para.letter_spacing_pt':
+      return (
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <NumberInput value={value as number} onChange={onChange} step={0.1} min={0} testId="attr-letter-spacing-pt" inputId={inputId} />
+          <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', fontFamily: 'var(--font-ui)' }}>pt</span>
         </span>
       );
 
