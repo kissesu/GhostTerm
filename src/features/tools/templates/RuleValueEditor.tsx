@@ -774,8 +774,8 @@ export function RuleValueEditorByAttr({ attr, value, onChange }: RuleValueEditor
           onChange={onChange}
           testId="attr-formula-numbering"
           options={[
-            { value: 'continuous', label: '连续编号（图1/图2）' },
-            { value: 'chapter_based', label: '章节式（图1-1/图2-3）' },
+            { value: 'continuous', label: '连续编号（(1)/(2)）' },
+            { value: 'chapter_based', label: '章节式（(1-1)/(2-3)）' },
           ]}
         />
       );

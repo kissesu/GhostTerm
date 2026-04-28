@@ -989,6 +989,25 @@ class TestNumberingFigureStyle:
         assert check_numbering_figure_style(doc, 'continuous') is None
         assert check_numbering_figure_style(doc, 'chapter_based') is None
 
+    def test_tie_vote_conservatively_selects_chapter_based(self):
+        """等票场景：1 个连续式 + 1 个章节式 → 保守选 chapter_based。
+
+        判别力设计（等票路径）：
+        - 等票时 actual='chapter_based'，expected='chapter_based' → None（保守选通过）
+        - 等票时 actual='chapter_based'，expected='continuous' → issue（actual=chapter_based）
+        删除等票分支（else: result=chapter_based）后，两个 path 均会得到 actual=None
+        （total=2 但无多数方），断言都会挂。
+        """
+        # 1 个连续式 + 1 个章节式 → fig_continuous=1, fig_chapter=1 → 等票
+        doc = _doc_with_figure_captions('图1 连续图题', '图1-1 章节图题')
+        # 等票 → actual=chapter_based → expected=chapter_based → None
+        assert check_numbering_figure_style(doc, 'chapter_based') is None
+        # 等票 → actual=chapter_based → expected=continuous → issue
+        issue = check_numbering_figure_style(doc, 'continuous')
+        assert issue is not None
+        assert issue['actual'] == 'chapter_based'
+        assert issue['expected'] == 'continuous'
+
 
 class TestNumberingSubfigureStyle:
     """分图编号风格检查器测试。

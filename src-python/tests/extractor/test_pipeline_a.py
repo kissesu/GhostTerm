@@ -355,3 +355,31 @@ class TestNumberingStylesIntegration:
         value = rules['formula_block']['value']
         assert 'numbering.formula_style' in value, f'formula_style 未写入 value={value}'
         assert value['numbering.formula_style'] == 'continuous'
+
+    def test_fullwidth_space_in_figure_caption(self, tmp_path):
+        """图题含全角空格 U+3000 时，regex [\s　] 分支应正确匹配并推断 figure_style。
+
+        判别力：构造 2 个"图　1"/"图　2"格式图题（全角空格代替半角），
+        验证 _read_numbering_styles 的 _RE_FIG_CONTINUOUS 能命中全角空格变体。
+        删除 regex 中的 \\u3000 后，两个图题均漏匹配 → total_fig=0 < 2 → key 缺席，断言挂。
+        """
+        from docx import Document as DocxDocument
+        doc = DocxDocument()
+        # 全角空格 U+3000 位于图号与序号之间（"图　1 测试图"）
+        doc.add_paragraph('图　1 测试图甲')
+        doc.add_paragraph('图　2 测试图乙')
+        docx_path = tmp_path / 'test_fig_fullwidth_space.docx'
+        doc.save(str(docx_path))
+
+        result = extract_all(str(docx_path))
+        rules = result['rules']
+
+        # figure_caption 字段必须存在（全角空格图题应被 regex 捕获）
+        assert 'figure_caption' in rules, (
+            f'全角空格图题未触发 figure_caption 写入；rules keys={list(rules.keys())}'
+        )
+        value = rules['figure_caption']['value']
+        assert 'numbering.figure_style' in value, (
+            f'全角空格路径漏抓 figure_style；value={value}'
+        )
+        assert value['numbering.figure_style'] == 'continuous'
