@@ -116,3 +116,32 @@ class TestExtractParaSpacing:
         from thesis_worker.extractor.patterns import extract_para_spacing
         assert extract_para_spacing('段前 12 磅')[0] == 'para.space_before_pt'
         assert extract_para_spacing('段后 12 磅')[0] == 'para.space_after_pt'
+
+
+class TestExtractIndent:
+    """T3.2: 首行/悬挂缩进多单位（含字符）"""
+
+    def test_first_line_indent_2_chars(self):
+        from thesis_worker.extractor.patterns import extract_indent
+        assert extract_indent('首行缩进 2 字符') == ('para.first_line_indent_chars', 2.0)
+
+    def test_first_line_indent_0_74_cm(self):
+        import pytest
+        from thesis_worker.extractor.patterns import extract_indent
+        out = extract_indent('首行缩进 0.74 厘米')
+        assert out[0] == 'para.first_line_indent_pt'
+        assert out[1] == pytest.approx(20.97, abs=0.05)
+
+    def test_hanging_indent_14_pt(self):
+        from thesis_worker.extractor.patterns import extract_indent
+        assert extract_indent('悬挂缩进 14 磅') == ('para.hanging_indent_pt', 14.0)
+
+    def test_first_line_priority_over_hanging(self):
+        """同一文本同时出现首行+悬挂时，优先首行（先扫描到的）"""
+        from thesis_worker.extractor.patterns import extract_indent
+        out = extract_indent('首行缩进 2 字符；悬挂缩进 1 字符')
+        assert out == ('para.first_line_indent_chars', 2.0)
+
+    def test_no_indent_keyword_returns_none(self):
+        from thesis_worker.extractor.patterns import extract_indent
+        assert extract_indent('段前 6 磅') is None

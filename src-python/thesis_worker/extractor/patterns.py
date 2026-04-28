@@ -176,3 +176,49 @@ def extract_para_spacing(text: str) -> Optional[tuple[str, float]]:
     if pt is None:
         return None
     return (f'para.space_{suffix}_pt', round(pt, 2))
+
+
+# ============================================================
+# T3.2: 首行/悬挂缩进多单位自然语言抽取
+# 单位枚举：字符 + 5 种长度单位（无"行"，缩进不以行为单位）
+# 全角空格 U+3000 必须显式纳入，覆盖中文排版式空格
+# ============================================================
+
+# 缩进单位：字符 + 5 长度单位（无"行"）
+_INDENT_UNITS = r'(?:字符|磅|pt|点|英寸|inch|in|厘米|cm|毫米|mm)'
+_RE_INDENT = re.compile(
+    r'(首行缩进|悬挂缩进)[\s　]*(\d+(?:\.\d+)?)[\s　]*(' + _INDENT_UNITS + r')',
+    re.IGNORECASE,
+)
+
+
+def extract_indent(text: str) -> Optional[tuple[str, float]]:
+    """抽首行/悬挂缩进值 → (sink_attr_key, chars_or_pt_value)。
+
+    业务逻辑：
+    1. 正则识别 "首行缩进"/"悬挂缩进" + 数值 + 单位
+    2. 单位"字符" → _chars 兄弟 attr
+    3. 长度单位 → _pt 兄弟 attr（转 pt）
+
+    @example
+        extract_indent('首行缩进 2 字符')   → ('para.first_line_indent_chars', 2.0)
+        extract_indent('悬挂缩进 14 磅')    → ('para.hanging_indent_pt', 14.0)
+        extract_indent('首行缩进 0.74 厘米') → ('para.first_line_indent_pt', 20.97)
+    """
+    from .units import length_to_pt
+    m = _RE_INDENT.search(text)
+    if not m:
+        return None
+    kind = m.group(1)  # '首行缩进' / '悬挂缩进'
+    val = float(m.group(2))
+    unit = m.group(3)
+
+    prefix = 'first_line' if kind == '首行缩进' else 'hanging'
+
+    if unit == '字符':
+        return (f'para.{prefix}_indent_chars', val)
+
+    pt = length_to_pt(val, unit)
+    if pt is None:
+        return None
+    return (f'para.{prefix}_indent_pt', round(pt, 2))
