@@ -11,12 +11,14 @@
 import { useEffect } from 'react';
 import { useTemplateStore } from './TemplateStore';
 import { useToolsStore } from '../toolsStore';
+import { BUILTIN_TEMPLATE_ID } from './builtinTemplate';
 
 // localStorage 键名，跨会话持久化最后使用的模板 ID
 const STORAGE_KEY = 'ghostterm:active-template-id';
 
 // 内置模板兜底 ID，localStorage 中的 ID 在列表中找不到时回退到此值
-const DEFAULT_TEMPLATE_ID = '_builtin-gbt7714';
+// 引共享常量，避免与 Rust 端 BUILTIN_ID 错配（见 builtinTemplate.ts）
+const DEFAULT_TEMPLATE_ID = BUILTIN_TEMPLATE_ID;
 
 interface TemplateSelectorProps {
   /** Task 9 完成后由 ToolsWorkspace 传入，打开 TemplateManager modal */

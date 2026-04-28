@@ -9,6 +9,7 @@
 
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
+import { BUILTIN_TEMPLATE_ID } from './templates/builtinTemplate';
 
 /**
  * Undo 栈条目。
@@ -51,8 +52,8 @@ export const useToolsStore = create<ToolsState>((set, get) => ({
   // ============================================================
 
   activeToolId: null,
-  // _builtin-gbt7714：内置 GB/T 7714 参考文献格式模板（见 Task 8 selector 说明）
-  activeTemplateId: '_builtin-gbt7714',
+  // 内置 GB/T 7714 参考文献格式模板（共享常量，与 Rust 端 BUILTIN_ID 同步）
+  activeTemplateId: BUILTIN_TEMPLATE_ID,
   undoStack: [],
 
   // ============================================================

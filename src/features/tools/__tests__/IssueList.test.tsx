@@ -71,7 +71,7 @@ describe('IssueList', () => {
       undo: vi.fn(),
       // 其他 store 字段：测试中不使用，填充最小满足类型的占位值
       activeToolId: null,
-      activeTemplateId: '_builtin-gbt7714',
+      activeTemplateId: '_builtin-gbt7714-v2',
       undoStack: [],
       setActiveTool: vi.fn(),
       setActiveTemplate: vi.fn(),

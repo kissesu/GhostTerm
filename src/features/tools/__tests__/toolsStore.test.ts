@@ -18,7 +18,7 @@ describe('toolsStore', () => {
     // 每次测试前重置 store 到初始状态，避免测试间状态污染
     useToolsStore.setState({
       activeToolId: null,
-      activeTemplateId: '_builtin-gbt7714',
+      activeTemplateId: '_builtin-gbt7714-v2',
       undoStack: [],
     });
     vi.mocked(invoke).mockReset();

@@ -28,7 +28,7 @@ import type { TemplateJson } from '../templates/TemplateStore';
 // ─── 测试用模板 fixtures ───────────────────────
 const tplA: TemplateJson = {
   schema_version: 2,
-  id: '_builtin-gbt7714',
+  id: '_builtin-gbt7714-v2',
   name: 'GB/T 7714 内置',
   source: { type: 'builtin' },
   updated_at: '2026-01-01T00:00:00.000Z',
@@ -52,7 +52,7 @@ beforeEach(() => {
     // load 是 no-op，避免 TemplateSelector mount 时把 loading 拉回 true
     load: vi.fn().mockResolvedValue(undefined),
   });
-  useToolsStore.setState({ activeTemplateId: '_builtin-gbt7714' });
+  useToolsStore.setState({ activeTemplateId: '_builtin-gbt7714-v2' });
   localStorage.clear();
 });
 
