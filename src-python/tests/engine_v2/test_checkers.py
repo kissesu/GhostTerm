@@ -581,6 +581,41 @@ class TestLayoutPosition:
         assert check_layout_position(caption, 'below') is None
         assert check_layout_position(caption, 'above') is None
 
+    def test_caption_after_independent_table_returns_below(self):
+        """body 级独立 w:tbl 在前，caption 在后 → actual='below'。
+
+        判别力：删除 _para_el_contains_figure_or_table 入口自身 tag 检查
+        后此 case 必挂（body 级 tbl 漏检，误返回 None）。
+        """
+        doc = Document()
+        # doc.add_table 直接在 body 写入独立 w:tbl 元素
+        doc.add_table(2, 2)
+        caption = doc.add_paragraph('表1 测试表格')
+        # 前驱是独立 w:tbl → caption 在表格下方
+        assert check_layout_position(caption, 'below') is None
+        issue = check_layout_position(caption, 'above')
+        assert issue is not None
+        assert issue['attr'] == 'layout.position'
+        assert issue['actual'] == 'below'
+        assert issue['expected'] == 'above'
+
+    def test_caption_before_independent_table_returns_above(self):
+        """caption 在前，body 级独立 w:tbl 在后 → actual='above'。
+
+        判别力：删除 _para_el_contains_figure_or_table 入口自身 tag 检查
+        后此 case 必挂（body 级 tbl 漏检，误返回 None）。
+        """
+        doc = Document()
+        caption = doc.add_paragraph('表1 测试表格')
+        # 后继是独立 w:tbl → caption 在表格上方
+        doc.add_table(2, 2)
+        assert check_layout_position(caption, 'above') is None
+        issue = check_layout_position(caption, 'below')
+        assert issue is not None
+        assert issue['attr'] == 'layout.position'
+        assert issue['actual'] == 'above'
+        assert issue['expected'] == 'below'
+
 
 # ───────────────────────────────────────────────
 # T4.1: check_citation_style 测试

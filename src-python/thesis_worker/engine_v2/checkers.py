@@ -6,10 +6,11 @@
               分三类：
                 A — 段落级 (para, expected) -> Optional[dict]
                 B — 文档级 (doc, expected) -> Optional[dict]
-                C — 延后存根，暂不支持，固定返回 None
+                C — 实现完成（v3 阶段：layout/citation/pagination）
 @author: Atlas.oi
 @date: 2026-04-18
 """
+import re
 from typing import Any, Optional
 
 from docx.document import Document
@@ -676,8 +677,6 @@ def check_numbering_formula_style(doc: Document, expected: str) -> Optional[dict
 # 类别 C：T4.1 实现 deferred checker
 # ───────────────────────────────────────────────
 
-import re as _re
-
 # 用于判断段落是否含图（w:drawing）或表（w:tbl）的 OOXML 标签名
 _DRAWING_TAG = _w('drawing')
 _TBL_TAG = _w('tbl')
@@ -686,8 +685,13 @@ _TBL_TAG = _w('tbl')
 def _para_el_contains_figure_or_table(el) -> bool:
     """判断给定 XML 元素（段落 _element 或其 r 元素）是否包含图片（w:drawing）或表格（w:tbl）。
 
-    直接递归遍历子树，确保嵌套情况也能覆盖。
+    入口判定：el 自身就是 tbl/drawing 时直接返回 True；
+    body 直接子节点为独立 w:tbl 时，调用方传入的 el 就是 tbl 本身，
+    不加此检查会漏检。
     """
+    # el 自身就是目标元素（body 级独立表格/drawing 最常见此情形）
+    if el.tag in (_DRAWING_TAG, _TBL_TAG):
+        return True
     for child in el:
         if child.tag in (_DRAWING_TAG, _TBL_TAG):
             return True
@@ -744,9 +748,9 @@ def check_layout_position(para: Paragraph, expected: str) -> Optional[dict]:
 
 # 引用风格判定正则
 # GB/T 7714 特征：序号 [N] 开头
-_RE_GBT7714 = _re.compile(r'^\[\d+\]')
+_RE_GBT7714 = re.compile(r'^\[\d+\]')
 # APA 特征：含括号包围年份 (YYYY)
-_RE_APA = _re.compile(r'\(\d{4}\)')
+_RE_APA = re.compile(r'\(\d{4}\)')
 
 
 def check_citation_style(para: Paragraph, expected: str) -> Optional[dict]:
@@ -892,7 +896,7 @@ CHECKER_MAP: dict[str, Any] = {
     'numbering.figure_style':          check_numbering_figure_style,
     'numbering.subfigure_style':       check_numbering_subfigure_style,
     'numbering.formula_style':         check_numbering_formula_style,
-    # layout / citation / pagination（延后存根）
+    # layout / citation / pagination
     'layout.position':                 check_layout_position,
     'citation.style':                  check_citation_style,
     'pagination.front_style':          check_pagination_front_style,
