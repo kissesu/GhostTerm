@@ -673,39 +673,165 @@ def check_numbering_formula_style(doc: Document, expected: str) -> Optional[dict
 
 
 # ───────────────────────────────────────────────
-# 类别 C：延后存根（deferred to v3）
+# 类别 C：T4.1 实现 deferred checker
 # ───────────────────────────────────────────────
 
+import re as _re
+
+# 用于判断段落是否含图（w:drawing）或表（w:tbl）的 OOXML 标签名
+_DRAWING_TAG = _w('drawing')
+_TBL_TAG = _w('tbl')
+
+
+def _para_el_contains_figure_or_table(el) -> bool:
+    """判断给定 XML 元素（段落 _element 或其 r 元素）是否包含图片（w:drawing）或表格（w:tbl）。
+
+    直接递归遍历子树，确保嵌套情况也能覆盖。
+    """
+    for child in el:
+        if child.tag in (_DRAWING_TAG, _TBL_TAG):
+            return True
+        if _para_el_contains_figure_or_table(child):
+            return True
+    return False
+
+
 def check_layout_position(para: Paragraph, expected: str) -> Optional[dict]:
+    """T4.1 实现：检查图题/表题的位置（'above'/'below'）。
+
+    业务逻辑：
+    1. 通过 para._element 找到它在文档 body 中的索引
+    2. 检查前驱元素（previous sibling）是否含 w:drawing 或 w:tbl
+       - 前驱含图/表 → caption 在图/表"下方"（below）
+    3. 检查后继元素（next sibling）是否含 w:drawing 或 w:tbl
+       - 后继含图/表 → caption 在图/表"上方"（above）
+    4. 前后都没有图/表邻接 → 无法判定，返回 None
+
+    注意：只检查直接相邻的段落级元素（一步之遥），
+    不做跨段落的深度搜索，避免误判。
     """
-    [延后 v3] 检查图题/表题位置（'above'/'below'）。
-    需要解析段落与图/表的相对位置关系，当前能力范围之外，固定返回 None（不评判）。
-    """
+    el = para._element
+    parent = el.getparent()
+    if parent is None:
+        # 段落无父节点（异常文档结构），无法判定
+        return None
+
+    children = list(parent)
+    try:
+        idx = children.index(el)
+    except ValueError:
+        return None
+
+    # 检查前驱段落（index - 1）
+    if idx > 0 and _para_el_contains_figure_or_table(children[idx - 1]):
+        # 前驱是图/表 → caption 在图/表下方
+        actual = 'below'
+        if actual == expected:
+            return None
+        return {'attr': 'layout.position', 'actual': actual, 'expected': expected}
+
+    # 检查后继段落（index + 1）
+    if idx < len(children) - 1 and _para_el_contains_figure_or_table(children[idx + 1]):
+        # 后继是图/表 → caption 在图/表上方
+        actual = 'above'
+        if actual == expected:
+            return None
+        return {'attr': 'layout.position', 'actual': actual, 'expected': expected}
+
+    # 前后都不是图/表（独立 caption 段落），无法判定
     return None
+
+
+# 引用风格判定正则
+# GB/T 7714 特征：序号 [N] 开头
+_RE_GBT7714 = _re.compile(r'^\[\d+\]')
+# APA 特征：含括号包围年份 (YYYY)
+_RE_APA = _re.compile(r'\(\d{4}\)')
 
 
 def check_citation_style(para: Paragraph, expected: str) -> Optional[dict]:
+    """T4.1 实现：检查参考文献条目的引用风格（'gbt7714' / 'apa' / 'mla'）。
+
+    启发式判定规则（保守）：
+    - 文本以 [N] 开头（regex ^\\[\\d+\\]）→ actual='gbt7714'
+    - 文本含 (YYYY) 括号年份（regex \\(\\d{4}\\)）→ actual='apa'
+    - 两条都不符合 → actual=None，视为无法判定，不报 issue
+
+    MLA 格式无简单特征正则可判别，保守处理为 None（不报违规）。
     """
-    [延后 v3] 检查参考文献条目是否符合 GB/T 7714 格式。
-    需要复杂正则 + 格式解析，当前固定返回 None（不评判）。
+    text = para.text.strip()
+    if not text:
+        # 空段落，无法判定
+        return None
+
+    if _RE_GBT7714.match(text):
+        actual: Optional[str] = 'gbt7714'
+    elif _RE_APA.search(text):
+        actual = 'apa'
+    else:
+        # 无法推断风格（含 MLA），保守处理
+        actual = None
+
+    if actual is None:
+        return None
+    if actual == expected:
+        return None
+    return {'attr': 'citation.style', 'actual': actual, 'expected': expected}
+
+
+def _read_pgnumtype_fmt(section_pr) -> Optional[str]:
+    """从 sectPr XML 元素读取 w:pgNumType/@w:fmt 属性值。
+
+    返回 OOXML 原始 fmt 字符串（如 'lowerRoman'/'upperRoman'/'decimal'），
+    若不存在则返回 None（表示使用默认值 decimal/阿拉伯数字）。
     """
-    return None
+    from docx.oxml.ns import qn
+    pg_num_type = section_pr.find(qn('w:pgNumType'))
+    if pg_num_type is None:
+        return None
+    return pg_num_type.get(qn('w:fmt'))
+
+
+def _ooxml_fmt_to_style(fmt: Optional[str]) -> str:
+    """将 OOXML w:pgNumType fmt 值映射为业务风格字符串。
+
+    映射表：
+    - 'lowerRoman' / 'upperRoman' → 'roman'
+    - 'decimal' / None（默认）     → 'arabic'
+    """
+    if fmt in ('lowerRoman', 'upperRoman'):
+        return 'roman'
+    # decimal 或不存在（Word 默认为阿拉伯数字）
+    return 'arabic'
 
 
 def check_pagination_front_style(doc: Document, expected: str) -> Optional[dict]:
+    """T4.1 实现：检查前置页码样式（'roman' / 'arabic' / 'none'）。
+
+    从第一个 section 的 sectPr 读 w:pgNumType/@w:fmt：
+    - lowerRoman / upperRoman → 'roman'
+    - decimal 或不存在       → 'arabic'
     """
-    [延后 v3] 检查前置页码样式（'roman' 罗马数字 / 'arabic' 阿拉伯数字）。
-    需要读取 section 的页码格式 XML，当前固定返回 None（不评判）。
-    """
-    return None
+    section_pr = doc.sections[0]._sectPr
+    fmt = _read_pgnumtype_fmt(section_pr)
+    actual = _ooxml_fmt_to_style(fmt)
+    if actual == expected:
+        return None
+    return {'attr': 'pagination.front_style', 'actual': actual, 'expected': expected}
 
 
 def check_pagination_body_style(doc: Document, expected: str) -> Optional[dict]:
+    """T4.1 实现：检查正文页码样式（'arabic' / 'roman'）。
+
+    从最后一个 section 的 sectPr 读 w:pgNumType/@w:fmt。
+    若文档只有 1 个 section，front 和 body 样式相同。
     """
-    [延后 v3] 检查正文页码样式（'arabic' 阿拉伯数字）。
-    同 check_pagination_front_style，固定返回 None（不评判）。
-    """
-    return None
+    section_pr = doc.sections[-1]._sectPr
+    fmt = _read_pgnumtype_fmt(section_pr)
+    actual = _ooxml_fmt_to_style(fmt)
+    if actual == expected:
+        return None
+    return {'attr': 'pagination.body_style', 'actual': actual, 'expected': expected}
 
 
 # ───────────────────────────────────────────────

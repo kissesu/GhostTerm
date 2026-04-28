@@ -500,26 +500,280 @@ class TestPageMargins:
 
 
 # ───────────────────────────────────────────────
-# 延后存根（确认固定返回 None）
+# T4.1: check_layout_position 测试
 # ───────────────────────────────────────────────
 
-class TestDeferredStubs:
-    def test_layout_position_returns_none(self):
-        doc = Document()
-        p = doc.add_paragraph('图 1 示意图')
-        assert check_layout_position(p, 'below') is None
+def _doc_with_drawing_then_caption() -> tuple:
+    """构造"drawing 段落在前，caption 段落在后"的文档（caption 在 below 位置）。
 
-    def test_citation_style_returns_none(self):
+    返回 (doc, caption_para)。
+    """
+    from lxml import etree
+    doc = Document()
+    # 第一段：注入 w:drawing，模拟图片段落
+    fig_para = doc.add_paragraph()
+    run = fig_para.add_run()
+    etree.SubElement(run._element, qn('w:drawing'))
+    # 第二段：caption 段落，紧接在图片之后
+    caption_para = doc.add_paragraph('图1 测试图')
+    return doc, caption_para
+
+
+def _doc_with_caption_then_drawing() -> tuple:
+    """构造"caption 段落在前，drawing 段落在后"的文档（caption 在 above 位置）。
+
+    返回 (doc, caption_para)。
+    """
+    from lxml import etree
+    doc = Document()
+    # 第一段：caption，紧接在图片之前
+    caption_para = doc.add_paragraph('图1 测试图')
+    # 第二段：注入 w:drawing，模拟图片段落
+    fig_para = doc.add_paragraph()
+    run = fig_para.add_run()
+    etree.SubElement(run._element, qn('w:drawing'))
+    return doc, caption_para
+
+
+class TestLayoutPosition:
+    """check_layout_position 判别力测试（T4.1 实现）。
+
+    判别力设计：
+    - PASS below：前驱含 drawing，expected='below' → actual='below' → None。
+    - FAIL below→above：前驱含 drawing，actual='below' 但 expected='above' → issue。
+    - PASS above：后继含 drawing，expected='above' → actual='above' → None。
+    - None path：前后都无图/表邻接 → 无法判定 → None（不论 expected 是什么）。
+    """
+
+    def test_caption_below_drawing_passes(self):
+        # drawing 在前，caption 在后 → actual='below'，expected='below' → None
+        _, caption = _doc_with_drawing_then_caption()
+        assert check_layout_position(caption, 'below') is None
+
+    def test_caption_below_drawing_fails_when_expected_above(self):
+        # drawing 在前 → actual='below'，expected='above' → issue
+        _, caption = _doc_with_drawing_then_caption()
+        issue = check_layout_position(caption, 'above')
+        assert issue is not None
+        assert issue['attr'] == 'layout.position'
+        assert issue['actual'] == 'below'
+        assert issue['expected'] == 'above'
+
+    def test_caption_above_drawing_passes(self):
+        # caption 在前，drawing 在后 → actual='above'，expected='above' → None
+        _, caption = _doc_with_caption_then_drawing()
+        assert check_layout_position(caption, 'above') is None
+
+    def test_caption_above_drawing_fails_when_expected_below(self):
+        # caption 在前，drawing 在后 → actual='above'，expected='below' → issue
+        _, caption = _doc_with_caption_then_drawing()
+        issue = check_layout_position(caption, 'below')
+        assert issue is not None
+        assert issue['actual'] == 'above'
+        assert issue['expected'] == 'below'
+
+    def test_isolated_caption_returns_none(self):
+        # 前后都没有图/表邻接 → 无法判定 → None（不论 expected）
         doc = Document()
-        p = doc.add_paragraph('[1] 作者. 标题. 出版社, 2020.')
+        doc.add_paragraph('无关段落 A')
+        caption = doc.add_paragraph('图1 孤立 caption')
+        doc.add_paragraph('无关段落 B')
+        assert check_layout_position(caption, 'below') is None
+        assert check_layout_position(caption, 'above') is None
+
+
+# ───────────────────────────────────────────────
+# T4.1: check_citation_style 测试
+# ───────────────────────────────────────────────
+
+class TestCitationStyle:
+    """check_citation_style 判别力测试（T4.1 实现）。
+
+    判别力设计：
+    - PASS gbt7714：[N] 开头，expected='gbt7714' → None。
+    - FAIL gbt7714→apa：[N] 开头但 expected='apa' → issue（actual='gbt7714'）。
+    - PASS apa：含 (YYYY)，expected='apa' → None。
+    - FAIL apa→gbt7714：含 (YYYY) 但 expected='gbt7714' → issue（actual='apa'）。
+    - None path（无法推断）：普通文本无 [N] 无 (YYYY) → actual=None → None。
+    """
+
+    def test_gbt7714_passes(self):
+        # [N] 开头 → gbt7714，expected='gbt7714' → None
+        doc = Document()
+        p = doc.add_paragraph('[1] 张三, 李四. 机器学习综述. 计算机学报, 2020.')
         assert check_citation_style(p, 'gbt7714') is None
 
-    def test_pagination_front_style_returns_none(self):
+    def test_gbt7714_mismatch_apa(self):
+        # [N] 开头 → actual='gbt7714'，expected='apa' → issue
         doc = Document()
+        p = doc.add_paragraph('[1] 张三, 李四. 机器学习综述. 计算机学报, 2020.')
+        issue = check_citation_style(p, 'apa')
+        assert issue is not None
+        assert issue['attr'] == 'citation.style'
+        assert issue['actual'] == 'gbt7714'
+        assert issue['expected'] == 'apa'
+
+    def test_apa_passes(self):
+        # 含 (2020) 括号年份 → apa，expected='apa' → None
+        doc = Document()
+        p = doc.add_paragraph('Zhang, S. (2020). Deep learning overview. Nature.')
+        assert check_citation_style(p, 'apa') is None
+
+    def test_apa_mismatch_gbt7714(self):
+        # 含 (YYYY) → actual='apa'，expected='gbt7714' → issue
+        doc = Document()
+        p = doc.add_paragraph('Smith, J. (2019). Title. Journal, 12(3), 45-67.')
+        issue = check_citation_style(p, 'gbt7714')
+        assert issue is not None
+        assert issue['actual'] == 'apa'
+        assert issue['expected'] == 'gbt7714'
+
+    def test_unrecognized_style_returns_none(self):
+        # 普通段落文本，无 [N] 无 (YYYY) → actual=None → 不报 issue
+        doc = Document()
+        p = doc.add_paragraph('Smith A. Title of paper. Publisher, 2020.')
+        # 无法推断 → 不论 expected 是什么都不报
+        assert check_citation_style(p, 'gbt7714') is None
+        assert check_citation_style(p, 'apa') is None
+        assert check_citation_style(p, 'mla') is None
+
+
+# ───────────────────────────────────────────────
+# T4.1: check_pagination_front_style 测试
+# ───────────────────────────────────────────────
+
+def _inject_pgnumtype(doc: Document, section_idx: int, fmt_val: str) -> None:
+    """向指定 section 的 sectPr 注入 w:pgNumType fmt 属性。
+
+    业务场景：模拟 Word 在前置页（摘要目录页）设置罗马数字页码，
+    或在正文页设置阿拉伯数字页码。
+    """
+    from lxml import etree
+    section_pr = doc.sections[section_idx]._sectPr
+    pg_num_type = etree.SubElement(section_pr, qn('w:pgNumType'))
+    pg_num_type.set(qn('w:fmt'), fmt_val)
+
+
+class TestPaginationFrontStyle:
+    """check_pagination_front_style 判别力测试（T4.1 实现）。
+
+    判别力设计：
+    - PASS roman：注入 lowerRoman → actual='roman'，expected='roman' → None。
+    - PASS arabic：不注入（默认）→ actual='arabic'，expected='arabic' → None。
+    - FAIL roman→arabic：注入 lowerRoman → actual='roman'，expected='arabic' → issue。
+    - FAIL arabic→roman：不注入（默认 arabic）→ expected='roman' → issue。
+    """
+
+    def test_lower_roman_passes(self):
+        # 注入 lowerRoman → actual='roman'，expected='roman' → None
+        doc = Document()
+        _inject_pgnumtype(doc, 0, 'lowerRoman')
         assert check_pagination_front_style(doc, 'roman') is None
 
-    def test_pagination_body_style_returns_none(self):
+    def test_upper_roman_also_passes(self):
+        # 注入 upperRoman 也映射为 'roman' → None
         doc = Document()
+        _inject_pgnumtype(doc, 0, 'upperRoman')
+        assert check_pagination_front_style(doc, 'roman') is None
+
+    def test_no_pgnumtype_defaults_to_arabic(self):
+        # 未注入 pgNumType → 默认 arabic，expected='arabic' → None
+        doc = Document()
+        assert check_pagination_front_style(doc, 'arabic') is None
+
+    def test_roman_mismatch_arabic(self):
+        # 注入 lowerRoman → actual='roman'，expected='arabic' → issue
+        doc = Document()
+        _inject_pgnumtype(doc, 0, 'lowerRoman')
+        issue = check_pagination_front_style(doc, 'arabic')
+        assert issue is not None
+        assert issue['attr'] == 'pagination.front_style'
+        assert issue['actual'] == 'roman'
+        assert issue['expected'] == 'arabic'
+
+    def test_default_arabic_mismatch_roman(self):
+        # 未注入（默认 arabic），expected='roman' → issue
+        doc = Document()
+        issue = check_pagination_front_style(doc, 'roman')
+        assert issue is not None
+        assert issue['actual'] == 'arabic'
+        assert issue['expected'] == 'roman'
+
+
+# ───────────────────────────────────────────────
+# T4.1: check_pagination_body_style 测试
+# ───────────────────────────────────────────────
+
+def _doc_with_two_sections() -> Document:
+    """构造两个 section 的文档（模拟前置页 roman + 正文 arabic 的毕业论文）。
+
+    python-docx 的 sections 解析规则：
+    - 段落 pPr 中含 sectPr → 该段结束一个 section（section[0]）
+    - body 末尾的 sectPr → 最后一个 section（section[-1]）
+
+    所以要让 section[0]=roman、section[-1]=arabic（默认），
+    需要把带 roman pgNumType 的 sectPr 插入到 body 末尾 sectPr **之前**：
+    1. add_paragraph('前置页') 和 add_paragraph('正文')
+    2. 在 body 末尾 sectPr 之前插入带 lowerRoman 的 p/pPr/sectPr
+    """
+    from lxml import etree
+    doc = Document()
+    doc.add_paragraph('前置页内容')
+    doc.add_paragraph('正文内容')
+
+    body = doc.element.body
+    # body 末尾是 w:sectPr（文档结束 sectPr）
+    last_sectpr = body[-1]
+
+    # 在末尾 sectPr 之前插入 section break 段落（前置 section，roman 页码）
+    p_el = etree.Element(qn('w:p'))
+    p_pr = etree.SubElement(p_el, qn('w:pPr'))
+    sect_pr_new = etree.SubElement(p_pr, qn('w:sectPr'))
+    pg_num = etree.SubElement(sect_pr_new, qn('w:pgNumType'))
+    pg_num.set(qn('w:fmt'), 'lowerRoman')
+    # 插入到末尾 sectPr 之前，使其成为 section[0]
+    body.insert(list(body).index(last_sectpr), p_el)
+
+    return doc
+
+
+class TestPaginationBodyStyle:
+    """check_pagination_body_style 判别力测试（T4.1 实现）。
+
+    判别力设计：
+    - PASS arabic（单 section 默认）：不注入 → actual='arabic'，expected='arabic' → None。
+    - FAIL arabic→roman：不注入（默认 arabic），expected='roman' → issue。
+    - 多 section：最后 section 注入 decimal → actual='arabic'；前 section 是 roman，
+      检验读的是最后一个而非第一个。
+    """
+
+    def test_no_pgnumtype_defaults_to_arabic(self):
+        # 未注入 → 默认 arabic，expected='arabic' → None
+        doc = Document()
+        assert check_pagination_body_style(doc, 'arabic') is None
+
+    def test_arabic_mismatch_roman(self):
+        # 默认 arabic，expected='roman' → issue
+        doc = Document()
+        issue = check_pagination_body_style(doc, 'roman')
+        assert issue is not None
+        assert issue['attr'] == 'pagination.body_style'
+        assert issue['actual'] == 'arabic'
+        assert issue['expected'] == 'roman'
+
+    def test_roman_body_fails_expected_arabic(self):
+        # 单 section 注入 lowerRoman → actual='roman'，expected='arabic' → issue
+        doc = Document()
+        _inject_pgnumtype(doc, 0, 'lowerRoman')
+        issue = check_pagination_body_style(doc, 'arabic')
+        assert issue is not None
+        assert issue['actual'] == 'roman'
+
+    def test_multi_section_reads_last_section(self):
+        # 两 section 文档：前 section=roman，正文（最后）section 无注入=arabic
+        # check_pagination_body_style 应读最后 section → actual='arabic'
+        doc = _doc_with_two_sections()
+        # 最后一个 section（正文）无 pgNumType → arabic
         assert check_pagination_body_style(doc, 'arabic') is None
 
 
