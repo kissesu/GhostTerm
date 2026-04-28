@@ -27,7 +27,13 @@ LENGTH_UNIT_TO_PT: dict[str, float] = {
 }
 
 # 可识别的所有长度单位（用于正则枚举）；按长度从长到短排序避免短前缀吞掉长后缀（"英寸" 在 "in" 前）
-_LENGTH_UNIT_PATTERN = r'(?:磅|pt|点|英寸|inch|in|厘米|cm|毫米|mm)'
+# ASCII 短单位（inch/in/cm/mm/pt）必须加词界保护，避免在英文上下文中误匹配：
+#   - '1 input'        前导英文 input 内 'in' 误匹配 (1, 'in')   → (?<![A-Za-z]) 阻止
+#   - '1cmm'           尾随英文 m，cm 多吞 m → 紧贴 (1, 'cm') 误匹配 → (?![A-Za-z]) 阻止
+#   - 'click 1 in form' 介词 in 后跟英文小写单词 → 非长度单位语境 → (?![\s　]+[a-z]) 阻止
+# 中文单位（磅/点/英寸/厘米/毫米）无英文歧义，保留原写法
+# inch 必须排在 in 前，否则 'inch' 会被识别为 'in' + 'ch'
+_LENGTH_UNIT_PATTERN = r'(?:磅|点|英寸|厘米|毫米|(?<![A-Za-z])(?:inch|in|cm|mm|pt)(?![A-Za-z])(?![\s　]+[a-z]))'
 
 # 抓取 "数值 + 长度单位" 的通用正则；含全角空格 [\s　] 容忍中文模板
 _LENGTH_VALUE_RE = re.compile(

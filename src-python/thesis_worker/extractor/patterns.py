@@ -37,7 +37,9 @@ _SIZE_NAME_RE: re.Pattern = _build_size_name_pattern()
 
 # 共享长度单位正则模式（与 units.py 同步）；按长度从长到短避免短前缀吞掉长后缀
 # inch 必须排在 in 前，否则 'inch' 会被识别为 'in' + 'ch'
-_LENGTH_UNIT_PATTERN = r'(?:磅|pt|点|英寸|inch|in|厘米|cm|毫米|mm)'
+# ASCII 短单位（inch/in/cm/mm/pt）加 (?<![A-Za-z]) / (?![A-Za-z]) / (?![\s　]+[a-z]) 三层词界保护，
+# 避免在英文上下文（'1 input' / '1cmm' / 'click 1 in form'）误匹配
+_LENGTH_UNIT_PATTERN = r'(?:磅|点|英寸|厘米|毫米|(?<![A-Za-z])(?:inch|in|cm|mm|pt)(?![A-Za-z])(?![\s　]+[a-z]))'
 
 # 纯数字 pt 字号：匹配 "12pt" / "15 磅" / "10.5pt"
 _SIZE_PT_RE = re.compile(r'(\d+(?:\.\d+)?)\s*(?:pt|磅|点)', re.IGNORECASE)
@@ -139,7 +141,8 @@ def find_quoted_field(text: str) -> Optional[tuple[str, str]]:
 # ============================================================
 
 # 段前/段后单位枚举：行 + 5 种长度单位
-_PARA_SPACING_UNITS = r'(?:行|磅|pt|点|英寸|inch|in|厘米|cm|毫米|mm)'
+# ASCII 短单位加词界保护，与 _LENGTH_UNIT_PATTERN 同口径
+_PARA_SPACING_UNITS = r'(?:行|磅|点|英寸|厘米|毫米|(?<![A-Za-z])(?:inch|in|cm|mm|pt)(?![A-Za-z])(?![\s　]+[a-z]))'
 _RE_PARA_SPACING = re.compile(
     r'(段前|段后)[\s　]*(\d+(?:\.\d+)?)[\s　]*(' + _PARA_SPACING_UNITS + r')',
     re.IGNORECASE,
@@ -185,7 +188,8 @@ def extract_para_spacing(text: str) -> Optional[tuple[str, float]]:
 # ============================================================
 
 # 缩进单位：字符 + 5 长度单位（无"行"）
-_INDENT_UNITS = r'(?:字符|磅|pt|点|英寸|inch|in|厘米|cm|毫米|mm)'
+# ASCII 短单位加词界保护，与 _LENGTH_UNIT_PATTERN 同口径
+_INDENT_UNITS = r'(?:字符|磅|点|英寸|厘米|毫米|(?<![A-Za-z])(?:inch|in|cm|mm|pt)(?![A-Za-z])(?![\s　]+[a-z]))'
 _RE_INDENT = re.compile(
     r'(首行缩进|悬挂缩进)[\s　]*(\d+(?:\.\d+)?)[\s　]*(' + _INDENT_UNITS + r')',
     re.IGNORECASE,
@@ -284,7 +288,8 @@ def extract_line_spacing(text: str) -> Optional[dict]:
 # ============================================================
 
 # 字符间距单位：字符 + 4 长度单位（无"行"）
-_LS_UNITS = r'(?:字符|磅|pt|点|英寸|inch|in|厘米|cm|毫米|mm)'
+# ASCII 短单位加词界保护，与 _LENGTH_UNIT_PATTERN 同口径
+_LS_UNITS = r'(?:字符|磅|点|英寸|厘米|毫米|(?<![A-Za-z])(?:inch|in|cm|mm|pt)(?![A-Za-z])(?![\s　]+[a-z]))'
 _RE_LETTER_SPACING = re.compile(
     r'字符?间距[^\d]*?(\d+(?:\.\d+)?)[\s　]*(' + _LS_UNITS + r')',
     re.IGNORECASE,

@@ -102,3 +102,32 @@ class TestChineseSizeNames:
         from thesis_worker.utils.size import pt_to_name
         assert pt_to_name(5.5) == '七号'
         assert pt_to_name(5.0) == '八号'
+
+
+class TestAsciiUnitBoundary:
+    """T-fix1: ASCII 单位词边界保护，避免英文上下文误匹配"""
+
+    def test_in_inside_input_no_match(self):
+        from thesis_worker.extractor.units import extract_length_with_unit
+        # "1 input" 不应匹配 (1, 'in')
+        assert extract_length_with_unit('1 input') is None
+
+    def test_in_inside_word_no_match(self):
+        from thesis_worker.extractor.units import extract_length_with_unit
+        assert extract_length_with_unit('click 1 in form') is None
+
+    def test_pt_attached_to_letter_no_match(self):
+        from thesis_worker.extractor.units import extract_length_with_unit
+        # '1cmm' 中 cm 后跟 m → 在词内 → 应不匹配
+        # 旧逻辑无 \b 会误匹配 (1, 'cm')
+        result = extract_length_with_unit('1cmm')
+        assert result is None or result[1] != 'cm'
+
+    def test_legitimate_uses_still_work(self):
+        from thesis_worker.extractor.units import extract_length_with_unit
+        # 词界改造不应破坏合法 case
+        assert extract_length_with_unit('1 cm') == (1.0, 'cm')
+        assert extract_length_with_unit('1 in') == (1.0, 'in')
+        assert extract_length_with_unit('1 inch') == (1.0, 'inch')
+        assert extract_length_with_unit('1pt') == (1.0, 'pt')  # 紧贴数字 OK
+        assert extract_length_with_unit('段前 6 磅') == (6.0, '磅')

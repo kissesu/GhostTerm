@@ -79,6 +79,16 @@ class TestPatternConstants:
         # 单纯数字无单位也不应匹配
         assert rx.search('数字 100 无单位') is None
 
+    def test_length_pattern_ascii_word_boundary(self):
+        """T-fix1: ASCII 短单位 in/cm/mm/pt 不能在英文单词中误匹配"""
+        from thesis_worker.extractor.patterns import _LENGTH_UNIT_PATTERN
+        import re
+        rx = re.compile(rf'(\d+(?:\.\d+)?)[\s　]*({_LENGTH_UNIT_PATTERN})')
+        # 'input' 含 'in'，不应误匹配
+        assert rx.search('1 input') is None
+        # 'commit' 含 'm' 但 c 不是单位前缀，本来也不匹配；保险起见也加
+        assert rx.search('1 commit message') is None
+
 
 class TestExtractParaSpacing:
     """T3.1: 段前/段后多单位自然语言抽取"""
