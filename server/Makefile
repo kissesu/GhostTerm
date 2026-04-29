@@ -11,12 +11,11 @@ gen: gen-server gen-types
 gen-server:
 	go generate ./...
 
-# 用 openapi-typescript 生成前端 types（占位，由 Phase 0c 子任务激活）。
-# 当前 Phase 0a 不强制运行，避免引入 pnpm 顺序依赖；前端 worker 在自己的 phase 内执行。
+# 用 openapi-typescript 生成前端 types（Phase 0c 已激活）。
+# 通过仓库根的 pnpm script `gen-progress-types` 调用，确保依赖与版本由 root package.json 统一管理。
+# 注意：Makefile 在 server/ 子目录下执行，需要先 cd 回仓库根。
 gen-types:
-	@echo "[gen-types] 占位：Phase 0c 由前端 subagent 执行"
-	@echo "  pnpm openapi-typescript server/openapi.yaml -o src/features/progress/api/types.gen.ts"
-	@echo "  pnpm openapi-zod-client  server/openapi.yaml -o src/features/progress/api/schemas.gen.ts"
+	cd .. && pnpm gen-progress-types
 
 build:
 	go build ./...
