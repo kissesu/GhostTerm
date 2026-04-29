@@ -24,6 +24,7 @@ import (
 	"github.com/ghostterm/progress-server/internal/api"
 	"github.com/ghostterm/progress-server/internal/config"
 	"github.com/ghostterm/progress-server/internal/db"
+	"github.com/ghostterm/progress-server/internal/services"
 )
 
 func main() {
@@ -48,9 +49,27 @@ func main() {
 	defer pool.Close()
 
 	// ============================================
-	// 第三步：装配 router + healthz（含 DB ping）
+	// 第三步：装配 services（Phase 2 起 AuthService 进入 router）
 	// ============================================
-	handler, err := api.NewRouter()
+	authSvc, err := services.NewAuthService(services.AuthServiceDeps{
+		Pool:          pool,
+		AccessSecret:  cfg.JWTAccessSecret,
+		RefreshSecret: cfg.JWTRefreshSecret,
+		AccessTTL:     cfg.JWTAccessTTL,
+		RefreshTTL:    cfg.JWTRefreshTTL,
+		BcryptCost:    cfg.BcryptCost,
+	})
+	if err != nil {
+		log.Fatalf("init auth service: %v", err)
+	}
+
+	// ============================================
+	// 第四步：装配 router + healthz（含 DB ping）
+	// ============================================
+	handler, err := api.NewRouter(api.RouterDeps{
+		Pool:        pool,
+		AuthService: authSvc,
+	})
 	if err != nil {
 		log.Fatalf("init router: %v", err)
 	}

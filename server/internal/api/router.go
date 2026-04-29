@@ -1,8 +1,13 @@
 /*
 @file router.go
-@description chi 路由 + ogen 生成的 OpenAPI server 装载入口；handler 为占位实现，
-             所有 endpoint 返回 not_implemented_yet error（v2 part3 §AB1：禁止 panic）。
-             后续 Phase 1-13 由各 worker 替换 oasHandler 内具体方法。
+@description chi 路由 + ogen 生成的 OpenAPI server 装载入口。
+             Phase 2 起：AuthHandler 嵌入 oasHandler，5 个 auth 方法（Login/Refresh/Logout/Me/WsTicket）
+             有了真实实现；其它 endpoint 仍由 oas.UnimplementedHandler 默认返回 ErrNotImplemented。
+
+             鉴权链路：ogen SecurityHandler 实现里调 services.AuthService.VerifyAccessToken，
+             校验通过后通过 middleware.WithAuthContext 把 AuthContext 注入到 ctx。handler 入口
+             用 middleware.AuthContextFrom 取出。AuthLogin / AuthRefresh 在 OpenAPI 里没声明
+             security，ogen 自动跳过 SecurityHandler，所以登录/刷新无需 token 即可访问。
 @author Atlas.oi
 @date 2026-04-29
 */
@@ -11,91 +16,179 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	chimw "github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/ghostterm/progress-server/internal/api/handlers"
+	apimw "github.com/ghostterm/progress-server/internal/api/middleware"
 	"github.com/ghostterm/progress-server/internal/api/oas"
+	"github.com/ghostterm/progress-server/internal/services"
 )
 
-// ErrNotImplementedYet 是 Phase 0a skeleton 阶段所有未实现 endpoint 的统一错误。
+// ErrNotImplementedYet 是 skeleton 阶段所有未实现 endpoint 的统一错误。
 //
-// 业务背景：
-// 1. v2 part3 §AB1 明确要求：router skeleton 不允许 panic("TODO")，必须返回明确错误码
-// 2. ogen 框架会把这个 error 透传给 SecurityHandler/Operation 失败链路，
-//    在 main.go 的 ErrorHandler 中映射为 501 Not Implemented + ErrorEnvelope
-// 3. 当某个 endpoint 在 Phase 4-12 被真实实现后，oasHandler 的对应 method 会被覆盖
+// v2 part3 §AB1 明确要求：router 不允许 panic("TODO")。
+// Phase 2 已替换 5 个 auth 方法为真实实现；其它 endpoint 由 UnimplementedHandler 兜底。
 var ErrNotImplementedYet = errors.New("not_implemented_yet")
 
-// oasHandler 是 oas.Handler 接口的项目级实现。
+// oasHandler 嵌入 ogen UnimplementedHandler 拿到所有"默认返回 ErrNotImplemented"的方法，
+// 通过持有 *handlers.AuthHandler 字段并显式 forward 5 个 auth 方法来覆盖默认实现。
 //
-// 通过嵌入 oas.UnimplementedHandler 自动获取所有方法的 not-implemented 默认实现
-// （ogen 生成的 UnimplementedHandler 每个方法返回 http.ErrNotImplemented）。
-//
-// 后续 phase 的 worker 会在本 struct 上添加具体业务字段（service 引用）并覆盖对应方法。
-// 这里不预设具体 service field，避免 Phase 1-3 引入循环依赖；service 注入在各 phase 自行接入。
+// 注：Go 嵌入字段的"方法 ambiguous selector"规则会让"两个嵌入字段同名方法"导致编译失败；
+// 因此 AuthHandler 不嵌入而是作为命名字段，由 oasHandler 自己声明方法做显式 forward。
+// 后续 phase 的 worker 会再持有 *CustomerHandler / *ProjectHandler 字段并 forward 各自方法。
 type oasHandler struct {
+	auth *handlers.AuthHandler
 	oas.UnimplementedHandler
 }
 
-// 编译时校验：oasHandler 必须满足 oas.Handler 接口
+// AuthLogin 转发到 AuthHandler 实现（覆盖 UnimplementedHandler 的默认 ErrNotImplemented）
+func (h *oasHandler) AuthLogin(ctx context.Context, req *oas.AuthLoginRequest) (oas.AuthLoginRes, error) {
+	return h.auth.AuthLogin(ctx, req)
+}
+
+// AuthRefresh 转发到 AuthHandler 实现
+func (h *oasHandler) AuthRefresh(ctx context.Context, req *oas.AuthRefreshRequest) (oas.AuthRefreshRes, error) {
+	return h.auth.AuthRefresh(ctx, req)
+}
+
+// AuthLogout 转发到 AuthHandler 实现
+func (h *oasHandler) AuthLogout(ctx context.Context) (oas.AuthLogoutRes, error) {
+	return h.auth.AuthLogout(ctx)
+}
+
+// AuthGetMe 转发到 AuthHandler 实现
+func (h *oasHandler) AuthGetMe(ctx context.Context) (oas.AuthGetMeRes, error) {
+	return h.auth.AuthGetMe(ctx)
+}
+
+// WsTicketIssue 转发到 AuthHandler 实现
+func (h *oasHandler) WsTicketIssue(ctx context.Context) (*oas.WSTicketResponse, error) {
+	return h.auth.WsTicketIssue(ctx)
+}
+
+// 编译时校验：oasHandler 仍满足 oas.Handler 接口（含 Auth 方法的真实实现）
 var _ oas.Handler = (*oasHandler)(nil)
 
-// oasSecurityHandler 是 oas.SecurityHandler 接口的占位实现。
+// oasSecurityHandler 实现 ogen 的 SecurityHandler。
 //
-// 业务背景：
-// - OpenAPI 全局声明了 bearerAuth，ogen 要求必须提供 SecurityHandler
-// - Phase 0a 阶段尚未接入 JWT，统一返回 not_implemented_yet
-// - Phase 2（Auth）会用真实 JWT 解析逻辑替换本 struct
-type oasSecurityHandler struct{}
+// 业务流程：
+//  1. ogen 在调 op handler 前，先把 Authorization 头里的 Bearer token 传给本 struct
+//  2. 调 svc.VerifyAccessToken 完成签名 + token_version + is_active 三层校验
+//  3. 把 AuthContext 注入 ctx，op handler 通过 middleware.AuthContextFrom 取出
+//  4. 校验失败返回 error，ogen 框架透传到 ErrorHandler，写为 401 ErrorEnvelope
+type oasSecurityHandler struct {
+	svc services.AuthService
+}
 
-// HandleBearerAuth 占位实现：拒绝所有需要鉴权的请求。
-//
-// 安全考量：默认 deny 而非 allow，符合"零信任"原则，
-// 即使 Phase 2 未及时实现，也不会出现接口被无鉴权访问的安全空窗。
-func (oasSecurityHandler) HandleBearerAuth(ctx context.Context, op oas.OperationName, t oas.BearerAuth) (context.Context, error) {
-	return ctx, ErrNotImplementedYet
+// HandleBearerAuth 是 ogen SecurityHandler 接口方法。
+func (h *oasSecurityHandler) HandleBearerAuth(ctx context.Context, _ oas.OperationName, t oas.BearerAuth) (context.Context, error) {
+	if t.Token == "" {
+		return ctx, errors.New("unauthorized")
+	}
+	sc, err := h.svc.VerifyAccessToken(ctx, t.Token)
+	if err != nil {
+		return ctx, err
+	}
+	ac, ok := sc.(services.AuthContext)
+	if !ok {
+		return ctx, errors.New("unauthorized")
+	}
+	return apimw.WithAuthContext(ctx, ac), nil
 }
 
 // 编译时校验
 var _ oas.SecurityHandler = (*oasSecurityHandler)(nil)
 
-// NewRouter 装配 chi 基础中间件 + ogen 生成的 OpenAPI server，返回可挂载的 http.Handler。
+// RouterDeps 装配 NewRouter 所需依赖。
+//
+// 业务背景：相比 Phase 0a 的"无参 NewRouter"，Phase 2 起 router 需要 service 层来源；
+// 把它收敛到一个 deps struct 让后续 phase 加 service 时不破坏 main.go 的调用签名。
+type RouterDeps struct {
+	Pool        *pgxpool.Pool
+	AuthService services.AuthService
+}
+
+// NewRouter 装配 chi 基础中间件 + ogen 生成的 OpenAPI server。
 //
 // 业务流程：
-// 1. 创建 chi router，注册 RequestID / Logger / Recoverer 三类基础中间件
-// 2. 暴露 /healthz 健康检查（main.go 的 server skeleton 验证用，不在 OpenAPI 契约中）
-// 3. 用 ogen 生成的 oas.NewServer 包装 oasHandler + oasSecurityHandler，
-//    挂载在根路径 "/"（OpenAPI 中所有 path 已含 /api 前缀，不需要再 Mount("/api", ...)）
-//
-// 错误处理：
-// - ogen 默认 ErrorHandler 把 handler 返回的 error 转成 500，未来 Phase 1-2 会替换为
-//   ErrorEnvelope 序列化中间件，把 ErrNotImplementedYet 等映射为对应 HTTP 状态码
-func NewRouter() (http.Handler, error) {
+//  1. 注册 chi 基础中间件（RequestID / RealIP / Logger / Recoverer）
+//  2. 暴露 /healthz（main.go 还会再覆盖一份带 DB ping 的）
+//  3. 用 ogen NewServer 装配 oasHandler + oasSecurityHandler
+//  4. 自定义 ErrorHandler：把 service sentinel error 映射为对应 HTTP 状态 + ErrorEnvelope
+func NewRouter(deps RouterDeps) (http.Handler, error) {
+	if deps.AuthService == nil {
+		return nil, errors.New("router: AuthService is required")
+	}
 	r := chi.NewRouter()
 
-	// chi 基础中间件
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
+	r.Use(chimw.RequestID)
+	r.Use(chimw.RealIP)
+	r.Use(chimw.Logger)
+	r.Use(chimw.Recoverer)
 
-	// healthz 用于 docker/systemd 探活
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
 
-	// 装配 ogen 生成的 server
-	oasServer, err := oas.NewServer(&oasHandler{}, oasSecurityHandler{})
+	authHandler := handlers.NewAuthHandler(deps.AuthService)
+	secHandler := &oasSecurityHandler{svc: deps.AuthService}
+
+	oasServer, err := oas.NewServer(
+		&oasHandler{auth: authHandler},
+		secHandler,
+		oas.WithErrorHandler(errorEnvelopeHandler),
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	// 把 ogen server 挂在根路径，OpenAPI 中所有 path 已含 /api 前缀
 	r.Mount("/", oasServer)
-
 	return r, nil
+}
+
+// errorEnvelopeHandler 把 handler / SecurityHandler 抛出的 error 映射为 ErrorEnvelope JSON。
+//
+// 业务背景：
+//   - service 层的 sentinel error（ErrInvalidAccessToken / ErrInvalidWSTicket 等）
+//     代表已知业务失败；HTTP 应映射为 401 / 400 而非 500
+//   - 未知 error 兜底 500 + code=internal，避免泄漏内部细节
+func errorEnvelopeHandler(_ context.Context, w http.ResponseWriter, _ *http.Request, err error) {
+	status := http.StatusInternalServerError
+	code := string(oas.ErrorEnvelopeErrorCodeInternal)
+	msg := "internal server error"
+
+	switch {
+	case errors.Is(err, services.ErrInvalidAccessToken),
+		errors.Is(err, services.ErrInvalidRefreshToken),
+		errors.Is(err, services.ErrInvalidCredentials),
+		errors.Is(err, services.ErrUserInactive):
+		status = http.StatusUnauthorized
+		code = string(oas.ErrorEnvelopeErrorCodeUnauthorized)
+		msg = "未登录或会话已失效"
+	case errors.Is(err, services.ErrInvalidWSTicket):
+		status = http.StatusUnauthorized
+		code = string(oas.ErrorEnvelopeErrorCodeTicketInvalid)
+		msg = "WS ticket 无效或已过期"
+	case errors.Is(err, ErrNotImplementedYet):
+		status = http.StatusNotImplemented
+		code = string(oas.ErrorEnvelopeErrorCodeNotImplemented)
+		msg = "尚未实现"
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	body := map[string]any{
+		"error": map[string]any{
+			"code":    code,
+			"message": msg,
+		},
+	}
+	_ = json.NewEncoder(w).Encode(body)
 }

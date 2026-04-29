@@ -63,6 +63,9 @@ type AuthService interface {
 	// VerifyAccessToken 中间件用，校验 token 合法性并返回用户上下文
 	VerifyAccessToken(ctx context.Context, accessToken string) (SessionContext, error)
 
+	// Me 读取当前 session 的用户基础信息（不返回 password_hash / token_version）
+	Me(ctx context.Context, sc SessionContext) (any, error)
+
 	// IssueWSTicket 签发短期（30s）WebSocket 票据，浏览器 WS 不支持 Authorization header
 	IssueWSTicket(ctx context.Context, sc SessionContext) (ticket string, expiresAt time.Time, err error)
 

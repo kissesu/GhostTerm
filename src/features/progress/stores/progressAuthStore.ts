@@ -1,41 +1,185 @@
 /**
  * @file progressAuthStore.ts
- * @description 进度模块认证状态占位 store。
+ * @description 进度模块认证 store（Phase 2 完整版）。
  *
- *              Phase 0d 仅暴露 accessToken / setAccessToken / clearToken 供 apiFetch
- *              注入 Bearer header；完整登录、refresh、token_version 等流程在 Phase 2
- *              （JWT 认证）中实现，届时替换为带 persist + refresh 流转的版本。
+ *              负责 token / user 状态 + 与后端 5 个 auth endpoint 联通：
+ *                - login / refresh / logout / loadMe（getMe）
  *
- *              不持久化 token 是有意为之：Phase 0d 没有真实后端可联通，避免假数据
- *              污染本地存储；Phase 2 接入登录 endpoint 后再决定 SecureStorage 落盘。
+ *              持久化策略（v2 part1 §C7）：
+ *                - accessToken：仅内存，不落 localStorage（避免 XSS 长期持有）
+ *                - refreshToken：写 localStorage('progress_refresh_token')，
+ *                  应用启动调 refresh() 换新 access；refresh 失败则清空
+ *                - user：仅内存（loadMe 后填）
+ *
+ *              不在本文件做的事：
+ *                - 不实现 401 → 自动 refresh + retry：跨 store 协调由 client 层下个迭代加
+ *                - 不做 SecureStorage：Tauri 桌面端可用 keytar，但 v1 web 部署不一定有原生支持
  *
  * @author Atlas.oi
  * @date 2026-04-29
  */
 
 import { create } from 'zustand';
+import { z } from 'zod';
 
-interface ProgressAuthState {
-  /** 当前 access token；未登录时为 null */
-  accessToken: string | null;
-  /** 写入新的 access token（登录或 refresh 成功后调用） */
-  setAccessToken: (token: string) => void;
-  /** 清空 access token（登出/refresh 失败后调用） */
-  clearToken: () => void;
+import { apiFetch, ProgressApiError } from '../api/client';
+import { LoginResponseSchema, RefreshResponseSchema, UserSchema } from '../api/schemas';
+import type { LoginResponsePayload, UserPayload } from '../api/schemas';
+
+// ============================================
+// localStorage key —— 隔离命名空间，避免与其它模块冲突
+// ============================================
+const REFRESH_KEY = 'progress_refresh_token';
+
+// ============================================
+// localStorage 读/写 —— 容错：测试环境若被禁用直接吞错
+// ============================================
+function readRefresh(): string | null {
+  try {
+    return globalThis.localStorage?.getItem(REFRESH_KEY) ?? null;
+  } catch {
+    return null;
+  }
 }
 
-export const useProgressAuthStore = create<ProgressAuthState>((set) => ({
+function writeRefresh(token: string | null): void {
+  try {
+    if (token) {
+      globalThis.localStorage?.setItem(REFRESH_KEY, token);
+    } else {
+      globalThis.localStorage?.removeItem(REFRESH_KEY);
+    }
+  } catch {
+    // 隐身浏览模式 / 测试 jsdom 关闭 localStorage 时静默忽略
+  }
+}
+
+// ============================================
+// store state + actions
+// ============================================
+
+interface ProgressAuthState {
+  accessToken: string | null;
+  refreshToken: string | null;
+  user: UserPayload | null;
+  /** 当前是否正在登录 / 加载 me，UI 用于 disable 按钮 */
+  loading: boolean;
+  /** 最近一次操作的错误信息（登录失败提示等） */
+  error: string | null;
+
+  // ============ actions ============
+
+  /** 邮箱 + 密码登录 */
+  login: (email: string, password: string) => Promise<void>;
+  /** 用 refreshToken 换新 accessToken；失败会清空 refresh */
+  refresh: () => Promise<void>;
+  /** 登出：调后端 + 清空本地状态 + 清 localStorage */
+  logout: () => Promise<void>;
+  /** 拉取当前登录用户信息（依赖 accessToken） */
+  loadMe: () => Promise<void>;
+  /** 清空本地 token / user / error（不调后端） */
+  clearLocal: () => void;
+}
+
+export const useProgressAuthStore = create<ProgressAuthState>((set, get) => ({
   accessToken: null,
-  setAccessToken: (token) => set({ accessToken: token }),
-  clearToken: () => set({ accessToken: null }),
+  refreshToken: readRefresh(),
+  user: null,
+  loading: false,
+  error: null,
+
+  // ----------------------------------------------------------
+  // login: POST /api/auth/login → { accessToken, refreshToken, user }
+  // ----------------------------------------------------------
+  async login(email, password) {
+    set({ loading: true, error: null });
+    try {
+      const data: LoginResponsePayload = await apiFetch(
+        '/api/auth/login',
+        {
+          method: 'POST',
+          anonymous: true, // 登录是公开 endpoint
+          body: JSON.stringify({ email, password }),
+        },
+        LoginResponseSchema,
+      );
+      writeRefresh(data.refreshToken);
+      set({
+        accessToken: data.accessToken,
+        refreshToken: data.refreshToken,
+        user: data.user,
+        loading: false,
+        error: null,
+      });
+    } catch (err) {
+      // 错误暴露给 UI 做提示；同时清空 token 避免半状态
+      const msg = err instanceof ProgressApiError ? err.message : String(err);
+      set({ accessToken: null, user: null, loading: false, error: msg });
+      throw err;
+    }
+  },
+
+  // ----------------------------------------------------------
+  // refresh: POST /api/auth/refresh → { accessToken }
+  // ----------------------------------------------------------
+  async refresh() {
+    const current = get().refreshToken;
+    if (!current) {
+      throw new ProgressApiError(401, 'unauthorized', 'no refresh token');
+    }
+    const data = await apiFetch(
+      '/api/auth/refresh',
+      {
+        method: 'POST',
+        anonymous: true, // refresh 不依赖 access token
+        body: JSON.stringify({ refreshToken: current }),
+      },
+      RefreshResponseSchema,
+    ).catch((err) => {
+      // refresh 失败 = refresh token 失效；清空本地 state 避免后续重复尝试
+      writeRefresh(null);
+      set({ accessToken: null, refreshToken: null, user: null });
+      throw err;
+    });
+    set({ accessToken: data.accessToken });
+  },
+
+  // ----------------------------------------------------------
+  // logout: POST /api/auth/logout（带 access token）→ 204
+  // 即使后端调用失败（例如 token 已过期），也要把本地状态清干净
+  // ----------------------------------------------------------
+  async logout() {
+    try {
+      await apiFetch('/api/auth/logout', { method: 'POST' }, z.void());
+    } catch {
+      // 后端失败不阻断本地登出 —— 用户语义就是"我要退出"
+    } finally {
+      writeRefresh(null);
+      set({ accessToken: null, refreshToken: null, user: null, error: null });
+    }
+  },
+
+  // ----------------------------------------------------------
+  // loadMe: GET /api/auth/me → { user }
+  // ----------------------------------------------------------
+  async loadMe() {
+    const data = await apiFetch('/api/auth/me', { method: 'GET' }, UserSchema);
+    set({ user: data });
+  },
+
+  // ----------------------------------------------------------
+  // clearLocal: 不调后端，只清本地（用于 401 时强制返回登录页）
+  // ----------------------------------------------------------
+  clearLocal() {
+    writeRefresh(null);
+    set({ accessToken: null, refreshToken: null, user: null, error: null });
+  },
 }));
 
 /**
- * 获取当前 access token 的同步函数（apiFetch 在请求前调用）。
+ * 同步获取当前 access token（apiFetch 在请求前调用）。
  *
- * 抽出独立函数而非直接读 store 是为了：
- * 1. 保持 apiFetch 与具体 store 实现解耦，Phase 2 替换 store 时无须改 client
- * 2. 便于在测试中通过 mock 该 hook 注入临时 token
+ * 与 store 解耦：apiFetch 不直接 import store hook，避免循环依赖。
  */
 export function getAccessToken(): string | null {
   return useProgressAuthStore.getState().accessToken;
