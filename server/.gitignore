@@ -1,0 +1,21 @@
+# 编译产物（progress-server 二进制）
+progress-server
+*.exe
+*.test
+*.test.bin
+
+# Vendor 目录（本项目走 go module，不 vendor）
+vendor/
+
+# 本地环境配置（含 DB_URL/JWT_SECRET 等敏感信息）
+.env
+.env.*
+
+# 本地文件存储与覆盖率
+data/
+coverage.out
+coverage.html
+
+# IDE 临时文件
+.idea/
+*.swp

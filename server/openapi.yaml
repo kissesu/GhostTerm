@@ -1,0 +1,1298 @@
+openapi: 3.0.3
+info:
+  title: GhostTerm Progress Module API
+  version: 1.0.0
+  description: |
+    GhostTerm 进度模块 API 单一来源（OpenAPI 3.0）。
+    后端用 ogen 生成 server skeleton，前端用 openapi-typescript / openapi-zod-client 生成类型与运行时 schema。
+    每次 schema 变更：改本文件 → make gen → 双方编译错误自动暴露不一致。
+servers:
+  - url: http://localhost:8080
+    description: 本地开发
+security:
+  - bearerAuth: []
+
+# ======================================================================
+# 通用响应包装（v2 强制）：成功 200/201 必须 DataEnvelope，错误必须 ErrorEnvelope
+# ======================================================================
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # ===== 通用 envelope =====
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - unauthorized
+                - permission_denied
+                - not_found
+                - validation_failed
+                - state_machine_invalid_transition
+                - mime_not_allowed
+                - file_too_large
+                - ticket_invalid
+                - not_implemented
+                - internal
+            message: { type: string }
+            details:
+              type: object
+              additionalProperties: true
+              nullable: true
+
+    Money:
+      type: string
+      pattern: '^-?\d+\.\d{2}$'
+      description: '十进制金额，最多 12 位整数 + 2 位小数（与 Postgres NUMERIC(12,2) 对齐，前端用 decimal.js 处理）'
+
+    # ===== 用户 / 角色 / 权限 =====
+    User:
+      type: object
+      required: [id, email, displayName, roleId, isActive, createdAt]
+      properties:
+        id: { type: integer, format: int64 }
+        email: { type: string, format: email }
+        displayName: { type: string }
+        roleId: { type: integer, format: int64 }
+        isActive: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    Role:
+      type: object
+      required: [id, name, isSystem, createdAt]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        isSystem: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    Permission:
+      type: object
+      required: [id, resource, action, scope]
+      properties:
+        id: { type: integer, format: int64 }
+        resource: { type: string, description: "资源类型，如 project / customer / feedback" }
+        action: { type: string, description: "动作，如 read / create / update / delete" }
+        scope: { type: string, description: "范围，如 all / created_by_self / created_by_role:<id>" }
+
+    # ===== 客户 =====
+    Customer:
+      type: object
+      required: [id, nameWechat, createdBy, createdAt, updatedAt]
+      properties:
+        id: { type: integer, format: int64 }
+        nameWechat: { type: string }
+        remark: { type: string, nullable: true }
+        createdBy: { type: integer, format: int64 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CustomerCreateRequest:
+      type: object
+      required: [nameWechat]
+      properties:
+        nameWechat: { type: string, minLength: 1 }
+        remark: { type: string }
+
+    CustomerUpdateRequest:
+      type: object
+      properties:
+        nameWechat: { type: string, minLength: 1 }
+        remark: { type: string, nullable: true }
+
+    # ===== 项目 =====
+    ProjectStatus:
+      type: string
+      enum:
+        - dealing
+        - quoting
+        - developing
+        - confirming
+        - delivered
+        - paid
+        - archived
+        - after_sales
+        - cancelled
+
+    ProjectPriority:
+      type: string
+      enum: [urgent, normal]
+
+    ThesisLevel:
+      type: string
+      enum: [bachelor, master, doctor]
+
+    Project:
+      type: object
+      required:
+        - id
+        - name
+        - customerId
+        - description
+        - priority
+        - status
+        - deadline
+        - originalQuote
+        - currentQuote
+        - afterSalesTotal
+        - totalReceived
+        - createdBy
+        - dealingAt
+        - createdAt
+        - updatedAt
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        customerId: { type: integer, format: int64 }
+        description: { type: string }
+        priority: { $ref: '#/components/schemas/ProjectPriority' }
+        thesisLevel:
+          allOf: [{ $ref: '#/components/schemas/ThesisLevel' }]
+          nullable: true
+        subject: { type: string, nullable: true }
+        status: { $ref: '#/components/schemas/ProjectStatus' }
+        holderRoleId: { type: integer, format: int64, nullable: true }
+        holderUserId: { type: integer, format: int64, nullable: true }
+        deadline: { type: string, format: date-time }
+        dealingAt: { type: string, format: date-time }
+        quotingAt: { type: string, format: date-time, nullable: true }
+        devStartedAt: { type: string, format: date-time, nullable: true }
+        confirmingAt: { type: string, format: date-time, nullable: true }
+        deliveredAt: { type: string, format: date-time, nullable: true }
+        paidAt: { type: string, format: date-time, nullable: true }
+        archivedAt: { type: string, format: date-time, nullable: true }
+        afterSalesAt: { type: string, format: date-time, nullable: true }
+        cancelledAt: { type: string, format: date-time, nullable: true }
+        originalQuote: { $ref: '#/components/schemas/Money' }
+        currentQuote: { $ref: '#/components/schemas/Money' }
+        afterSalesTotal: { $ref: '#/components/schemas/Money' }
+        totalReceived: { $ref: '#/components/schemas/Money' }
+        openingDocId: { type: integer, format: int64, nullable: true }
+        assignmentDocId: { type: integer, format: int64, nullable: true }
+        formatSpecDocId: { type: integer, format: int64, nullable: true }
+        createdBy: { type: integer, format: int64 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ProjectCreateRequest:
+      type: object
+      required: [name, customerId, description, deadline]
+      properties:
+        name: { type: string, minLength: 1 }
+        customerId: { type: integer, format: int64 }
+        description: { type: string, minLength: 1 }
+        priority: { $ref: '#/components/schemas/ProjectPriority' }
+        thesisLevel: { $ref: '#/components/schemas/ThesisLevel' }
+        subject: { type: string }
+        deadline: { type: string, format: date-time }
+        originalQuote: { $ref: '#/components/schemas/Money' }
+
+    ProjectUpdateRequest:
+      type: object
+      description: "PATCH 部分字段，全部 optional"
+      properties:
+        name: { type: string, minLength: 1 }
+        description: { type: string, minLength: 1 }
+        priority: { $ref: '#/components/schemas/ProjectPriority' }
+        thesisLevel: { $ref: '#/components/schemas/ThesisLevel' }
+        subject: { type: string, nullable: true }
+        deadline: { type: string, format: date-time }
+
+    # ===== 项目执行事件（状态机驱动） =====
+    EventCode:
+      type: string
+      description: "状态机事件代码，详见 spec §6.2"
+      enum:
+        - E0
+        - E1
+        - E2
+        - E3
+        - E4
+        - E5
+        - E6
+        - E7
+        - E8
+        - E9
+        - E10
+        - E11
+        - E12
+        - E13
+        - E_AS1
+        - E_AS3
+
+    EventTriggerRequest:
+      type: object
+      required: [event, remark]
+      properties:
+        event: { $ref: '#/components/schemas/EventCode' }
+        remark: { type: string, minLength: 1, description: "状态变更日志必填备注" }
+        newHolderUserId:
+          type: integer
+          format: int64
+          nullable: true
+          description: "事件需要换持球者时填写（如 E2 由超管指定开发者）"
+
+    StatusChangeLog:
+      type: object
+      required: [id, projectId, eventCode, eventName, toStatus, remark, triggeredBy, triggeredAt]
+      properties:
+        id: { type: integer, format: int64 }
+        projectId: { type: integer, format: int64 }
+        eventCode: { type: string }
+        eventName: { type: string }
+        fromStatus:
+          allOf: [{ $ref: '#/components/schemas/ProjectStatus' }]
+          nullable: true
+        toStatus: { $ref: '#/components/schemas/ProjectStatus' }
+        fromHolderId: { type: integer, format: int64, nullable: true }
+        toHolderId: { type: integer, format: int64, nullable: true }
+        remark: { type: string }
+        triggeredBy: { type: integer, format: int64 }
+        triggeredAt: { type: string, format: date-time }
+
+    # ===== 反馈 =====
+    FeedbackSource:
+      type: string
+      enum: [phone, wechat, email, meeting, other]
+
+    FeedbackStatus:
+      type: string
+      enum: [pending, done]
+
+    Feedback:
+      type: object
+      required: [id, projectId, content, source, status, recordedBy, recordedAt]
+      properties:
+        id: { type: integer, format: int64 }
+        projectId: { type: integer, format: int64 }
+        content: { type: string }
+        source: { $ref: '#/components/schemas/FeedbackSource' }
+        status: { $ref: '#/components/schemas/FeedbackStatus' }
+        recordedBy: { type: integer, format: int64 }
+        recordedAt: { type: string, format: date-time }
+        attachmentIds:
+          type: array
+          items: { type: integer, format: int64 }
+
+    FeedbackCreateRequest:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string, minLength: 1 }
+        source: { $ref: '#/components/schemas/FeedbackSource' }
+        attachmentIds:
+          type: array
+          items: { type: integer, format: int64 }
+
+    FeedbackUpdateRequest:
+      type: object
+      properties:
+        status: { $ref: '#/components/schemas/FeedbackStatus' }
+
+    # ===== 财务 =====
+    PaymentDirection:
+      type: string
+      enum: [customer_in, dev_settlement]
+
+    Payment:
+      type: object
+      required: [id, projectId, direction, amount, paidAt, remark, recordedBy, recordedAt]
+      properties:
+        id: { type: integer, format: int64 }
+        projectId: { type: integer, format: int64 }
+        direction: { $ref: '#/components/schemas/PaymentDirection' }
+        amount: { $ref: '#/components/schemas/Money' }
+        paidAt: { type: string, format: date-time }
+        relatedUserId:
+          type: integer
+          format: int64
+          nullable: true
+          description: "仅 dev_settlement 必填"
+        screenshotId:
+          type: integer
+          format: int64
+          nullable: true
+          description: "仅 dev_settlement 必填（截图 file_id）"
+        remark: { type: string }
+        recordedBy: { type: integer, format: int64 }
+        recordedAt: { type: string, format: date-time }
+
+    PaymentCreateRequest:
+      type: object
+      required: [direction, amount, paidAt, remark]
+      properties:
+        direction: { $ref: '#/components/schemas/PaymentDirection' }
+        amount: { $ref: '#/components/schemas/Money' }
+        paidAt: { type: string, format: date-time }
+        relatedUserId: { type: integer, format: int64, nullable: true }
+        screenshotId: { type: integer, format: int64, nullable: true }
+        remark: { type: string, minLength: 1 }
+
+    # ===== 文件 / 论文版本 =====
+    FileMetadata:
+      type: object
+      required: [id, uuid, filename, sizeBytes, mimeType, uploadedBy, uploadedAt]
+      properties:
+        id: { type: integer, format: int64 }
+        uuid: { type: string, format: uuid }
+        filename: { type: string }
+        sizeBytes: { type: integer, format: int64 }
+        mimeType: { type: string }
+        uploadedBy: { type: integer, format: int64 }
+        uploadedAt: { type: string, format: date-time }
+
+    ProjectFile:
+      type: object
+      required: [id, projectId, fileId, category, addedAt, file]
+      properties:
+        id: { type: integer, format: int64 }
+        projectId: { type: integer, format: int64 }
+        fileId: { type: integer, format: int64 }
+        category:
+          type: string
+          enum: [sample_doc, source_code]
+        addedAt: { type: string, format: date-time }
+        file: { $ref: '#/components/schemas/FileMetadata' }
+
+    ThesisVersion:
+      type: object
+      required: [id, projectId, fileId, versionNo, uploadedBy, uploadedAt, file]
+      properties:
+        id: { type: integer, format: int64 }
+        projectId: { type: integer, format: int64 }
+        fileId: { type: integer, format: int64 }
+        versionNo: { type: integer }
+        remark: { type: string, nullable: true }
+        uploadedBy: { type: integer, format: int64 }
+        uploadedAt: { type: string, format: date-time }
+        file: { $ref: '#/components/schemas/FileMetadata' }
+
+    ThesisVersionCreateRequest:
+      type: object
+      required: [fileId]
+      properties:
+        fileId: { type: integer, format: int64 }
+        remark: { type: string }
+
+    # ===== 费用变更 =====
+    QuoteChangeType:
+      type: string
+      enum: [append, modify, after_sales]
+
+    QuoteChange:
+      type: object
+      required: [id, projectId, changeType, delta, oldQuote, newQuote, reason, phase, changedBy, changedAt]
+      properties:
+        id: { type: integer, format: int64 }
+        projectId: { type: integer, format: int64 }
+        changeType: { $ref: '#/components/schemas/QuoteChangeType' }
+        delta: { $ref: '#/components/schemas/Money' }
+        oldQuote: { $ref: '#/components/schemas/Money' }
+        newQuote: { $ref: '#/components/schemas/Money' }
+        reason: { type: string }
+        phase: { $ref: '#/components/schemas/ProjectStatus' }
+        changedBy: { type: integer, format: int64 }
+        changedAt: { type: string, format: date-time }
+
+    QuoteChangeRequest:
+      type: object
+      required: [changeType, reason]
+      properties:
+        changeType: { $ref: '#/components/schemas/QuoteChangeType' }
+        delta: { $ref: '#/components/schemas/Money' }
+        newQuote: { $ref: '#/components/schemas/Money' }
+        reason: { type: string, minLength: 1 }
+
+    # ===== 通知 =====
+    NotificationType:
+      type: string
+      enum:
+        - ball_passed
+        - deadline_approaching
+        - overdue
+        - new_feedback
+        - settlement_received
+        - project_terminated
+
+    Notification:
+      type: object
+      required: [id, userId, type, title, body, isRead, createdAt]
+      properties:
+        id: { type: integer, format: int64 }
+        userId: { type: integer, format: int64 }
+        type: { $ref: '#/components/schemas/NotificationType' }
+        projectId: { type: integer, format: int64, nullable: true }
+        title: { type: string }
+        body: { type: string }
+        isRead: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        readAt: { type: string, format: date-time, nullable: true }
+
+    # ===== Earnings / Dashboard =====
+    EarningsSummary:
+      type: object
+      required: [userId, totalEarned, settlementCount, projects]
+      properties:
+        userId: { type: integer, format: int64 }
+        totalEarned: { $ref: '#/components/schemas/Money' }
+        settlementCount: { type: integer }
+        lastPaidAt: { type: string, format: date-time, nullable: true }
+        projects:
+          type: array
+          items:
+            type: object
+            required: [projectId, projectName, totalEarned, settlementCount]
+            properties:
+              projectId: { type: integer, format: int64 }
+              projectName: { type: string }
+              totalEarned: { $ref: '#/components/schemas/Money' }
+              settlementCount: { type: integer }
+              lastPaidAt: { type: string, format: date-time, nullable: true }
+
+    # ===== Auth =====
+    AuthLoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 1 }
+
+    AuthLoginResponse:
+      type: object
+      required: [accessToken, refreshToken, user]
+      properties:
+        accessToken: { type: string, description: "短期 access token (15min)" }
+        refreshToken: { type: string, description: "长期 refresh token (30d)" }
+        user: { $ref: '#/components/schemas/User' }
+
+    AuthRefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+
+    AuthRefreshResponse:
+      type: object
+      required: [accessToken]
+      properties:
+        accessToken: { type: string }
+
+    # ===== WebSocket ticket =====
+    WSTicket:
+      type: object
+      required: [ticket, expiresAt]
+      properties:
+        ticket: { type: string, description: "短期 WS 票据，用于建立 /ws/notifications 连接" }
+        expiresAt: { type: string, format: date-time, description: "票据过期时间（一般 30s）" }
+
+    # ===== Data envelopes（用于响应包装） =====
+    UserResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/User' }
+
+    UserListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/User' }
+
+    RoleListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Role' }
+
+    PermissionListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Permission' }
+
+    CustomerResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/Customer' }
+
+    CustomerListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Customer' }
+
+    ProjectResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/Project' }
+
+    ProjectListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Project' }
+
+    StatusChangeLogListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/StatusChangeLog' }
+
+    FeedbackResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/Feedback' }
+
+    FeedbackListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Feedback' }
+
+    PaymentResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/Payment' }
+
+    PaymentListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Payment' }
+
+    ProjectFileListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/ProjectFile' }
+
+    FileMetadataResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/FileMetadata' }
+
+    ThesisVersionResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/ThesisVersion' }
+
+    ThesisVersionListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/ThesisVersion' }
+
+    QuoteChangeResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/QuoteChange' }
+
+    QuoteChangeListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/QuoteChange' }
+
+    NotificationListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Notification' }
+
+    EarningsSummaryResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/EarningsSummary' }
+
+    AuthLoginEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/AuthLoginResponse' }
+
+    AuthRefreshEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/AuthRefreshResponse' }
+
+    WSTicketResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/WSTicket' }
+
+  responses:
+    UnauthorizedError:
+      description: 缺失或无效凭证
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    PermissionDeniedError:
+      description: 无权限
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    NotFoundError:
+      description: 资源不存在
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    ValidationError:
+      description: 请求体校验失败
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    NotImplementedError:
+      description: 接口尚未实现（Phase 0a skeleton 阶段）
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+# ======================================================================
+# Paths
+# ======================================================================
+paths:
+
+  # ===== Auth =====
+  /api/auth/login:
+    post:
+      operationId: authLogin
+      summary: 登录获取 access + refresh token
+      security: []
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AuthLoginRequest' }
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthLoginEnvelope' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /api/auth/refresh:
+    post:
+      operationId: authRefresh
+      summary: 用 refresh token 换 access token
+      security: []
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AuthRefreshRequest' }
+      responses:
+        '200':
+          description: 刷新成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthRefreshEnvelope' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+
+  /api/auth/logout:
+    post:
+      operationId: authLogout
+      summary: 登出（递增 token_version 使所有 token 失效）
+      tags: [auth]
+      responses:
+        '204':
+          description: 登出成功
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+
+  /api/users/me:
+    get:
+      operationId: usersMe
+      summary: 获取当前登录用户
+      tags: [users]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserResponse' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+
+  # ===== Users (super admin only) =====
+  /api/users:
+    get:
+      operationId: usersList
+      summary: 列出所有用户（仅超管）
+      tags: [users]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserListResponse' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/PermissionDeniedError' }
+
+  # ===== Roles & Permissions =====
+  /api/roles:
+    get:
+      operationId: rolesList
+      summary: 列出所有角色
+      tags: [rbac]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RoleListResponse' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+
+  /api/permissions:
+    get:
+      operationId: permissionsList
+      summary: 列出所有权限
+      tags: [rbac]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PermissionListResponse' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+
+  # ===== Customers =====
+  /api/customers:
+    get:
+      operationId: customersList
+      summary: 列出客户（按权限过滤）
+      tags: [customers]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerListResponse' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+    post:
+      operationId: customersCreate
+      summary: 创建客户
+      tags: [customers]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerCreateRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerResponse' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /api/customers/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    get:
+      operationId: customersGet
+      tags: [customers]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerResponse' }
+        '404': { $ref: '#/components/responses/NotFoundError' }
+    patch:
+      operationId: customersUpdate
+      tags: [customers]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerUpdateRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerResponse' }
+        '404': { $ref: '#/components/responses/NotFoundError' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  # ===== Projects =====
+  /api/projects:
+    get:
+      operationId: projectsList
+      summary: 列出项目（按 RBAC 过滤）
+      tags: [projects]
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/ProjectStatus' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectListResponse' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+    post:
+      operationId: projectsCreate
+      summary: 创建项目（默认进入 dealing 状态）
+      tags: [projects]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectCreateRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectResponse' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /api/projects/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    get:
+      operationId: projectsGet
+      tags: [projects]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectResponse' }
+        '404': { $ref: '#/components/responses/NotFoundError' }
+    patch:
+      operationId: projectsUpdate
+      summary: 修改项目基础字段（不含状态机）
+      tags: [projects]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectUpdateRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectResponse' }
+        '404': { $ref: '#/components/responses/NotFoundError' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /api/projects/{id}/events:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    post:
+      operationId: projectsTriggerEvent
+      summary: 触发状态机事件
+      tags: [projects]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventTriggerRequest' }
+      responses:
+        '200':
+          description: 事件已触发，返回最新项目
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectResponse' }
+        '409':
+          description: 状态机不允许此跳转
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /api/projects/{id}/status-changes:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    get:
+      operationId: projectsStatusChanges
+      summary: 查询项目状态变更日志
+      tags: [projects]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StatusChangeLogListResponse' }
+        '404': { $ref: '#/components/responses/NotFoundError' }
+
+  /api/projects/{id}/feedbacks:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    get:
+      operationId: projectsListFeedbacks
+      tags: [feedbacks]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FeedbackListResponse' }
+    post:
+      operationId: projectsCreateFeedback
+      tags: [feedbacks]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FeedbackCreateRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FeedbackResponse' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /api/feedbacks/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    patch:
+      operationId: feedbacksUpdate
+      summary: 修改反馈状态（pending → done）
+      tags: [feedbacks]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FeedbackUpdateRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FeedbackResponse' }
+        '404': { $ref: '#/components/responses/NotFoundError' }
+
+  /api/projects/{id}/payments:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    get:
+      operationId: projectsListPayments
+      tags: [payments]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentListResponse' }
+    post:
+      operationId: projectsCreatePayment
+      summary: 录入收款或开发结算
+      tags: [payments]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PaymentCreateRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentResponse' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /api/projects/{id}/files:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    get:
+      operationId: projectsListFiles
+      summary: 列出项目附件（sample_doc / source_code）
+      tags: [files]
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [sample_doc, source_code]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectFileListResponse' }
+
+  /api/projects/{id}/quote-changes:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    get:
+      operationId: projectsListQuoteChanges
+      tags: [quote-changes]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QuoteChangeListResponse' }
+    post:
+      operationId: projectsCreateQuoteChange
+      summary: 提交费用变更（追加 / 修改 / 售后）
+      tags: [quote-changes]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/QuoteChangeRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QuoteChangeResponse' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /api/projects/{id}/thesis-versions:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    get:
+      operationId: projectsListThesisVersions
+      tags: [thesis]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ThesisVersionListResponse' }
+    post:
+      operationId: projectsCreateThesisVersion
+      summary: 上传论文新版（永不覆盖，version_no 自动递增）
+      tags: [thesis]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ThesisVersionCreateRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ThesisVersionResponse' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  # ===== Files (multipart upload，文件本身用 multipart，元信息走 envelope) =====
+  /api/files:
+    post:
+      operationId: filesUpload
+      summary: 上传文件，返回文件元数据
+      tags: [files]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: 文件已上传
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FileMetadataResponse' }
+        '413':
+          description: 文件过大
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '415':
+          description: MIME 不允许
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/files/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    get:
+      operationId: filesDownload
+      summary: 下载文件（流式）
+      tags: [files]
+      responses:
+        '200':
+          description: 文件内容
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404': { $ref: '#/components/responses/NotFoundError' }
+
+  # ===== Notifications =====
+  /api/notifications:
+    get:
+      operationId: notificationsList
+      summary: 当前用户通知
+      tags: [notifications]
+      parameters:
+        - name: unreadOnly
+          in: query
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationListResponse' }
+
+  /api/notifications/{id}/read:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    post:
+      operationId: notificationsMarkRead
+      summary: 标记单条通知为已读
+      tags: [notifications]
+      responses:
+        '204':
+          description: 已标记
+        '404': { $ref: '#/components/responses/NotFoundError' }
+
+  /api/notifications/read-all:
+    post:
+      operationId: notificationsMarkAllRead
+      summary: 全部标为已读
+      tags: [notifications]
+      responses:
+        '204':
+          description: 已标记
+
+  # ===== Dashboard / Earnings =====
+  /api/me/earnings:
+    get:
+      operationId: meEarnings
+      summary: 当前用户收益视图（自动按 user_id 过滤）
+      tags: [dashboard]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EarningsSummaryResponse' }
+
+  # ===== WebSocket ticket =====
+  # 浏览器 WebSocket 不支持 Authorization header，先用 access token 换一个短期 ticket，
+  # 然后用 /ws/notifications?ticket=... 升级连接（详见 W2 / C6）
+  /api/ws/ticket:
+    post:
+      operationId: wsTicketIssue
+      summary: 签发 WebSocket 票据（30s 有效）
+      tags: [ws]
+      responses:
+        '201':
+          description: 票据已签发
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WSTicketResponse' }
+
+  /api/ws/notifications:
+    get:
+      operationId: wsNotificationsConnect
+      summary: |
+        WebSocket 升级端点（非 HTTP REST，仅 OpenAPI 描述）。
+        协议：客户端 query 参数携带 ticket，服务端校验 ticket 后升级；
+        消息帧 JSON：{ "type": "notification.new" | "ping" | "pong", "data": <payload> }。
+        ogen 不会为此生成 handler，由 router.go 直接注册 ws 处理器。
+      tags: [ws]
+      parameters:
+        - name: ticket
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '101':
+          description: Switching Protocols
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
