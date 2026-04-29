@@ -6,232 +6,579 @@
     <title>Habitat Grid / Workspace</title>
     <style>
       :root {
-        --bg: #ece8df;
-        --paper: rgba(255,255,255,0.68);
-        --line: rgba(42, 57, 91, 0.08);
-        --text: #22324e;
-        --muted: #6f809f;
-        --accent: #5e7cae;
-        --accent-soft: rgba(94,124,174,0.12);
-        --mint: #89a99a;
+        --bg: #09100d;
+        --bg-soft: #101915;
+        --panel: #111b16;
+        --panel-2: #14211b;
+        --panel-3: #18271f;
+        --line: rgba(141, 180, 155, 0.12);
+        --line-strong: rgba(141, 180, 155, 0.24);
+        --text: #eef7f0;
+        --muted: #9cb7a6;
+        --muted-2: #6f8678;
+        --jade: #1fd0aa;
+        --jade-soft: rgba(31, 208, 170, 0.12);
+        --amber: #e0b454;
+        --red: #f06d63;
+        --blue: #77a9ff;
+        --shadow: 0 26px 80px rgba(0, 0, 0, 0.46);
       }
-      * { box-sizing: border-box; }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
       body {
         margin: 0;
-        font-family: "SF Pro Display","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+        min-height: 100%;
+      }
+
+      body {
+        font-family: "Avenir Next", "PingFang SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif;
         color: var(--text);
         background:
-          radial-gradient(circle at top right, rgba(94,124,174,0.12), transparent 22%),
-          radial-gradient(circle at bottom left, rgba(137,169,154,0.12), transparent 24%),
-          linear-gradient(180deg, #f2eee7, #e7e2d7);
+          radial-gradient(circle at 18% 16%, rgba(31, 208, 170, 0.12), transparent 24%),
+          radial-gradient(circle at 82% 8%, rgba(119, 169, 255, 0.12), transparent 18%),
+          linear-gradient(180deg, #08100d 0%, #0b130f 55%, #070d0a 100%);
       }
+
       .page {
-        width: min(1700px, calc(100vw - 48px));
+        width: min(1840px, calc(100vw - 36px));
         margin: 0 auto;
-        padding: 28px 0 48px;
+        padding: 22px 0 36px;
       }
+
       .hero {
-        display: flex;
-        justify-content: space-between;
+        display: grid;
+        grid-template-columns: 1.3fr 0.9fr;
+        gap: 28px;
         align-items: end;
-        gap: 24px;
-        margin-bottom: 24px;
+        margin-bottom: 20px;
       }
+
       .eyebrow {
         display: inline-flex;
+        align-items: center;
+        gap: 10px;
         padding: 8px 12px;
         border-radius: 999px;
-        background: rgba(255,255,255,0.5);
         border: 1px solid var(--line);
-        color: #536684;
+        background: rgba(16, 25, 21, 0.9);
+        color: var(--jade);
         font-size: 12px;
-        letter-spacing: 0.12em;
+        letter-spacing: 0.14em;
         text-transform: uppercase;
       }
+
+      .eyebrow::before {
+        content: "";
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--jade);
+        box-shadow: 0 0 14px rgba(31, 208, 170, 0.7);
+      }
+
       h1 {
         margin: 14px 0 10px;
-        font-size: clamp(42px, 5vw, 74px);
-        line-height: .94;
-        letter-spacing: -.06em;
+        font-size: clamp(42px, 4.8vw, 76px);
+        line-height: 0.94;
+        letter-spacing: -0.06em;
       }
+
       .hero p {
-        max-width: 940px;
         margin: 0;
+        max-width: 880px;
         color: var(--muted);
-        font-size: 18px;
+        font-size: 17px;
+        line-height: 1.9;
+      }
+
+      .hero-note {
+        padding: 18px 20px;
+        border-radius: 24px;
+        border: 1px solid var(--line);
+        background:
+          linear-gradient(180deg, rgba(19, 30, 24, 0.96), rgba(11, 18, 14, 0.94));
+        box-shadow: var(--shadow);
+      }
+
+      .hero-note strong {
+        display: block;
+        margin-bottom: 10px;
+        font-size: 14px;
+        color: var(--text);
+      }
+
+      .hero-note p {
+        font-size: 14px;
         line-height: 1.8;
       }
+
       .window {
         overflow: hidden;
         border-radius: 30px;
         border: 1px solid var(--line);
-        background: rgba(250,247,241,0.84);
-        box-shadow: 0 24px 80px rgba(55, 63, 84, 0.18);
+        background:
+          linear-gradient(180deg, rgba(13, 20, 16, 0.98), rgba(8, 12, 10, 0.98));
+        box-shadow: var(--shadow);
       }
+
       .titlebar {
-        height: 60px;
-        padding: 0 16px;
         display: grid;
-        grid-template-columns: 90px 1fr auto;
+        grid-template-columns: 96px 1fr auto;
         align-items: center;
+        min-height: 62px;
+        padding: 0 18px;
         border-bottom: 1px solid var(--line);
-        background: rgba(250,247,241,0.88);
+        background: rgba(10, 16, 13, 0.9);
       }
-      .lights { display:flex; gap:8px; }
-      .lights span { width:12px; height:12px; border-radius:50%; display:block; }
+
+      .lights {
+        display: flex;
+        gap: 8px;
+      }
+
+      .lights span {
+        display: block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+      }
+
       .brand {
         justify-self: center;
-        display:flex;
-        align-items:center;
-        gap:10px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
         font-size: 13px;
-        letter-spacing: .08em;
-        text-transform: uppercase;
         font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
       }
-      .mark {
+
+      .brand-mark {
         width: 16px;
         height: 16px;
         border-radius: 5px;
-        background: linear-gradient(135deg, #5d79ab, #97adba);
+        background: linear-gradient(135deg, #1fd0aa, #77a9ff);
+        box-shadow: 0 0 20px rgba(31, 208, 170, 0.26);
       }
-      .nav { display:flex; gap:8px; }
-      .nav span {
+
+      .top-nav {
+        display: flex;
+        gap: 8px;
+      }
+
+      .top-nav span {
         padding: 8px 14px;
         border-radius: 999px;
-        color: #4b5f83;
+        color: var(--muted);
         font-size: 12px;
       }
-      .nav .active {
-        background: var(--accent-soft);
-        border: 1px solid rgba(94,124,174,0.16);
+
+      .top-nav .active {
+        color: var(--text);
+        background: var(--jade-soft);
+        border: 1px solid rgba(31, 208, 170, 0.22);
       }
+
+      .toolbar {
+        display: grid;
+        grid-template-columns: auto auto auto 1fr auto auto;
+        gap: 12px;
+        align-items: center;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(12, 19, 15, 0.86);
+      }
+
+      .segmented {
+        display: inline-flex;
+        gap: 8px;
+        padding: 4px;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        background: rgba(20, 30, 24, 0.9);
+      }
+
+      .segmented span {
+        padding: 8px 12px;
+        border-radius: 10px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .segmented .active {
+        color: #062019;
+        background: var(--jade);
+        box-shadow: 0 8px 24px rgba(31, 208, 170, 0.22);
+      }
+
+      .select,
+      .search {
+        height: 40px;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        background: rgba(19, 29, 23, 0.92);
+        color: var(--text);
+      }
+
+      .select {
+        display: inline-flex;
+        align-items: center;
+        padding: 0 14px;
+        min-width: 150px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .search {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        padding: 0 14px;
+        font-size: 12px;
+        color: var(--muted-2);
+      }
+
+      .button {
+        height: 40px;
+        padding: 0 16px;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        background: rgba(18, 27, 22, 0.9);
+        color: var(--text);
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .button.primary {
+        background: var(--jade);
+        border-color: transparent;
+        color: #082018;
+      }
+
       .shell {
         display: grid;
-        grid-template-columns: 290px 1fr 290px;
-        min-height: 1040px;
+        grid-template-columns: 312px 1fr 324px;
+        min-height: 1120px;
       }
-      .rail, .spine {
+
+      .rail,
+      .spine {
         padding: 18px;
+        background: rgba(9, 14, 11, 0.68);
+      }
+
+      .rail {
         border-right: 1px solid var(--line);
       }
+
       .spine {
-        border-right: none;
         border-left: 1px solid var(--line);
       }
+
       .main {
         padding: 18px;
         background:
-          radial-gradient(circle at top center, rgba(94,124,174,0.06), transparent 28%),
-          rgba(247,244,236,0.86);
+          linear-gradient(180deg, rgba(15, 22, 18, 0.96), rgba(9, 14, 11, 0.96)),
+          radial-gradient(circle at top center, rgba(31, 208, 170, 0.08), transparent 24%);
       }
+
       .section {
         margin-bottom: 16px;
         padding: 16px;
         border-radius: 24px;
-        background: var(--paper);
         border: 1px solid var(--line);
+        background:
+          linear-gradient(180deg, rgba(19, 29, 23, 0.96), rgba(14, 22, 18, 0.94));
       }
+
       .section-title {
-        display:flex;
-        justify-content:space-between;
-        align-items:center;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
         margin-bottom: 12px;
-        color: #627493;
+        color: var(--muted);
         font-size: 11px;
-        letter-spacing: .12em;
+        letter-spacing: 0.12em;
         text-transform: uppercase;
       }
-      .bay, .chip, .slab, .channel, .dock-item, .tray-item, .metric {
-        border-radius: 18px;
-        border: 1px solid var(--line);
-        background: rgba(255,255,255,0.62);
-      }
-      .bay {
-        padding: 14px;
-        margin-bottom: 12px;
-      }
-      .bay strong {
-        display:block;
+
+      .section-title strong {
+        color: var(--text);
         font-size: 15px;
-        margin-bottom: 6px;
+        letter-spacing: -0.02em;
+        text-transform: none;
       }
-      .bay p, .metric p, .slab p, .channel p, .dock-item p, .tray-item p {
+
+      .meta-badge,
+      .mini-pill,
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: rgba(25, 39, 31, 0.9);
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .status-pill.active {
+        color: #061f18;
+        background: rgba(31, 208, 170, 0.92);
+        border-color: transparent;
+      }
+
+      .grid-2,
+      .grid-3,
+      .grid-4 {
+        display: grid;
+        gap: 12px;
+      }
+
+      .grid-2 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .grid-3 {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .grid-4 {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .project-card,
+      .nav-card,
+      .file-card,
+      .code-card,
+      .terminal-card,
+      .context-card,
+      .review-card,
+      .metric-card,
+      .entry-card {
+        border-radius: 20px;
+        border: 1px solid var(--line);
+        background:
+          linear-gradient(180deg, rgba(21, 34, 27, 0.98), rgba(14, 23, 18, 0.98));
+      }
+
+      .project-card,
+      .nav-card,
+      .file-card,
+      .code-card,
+      .terminal-card,
+      .context-card,
+      .review-card,
+      .entry-card {
+        padding: 14px;
+      }
+
+      .project-card.active {
+        border-color: rgba(31, 208, 170, 0.32);
+        background:
+          linear-gradient(180deg, rgba(23, 44, 35, 1), rgba(15, 27, 21, 1));
+        box-shadow: inset 0 0 0 1px rgba(31, 208, 170, 0.12);
+      }
+
+      .project-card strong,
+      .nav-card strong,
+      .file-card strong,
+      .code-card strong,
+      .terminal-card strong,
+      .context-card strong,
+      .review-card strong,
+      .metric-card strong,
+      .entry-card strong {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 14px;
+        line-height: 1.4;
+      }
+
+      .project-card p,
+      .nav-card p,
+      .file-card p,
+      .code-card p,
+      .terminal-card p,
+      .context-card p,
+      .review-card p,
+      .entry-card p,
+      .metric-card p {
         margin: 0;
         color: var(--muted);
         font-size: 12px;
-        line-height: 1.7;
+        line-height: 1.75;
       }
-      .chip-row {
-        display:flex;
-        flex-wrap:wrap;
-        gap:8px;
+
+      .project-head,
+      .card-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: start;
+        margin-bottom: 8px;
       }
-      .nav-list {
-        display:grid;
-        gap:10px;
+
+      .stack {
+        display: grid;
+        gap: 12px;
       }
-      .chip {
-        padding: 8px 10px;
-        font-size: 12px;
-        color: #4d6285;
+
+      .project-foot,
+      .card-foot {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
       }
-      .nav-item {
-        padding: 12px 13px;
-        border-radius: 18px;
-        border: 1px solid var(--line);
-        background: rgba(255,255,255,0.64);
+
+      .entry-card {
+        min-height: 120px;
       }
-      .nav-item strong {
-        display:block;
-        margin-bottom:6px;
-        font-size:13px;
-      }
-      .nav-item p {
-        margin:0;
-        color: var(--muted);
-        font-size:12px;
-        line-height:1.7;
-      }
+
       .core-grid {
-        display:grid;
-        grid-template-columns: 1.25fr .95fr;
+        display: grid;
+        grid-template-columns: 1.16fr 0.92fr;
         gap: 14px;
       }
-      .entry-grid {
-        display:grid;
-        grid-template-columns: 1fr 1fr;
+
+      .workbench {
+        display: grid;
+        gap: 14px;
+      }
+
+      .code-workspace {
+        overflow: hidden;
+        border-radius: 22px;
+        border: 1px solid var(--line);
+        background:
+          linear-gradient(180deg, rgba(8, 13, 11, 0.98), rgba(10, 15, 12, 0.98));
+      }
+
+      .workspace-tabs {
+        display: flex;
+        gap: 8px;
+        padding: 12px 12px 0;
+      }
+
+      .workspace-tab {
+        padding: 8px 12px;
+        border-radius: 12px 12px 0 0;
+        border: 1px solid var(--line);
+        border-bottom: none;
+        background: rgba(17, 28, 22, 0.96);
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .workspace-tab.active {
+        color: var(--text);
+        background: rgba(23, 38, 30, 0.98);
+      }
+
+      .code-surface {
+        display: grid;
+        grid-template-columns: 82px 1fr 330px;
+        min-height: 390px;
+        border-top: 1px solid var(--line);
+      }
+
+      .gutter {
+        padding: 16px 10px 18px 16px;
+        border-right: 1px solid var(--line);
+        color: #5d7468;
+        font-family: "SF Mono", "JetBrains Mono", "Cascadia Code", monospace;
+        font-size: 12px;
+        line-height: 1.95;
+        text-align: right;
+      }
+
+      .code-lines {
+        padding: 16px 18px 18px 0;
+        color: #dceee2;
+        font-family: "SF Mono", "JetBrains Mono", "Cascadia Code", monospace;
+        font-size: 12px;
+        line-height: 1.95;
+        white-space: pre;
+      }
+
+      .side-diff {
+        padding: 16px;
+        border-left: 1px solid var(--line);
+        background: rgba(15, 25, 20, 0.92);
+      }
+
+      .diff-block {
+        margin-bottom: 12px;
+        padding: 12px;
+        border-radius: 16px;
+        border: 1px solid rgba(31, 208, 170, 0.14);
+        background: rgba(23, 43, 34, 0.66);
+      }
+
+      .diff-block.warn {
+        border-color: rgba(224, 180, 84, 0.18);
+        background: rgba(50, 38, 18, 0.34);
+      }
+
+      .mono {
+        font-family: "SF Mono", "JetBrains Mono", "Cascadia Code", monospace;
+        font-size: 11px;
+        line-height: 1.78;
+        color: #bdd7c8;
+        white-space: pre-wrap;
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 12px;
       }
-      .stack { display:grid; gap:12px; }
-      .slab, .channel, .dock-item, .tray-item, .metric {
+
+      .metric-card {
         padding: 14px;
       }
-      .slab strong, .channel strong, .dock-item strong, .tray-item strong, .metric strong {
-        display:block;
-        margin-bottom: 6px;
-        font-size: 13px;
+
+      .metric-card strong {
+        font-size: 28px;
+        letter-spacing: -0.05em;
       }
-      .slab-grid {
-        display:grid;
-        grid-template-columns: repeat(2, minmax(0,1fr));
-        gap: 12px;
-      }
-      .metrics {
-        display:grid;
-        grid-template-columns: repeat(2, minmax(0,1fr));
-        gap:12px;
-      }
-      .metric strong {
-        font-size: 26px;
-        letter-spacing: -.05em;
-      }
-      .mono {
-        font-family: "SF Mono","JetBrains Mono","Cascadia Code",monospace;
+
+      .helper {
+        color: var(--muted-2);
         font-size: 11px;
-        line-height: 1.75;
-        color: #41546f;
-        white-space: pre-wrap;
+      }
+
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+      }
+
+      .dot.jade {
+        background: var(--jade);
+      }
+
+      .dot.blue {
+        background: var(--blue);
+      }
+
+      .dot.amber {
+        background: var(--amber);
+      }
+
+      .dot.red {
+        background: var(--red);
       }
     </style>
   </head>
@@ -240,179 +587,320 @@
       <section class="hero">
         <div>
           <div class="eyebrow">Habitat Grid / Workspace</div>
-          <h1>工作区不是三栏，而是一个正在呼吸的工作栖息地</h1>
-          <p>项目是舱室，命令是通道，代码是 slab，上下文是 dock。用户面对的不是文件管理，而是“当前环境里有哪些活跃工作实体，以及它们彼此如何流动”。</p>
+          <h1>把 GhostTerm 重构成真正可操作的工作栖息地</h1>
+          <p>
+            这一版不再用难懂的术语堆砌概念，而是把项目目录、项目文件、代码工作区、终端任务、变更检查和上下文资料全部做成一眼能理解的工作台模块。
+          </p>
+        </div>
+        <div class="hero-note">
+          <strong>重构方向</strong>
+          <p>
+            视觉语言改为深色矿物舱室风格，结构上参考高密度任务看板的清晰度，但核心仍服务于 GhostTerm 的代码、终端和上下文协作场景。
+          </p>
         </div>
       </section>
 
       <section class="window">
         <header class="titlebar">
           <div class="lights">
-            <span style="background:#d56a63"></span>
-            <span style="background:#d0a246"></span>
-            <span style="background:#6a9f6d"></span>
+            <span style="background:#e46b5f"></span>
+            <span style="background:#d5a84d"></span>
+            <span style="background:#4dc77a"></span>
           </div>
-          <div class="brand"><span class="mark"></span><span>GhostTerm</span></div>
-          <div class="nav">
+          <div class="brand">
+            <span class="brand-mark"></span>
+            <span>GhostTerm</span>
+          </div>
+          <div class="top-nav">
             <span class="active">工作区</span>
             <span>工具</span>
             <span>进度</span>
           </div>
         </header>
 
+        <div class="toolbar">
+          <div class="segmented">
+            <span class="active">当前工作台</span>
+            <span>目录视图</span>
+            <span>并排对比</span>
+          </div>
+          <div class="select">所有项目</div>
+          <div class="select">所有上下文</div>
+          <div class="search">搜索项目 / 文件 / 终端输出</div>
+          <div class="button">切换项目组</div>
+          <div class="button primary">新建终端任务</div>
+        </div>
+
         <div class="shell">
           <aside class="rail">
             <div class="section">
-              <div class="section-title"><span>Project Bays</span><span>4 活跃舱</span></div>
-              <div class="bay">
-                <strong>GhostTerm 核心仓</strong>
-                <p>main / 3 通道 / 12 context packets / 4 patches</p>
+              <div class="section-title">
+                <strong>当前项目</strong>
+                <span class="meta-badge">4 个活跃项目</span>
               </div>
-              <div class="bay">
-                <strong>论文规范实验仓</strong>
-                <p>tools-lab / 2 通道 / 8 specimen notes</p>
-              </div>
-              <div class="bay">
-                <strong>前端交互试验仓</strong>
-                <p>workspace-v2 / 1 通道 / 6 selected excerpts</p>
-              </div>
-              <div class="bay">
-                <strong>终端桥接修复仓</strong>
-                <p>pty-fix / idle / review pending</p>
+              <div class="stack">
+                <div class="project-card active">
+                  <div class="project-head">
+                    <strong>GhostTerm 主应用</strong>
+                    <span class="status-pill active">当前处理</span>
+                  </div>
+                  <p>main 分支 / 3 个终端任务 / 4 处待检查变更</p>
+                  <div class="project-foot">
+                    <span class="mini-pill"><span class="dot jade"></span>代码改动中</span>
+                    <span class="mini-pill"><span class="dot amber"></span>设计稿同步中</span>
+                  </div>
+                </div>
+                <div class="project-card">
+                  <div class="project-head">
+                    <strong>论文工具实验区</strong>
+                    <span class="status-pill">待切换</span>
+                  </div>
+                  <p>tools-lab 分支 / 2 个检测任务 / 1 个模板修订</p>
+                </div>
+                <div class="project-card">
+                  <div class="project-head">
+                    <strong>终端桥接修复</strong>
+                    <span class="status-pill">空闲</span>
+                  </div>
+                  <p>pty-fix 分支 / 回归测试已通过 / 等待合并</p>
+                </div>
               </div>
             </div>
 
             <div class="section">
-              <div class="section-title"><span>Directory Spine</span><span>目录脊柱</span></div>
-              <div class="nav-list">
-                <div class="nav-item">
-                  <strong>Source Root</strong>
+              <div class="section-title">
+                <strong>项目目录</strong>
+                <span class="helper">直接进入目录，不展示传统树状噪声</span>
+              </div>
+              <div class="stack">
+                <div class="nav-card">
+                  <div class="card-head">
+                    <strong>源码目录</strong>
+                    <span class="mini-pill">最常用</span>
+                  </div>
                   <p>/src / layouts / features / shared / test</p>
                 </div>
-                <div class="nav-item">
-                  <strong>Tool Lab Root</strong>
-                  <p>/features/tools / templates / sidecar protocol</p>
+                <div class="nav-card">
+                  <div class="card-head">
+                    <strong>工具目录</strong>
+                    <span class="mini-pill">检测与模板</span>
+                  </div>
+                  <p>/features/tools / templates / sidecar / adapters</p>
                 </div>
-                <div class="nav-item">
-                  <strong>Design Root</strong>
+                <div class="nav-card">
+                  <div class="card-head">
+                    <strong>设计目录</strong>
+                    <span class="mini-pill">静态设计稿</span>
+                  </div>
                   <p>/designs / habitat-grid-workspace.html / tools / progress</p>
                 </div>
               </div>
             </div>
 
             <div class="section">
-              <div class="section-title"><span>Search Current</span><span>Probe</span></div>
-              <div class="chip-row">
-                <div class="chip">project selector</div>
-                <div class="chip">terminal focus</div>
-                <div class="chip">group mapping</div>
-                <div class="chip">docx preview</div>
+              <div class="section-title">
+                <strong>快速入口</strong>
+                <span class="helper">把常用动作放在左侧固定可见</span>
+              </div>
+              <div class="grid-2">
+                <div class="entry-card">
+                  <strong>打开项目目录</strong>
+                  <p>从当前项目直接跳到源码目录或设计目录。</p>
+                </div>
+                <div class="entry-card">
+                  <strong>调入项目文件</strong>
+                  <p>把文件送进中间工作区，不需要先展开整棵树。</p>
+                </div>
+                <div class="entry-card">
+                  <strong>打开代码对比</strong>
+                  <p>当前文件、搜索片段、diff 结果并排比较。</p>
+                </div>
+                <div class="entry-card">
+                  <strong>创建终端任务</strong>
+                  <p>按项目开多个终端，不再只保留一个黑框。</p>
+                </div>
               </div>
             </div>
           </aside>
 
           <section class="main">
             <div class="section">
-              <div class="section-title"><span>Active Habitat / GhostTerm 核心仓</span><span>Now</span></div>
-              <div class="chip-row">
-                <div class="chip">Codex attached</div>
-                <div class="chip">3 命令在轨</div>
-                <div class="chip">左侧面板 redesign</div>
-                <div class="chip">review tray active</div>
+              <div class="section-title">
+                <strong>当前项目工作台</strong>
+                <span class="meta-badge">GhostTerm 主应用 / 左侧面板与设计稿联动</span>
+              </div>
+              <div class="grid-4">
+                <div class="metric-card">
+                  <strong>07</strong>
+                  <p>当前打开的代码对象</p>
+                </div>
+                <div class="metric-card">
+                  <strong>03</strong>
+                  <p>正在运行的终端任务</p>
+                </div>
+                <div class="metric-card">
+                  <strong>04</strong>
+                  <p>待检查的变更块</p>
+                </div>
+                <div class="metric-card">
+                  <strong>12</strong>
+                  <p>已挂接的上下文资料</p>
+                </div>
               </div>
             </div>
 
             <div class="section">
-              <div class="section-title"><span>Workspace Entrances</span><span>显式入口</span></div>
-              <div class="entry-grid">
-                <div class="tray-item">
-                  <strong>项目目录入口</strong>
-                  <p>从 Project Bay 下钻到对应目录脊柱，而不是展开传统文件树。</p>
+              <div class="section-title">
+                <strong>工作区入口</strong>
+                <span class="helper">先选项目，再选目录，再把文件送入代码工作区</span>
+              </div>
+              <div class="grid-4">
+                <div class="entry-card">
+                  <strong>1. 选择项目</strong>
+                  <p>从左侧当前项目列表选择本次要处理的项目。</p>
                 </div>
-                <div class="tray-item">
-                  <strong>项目文件入口</strong>
-                  <p>从 File Dock 选择文件对象，再拖入当前主舱形成工作 slab。</p>
+                <div class="entry-card">
+                  <strong>2. 进入目录</strong>
+                  <p>选择源码目录、工具目录或设计目录。</p>
                 </div>
-                <div class="tray-item">
-                  <strong>代码对象入口</strong>
-                  <p>代码片段、完整文件、搜索命中都以 code slab 进入环境，可并列比较。</p>
+                <div class="entry-card">
+                  <strong>3. 调入文件</strong>
+                  <p>将文件卡片拖入中间的代码工作区并生成标签。</p>
                 </div>
-                <div class="tray-item">
-                  <strong>终端入口</strong>
-                  <p>每个项目舱可创建多个 command channel，绑定该项目上下文独立运行。</p>
+                <div class="entry-card">
+                  <strong>4. 运行终端</strong>
+                  <p>为当前项目开启独立终端任务并查看输出。</p>
                 </div>
               </div>
             </div>
 
             <div class="core-grid">
-              <div class="stack">
+              <div class="workbench">
                 <div class="section">
-                  <div class="section-title"><span>File Dock</span><span>项目文件入口</span></div>
-                  <div class="slab-grid">
-                    <div class="slab">
-                      <strong>src/features/sidebar/ProjectSelector.tsx</strong>
-                      <p>当前从项目目录脊柱调入的活跃文件，可继续拖入代码对象堆。</p>
+                  <div class="section-title">
+                    <strong>文件入口</strong>
+                    <span class="meta-badge">当前目录下最常用的文件对象</span>
+                  </div>
+                  <div class="grid-2">
+                    <div class="file-card">
+                      <div class="card-head">
+                        <strong>src/features/sidebar/ProjectSelector.tsx</strong>
+                        <span class="mini-pill"><span class="dot jade"></span>已打开</span>
+                      </div>
+                      <p>左侧面板项目分组与切换入口，正在联动新工作区文案。</p>
                     </div>
-                    <div class="slab">
-                      <strong>src/features/tools/ToolsWorkspace.tsx</strong>
-                      <p>工具舱入口文件，作为跨空间跳转的桥接对象。</p>
+                    <div class="file-card">
+                      <div class="card-head">
+                        <strong>src/layouts/AppLayout.tsx</strong>
+                        <span class="mini-pill"><span class="dot blue"></span>布局核心</span>
+                      </div>
+                      <p>主壳层与工作区结构文件，决定整体空间分布。</p>
                     </div>
-                    <div class="slab">
-                      <strong>designs/habitat-grid-workspace.html</strong>
-                      <p>当前设计稿本体，非代码对象也可以进入主舱工作流。</p>
+                    <div class="file-card">
+                      <div class="card-head">
+                        <strong>designs/habitat-grid-workspace.html</strong>
+                        <span class="mini-pill"><span class="dot amber"></span>设计稿</span>
+                      </div>
+                      <p>当前视觉重构文件，本次重点修改对象。</p>
                     </div>
-                    <div class="slab">
-                      <strong>src/layouts/WorkspaceRouter.tsx</strong>
-                      <p>系统骨架对象，可直接作为结构入口打开。</p>
+                    <div class="file-card">
+                      <div class="card-head">
+                        <strong>src/features/terminal/Terminal.tsx</strong>
+                        <span class="mini-pill"><span class="dot red"></span>终端交互</span>
+                      </div>
+                      <p>输入、聚焦、连接状态都从这里进入终端任务区。</p>
                     </div>
                   </div>
                 </div>
 
                 <div class="section">
-                  <div class="section-title"><span>Code Slabs</span><span>代码对象堆</span></div>
-                  <div class="slab-grid">
-                    <div class="slab">
-                      <strong>ProjectSelector.tsx</strong>
-                      <p>当前被拖入主环境的活跃代码 slab。突出“作用中的对象”，不是 tab。</p>
+                  <div class="section-title">
+                    <strong>代码工作区</strong>
+                    <span class="helper">当前文件、代码片段与对比结果在这里并排工作</span>
+                  </div>
+                  <div class="code-workspace">
+                    <div class="workspace-tabs">
+                      <div class="workspace-tab active">ProjectSelector.tsx</div>
+                      <div class="workspace-tab">AppLayout.tsx</div>
+                      <div class="workspace-tab">design notes</div>
                     </div>
-                    <div class="slab">
-                      <strong>projectGroupingStore.ts</strong>
-                      <p>分组映射与筛选逻辑，已挂接到当前 patch flow。</p>
-                    </div>
-                    <div class="slab">
-                      <strong>Workspace notes</strong>
-                      <p>设计意图、用户反馈、禁止回到传统 IDE 框架的约束，一样作为工作对象存在。</p>
-                    </div>
-                    <div class="slab">
-                      <strong>Search excerpt bundle</strong>
-                      <p>由搜索探针投递到当前舱内的代码片段集合。</p>
+                    <div class="code-surface">
+                      <div class="gutter">12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24</div>
+                      <div class="code-lines">const currentGroup = useProjectGroupingStore((state) =&gt; state.currentGroupId);
+const visibleProjects = useProjectGroupingStore((state) =&gt;
+  state.selectProjectsForCurrentGroup(projects, searchQuery)
+);
+
+return (
+  &lt;ProjectPanelShell title="当前项目"&gt;
+    &lt;ProjectGroupSwitcher /&gt;
+    &lt;ProjectDirectoryAccess /&gt;
+    &lt;ProjectFileDock projects={visibleProjects} /&gt;
+  &lt;/ProjectPanelShell&gt;
+);
+
+// 入口语言要让用户立刻知道这里能做什么</div>
+                      <aside class="side-diff">
+                        <div class="diff-block">
+                          <strong>当前变更摘要</strong>
+                          <p>旧命名：Directory Spine / Code Slabs / Command Channels</p>
+                          <p>新命名：项目目录 / 代码工作区 / 终端任务</p>
+                        </div>
+                        <div class="diff-block warn">
+                          <strong>设计检查</strong>
+                          <p>问题：用户无法理解术语含义</p>
+                          <p>处理：全部替换成可操作、可理解的界面语言</p>
+                        </div>
+                      </aside>
                     </div>
                   </div>
                 </div>
 
                 <div class="section">
-                  <div class="section-title"><span>Command Channels</span><span>命令通道</span></div>
+                  <div class="section-title">
+                    <strong>终端任务</strong>
+                    <span class="meta-badge">一个项目可以同时跑多个终端会话</span>
+                  </div>
                   <div class="stack">
-                    <div class="channel">
-                      <strong>Channel A / codex session</strong>
-                      <p class="mono">$ codex run redesign-workspace
-context packets: 12
-pending patch: 4 files
-verdict: draft-ready</p>
+                    <div class="terminal-card">
+                      <div class="card-head">
+                        <strong>任务 A / 设计稿重构验证</strong>
+                        <span class="mini-pill"><span class="dot jade"></span>运行中</span>
+                      </div>
+                      <p class="mono">$ pnpm vitest run src/test/designConceptSpec.test.ts
+✓ 2 tests passed
+workspace labels updated
+preview ready</p>
                     </div>
-                    <div class="channel">
-                      <strong>Channel B / test orbit</strong>
+                    <div class="terminal-card">
+                      <div class="card-head">
+                        <strong>任务 B / 全量测试</strong>
+                        <span class="mini-pill"><span class="dot amber"></span>队列中</span>
+                      </div>
                       <p class="mono">$ pnpm test
-398 passed / 1 skipped
-canvas warnings retained
-design spec green</p>
+399 passed / 1 skipped
+existing act warnings retained</p>
                     </div>
-                    <div class="channel">
-                      <strong>Channel C / project shell</strong>
+                    <div class="terminal-card">
+                      <div class="card-head">
+                        <strong>任务 C / Git 状态</strong>
+                        <span class="mini-pill"><span class="dot blue"></span>已完成</span>
+                      </div>
                       <p class="mono">$ git status
-M src/features/sidebar/ProjectSelector.tsx
 M designs/habitat-grid-workspace.html
-?? designs/habitat-grid-tools.html</p>
+M src/test/designConceptSpec.test.ts</p>
                     </div>
                   </div>
                 </div>
@@ -420,33 +908,61 @@ M designs/habitat-grid-workspace.html
 
               <div class="stack">
                 <div class="section">
-                  <div class="section-title"><span>Context Dock</span><span>停靠台</span></div>
+                  <div class="section-title">
+                    <strong>上下文资料</strong>
+                    <span class="helper">截图、需求、选中的代码片段都挂在这里</span>
+                  </div>
                   <div class="stack">
-                    <div class="dock-item">
-                      <strong>Image Packet / sidebar-top.png</strong>
-                      <p>用户上传截图，作为空间关系约束被固定在当前环境。</p>
+                    <div class="context-card">
+                      <div class="card-head">
+                        <strong>参考截图</strong>
+                        <span class="mini-pill">用户提供</span>
+                      </div>
+                      <p>深色任务看板的清晰分区、过滤栏和信息密度，被用来重建这版工作区。</p>
                     </div>
-                    <div class="dock-item">
-                      <strong>Issue Packet / “别像传统 IDE”</strong>
-                      <p>高优先级体验约束，影响当前所有环境编排。</p>
+                    <div class="context-card">
+                      <div class="card-head">
+                        <strong>需求约束</strong>
+                        <span class="mini-pill">高优先级</span>
+                      </div>
+                      <p>不能像传统 IDE；命名要让用户一眼能懂；工作区必须包含目录、文件、代码和终端入口。</p>
                     </div>
-                    <div class="dock-item">
-                      <strong>Selection Bundle / 3 excerpts</strong>
-                      <p>来自 project selector、layout、tools workspace 的代码片段。</p>
+                    <div class="context-card">
+                      <div class="card-head">
+                        <strong>选中片段</strong>
+                        <span class="mini-pill">3 个代码对象</span>
+                      </div>
+                      <p>ProjectSelector、AppLayout、Terminal 三处代码被挂接为当前操作的上下文资料。</p>
                     </div>
                   </div>
                 </div>
 
                 <div class="section">
-                  <div class="section-title"><span>Review Tray</span><span>审查托盘</span></div>
+                  <div class="section-title">
+                    <strong>变更与检查</strong>
+                    <span class="helper">把 patch、行为检查和待确认项集中放在右侧</span>
+                  </div>
                   <div class="stack">
-                    <div class="tray-item">
-                      <strong>Patch Cluster / grouped-projects</strong>
-                      <p>7 files changed / compile green / design behavior aligned</p>
+                    <div class="review-card">
+                      <div class="card-head">
+                        <strong>文案改名检查</strong>
+                        <span class="mini-pill"><span class="dot jade"></span>已完成</span>
+                      </div>
+                      <p>所有抽象名词已替换为用户语言：项目目录、文件入口、代码工作区、终端任务、工作状态。</p>
                     </div>
-                    <div class="tray-item">
-                      <strong>Behavior Check / session memory</strong>
-                      <p>项目切换后 scrollback 保留；当前环境引用关系未断裂。</p>
+                    <div class="review-card">
+                      <div class="card-head">
+                        <strong>结构完整性检查</strong>
+                        <span class="mini-pill"><span class="dot amber"></span>待确认</span>
+                      </div>
+                      <p>确认新的深色工作台是否比旧稿更像真实产品，而不是概念图说明板。</p>
+                    </div>
+                    <div class="review-card">
+                      <div class="card-head">
+                        <strong>下一个动作</strong>
+                        <span class="mini-pill"><span class="dot blue"></span>建议</span>
+                      </div>
+                      <p>如果这版方向正确，再继续把同一视觉系统扩展到“工具”和“进度”两个页面。</p>
                     </div>
                   </div>
                 </div>
@@ -456,37 +972,70 @@ M designs/habitat-grid-workspace.html
 
           <aside class="spine">
             <div class="section">
-              <div class="section-title"><span>Environment Spine</span><span>状态脊柱</span></div>
+              <div class="section-title">
+                <strong>工作状态</strong>
+                <span class="meta-badge">右侧只保留真正有用的状态信息</span>
+              </div>
               <div class="metrics">
-                <div class="metric">
-                  <strong>12</strong>
-                  <p>context packets</p>
-                </div>
-                <div class="metric">
-                  <strong>03</strong>
-                  <p>active channels</p>
-                </div>
-                <div class="metric">
-                  <strong>04</strong>
-                  <p>patch clusters</p>
-                </div>
-                <div class="metric">
+                <div class="metric-card">
                   <strong>91%</strong>
-                  <p>focus climate</p>
+                  <p>当前专注度</p>
+                </div>
+                <div class="metric-card">
+                  <strong>03</strong>
+                  <p>终端任务数量</p>
+                </div>
+                <div class="metric-card">
+                  <strong>12</strong>
+                  <p>上下文资料数量</p>
+                </div>
+                <div class="metric-card">
+                  <strong>04</strong>
+                  <p>待检查变更块</p>
                 </div>
               </div>
             </div>
 
             <div class="section">
-              <div class="section-title"><span>Next Action</span><span>建议</span></div>
+              <div class="section-title">
+                <strong>当前节奏</strong>
+                <span class="helper">帮助用户判断是不是还在有效推进</span>
+              </div>
               <div class="stack">
-                <div class="tray-item">
-                  <strong>将 Tools 检测样本拖入当前舱</strong>
-                  <p>把论文 issue 结果转成上下文对象，而不是单独切页处理。</p>
+                <div class="context-card">
+                  <div class="card-head">
+                    <strong>正在推进</strong>
+                    <span class="mini-pill"><span class="dot jade"></span>设计页重构</span>
+                  </div>
+                  <p>工作区的命名体系和整体视觉已经切换到新的深色工作台语言。</p>
                 </div>
-                <div class="tray-item">
-                  <strong>合并重复 context packets</strong>
-                  <p>当前有 3 个截图包指向同一问题，可合并为 1 个证据束。</p>
+                <div class="context-card">
+                  <div class="card-head">
+                    <strong>潜在阻塞</strong>
+                    <span class="mini-pill"><span class="dot red"></span>用户审美门槛高</span>
+                  </div>
+                  <p>如果这版仍不够成立，就需要继续往更大胆、更少概念术语的产品方向推进。</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="section">
+              <div class="section-title">
+                <strong>可直接跳转的动作</strong>
+                <span class="helper">不是建议文案，而是下一步操作入口</span>
+              </div>
+              <div class="stack">
+                <div class="review-card">
+                  <strong>打开 ProjectSelector</strong>
+                  <p>继续联动左侧面板的真实产品命名。</p>
+                </div>
+                <div class="review-card">
+                  <strong>检查终端视觉</strong>
+                  <p>把“终端任务”的视觉系统抽到 Terminal 设计稿里。</p>
+                </div>
+                <div class="review-card">
+                  <strong>扩展到进度页</strong>
+                  <p>复用这套颜色、标题、卡片和状态语言。</p>
                 </div>
               </div>
             </div>

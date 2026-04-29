@@ -6,225 +6,1004 @@
     <title>Habitat Grid / Progress</title>
     <style>
       :root {
-        --bg: #ece8df;
-        --paper: rgba(255,255,255,0.68);
-        --line: rgba(42,57,91,0.08);
-        --text: #22324e;
-        --muted: #6f809f;
-        --accent: #607caf;
-        --moss: #90a58f;
+        --bg: #0d0d0c;
+        --bar: #141412;
+        --panel: #191916;
+        --panel-2: #20201c;
+        --panel-3: #25251f;
+        --card: #22231f;
+        --line: rgba(233, 226, 204, 0.11);
+        --line-strong: rgba(233, 226, 204, 0.2);
+        --text: #f0eee4;
+        --muted: #b4ae9c;
+        --faint: #7e796c;
+        --accent: #b8ff6a;
+        --accent-ink: #10160a;
+        --cyan: #63d5ff;
+        --amber: #e7ba4a;
+        --red: #ef6862;
+        --green: #79d17c;
+        --shadow: 0 24px 70px rgba(0, 0, 0, 0.46);
       }
-      * { box-sizing: border-box; }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
       body {
-        margin:0;
-        font-family:"SF Pro Display","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
-        color:var(--text);
+        margin: 0;
+        min-height: 100%;
+      }
+
+      body {
         background:
-          radial-gradient(circle at top left, rgba(96,124,175,0.1), transparent 22%),
-          radial-gradient(circle at bottom right, rgba(144,165,143,0.11), transparent 25%),
-          linear-gradient(180deg, #f3f0ea, #e6e1d6);
+          linear-gradient(180deg, rgba(184, 255, 106, 0.035), transparent 260px),
+          radial-gradient(circle at 75% 0%, rgba(99, 213, 255, 0.08), transparent 300px),
+          var(--bg);
+        color: var(--text);
+        font-family: "Avenir Next", "PingFang SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif;
       }
-      .page { width:min(1700px,calc(100vw - 48px)); margin:0 auto; padding:28px 0 48px; }
-      .eyebrow {
-        display:inline-flex; padding:8px 12px; border-radius:999px; border:1px solid var(--line);
-        background:rgba(255,255,255,0.55); color:#556881; font-size:12px; letter-spacing:.12em; text-transform:uppercase;
+
+      button {
+        font: inherit;
       }
-      h1 { margin:14px 0 10px; font-size:clamp(42px,5vw,74px); line-height:.94; letter-spacing:-.06em; }
-      .lead { max-width:980px; color:var(--muted); font-size:18px; line-height:1.8; margin-bottom:24px; }
-      .window {
-        overflow:hidden; border-radius:30px; border:1px solid var(--line); background:rgba(249,246,241,.88);
-        box-shadow:0 24px 80px rgba(55,63,84,.18);
+
+      .app {
+        width: 1500px;
+        min-height: 967px;
+        margin: 0 auto;
+        border: 1px solid rgba(233, 226, 204, 0.08);
+        background: #0b0b0a;
+        box-shadow: var(--shadow);
       }
+
       .titlebar {
-        height:60px; padding:0 16px; display:grid; grid-template-columns:90px 1fr auto; align-items:center;
-        border-bottom:1px solid var(--line); background:rgba(250,247,241,.9);
+        height: 34px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 10px;
+        border-bottom: 1px solid rgba(233, 226, 204, 0.08);
+        background: #10100f;
       }
-      .lights { display:flex; gap:8px; } .lights span { width:12px; height:12px; border-radius:50%; display:block; }
-      .brand { justify-self:center; display:flex; gap:10px; align-items:center; font-size:13px; letter-spacing:.08em; text-transform:uppercase; font-weight:700; }
-      .mark { width:16px; height:16px; border-radius:5px; background:linear-gradient(135deg,#5d79ab,#97adba); }
-      .nav { display:flex; gap:8px; } .nav span { padding:8px 14px; border-radius:999px; color:#4b5f83; font-size:12px; }
-      .nav .active { background:rgba(96,124,175,.12); border:1px solid rgba(96,124,175,.16); }
-      .shell { display:grid; grid-template-columns:280px 1fr 320px; min-height:1060px; }
-      .left, .right { padding:18px; border-right:1px solid var(--line); }
-      .right { border-right:none; border-left:1px solid var(--line); }
-      .main { padding:18px; background:rgba(247,244,236,.86); }
-      .block { margin-bottom:16px; padding:16px; border-radius:24px; border:1px solid var(--line); background:var(--paper); }
-      .head { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; color:#627493; font-size:11px; letter-spacing:.12em; text-transform:uppercase; }
-      .region, .obs, .node, .metric {
-        border-radius:18px; border:1px solid var(--line); background:rgba(255,255,255,.66);
+
+      .title {
+        color: #c9c3b1;
+        font-size: 13px;
+        font-weight: 800;
       }
-      .region, .obs, .node, .metric { padding:14px; }
-      .region strong, .obs strong, .node strong, .metric strong { display:block; margin-bottom:6px; font-size:13px; }
-      .region p, .obs p, .node p, .metric p { margin:0; color:var(--muted); font-size:12px; line-height:1.7; }
-      .terrain { position:relative; min-height:760px; border-radius:24px; border:1px solid var(--line); overflow:hidden; background:
-        linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px) 0 0 / 56px 56px,
-        linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px) 0 0 / 56px 56px,
-        radial-gradient(circle at top center, rgba(96,124,175,0.09), transparent 26%),
-        rgba(255,255,255,.42);
+
+      .window-tools {
+        display: flex;
+        gap: 7px;
       }
-      .lane {
-        position:absolute;
-        height:3px;
-        border-radius:999px;
-        background: linear-gradient(90deg, rgba(96,124,175,0.6), rgba(144,165,143,0.3));
+
+      .window-tools span {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #575247;
       }
-      .node {
-        position:absolute;
-        width:148px;
-        box-shadow:0 14px 28px rgba(69,85,119,.08);
+
+      .toolbar {
+        height: 50px;
+        display: grid;
+        grid-template-columns: auto auto 1fr auto;
+        gap: 14px;
+        align-items: center;
+        padding: 0 16px;
+        border-bottom: 1px solid var(--line);
+        background: var(--bar);
       }
-      .node .state {
-        display:inline-flex;
-        margin-top:8px;
-        padding:6px 10px;
-        border-radius:999px;
-        background:rgba(96,124,175,.1);
-        color:#536684;
-        font-size:11px;
+
+      .segmented,
+      .filters,
+      .right-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
       }
-      .metrics { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
-      .metric strong { font-size:26px; letter-spacing:-.05em; }
+
+      .segmented {
+        padding: 4px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: #10100f;
+      }
+
+      .segmented button,
+      .filter,
+      .search,
+      .primary,
+      .icon-button {
+        height: 30px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        color: var(--muted);
+        background: #11110f;
+      }
+
+      .segmented button {
+        min-width: 54px;
+        padding: 0 12px;
+        border-color: transparent;
+        background: transparent;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .segmented .active {
+        color: var(--accent-ink);
+        background: var(--accent);
+      }
+
+      .filter {
+        min-width: 122px;
+        padding: 0 12px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 12px;
+      }
+
+      .search {
+        width: 226px;
+        padding: 0 12px;
+        display: inline-flex;
+        align-items: center;
+        color: var(--faint);
+        font-size: 12px;
+      }
+
+      .primary {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 14px;
+        color: var(--accent-ink);
+        background: var(--accent);
+        border-color: transparent;
+        font-size: 12px;
+        font-weight: 850;
+      }
+
+      .icon-button {
+        width: 30px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .primary svg,
+      .icon-button svg {
+        width: 14px;
+        height: 14px;
+        stroke: currentColor;
+        stroke-width: 2.2;
+        fill: none;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .summary {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 10px;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--line);
+        background: #0f0f0e;
+      }
+
+      .summary-card {
+        min-height: 58px;
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: linear-gradient(180deg, #1b1b18, #141412);
+      }
+
+      .summary-card span {
+        display: block;
+        color: var(--faint);
+        font-size: 11px;
+      }
+
+      .summary-card strong {
+        display: block;
+        margin-top: 4px;
+        color: var(--text);
+        font-size: 20px;
+      }
+
+      .view-stack {
+        display: grid;
+        gap: 18px;
+        padding: 14px 16px 18px;
+      }
+
+      .view-panel {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        overflow: hidden;
+      }
+
+      .view-head {
+        height: 42px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 12px;
+        border-bottom: 1px solid var(--line);
+        background: #151513;
+      }
+
+      .view-title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 13px;
+        font-weight: 850;
+      }
+
+      .view-title code {
+        padding: 4px 7px;
+        border-radius: 5px;
+        color: var(--accent-ink);
+        background: var(--accent);
+        font-family: inherit;
+        font-size: 11px;
+        font-weight: 900;
+      }
+
+      .view-meta {
+        color: var(--faint);
+        font-size: 11px;
+      }
+
+      .board-shell {
+        display: grid;
+        grid-template-columns: 1fr 278px;
+        min-height: 612px;
+      }
+
+      .board {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 10px;
+        padding: 12px;
+      }
+
+      .column {
+        min-height: 588px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: #121210;
+        overflow: hidden;
+      }
+
+      .column-header {
+        height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 10px;
+        border-bottom: 1px solid rgba(233, 226, 204, 0.08);
+      }
+
+      .column-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #e9e3d3;
+        font-size: 13px;
+        font-weight: 850;
+      }
+
+      .stage-code {
+        min-width: 28px;
+        height: 22px;
+        padding: 0 7px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 5px;
+        border: 1px solid var(--line-strong);
+        color: #ddd6c1;
+        background: #24231f;
+        font-size: 10px;
+        font-weight: 900;
+      }
+
+      .count {
+        min-width: 22px;
+        height: 22px;
+        padding: 0 7px;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #25251f;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 850;
+      }
+
+      .card-list {
+        display: grid;
+        gap: 10px;
+        padding: 10px;
+      }
+
+      .task-card {
+        min-height: 110px;
+        padding: 12px;
+        border: 1px solid rgba(233, 226, 204, 0.09);
+        border-radius: 7px;
+        background: linear-gradient(180deg, #23231f, #1b1b18);
+        box-shadow: 0 10px 22px rgba(0, 0, 0, 0.2);
+      }
+
+      .task-card:hover {
+        border-color: rgba(184, 255, 106, 0.28);
+      }
+
+      .task-title {
+        margin: 0 0 8px;
+        color: var(--text);
+        font-size: 14px;
+        font-weight: 850;
+        line-height: 1.45;
+      }
+
+      .meta {
+        display: grid;
+        gap: 4px;
+        margin-bottom: 10px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .assignee {
+        color: var(--cyan);
+        font-weight: 800;
+      }
+
+      .card-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .tag,
+      .deadline,
+      .amount {
+        min-height: 22px;
+        padding: 3px 7px;
+        border-radius: 5px;
+        display: inline-flex;
+        align-items: center;
+        color: #e4ddcb;
+        background: rgba(255, 255, 255, 0.05);
+        font-size: 11px;
+        font-weight: 850;
+      }
+
+      .tag.urgent {
+        color: #ffd8d4;
+        background: rgba(239, 104, 98, 0.16);
+      }
+
+      .tag.finance {
+        color: #ffe7aa;
+        background: rgba(231, 186, 74, 0.14);
+      }
+
+      .tag.done {
+        color: #d7ffd8;
+        background: rgba(121, 209, 124, 0.14);
+      }
+
+      .deadline {
+        color: #221a08;
+        background: var(--amber);
+      }
+
+      .deadline.safe {
+        color: #081d0b;
+        background: var(--green);
+      }
+
+      .deadline.late {
+        color: #fff1ef;
+        background: var(--red);
+      }
+
+      .amount {
+        color: #ddd6c4;
+        background: rgba(0, 0, 0, 0.22);
+      }
+
+      .side-panel {
+        border-left: 1px solid var(--line);
+        padding: 12px;
+        background: #11110f;
+      }
+
+      .panel-section {
+        margin-bottom: 12px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: #181815;
+        overflow: hidden;
+      }
+
+      .panel-title {
+        height: 36px;
+        padding: 0 10px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid rgba(233, 226, 204, 0.08);
+        color: #e2dccb;
+        font-size: 13px;
+        font-weight: 850;
+      }
+
+      .panel-body {
+        display: grid;
+        gap: 10px;
+        padding: 10px;
+      }
+
+      .compact-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+        align-items: center;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .compact-row strong {
+        color: var(--text);
+      }
+
+      .progress-line {
+        height: 7px;
+        border-radius: 999px;
+        background: #292820;
+        overflow: hidden;
+      }
+
+      .progress-line span {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: var(--accent);
+      }
+
+      .mini-card {
+        padding: 10px;
+        border: 1px solid rgba(233, 226, 204, 0.08);
+        border-radius: 7px;
+        background: #20201c;
+      }
+
+      .mini-card strong {
+        display: block;
+        margin-bottom: 5px;
+        color: var(--text);
+        font-size: 12px;
+      }
+
+      .mini-card p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.55;
+      }
+
+      .table {
+        display: grid;
+        padding: 8px 12px 12px;
+      }
+
+      .table-row {
+        display: grid;
+        grid-template-columns: 1.35fr 0.8fr 0.7fr 0.8fr 0.65fr 0.7fr 0.65fr;
+        min-height: 42px;
+        align-items: center;
+        border-bottom: 1px solid rgba(233, 226, 204, 0.07);
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .table-row.header {
+        min-height: 34px;
+        color: var(--faint);
+        font-size: 11px;
+        font-weight: 850;
+      }
+
+      .table-row strong {
+        color: var(--text);
+      }
+
+      .status-chip {
+        width: max-content;
+        padding: 5px 8px;
+        border-radius: 5px;
+        color: #ded8c7;
+        background: #272620;
+        font-size: 11px;
+        font-weight: 850;
+      }
+
+      .gantt {
+        display: grid;
+        grid-template-columns: 260px 1fr;
+        padding: 12px;
+      }
+
+      .gantt-left,
+      .gantt-right {
+        border: 1px solid var(--line);
+        background: #121210;
+      }
+
+      .gantt-left {
+        border-radius: 7px 0 0 7px;
+        border-right: none;
+      }
+
+      .gantt-right {
+        border-radius: 0 7px 7px 0;
+        overflow: hidden;
+      }
+
+      .gantt-row,
+      .timeline-row {
+        height: 42px;
+        display: grid;
+        align-items: center;
+        border-bottom: 1px solid rgba(233, 226, 204, 0.07);
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .gantt-row {
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+        padding: 0 10px;
+      }
+
+      .gantt-row.header,
+      .timeline-row.header {
+        height: 34px;
+        color: var(--faint);
+        font-size: 11px;
+        font-weight: 850;
+      }
+
+      .timeline-row {
+        position: relative;
+        grid-template-columns: repeat(14, 1fr);
+        background:
+          linear-gradient(90deg, rgba(233, 226, 204, 0.06) 1px, transparent 1px) 0 0 / calc(100% / 14) 100%;
+      }
+
+      .timeline-row.header span {
+        padding-left: 8px;
+      }
+
+      .bar {
+        position: absolute;
+        height: 18px;
+        top: 12px;
+        border-radius: 5px;
+        background: var(--accent);
+        box-shadow: 0 0 18px rgba(184, 255, 106, 0.16);
+      }
+
+      .bar.quote {
+        background: var(--amber);
+      }
+
+      .bar.dev {
+        background: var(--cyan);
+      }
+
+      .bar.late {
+        background: var(--red);
+      }
+
+      .bar.done {
+        background: var(--green);
+      }
+
+      .legend {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        color: var(--faint);
+        font-size: 11px;
+      }
+
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .legend i {
+        width: 18px;
+        height: 6px;
+        border-radius: 999px;
+        display: inline-block;
+        background: var(--accent);
+      }
+
+      .footer {
+        height: 38px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 16px;
+        border-top: 1px solid var(--line);
+        background: #0d0d0c;
+        color: var(--faint);
+        font-size: 11px;
+      }
+
+      .footer strong {
+        color: var(--accent);
+      }
     </style>
   </head>
   <body>
-    <main class="page">
-      <div class="eyebrow">Habitat Grid / Progress</div>
-      <h1>进度不是看板，而是跨项目远征图</h1>
-      <p class="lead">`Progress` 不是任务列表，而是整座工作栖息地的地形图。它显示你在不同项目舱之间的迁移、阻塞、加速、修复与回忆路径。</p>
+    <main class="app">
+      <header class="titlebar">
+        <div class="title">GhostTerm · 进度模块</div>
+        <div class="window-tools"><span></span><span></span><span></span></div>
+      </header>
 
-      <section class="window">
-        <header class="titlebar">
-          <div class="lights">
-            <span style="background:#d56a63"></span>
-            <span style="background:#d0a246"></span>
-            <span style="background:#6a9f6d"></span>
-          </div>
-          <div class="brand"><span class="mark"></span><span>GhostTerm</span></div>
-          <div class="nav">
-            <span>工作区</span>
-            <span>工具</span>
-            <span class="active">进度</span>
-          </div>
-        </header>
-
-        <div class="shell">
-          <aside class="left">
-            <div class="block">
-              <div class="head"><span>Focus Regions</span><span>聚焦区域</span></div>
-              <div class="region">
-                <strong>GhostTerm 核心仓</strong>
-                <p>左侧面板重构 / 上下文编排 / 设计静态稿</p>
-              </div>
-              <div class="region" style="margin-top:12px;">
-                <strong>论文实验仓</strong>
-                <p>specimen 检测 / compare chamber / patch lab</p>
-              </div>
-              <div class="region" style="margin-top:12px;">
-                <strong>终端桥接仓</strong>
-                <p>pty / websocket / scrollback retain</p>
-              </div>
-            </div>
-
-            <div class="block">
-              <div class="head"><span>Mission Horizon</span><span>今日视野</span></div>
-              <div class="region">
-                <strong>Now</strong>
-                <p>Habitat Grid 详细设计落图中 / 2 个环境待合并</p>
-              </div>
-            </div>
-          </aside>
-
-          <section class="main">
-            <div class="block">
-              <div class="head"><span>Expedition Map</span><span>远征地形</span></div>
-              <div class="terrain">
-                <div class="lane" style="left:70px; top:148px; width:540px;"></div>
-                <div class="lane" style="left:110px; top:364px; width:470px;"></div>
-                <div class="lane" style="left:200px; top:580px; width:360px;"></div>
-
-                <div class="node" style="left:38px; top:100px;">
-                  <strong>进入 GhostTerm 仓</strong>
-                  <p>加载 project bays / attach context packets</p>
-                  <span class="state">start</span>
-                </div>
-                <div class="node" style="left:250px; top:112px;">
-                  <strong>运行设计探索</strong>
-                  <p>否定传统 IDE 框架 / 转入 Habitat Grid</p>
-                  <span class="state">decision</span>
-                </div>
-                <div class="node" style="left:492px; top:96px;">
-                  <strong>产出独立设计页</strong>
-                  <p>workspace/tools/progress 三张静态稿</p>
-                  <span class="state">build</span>
-                </div>
-
-                <div class="node" style="left:86px; top:316px;">
-                  <strong>进入论文实验仓</strong>
-                  <p>specimen intake / rule shelf / compare chamber</p>
-                  <span class="state">branch</span>
-                </div>
-                <div class="node" style="left:318px; top:332px;">
-                  <strong>样本修复链路</strong>
-                  <p>从 issue list 变为 forensic specimens</p>
-                  <span class="state">evolve</span>
-                </div>
-                <div class="node" style="left:542px; top:302px;">
-                  <strong>审计回写</strong>
-                  <p>backup / patch lab / audit ledger</p>
-                  <span class="state">verify</span>
-                </div>
-
-                <div class="node" style="left:170px; top:540px;">
-                  <strong>跨项目回跳</strong>
-                  <p>从进度节点回到对应 workspace 舱室</p>
-                  <span class="state">recall</span>
-                </div>
-                <div class="node" style="left:430px; top:524px;">
-                  <strong>阻塞观测</strong>
-                  <p>识别断裂点、残留尾项、未审查 patch</p>
-                  <span class="state">observe</span>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <aside class="right">
-            <div class="block">
-              <div class="head"><span>Bottleneck Observatory</span><span>阻塞观测台</span></div>
-              <div class="obs">
-                <strong>断裂点 / 设计方向验证</strong>
-                <p>用户拒绝传统 IDE 框架，需保持 Habitat Grid 的独立性。</p>
-              </div>
-              <div class="obs" style="margin-top:12px;">
-                <strong>残留项 / 页面整合</strong>
-                <p>工作区、工具、进度三稿仍需统一导航与组件语言。</p>
-              </div>
-            </div>
-
-            <div class="block">
-              <div class="head"><span>Momentum</span><span>推进动量</span></div>
-              <div class="metrics">
-                <div class="metric">
-                  <strong>06</strong>
-                  <p>active expedition nodes</p>
-                </div>
-                <div class="metric">
-                  <strong>02</strong>
-                  <p>open blockers</p>
-                </div>
-                <div class="metric">
-                  <strong>78%</strong>
-                  <p>concept cohesion</p>
-                </div>
-                <div class="metric">
-                  <strong>11</strong>
-                  <p>recoverable contexts</p>
-                </div>
-              </div>
-            </div>
-          </aside>
+      <section class="toolbar">
+        <div class="segmented" aria-label="视图切换">
+          <button class="active">看板</button>
+          <button>列表</button>
+          <button>Gantt</button>
+        </div>
+        <div class="filters">
+          <div class="filter">所有项目 <span>⌄</span></div>
+          <div class="filter">所有论文级别 <span>⌄</span></div>
+          <div class="filter">所有学科 <span>⌄</span></div>
+        </div>
+        <div></div>
+        <div class="right-actions">
+          <button class="icon-button" aria-label="刷新进度">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M20 12a8 8 0 1 1-2.3-5.6" />
+              <path d="M20 4v6h-6" />
+            </svg>
+          </button>
+          <button class="icon-button" aria-label="筛选字段">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 6h16" />
+              <path d="M7 12h10" />
+              <path d="M10 18h4" />
+            </svg>
+          </button>
+          <div class="search">搜索项目 / 客户 / 反馈</div>
+          <button class="primary">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 5v14" />
+              <path d="M5 12h14" />
+            </svg>
+            新建项目
+          </button>
         </div>
       </section>
+
+      <section class="summary">
+        <div class="summary-card"><span>总项目</span><strong>26</strong></div>
+        <div class="summary-card"><span>活跃推进</span><strong>15</strong></div>
+        <div class="summary-card"><span>今日到期</span><strong>04</strong></div>
+        <div class="summary-card"><span>客户反馈</span><strong>07</strong></div>
+        <div class="summary-card"><span>已交付</span><strong>11</strong></div>
+        <div class="summary-card"><span>已收款</span><strong>¥38.5k</strong></div>
+      </section>
+
+      <section class="view-stack">
+        <section class="view-panel">
+          <header class="view-head">
+            <div class="view-title"><code>01</code>看板视图</div>
+            <div class="view-meta">按项目阶段拖拽流转</div>
+          </header>
+
+          <div class="board-shell">
+            <div class="board">
+              <section class="column">
+                <header class="column-header">
+                  <div class="column-title"><span class="stage-code">S1</span>洽谈中</div>
+                  <span class="count">2</span>
+                </header>
+                <div class="card-list">
+                  <article class="task-card">
+                    <h2 class="task-title">周九 · 本科毕业论文</h2>
+                    <div class="meta">
+                      <span>客户：吴十@wechat</span>
+                      <span>流转在：<span class="assignee">@周客服</span></span>
+                    </div>
+                    <div class="card-foot">
+                      <div class="tags"><span class="tag">本科</span></div>
+                      <span class="deadline safe">12d</span>
+                    </div>
+                  </article>
+                  <article class="task-card">
+                    <h2 class="task-title">韩十一 · 期刊投稿</h2>
+                    <div class="meta">
+                      <span>客户：赵宁@wechat</span>
+                      <span>流转在：<span class="assignee">@周客服</span></span>
+                    </div>
+                    <div class="card-foot">
+                      <div class="tags"><span class="tag">硕士</span></div>
+                      <span class="deadline">5d</span>
+                    </div>
+                  </article>
+                </div>
+              </section>
+
+              <section class="column">
+                <header class="column-header">
+                  <div class="column-title"><span class="stage-code">S2</span>报价中</div>
+                  <span class="count">2</span>
+                </header>
+                <div class="card-list">
+                  <article class="task-card">
+                    <h2 class="task-title">王五 · 硕士毕业论文</h2>
+                    <div class="meta">
+                      <span>客户：赵六@wechat</span>
+                      <span>流转在：<span class="assignee">@王客服</span></span>
+                    </div>
+                    <div class="card-foot">
+                      <div class="tags"><span class="tag urgent">紧急</span></div>
+                      <span class="deadline">2d</span>
+                    </div>
+                    <div class="meta" style="margin-top: 8px;"><span>报价 ¥8,000 · 管理学</span></div>
+                  </article>
+                  <article class="task-card">
+                    <h2 class="task-title">李十二 · 本科论文修改</h2>
+                    <div class="meta">
+                      <span>客户：陈三@wechat</span>
+                      <span>流转在：<span class="assignee">@张开发</span></span>
+                    </div>
+                    <div class="card-foot">
+                      <div class="tags"><span class="tag">本科</span></div>
+                      <span class="deadline safe">8d</span>
+                    </div>
+                  </article>
+                </div>
+              </section>
+
+              <section class="column">
+                <header class="column-header">
+                  <div class="column-title"><span class="stage-code">S3</span>开发中</div>
+                  <span class="count">3</span>
+                </header>
+                <div class="card-list">
+                  <article class="task-card">
+                    <h2 class="task-title">张三 · 本科毕业论文</h2>
+                    <div class="meta">
+                      <span>客户：李四@wechat</span>
+                      <span>流转在：<span class="assignee">@张开发</span></span>
+                    </div>
+                    <div class="card-foot">
+                      <div class="tags"><span class="tag">本科 · 计算机</span></div>
+                      <span class="deadline">5d</span>
+                    </div>
+                    <div class="meta" style="margin-top: 8px;"><span class="assignee">2 条新反馈 · v3</span></div>
+                  </article>
+                  <article class="task-card">
+                    <h2 class="task-title">孙十三 · 博士毕业论文</h2>
+                    <div class="meta">
+                      <span>客户：黄四@wechat</span>
+                      <span>流转在：<span class="assignee">@刘开发</span></span>
+                    </div>
+                    <div class="card-foot">
+                      <div class="tags"><span class="tag urgent">紧急</span></div>
+                      <span class="deadline late">超期 1d</span>
+                    </div>
+                  </article>
+                  <article class="task-card">
+                    <h2 class="task-title">赵十四 · 硕士论文降重</h2>
+                    <div class="meta">
+                      <span>客户：胡五@wechat</span>
+                      <span>流转在：<span class="assignee">@刘开发</span></span>
+                    </div>
+                    <div class="card-foot">
+                      <div class="tags"><span class="tag">硕士</span></div>
+                      <span class="deadline safe">9d</span>
+                    </div>
+                  </article>
+                </div>
+              </section>
+
+              <section class="column">
+                <header class="column-header">
+                  <div class="column-title"><span class="stage-code">S4</span>待验收</div>
+                  <span class="count">1</span>
+                </header>
+                <div class="card-list">
+                  <article class="task-card">
+                    <h2 class="task-title">钱七 · 博士毕业论文</h2>
+                    <div class="meta">
+                      <span>客户：孙八@wechat</span>
+                      <span>流转在：<span class="assignee">@钱客服</span></span>
+                    </div>
+                    <div class="card-foot">
+                      <div class="tags"><span class="tag urgent">紧急</span></div>
+                      <span class="deadline late">超期 2d</span>
+                    </div>
+                    <div class="meta" style="margin-top: 8px;"><span>报价 ¥15,000 · 物理</span></div>
+                  </article>
+                </div>
+              </section>
+
+              <section class="column">
+                <header class="column-header">
+                  <div class="column-title"><span class="stage-code">S5</span>已交付</div>
+                  <span class="count">1</span>
+                </header>
+                <div class="card-list">
+                  <article class="task-card">
+                    <h2 class="task-title">郑一 · 硕士毕业论文</h2>
+                    <div class="meta">
+                      <span>客户：冯二@wechat</span>
+                      <span>流转在：<span class="assignee">@郑客服</span></span>
+                    </div>
+                    <div class="card-foot">
+                      <div class="tags"><span class="tag">硕士</span><span class="tag finance">未结算开发</span></div>
+                      <span class="amount">已交付</span>
+                    </div>
+                  </article>
+                </div>
+              </section>
+
+              <section class="column">
+                <header class="column-header">
+                  <div class="column-title"><span class="stage-code">S6</span>已收款</div>
+                  <span class="count">1</span>
+                </header>
+                <div class="card-list">
+                  <article class="task-card">
+                    <h2 class="task-title">林十五 · 本科毕业论文</h2>
+                    <div class="meta">
+                      <span>客户：何六@wechat</span>
+                      <span>流转在：<span class="assignee">@林客服</span></span>
+                    </div>
+                    <div class="card-foot">
+                      <div class="tags"><span class="tag">本科</span><span class="tag done">开发已结算</span></div>
+                      <span class="amount">¥3,500 已收</span>
+                    </div>
+                  </article>
+                </div>
+              </section>
+            </div>
+
+            <aside class="side-panel">
+              <section class="panel-section">
+                <header class="panel-title">今日重点 <span class="count">4</span></header>
+                <div class="panel-body">
+                  <div class="mini-card">
+                    <strong>超期项目</strong>
+                    <p>博士论文验收超期 2 天，本科论文开发超期 1 天。</p>
+                  </div>
+                  <div class="mini-card">
+                    <strong>待报价</strong>
+                    <p>2 个项目停留在报价中，最长等待 18 小时。</p>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel-section">
+                <header class="panel-title">阶段占比</header>
+                <div class="panel-body">
+                  <div class="compact-row"><span>开发中</span><strong>35%</strong></div>
+                  <div class="progress-line"><span style="width: 35%"></span></div>
+                  <div class="compact-row"><span>报价中</span><strong>22%</strong></div>
+                  <div class="progress-line"><span style="width: 22%; background: var(--amber)"></span></div>
+                  <div class="compact-row"><span>已完成</span><strong>43%</strong></div>
+                  <div class="progress-line"><span style="width: 43%; background: var(--green)"></span></div>
+                </div>
+              </section>
+
+              <section class="panel-section">
+                <header class="panel-title">人员负载</header>
+                <div class="panel-body">
+                  <div class="compact-row"><span>@张开发</span><strong>2 项</strong></div>
+                  <div class="compact-row"><span>@刘开发</span><strong>2 项</strong></div>
+                  <div class="compact-row"><span>@周客服</span><strong>2 项</strong></div>
+                  <div class="compact-row"><span>@钱客服</span><strong>1 项</strong></div>
+                </div>
+              </section>
+            </aside>
+          </div>
+        </section>
+
+        <section class="view-panel">
+          <header class="view-head">
+            <div class="view-title"><code>02</code>列表视图</div>
+            <div class="view-meta">用于批量检查、排序、筛选和核对金额</div>
+          </header>
+          <div class="table">
+            <div class="table-row header">
+              <span>项目</span><span>阶段</span><span>负责人</span><span>客户</span><span>到期</span><span>金额</span><span>风险</span>
+            </div>
+            <div class="table-row">
+              <strong>张三 · 本科毕业论文</strong><span class="status-chip">开发中</span><span>@张开发</span><span>李四</span><span>5d</span><span>¥8,000</span><span>反馈中</span>
+            </div>
+            <div class="table-row">
+              <strong>孙十三 · 博士毕业论文</strong><span class="status-chip">开发中</span><span>@刘开发</span><span>黄四</span><span>超期 1d</span><span>¥18,000</span><span>紧急</span>
+            </div>
+            <div class="table-row">
+              <strong>钱七 · 博士毕业论文</strong><span class="status-chip">待验收</span><span>@钱客服</span><span>孙八</span><span>超期 2d</span><span>¥15,000</span><span>验收阻塞</span>
+            </div>
+            <div class="table-row">
+              <strong>林十五 · 本科毕业论文</strong><span class="status-chip">已收款</span><span>@林客服</span><span>何六</span><span>完成</span><span>¥3,500</span><span>已结清</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="view-panel">
+          <header class="view-head">
+            <div class="view-title"><code>03</code>Gantt视图</div>
+            <div class="legend">
+              <span><i></i>洽谈</span>
+              <span><i style="background: var(--amber)"></i>报价</span>
+              <span><i style="background: var(--cyan)"></i>开发</span>
+              <span><i style="background: var(--red)"></i>超期</span>
+            </div>
+          </header>
+          <div class="gantt">
+            <div class="gantt-left">
+              <div class="gantt-row header"><span>项目</span><span>负责人</span></div>
+              <div class="gantt-row"><strong>周九 · 本科毕业论文</strong><span>@周客服</span></div>
+              <div class="gantt-row"><strong>王五 · 硕士毕业论文</strong><span>@王客服</span></div>
+              <div class="gantt-row"><strong>张三 · 本科毕业论文</strong><span>@张开发</span></div>
+              <div class="gantt-row"><strong>孙十三 · 博士毕业论文</strong><span>@刘开发</span></div>
+              <div class="gantt-row"><strong>钱七 · 博士毕业论文</strong><span>@钱客服</span></div>
+              <div class="gantt-row"><strong>林十五 · 本科毕业论文</strong><span>@林客服</span></div>
+            </div>
+            <div class="gantt-right">
+              <div class="timeline-row header">
+                <span>04/29</span><span>04/30</span><span>05/01</span><span>05/02</span><span>05/03</span><span>05/04</span><span>05/05</span>
+                <span>05/06</span><span>05/07</span><span>05/08</span><span>05/09</span><span>05/10</span><span>05/11</span><span>05/12</span>
+              </div>
+              <div class="timeline-row"><span class="bar" style="left: 2%; width: 42%"></span></div>
+              <div class="timeline-row"><span class="bar quote" style="left: 8%; width: 18%"></span></div>
+              <div class="timeline-row"><span class="bar dev" style="left: 18%; width: 50%"></span></div>
+              <div class="timeline-row"><span class="bar late" style="left: 4%; width: 64%"></span></div>
+              <div class="timeline-row"><span class="bar late" style="left: 20%; width: 38%"></span></div>
+              <div class="timeline-row"><span class="bar done" style="left: 0%; width: 24%"></span></div>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <footer class="footer">
+        <span><strong>Habitat Grid / Progress</strong> · 看板 / 列表 / Gantt 三视图</span>
+        <span>颜色只表达风险、到期和金额状态；阶段通过 S1-S6 标识</span>
+      </footer>
     </main>
   </body>
 </html>
