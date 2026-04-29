@@ -71,12 +71,39 @@ export const RefreshResponseSchema = z.object({
 export type RefreshResponsePayload = z.infer<typeof RefreshResponseSchema>;
 
 // ============================================
+// 客户（Phase 4 - Worker A）
+// ============================================
+
+/**
+ * 客户视图。
+ * 对应 openapi.yaml components.schemas.Customer
+ *
+ * 字段说明：
+ *   - remark：openapi nullable string；后端 NULL → null；非 NULL → string
+ *   - createdAt / updatedAt：date-time 字符串（ISO 8601）；前端按需 new Date(...) 解析
+ */
+export const CustomerSchema = z.object({
+  id: z.number().int(),
+  nameWechat: z.string(),
+  remark: z.string().nullable(),
+  createdBy: z.number().int(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export type CustomerPayload = z.infer<typeof CustomerSchema>;
+
+/**
+ * 客户列表响应外层 envelope 内的 data 字段（[Customer, ...]）。
+ * apiFetch 已经剥过外层 { data: ... } 壳，本 schema 只校验数组。
+ */
+export const CustomerListSchema = z.array(CustomerSchema);
+
+// ============================================
 // 待补 schema（按 phase 分配）
 // ============================================
 // TODO(Phase 2 - 用户与 JWT 认证):
 //   - WSTicket    （短期 WS 票据）
-// TODO(Phase 4 - Worker A customer):
-//   - Customer / CustomerCreateRequest / CustomerUpdateRequest
 // TODO(Phase 5 - Worker B project):
 //   - Project / ProjectCreateRequest / ProjectStatus / ProjectPriority
 //   - ThesisLevel / ThesisExtension / RiskItem
