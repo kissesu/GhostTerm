@@ -37,13 +37,14 @@ import (
 var ErrNotImplementedYet = errors.New("not_implemented_yet")
 
 // oasHandler 嵌入 ogen UnimplementedHandler 拿到所有"默认返回 ErrNotImplemented"的方法，
-// 通过持有 *handlers.AuthHandler 字段并显式 forward 5 个 auth 方法来覆盖默认实现。
+// 通过持有 *handlers.AuthHandler / *handlers.RBACHandler 字段并显式 forward 真实方法来覆盖默认实现。
 //
 // 注：Go 嵌入字段的"方法 ambiguous selector"规则会让"两个嵌入字段同名方法"导致编译失败；
-// 因此 AuthHandler 不嵌入而是作为命名字段，由 oasHandler 自己声明方法做显式 forward。
+// 因此 AuthHandler / RBACHandler 不嵌入而是作为命名字段，由 oasHandler 自己声明方法做显式 forward。
 // 后续 phase 的 worker 会再持有 *CustomerHandler / *ProjectHandler 字段并 forward 各自方法。
 type oasHandler struct {
 	auth *handlers.AuthHandler
+	rbac *handlers.RBACHandler
 	oas.UnimplementedHandler
 }
 
@@ -72,7 +73,32 @@ func (h *oasHandler) WsTicketIssue(ctx context.Context) (*oas.WSTicketResponse, 
 	return h.auth.WsTicketIssue(ctx)
 }
 
-// 编译时校验：oasHandler 仍满足 oas.Handler 接口（含 Auth 方法的真实实现）
+// PermissionsList 转发到 RBACHandler 实现
+func (h *oasHandler) PermissionsList(ctx context.Context) (oas.PermissionsListRes, error) {
+	return h.rbac.PermissionsList(ctx)
+}
+
+// RolesList 转发到 RBACHandler 实现
+func (h *oasHandler) RolesList(ctx context.Context) (oas.RolesListRes, error) {
+	return h.rbac.RolesList(ctx)
+}
+
+// RolesCreate 转发到 RBACHandler 实现
+func (h *oasHandler) RolesCreate(ctx context.Context, req *oas.RoleCreateRequest) (oas.RolesCreateRes, error) {
+	return h.rbac.RolesCreate(ctx, req)
+}
+
+// RolesGetPermissions 转发到 RBACHandler 实现
+func (h *oasHandler) RolesGetPermissions(ctx context.Context, params oas.RolesGetPermissionsParams) (oas.RolesGetPermissionsRes, error) {
+	return h.rbac.RolesGetPermissions(ctx, params)
+}
+
+// RolesUpdatePermissions 转发到 RBACHandler 实现
+func (h *oasHandler) RolesUpdatePermissions(ctx context.Context, req *oas.RolePermissionUpdateRequest, params oas.RolesUpdatePermissionsParams) (oas.RolesUpdatePermissionsRes, error) {
+	return h.rbac.RolesUpdatePermissions(ctx, req, params)
+}
+
+// 编译时校验：oasHandler 仍满足 oas.Handler 接口（含 Auth + RBAC 方法的真实实现）
 var _ oas.Handler = (*oasHandler)(nil)
 
 // oasSecurityHandler 实现 ogen 的 SecurityHandler。
@@ -109,9 +135,12 @@ var _ oas.SecurityHandler = (*oasSecurityHandler)(nil)
 //
 // 业务背景：相比 Phase 0a 的"无参 NewRouter"，Phase 2 起 router 需要 service 层来源；
 // 把它收敛到一个 deps struct 让后续 phase 加 service 时不破坏 main.go 的调用签名。
+//
+// Phase 3 起：必须传 RBACService；缺失时 NewRouter 返回错误。
 type RouterDeps struct {
 	Pool        *pgxpool.Pool
 	AuthService services.AuthService
+	RBACService services.RBACService
 }
 
 // NewRouter 装配 chi 基础中间件 + ogen 生成的 OpenAPI server。
@@ -125,6 +154,12 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	if deps.AuthService == nil {
 		return nil, errors.New("router: AuthService is required")
 	}
+	if deps.RBACService == nil {
+		return nil, errors.New("router: RBACService is required")
+	}
+	if deps.Pool == nil {
+		return nil, errors.New("router: Pool is required")
+	}
 	r := chi.NewRouter()
 
 	r.Use(chimw.RequestID)
@@ -137,11 +172,12 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 		_, _ = w.Write([]byte("ok"))
 	})
 
-	authHandler := handlers.NewAuthHandler(deps.AuthService)
+	authHandler := handlers.NewAuthHandler(deps.AuthService, deps.RBACService)
+	rbacHandler := handlers.NewRBACHandler(deps.RBACService, deps.Pool)
 	secHandler := &oasSecurityHandler{svc: deps.AuthService}
 
 	oasServer, err := oas.NewServer(
-		&oasHandler{auth: authHandler},
+		&oasHandler{auth: authHandler, rbac: rbacHandler},
 		secHandler,
 		oas.WithErrorHandler(errorEnvelopeHandler),
 	)

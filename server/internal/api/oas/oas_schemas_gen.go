@@ -4478,6 +4478,9 @@ type User struct {
 	RoleId      int64     `json:"roleId"`
 	IsActive    bool      `json:"isActive"`
 	CreatedAt   time.Time `json:"createdAt"`
+	// 当前 session 持有的权限码集合（仅在 /api/auth/me
+	// 响应中填充，登录/创建用户响应留空）。元素形如 'project:read'、'event:E10'。.
+	Permissions []string `json:"permissions"`
 }
 
 // GetID returns the value of ID.
@@ -4510,6 +4513,11 @@ func (s *User) GetCreatedAt() time.Time {
 	return s.CreatedAt
 }
 
+// GetPermissions returns the value of Permissions.
+func (s *User) GetPermissions() []string {
+	return s.Permissions
+}
+
 // SetID sets the value of ID.
 func (s *User) SetID(val int64) {
 	s.ID = val
@@ -4538,6 +4546,11 @@ func (s *User) SetIsActive(val bool) {
 // SetCreatedAt sets the value of CreatedAt.
 func (s *User) SetCreatedAt(val time.Time) {
 	s.CreatedAt = val
+}
+
+// SetPermissions sets the value of Permissions.
+func (s *User) SetPermissions(val []string) {
+	s.Permissions = val
 }
 
 // Ref: #/components/schemas/UserCreateRequest

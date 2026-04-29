@@ -25,6 +25,7 @@ import { z } from 'zod';
 import { apiFetch, ProgressApiError } from '../api/client';
 import { LoginResponseSchema, RefreshResponseSchema, UserSchema } from '../api/schemas';
 import type { LoginResponsePayload, UserPayload } from '../api/schemas';
+import { useProgressPermissionStore } from './progressPermissionStore';
 
 // ============================================
 // localStorage key —— 隔离命名空间，避免与其它模块冲突
@@ -156,15 +157,21 @@ export const useProgressAuthStore = create<ProgressAuthState>((set, get) => ({
     } finally {
       writeRefresh(null);
       set({ accessToken: null, refreshToken: null, user: null, error: null });
+      // Phase 3：登出时清空权限缓存，避免下个登录用户看到上个用户的权限
+      useProgressPermissionStore.getState().clear();
     }
   },
 
   // ----------------------------------------------------------
-  // loadMe: GET /api/auth/me → { user }
+  // loadMe: GET /api/auth/me → { user, permissions }
+  //
+  // Phase 3：响应 schema 含 permissions: string[]；拉到后立即同步到 permission store，
+  // 让 PermissionGate / usePermission 在组件首次渲染时就拿到结果
   // ----------------------------------------------------------
   async loadMe() {
     const data = await apiFetch('/api/auth/me', { method: 'GET' }, UserSchema);
     set({ user: data });
+    useProgressPermissionStore.getState().hydrateFromMe(data);
   },
 
   // ----------------------------------------------------------
@@ -173,6 +180,8 @@ export const useProgressAuthStore = create<ProgressAuthState>((set, get) => ({
   clearLocal() {
     writeRefresh(null);
     set({ accessToken: null, refreshToken: null, user: null, error: null });
+    // 同步清空权限 store
+    useProgressPermissionStore.getState().clear();
   },
 }));
 

@@ -29,6 +29,11 @@ import { z } from 'zod';
 /**
  * 当前登录用户。
  * 对应 openapi.yaml components.schemas.User
+ *
+ * Phase 3 起 /api/auth/me 响应附带 permissions 字段（权限码字符串数组），
+ * 用于前端 PermissionGate / usePermission hook 守卫菜单/按钮。
+ * 登录响应（AuthLoginResponse.user）的 permissions 留空数组，
+ * 因为客户端拿到 access token 后会主动调 me 拉权限。
  */
 export const UserSchema = z.object({
   id: z.number().int(),
@@ -37,6 +42,8 @@ export const UserSchema = z.object({
   roleId: z.number().int(),
   isActive: z.boolean(),
   createdAt: z.string(),
+  // permissions 是 v3 新增字段；旧响应可能缺失（Phase 2 未实现时），用 default 兼容
+  permissions: z.array(z.string()).optional().default([]),
 });
 
 export type UserPayload = z.infer<typeof UserSchema>;

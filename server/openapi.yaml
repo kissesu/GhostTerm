@@ -67,6 +67,10 @@ components:
         roleId: { type: integer, format: int64 }
         isActive: { type: boolean }
         createdAt: { type: string, format: date-time }
+        permissions:
+          type: array
+          description: "当前 session 持有的权限码集合（仅在 /api/auth/me 响应中填充，登录/创建用户响应留空）。元素形如 'project:read'、'event:E10'。"
+          items: { type: string }
 
     UserCreateRequest:
       type: object

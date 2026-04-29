@@ -578,6 +578,8 @@ export interface components {
             isActive: boolean;
             /** Format: date-time */
             createdAt: string;
+            /** @description 当前 session 持有的权限码集合（仅在 /api/auth/me 响应中填充，登录/创建用户响应留空）。元素形如 'project:read'、'event:E10'。 */
+            permissions?: string[];
         };
         UserCreateRequest: {
             /** @description 登录用 username（唯一） */

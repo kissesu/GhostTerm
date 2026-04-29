@@ -49,7 +49,7 @@ func main() {
 	defer pool.Close()
 
 	// ============================================
-	// 第三步：装配 services（Phase 2 起 AuthService 进入 router）
+	// 第三步：装配 services（Phase 2 AuthService + Phase 3 RBACService）
 	// ============================================
 	authSvc, err := services.NewAuthService(services.AuthServiceDeps{
 		Pool:          pool,
@@ -63,12 +63,21 @@ func main() {
 		log.Fatalf("init auth service: %v", err)
 	}
 
+	rbacSvc, err := services.NewRBACService(services.RBACServiceDeps{
+		Pool: pool,
+		// CacheTTL 留默认 5 分钟（NewRBACService 内部判定）
+	})
+	if err != nil {
+		log.Fatalf("init rbac service: %v", err)
+	}
+
 	// ============================================
 	// 第四步：装配 router + healthz（含 DB ping）
 	// ============================================
 	handler, err := api.NewRouter(api.RouterDeps{
 		Pool:        pool,
 		AuthService: authSvc,
+		RBACService: rbacSvc,
 	})
 	if err != nil {
 		log.Fatalf("init router: %v", err)

@@ -49,6 +49,8 @@ const SAMPLE_USER = {
   roleId: 2,
   isActive: true,
   createdAt: '2026-04-29T00:00:00Z',
+  // Phase 3：UserSchema 含 permissions 字段（默认空数组）
+  permissions: [] as string[],
 };
 
 beforeEach(() => {

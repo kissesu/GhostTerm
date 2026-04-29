@@ -29,13 +29,20 @@ import (
 // - ogen 把所有 endpoint 都收敛到一个 Handler 接口；其它 phase 的 worker 也会
 //   往同一个 oasHandler 上挂方法。本 struct 单独负责 auth 部分，由 router.go
 //   的 oasHandler "组合"（嵌入）进来
+//
+// 字段：
+// - Svc：认证 service
+// - RBAC：权限 service（Phase 3 加入），AuthGetMe 拉用户时附带 permission 码列表
+//   返回前端，用于 PermissionGate 的 UI 守卫
 type AuthHandler struct {
-	Svc services.AuthService
+	Svc  services.AuthService
+	RBAC services.RBACService
 }
 
-// NewAuthHandler 构造 AuthHandler，依赖一个已创建的 AuthService。
-func NewAuthHandler(svc services.AuthService) *AuthHandler {
-	return &AuthHandler{Svc: svc}
+// NewAuthHandler 构造 AuthHandler；rbac 允许 nil（Phase 2 时未注入），
+// 缺失时 AuthGetMe 不附带 permissions 字段（仍合法，为空数组）。
+func NewAuthHandler(svc services.AuthService, rbac services.RBACService) *AuthHandler {
+	return &AuthHandler{Svc: svc, RBAC: rbac}
 }
 
 // ============================================================
@@ -122,6 +129,13 @@ func (h *AuthHandler) AuthLogout(ctx context.Context) (oas.AuthLogoutRes, error)
 // ============================================================
 
 // AuthGetMe 实现 GET /api/auth/me。
+//
+// 业务流程：
+//  1. 从 ctx 取 AuthContext；svc.Me 拿到用户基础信息
+//  2. 若 RBAC service 已注入：调 LoadUserPermissions(roleID) 拉权限码集合
+//     转成 []string 后塞进 oas.User.Permissions（前端 PermissionGate 据此判定）
+//  3. 失败时不让 me 失败：权限拉取错误打印到 server log，permissions 留空
+//     —— 用户已登录，至少能看到自己的基本信息，权限菜单 UI 自然降级（缺权限 = 不显示）
 func (h *AuthHandler) AuthGetMe(ctx context.Context) (oas.AuthGetMeRes, error) {
 	sc, ok := middleware.AuthContextFrom(ctx)
 	if !ok {
@@ -135,7 +149,22 @@ func (h *AuthHandler) AuthGetMe(ctx context.Context) (oas.AuthGetMeRes, error) {
 	if !ok {
 		return nil, errors.New("auth handler: unexpected user type from service")
 	}
-	return &oas.UserResponse{Data: toOASUser(user)}, nil
+	oasUser := toOASUser(user)
+
+	// 第二步：附加权限码列表（仅在 me 接口；登录/创建响应不带）
+	if h.RBAC != nil {
+		permsMap, err := h.RBAC.LoadUserPermissions(ctx, user.RoleID)
+		if err == nil {
+			codes := make([]string, 0, len(permsMap))
+			for code := range permsMap {
+				codes = append(codes, code)
+			}
+			oasUser.Permissions = codes
+		}
+		// 错误路径：留空数组（前端 PermissionGate 全部 fail-closed），不让 me 失败
+	}
+
+	return &oas.UserResponse{Data: oasUser}, nil
 }
 
 // ============================================================

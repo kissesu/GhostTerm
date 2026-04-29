@@ -77,28 +77,80 @@ type AuthService interface {
 // RBACService — Phase 3 实现
 // ============================================================
 
-// RBACService 负责权限判定与 SQL 可见性过滤。
+// RBACService 负责"端点级权限判定"。
 //
-// 实现要点（spec §5）：
-// - 资源级权限（resource + action + scope）从 role_permissions 表加载
-// - 状态触发权限是 Go 硬编码表（见 spec §5.3）
-// - 数据可见性靠注入 SQL WHERE 子句（spec §5.4），不用 RLS（v2 改为应用层过滤）
+// 设计调整（v2 part1 §C2 vs v1 spec §5.4）：
+//   - 数据行可见性：由 Postgres RLS + project_members + helper 函数承担，
+//     应用层不再注入 WHERE 可见性子句
+//   - 端点级权限：仍由本 service 处理（"能否调用 POST /api/projects" / "能否触发 E10"），
+//     与 RLS 正交 —— RLS 决定看不看得见行，RBAC 决定能不能调接口
+//
+// 实现要点：
+//   - 权限"码"约定为 "<resource>:<action>"（如 "project:read"、"customer:create"）
+//   - 状态触发事件用 "event:<EventCode>" 命名空间（如 "event:E10"）
+//   - `*:*` 通配代表超管（与 0001 migration 预置一致）
+//   - role→permset 在内存缓存 5min（sync.Map + timestamp 过期）减少 DB 压力
 type RBACService interface {
-	// HasPermission 判断当前 session 是否拥有指定 resource+action 的权限
-	HasPermission(ctx context.Context, sc SessionContext, resource, action string) (bool, error)
+	// HasPermission 判断 roleID 对应角色是否拥有 perm 编码（"<resource>:<action>"）的权限。
+	//
+	// userID 仅用于将来扩展（如个人级 ACL）；当前实现仅按 roleID 决策，
+	// 但保留参数避免后续接口改动 ripple 到所有 caller。
+	HasPermission(ctx context.Context, userID, roleID int64, perm string) (bool, error)
 
-	// CanTriggerEvent 判断当前 session 在指定项目状态下能否触发事件（状态触发权限）
-	CanTriggerEvent(ctx context.Context, sc SessionContext, projectID int64, eventCode string) (bool, error)
+	// CanTriggerEvent 判断当前 session 能否在指定 projectID 上触发 eventCode。
+	//
+	// 校验链：
+	//   1. HasPermission(role, "event:"+eventCode)
+	//   2. is_admin (roleID==1) OR project_members 中存在 (projectID, userID) 记录
+	//   注：状态机本身的"前置状态-持球者-允许角色"细化校验由 Phase 5 的状态机引擎做
+	CanTriggerEvent(ctx context.Context, userID, roleID, projectID int64, eventCode string) (bool, error)
 
-	// VisibilityFilter 返回可注入到 WHERE 子句的 SQL 片段 + 参数（用于 SELECT 列表过滤）
-	// 结果如：("created_by = $1 OR holder_user_id = $1", []any{userID})
-	VisibilityFilter(ctx context.Context, sc SessionContext, resource string) (sqlFragment string, args []any, err error)
+	// VisibilityFilter 返回 SELECT 时可拼到 WHERE 的 SQL 片段。
+	//
+	// v2 起 RLS 已承担所有行级可见性，本方法保留只为"future-proof"：调用方
+	// 永远拿到 "TRUE" + nil（让 SQL 编译器优化掉），实际过滤由 RLS 完成。
+	// 不删该方法是因为：handler 层 helper 已习惯调它，删除会引发整片重构 noise。
+	VisibilityFilter(ctx context.Context, userID, roleID int64, scope string) (sqlFragment string, args []any, err error)
 
-	// ListPermissions 列出系统所有 permission 记录（仅超管）
-	ListPermissions(ctx context.Context, sc SessionContext) ([]any, error)
+	// ListPermissions 列出系统所有 permission 行（用于管理 UI / 调试）
+	ListPermissions(ctx context.Context) ([]Permission, error)
 
 	// ListRoles 列出所有角色
-	ListRoles(ctx context.Context, sc SessionContext) ([]any, error)
+	ListRoles(ctx context.Context) ([]Role, error)
+
+	// LoadUserPermissions 读取某 roleID 绑定的全部权限码集合（map 用于 O(1) 查询）。
+	//
+	// 主要用途：
+	//   1. /api/auth/me 响应附带用户权限码列表（前端 PermissionGate 使用）
+	//   2. JWT claims 预加载（如未来需要把 perms 编进 token，避免重复查 DB）
+	LoadUserPermissions(ctx context.Context, roleID int64) (map[string]bool, error)
+}
+
+// Permission 是 RBACService.ListPermissions 返回的视图模型。
+//
+// 字段对齐 0001 migration permissions 表，前端通过 OpenAPI Permission schema 消费。
+type Permission struct {
+	ID       int64
+	Resource string
+	Action   string
+	Scope    string
+}
+
+// Code 返回业务侧使用的权限编码 "<resource>:<action>"。
+//
+// 业务背景：UI 按 PermissionGate perm="event:E10" 的形式判定权限，
+// scope 字段（all/member）用于 RLS 行级控制，不参与 code 拼装。
+func (p Permission) Code() string {
+	return p.Resource + ":" + p.Action
+}
+
+// Role 是 RBACService.ListRoles 返回的视图模型。
+type Role struct {
+	ID          int64
+	Name        string
+	Description *string
+	IsSystem    bool
+	CreatedAt   time.Time
 }
 
 // ============================================================

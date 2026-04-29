@@ -10119,15 +10119,26 @@ func (s *User) encodeFields(e *jx.Encoder) {
 		e.FieldStart("createdAt")
 		json.EncodeDateTime(e, s.CreatedAt)
 	}
+	{
+		if s.Permissions != nil {
+			e.FieldStart("permissions")
+			e.ArrStart()
+			for _, elem := range s.Permissions {
+				e.Str(elem)
+			}
+			e.ArrEnd()
+		}
+	}
 }
 
-var jsonFieldsNameOfUser = [6]string{
+var jsonFieldsNameOfUser = [7]string{
 	0: "id",
 	1: "email",
 	2: "displayName",
 	3: "roleId",
 	4: "isActive",
 	5: "createdAt",
+	6: "permissions",
 }
 
 // Decode decodes User from json.
@@ -10210,6 +10221,25 @@ func (s *User) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"createdAt\"")
+			}
+		case "permissions":
+			if err := func() error {
+				s.Permissions = make([]string, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem string
+					v, err := d.Str()
+					elem = string(v)
+					if err != nil {
+						return err
+					}
+					s.Permissions = append(s.Permissions, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"permissions\"")
 			}
 		default:
 			return d.Skip()
