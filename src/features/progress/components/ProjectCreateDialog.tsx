@@ -1,0 +1,264 @@
+/**
+ * @file ProjectCreateDialog.tsx
+ * @description 项目创建对话框 —— 受控表单：客户/名称/描述/截止日期/优先级/论文级别/原始报价。
+ *
+ *              业务背景：
+ *              - 仅 admin / cs 调用此组件（PermissionGate 由调用方负责）
+ *              - 提交后调 projectsStore.create；成功后关闭对话框 + onCreated 回调
+ *              - 失败显示 Toast（调用方提供）；store 自身不存 error
+ *
+ *              字段必填：name / customerId / description / deadline
+ *              字段可选：priority（默认 normal）/ thesisLevel / subject / originalQuote（默认 0）
+ *
+ *              注：customer 列表由 Worker A (customer phase) 提供 store；当前组件
+ *              暴露 customerId 字段，由调用方透传或通过下拉选择 —— v1 简化：
+ *              用户直接输入 customerId（数字）。Phase 11 完整化后改为下拉。
+ *
+ * @author Atlas.oi
+ * @date 2026-04-29
+ */
+
+import { useState, type FormEvent, type ReactElement } from 'react';
+
+import type {
+  CreateProjectInput,
+  Project,
+  ProjectPriority,
+  ThesisLevel,
+} from '../api/projects';
+import { useProjectsStore } from '../stores/projectsStore';
+
+interface ProjectCreateDialogProps {
+  /** 是否显示弹窗 */
+  open: boolean;
+  /** 关闭弹窗（取消按钮 / 成功后） */
+  onClose: () => void;
+  /** 创建成功回调（caller 可显示 Toast 或导航） */
+  onCreated?: (project: Project) => void;
+}
+
+/**
+ * 项目创建对话框组件。
+ *
+ * 业务流程：
+ * 1. 用户填写 name / customerId / description / deadline 等字段
+ * 2. 点击"创建"调 projectsStore.create
+ * 3. 成功 → onCreated(project) + onClose()
+ * 4. 失败 → setError 显示在表单顶部
+ */
+export function ProjectCreateDialog({
+  open,
+  onClose,
+  onCreated,
+}: ProjectCreateDialogProps): ReactElement | null {
+  // 受控表单 state
+  const [name, setName] = useState('');
+  const [customerId, setCustomerId] = useState<string>(''); // 字符串以便受控 input；提交时 parseInt
+  const [description, setDescription] = useState('');
+  const [priority, setPriority] = useState<ProjectPriority>('normal');
+  const [thesisLevel, setThesisLevel] = useState<ThesisLevel | ''>('');
+  const [subject, setSubject] = useState('');
+  const [deadline, setDeadline] = useState(''); // datetime-local
+  const [originalQuote, setOriginalQuote] = useState('0');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const create = useProjectsStore((s) => s.create);
+
+  if (!open) {
+    return null;
+  }
+
+  // 提交处理
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    // 表单校验：必填
+    if (!name.trim()) {
+      setError('请填写项目名称');
+      return;
+    }
+    const customerIdNum = Number.parseInt(customerId, 10);
+    if (!Number.isFinite(customerIdNum) || customerIdNum <= 0) {
+      setError('请填写有效的客户 ID');
+      return;
+    }
+    if (!description.trim()) {
+      setError('请填写项目描述');
+      return;
+    }
+    if (!deadline) {
+      setError('请选择截止日期');
+      return;
+    }
+
+    // datetime-local 不带时区；转为 ISO 8601（按用户当地时区解释）
+    const deadlineISO = new Date(deadline).toISOString();
+
+    const input: CreateProjectInput = {
+      name: name.trim(),
+      customerId: customerIdNum,
+      description: description.trim(),
+      priority,
+      deadline: deadlineISO,
+      originalQuote,
+    };
+    if (thesisLevel) input.thesisLevel = thesisLevel;
+    if (subject.trim()) input.subject = subject.trim();
+
+    setSubmitting(true);
+    try {
+      const project = await create(input);
+      onCreated?.(project);
+      // 成功后重置表单 + 关闭
+      resetForm();
+      onClose();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const resetForm = () => {
+    setName('');
+    setCustomerId('');
+    setDescription('');
+    setPriority('normal');
+    setThesisLevel('');
+    setSubject('');
+    setDeadline('');
+    setOriginalQuote('0');
+    setError(null);
+  };
+
+  return (
+    <div role="dialog" aria-label="新建项目" data-testid="project-create-dialog">
+      <h2>新建项目</h2>
+      {error && (
+        <div role="alert" className="error">
+          {error}
+        </div>
+      )}
+      {/* 业务背景：noValidate 禁用 HTML5 自动校验，由 JS 在 handleSubmit 内统一校验，
+          避免浏览器拦截后 onSubmit 不触发导致 setError 失效（前端规则：错误必须暴露给用户） */}
+      <form onSubmit={handleSubmit} noValidate>
+        <label>
+          项目名称
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            disabled={submitting}
+            data-testid="project-name-input"
+          />
+        </label>
+
+        <label>
+          客户 ID
+          <input
+            type="number"
+            value={customerId}
+            onChange={(e) => setCustomerId(e.target.value)}
+            disabled={submitting}
+            data-testid="project-customer-input"
+          />
+        </label>
+
+        <label>
+          描述
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            disabled={submitting}
+            data-testid="project-description-input"
+          />
+        </label>
+
+        <label>
+          截止日期
+          <input
+            type="datetime-local"
+            value={deadline}
+            onChange={(e) => setDeadline(e.target.value)}
+            disabled={submitting}
+            data-testid="project-deadline-input"
+          />
+        </label>
+
+        <label>
+          优先级
+          <select
+            value={priority}
+            onChange={(e) => setPriority(e.target.value as ProjectPriority)}
+            disabled={submitting}
+            data-testid="project-priority-select"
+          >
+            <option value="normal">普通</option>
+            <option value="urgent">紧急</option>
+          </select>
+        </label>
+
+        <label>
+          论文等级
+          <select
+            value={thesisLevel}
+            onChange={(e) => setThesisLevel(e.target.value as ThesisLevel | '')}
+            disabled={submitting}
+            data-testid="project-thesis-level-select"
+          >
+            <option value="">未指定</option>
+            <option value="bachelor">本科</option>
+            <option value="master">硕士</option>
+            <option value="doctor">博士</option>
+          </select>
+        </label>
+
+        <label>
+          学科 / 选题
+          <input
+            type="text"
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            disabled={submitting}
+            data-testid="project-subject-input"
+          />
+        </label>
+
+        <label>
+          原始报价（元）
+          <input
+            type="text"
+            value={originalQuote}
+            onChange={(e) => setOriginalQuote(e.target.value)}
+            disabled={submitting}
+            data-testid="project-original-quote-input"
+          />
+        </label>
+
+        <div className="actions">
+          <button
+            type="button"
+            onClick={() => {
+              resetForm();
+              onClose();
+            }}
+            disabled={submitting}
+            data-testid="project-cancel-btn"
+          >
+            取消
+          </button>
+          <button
+            type="submit"
+            disabled={submitting}
+            data-testid="project-submit-btn"
+          >
+            {submitting ? '创建中...' : '创建'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
