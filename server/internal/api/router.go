@@ -37,14 +37,21 @@ import (
 var ErrNotImplementedYet = errors.New("not_implemented_yet")
 
 // oasHandler 嵌入 ogen UnimplementedHandler 拿到所有"默认返回 ErrNotImplemented"的方法，
-// 通过持有 *handlers.AuthHandler / *handlers.RBACHandler 字段并显式 forward 真实方法来覆盖默认实现。
+// 通过持有各业务 handler 字段并显式 forward 真实方法来覆盖默认实现。
 //
 // 注：Go 嵌入字段的"方法 ambiguous selector"规则会让"两个嵌入字段同名方法"导致编译失败；
-// 因此 AuthHandler / RBACHandler 不嵌入而是作为命名字段，由 oasHandler 自己声明方法做显式 forward。
-// 后续 phase 的 worker 会再持有 *CustomerHandler / *ProjectHandler 字段并 forward 各自方法。
+// 因此各 handler 不嵌入而是作为命名字段，由 oasHandler 自己声明方法做显式 forward。
+// Phase 10 Lead wireup：注册 worker A/B/C/D/E/F 的全部 handler。
 type oasHandler struct {
-	auth *handlers.AuthHandler
-	rbac *handlers.RBACHandler
+	auth     *handlers.AuthHandler
+	rbac     *handlers.RBACHandler
+	customer *handlers.CustomerHandler
+	project  *handlers.ProjectHandler
+	file     *handlers.FileHandler
+	feedback *handlers.FeedbackHandler
+	quote    *handlers.QuoteHandler
+	payment  *handlers.PaymentHandler
+	earnings *handlers.EarningsHandler
 	oas.UnimplementedHandler
 }
 
@@ -98,7 +105,146 @@ func (h *oasHandler) RolesUpdatePermissions(ctx context.Context, req *oas.RolePe
 	return h.rbac.RolesUpdatePermissions(ctx, req, params)
 }
 
-// 编译时校验：oasHandler 仍满足 oas.Handler 接口（含 Auth + RBAC 方法的真实实现）
+// ============================================================
+// Worker A — Customer：4 个方法 forward
+// ============================================================
+
+// CustomersList 转发到 CustomerHandler 实现
+func (h *oasHandler) CustomersList(ctx context.Context) (oas.CustomersListRes, error) {
+	return h.customer.CustomersList(ctx)
+}
+
+// CustomersGet 转发到 CustomerHandler 实现
+func (h *oasHandler) CustomersGet(ctx context.Context, params oas.CustomersGetParams) (oas.CustomersGetRes, error) {
+	return h.customer.CustomersGet(ctx, params)
+}
+
+// CustomersCreate 转发到 CustomerHandler 实现
+func (h *oasHandler) CustomersCreate(ctx context.Context, req *oas.CustomerCreateRequest) (oas.CustomersCreateRes, error) {
+	return h.customer.CustomersCreate(ctx, req)
+}
+
+// CustomersUpdate 转发到 CustomerHandler 实现
+func (h *oasHandler) CustomersUpdate(ctx context.Context, req *oas.CustomerUpdateRequest, params oas.CustomersUpdateParams) (oas.CustomersUpdateRes, error) {
+	return h.customer.CustomersUpdate(ctx, req, params)
+}
+
+// ============================================================
+// Worker B — Project + StateMachine：6 个方法 forward
+// ============================================================
+
+// ProjectsList 转发到 ProjectHandler 实现
+func (h *oasHandler) ProjectsList(ctx context.Context, params oas.ProjectsListParams) (oas.ProjectsListRes, error) {
+	return h.project.ProjectsList(ctx, params)
+}
+
+// ProjectsCreate 转发到 ProjectHandler 实现
+func (h *oasHandler) ProjectsCreate(ctx context.Context, req *oas.ProjectCreateRequest) (oas.ProjectsCreateRes, error) {
+	return h.project.ProjectsCreate(ctx, req)
+}
+
+// ProjectsGet 转发到 ProjectHandler 实现
+func (h *oasHandler) ProjectsGet(ctx context.Context, params oas.ProjectsGetParams) (oas.ProjectsGetRes, error) {
+	return h.project.ProjectsGet(ctx, params)
+}
+
+// ProjectsUpdate 转发到 ProjectHandler 实现
+func (h *oasHandler) ProjectsUpdate(ctx context.Context, req *oas.ProjectUpdateRequest, params oas.ProjectsUpdateParams) (oas.ProjectsUpdateRes, error) {
+	return h.project.ProjectsUpdate(ctx, req, params)
+}
+
+// ProjectsTriggerEvent 转发到 ProjectHandler 实现
+func (h *oasHandler) ProjectsTriggerEvent(ctx context.Context, req *oas.EventTriggerRequest, params oas.ProjectsTriggerEventParams) (oas.ProjectsTriggerEventRes, error) {
+	return h.project.ProjectsTriggerEvent(ctx, req, params)
+}
+
+// ProjectsStatusChanges 转发到 ProjectHandler 实现
+func (h *oasHandler) ProjectsStatusChanges(ctx context.Context, params oas.ProjectsStatusChangesParams) (oas.ProjectsStatusChangesRes, error) {
+	return h.project.ProjectsStatusChanges(ctx, params)
+}
+
+// ============================================================
+// Worker C — File：5 个方法 forward
+// ============================================================
+
+// FilesUpload 转发到 FileHandler 实现
+func (h *oasHandler) FilesUpload(ctx context.Context, req *oas.FilesUploadReq) (oas.FilesUploadRes, error) {
+	return h.file.FilesUpload(ctx, req)
+}
+
+// FilesDownload 转发到 FileHandler 实现
+func (h *oasHandler) FilesDownload(ctx context.Context, params oas.FilesDownloadParams) (oas.FilesDownloadRes, error) {
+	return h.file.FilesDownload(ctx, params)
+}
+
+// ProjectsListFiles 转发到 FileHandler 实现
+func (h *oasHandler) ProjectsListFiles(ctx context.Context, params oas.ProjectsListFilesParams) (*oas.ProjectFileListResponse, error) {
+	return h.file.ProjectsListFiles(ctx, params)
+}
+
+// ProjectsCreateThesisVersion 转发到 FileHandler 实现
+func (h *oasHandler) ProjectsCreateThesisVersion(ctx context.Context, req *oas.ThesisVersionCreateRequest, params oas.ProjectsCreateThesisVersionParams) (oas.ProjectsCreateThesisVersionRes, error) {
+	return h.file.ProjectsCreateThesisVersion(ctx, req, params)
+}
+
+// ProjectsListThesisVersions 转发到 FileHandler 实现
+func (h *oasHandler) ProjectsListThesisVersions(ctx context.Context, params oas.ProjectsListThesisVersionsParams) (*oas.ThesisVersionListResponse, error) {
+	return h.file.ProjectsListThesisVersions(ctx, params)
+}
+
+// ============================================================
+// Worker D — Feedback：3 个方法 forward
+// ============================================================
+
+// ProjectsListFeedbacks 转发到 FeedbackHandler 实现
+func (h *oasHandler) ProjectsListFeedbacks(ctx context.Context, params oas.ProjectsListFeedbacksParams) (*oas.FeedbackListResponse, error) {
+	return h.feedback.ProjectsListFeedbacks(ctx, params)
+}
+
+// ProjectsCreateFeedback 转发到 FeedbackHandler 实现
+func (h *oasHandler) ProjectsCreateFeedback(ctx context.Context, req *oas.FeedbackCreateRequest, params oas.ProjectsCreateFeedbackParams) (oas.ProjectsCreateFeedbackRes, error) {
+	return h.feedback.ProjectsCreateFeedback(ctx, req, params)
+}
+
+// FeedbacksUpdate 转发到 FeedbackHandler 实现
+func (h *oasHandler) FeedbacksUpdate(ctx context.Context, req *oas.FeedbackUpdateRequest, params oas.FeedbacksUpdateParams) (oas.FeedbacksUpdateRes, error) {
+	return h.feedback.FeedbacksUpdate(ctx, req, params)
+}
+
+// ============================================================
+// Worker E — Quote：2 个方法 forward
+// ============================================================
+
+// ProjectsListQuoteChanges 转发到 QuoteHandler 实现
+func (h *oasHandler) ProjectsListQuoteChanges(ctx context.Context, params oas.ProjectsListQuoteChangesParams) (*oas.QuoteChangeListResponse, error) {
+	return h.quote.ProjectsListQuoteChanges(ctx, params)
+}
+
+// ProjectsCreateQuoteChange 转发到 QuoteHandler 实现
+func (h *oasHandler) ProjectsCreateQuoteChange(ctx context.Context, req *oas.QuoteChangeRequest, params oas.ProjectsCreateQuoteChangeParams) (oas.ProjectsCreateQuoteChangeRes, error) {
+	return h.quote.ProjectsCreateQuoteChange(ctx, req, params)
+}
+
+// ============================================================
+// Worker F — Payment + Earnings：3 个方法 forward
+// ============================================================
+
+// ProjectsListPayments 转发到 PaymentHandler 实现
+func (h *oasHandler) ProjectsListPayments(ctx context.Context, params oas.ProjectsListPaymentsParams) (*oas.PaymentListResponse, error) {
+	return h.payment.ProjectsListPayments(ctx, params)
+}
+
+// ProjectsCreatePayment 转发到 PaymentHandler 实现
+func (h *oasHandler) ProjectsCreatePayment(ctx context.Context, req *oas.PaymentCreateRequest, params oas.ProjectsCreatePaymentParams) (oas.ProjectsCreatePaymentRes, error) {
+	return h.payment.ProjectsCreatePayment(ctx, req, params)
+}
+
+// MeEarnings 转发到 EarningsHandler 实现
+func (h *oasHandler) MeEarnings(ctx context.Context) (*oas.EarningsSummaryResponse, error) {
+	return h.earnings.MeEarnings(ctx)
+}
+
+// 编译时校验：oasHandler 满足 oas.Handler 接口（覆盖 worker A-F 全部方法 + Auth + RBAC）
 var _ oas.Handler = (*oasHandler)(nil)
 
 // oasSecurityHandler 实现 ogen 的 SecurityHandler。
@@ -136,11 +282,18 @@ var _ oas.SecurityHandler = (*oasSecurityHandler)(nil)
 // 业务背景：相比 Phase 0a 的"无参 NewRouter"，Phase 2 起 router 需要 service 层来源；
 // 把它收敛到一个 deps struct 让后续 phase 加 service 时不破坏 main.go 的调用签名。
 //
-// Phase 3 起：必须传 RBACService；缺失时 NewRouter 返回错误。
+// Phase 3 起：必须传 RBACService。
+// Phase 10 Lead wireup：增加 worker A-F 的全部 service 依赖，缺失即返回 error。
 type RouterDeps struct {
-	Pool        *pgxpool.Pool
-	AuthService services.AuthService
-	RBACService services.RBACService
+	Pool            *pgxpool.Pool
+	AuthService     services.AuthService
+	RBACService     services.RBACService
+	CustomerService services.CustomerService
+	ProjectService  *services.ProjectServiceImpl
+	FileService     services.FileService
+	FeedbackService services.FeedbackService
+	QuoteService    *services.QuoteService
+	PaymentService  services.PaymentService
 }
 
 // NewRouter 装配 chi 基础中间件 + ogen 生成的 OpenAPI server。
@@ -160,24 +313,70 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	if deps.Pool == nil {
 		return nil, errors.New("router: Pool is required")
 	}
+	if deps.CustomerService == nil {
+		return nil, errors.New("router: CustomerService is required")
+	}
+	if deps.ProjectService == nil {
+		return nil, errors.New("router: ProjectService is required")
+	}
+	if deps.FileService == nil {
+		return nil, errors.New("router: FileService is required")
+	}
+	if deps.FeedbackService == nil {
+		return nil, errors.New("router: FeedbackService is required")
+	}
+	if deps.QuoteService == nil {
+		return nil, errors.New("router: QuoteService is required")
+	}
+	if deps.PaymentService == nil {
+		return nil, errors.New("router: PaymentService is required")
+	}
 	r := chi.NewRouter()
 
 	r.Use(chimw.RequestID)
 	r.Use(chimw.RealIP)
 	r.Use(chimw.Logger)
 	r.Use(chimw.Recoverer)
+	// 文件下载安全响应头中间件（v2 part1 §C5）
+	// 仅对 GET /api/files/{id} 生效（中间件内部按 path 短路），
+	// 必须在 ogen mount 之前注册，否则 ResponseWriter 已被 ogen encoder 接管无法回改 header
+	r.Use(handlers.NewDownloadHeaderMiddleware())
 
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
 
+	// ============================================================
+	// 装配 worker A-F 的 handler
+	// ============================================================
 	authHandler := handlers.NewAuthHandler(deps.AuthService, deps.RBACService)
 	rbacHandler := handlers.NewRBACHandler(deps.RBACService, deps.Pool)
+	customerHandler := handlers.NewCustomerHandler(deps.CustomerService)
+	projectHandler := handlers.NewProjectHandler(deps.ProjectService)
+	fileHandler := handlers.NewFileHandler(deps.FileService)
+	feedbackHandler, err := handlers.NewFeedbackHandler(deps.FeedbackService, deps.RBACService)
+	if err != nil {
+		return nil, err
+	}
+	quoteHandler := handlers.NewQuoteHandler(deps.QuoteService)
+	paymentHandler := handlers.NewPaymentHandler(deps.PaymentService)
+	earningsHandler := handlers.NewEarningsHandler(deps.PaymentService)
+
 	secHandler := &oasSecurityHandler{svc: deps.AuthService}
 
 	oasServer, err := oas.NewServer(
-		&oasHandler{auth: authHandler, rbac: rbacHandler},
+		&oasHandler{
+			auth:     authHandler,
+			rbac:     rbacHandler,
+			customer: customerHandler,
+			project:  projectHandler,
+			file:     fileHandler,
+			feedback: feedbackHandler,
+			quote:    quoteHandler,
+			payment:  paymentHandler,
+			earnings: earningsHandler,
+		},
 		secHandler,
 		oas.WithErrorHandler(errorEnvelopeHandler),
 	)

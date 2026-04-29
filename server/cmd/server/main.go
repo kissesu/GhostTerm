@@ -49,7 +49,8 @@ func main() {
 	defer pool.Close()
 
 	// ============================================
-	// 第三步：装配 services（Phase 2 AuthService + Phase 3 RBACService）
+	// 第三步：装配 services
+	// Phase 2 AuthService / Phase 3 RBACService / Phase 4-9 worker A-F services
 	// ============================================
 	authSvc, err := services.NewAuthService(services.AuthServiceDeps{
 		Pool:          pool,
@@ -71,13 +72,55 @@ func main() {
 		log.Fatalf("init rbac service: %v", err)
 	}
 
+	customerSvc, err := services.NewCustomerService(services.CustomerServiceDeps{Pool: pool})
+	if err != nil {
+		log.Fatalf("init customer service: %v", err)
+	}
+
+	projectSvc, err := services.NewProjectService(services.ProjectServiceDeps{Pool: pool})
+	if err != nil {
+		log.Fatalf("init project service: %v", err)
+	}
+
+	// FileService 需要存储根目录 + 单文件大小上限（spec §6.6 默认 100MB）
+	// MB → 字节换算在 main.go 完成，service 内部不再做单位转换
+	fileSvc, err := services.NewFileService(services.FileServiceDeps{
+		Pool:         pool,
+		StoragePath:  cfg.FileStoragePath,
+		MaxSizeBytes: int64(cfg.FileMaxSizeMB) * 1024 * 1024,
+	})
+	if err != nil {
+		log.Fatalf("init file service: %v", err)
+	}
+
+	feedbackSvc, err := services.NewFeedbackService(services.FeedbackServiceDeps{Pool: pool})
+	if err != nil {
+		log.Fatalf("init feedback service: %v", err)
+	}
+
+	quoteSvc, err := services.NewQuoteService(pool)
+	if err != nil {
+		log.Fatalf("init quote service: %v", err)
+	}
+
+	paymentSvc, err := services.NewPaymentService(services.PaymentServiceDeps{Pool: pool})
+	if err != nil {
+		log.Fatalf("init payment service: %v", err)
+	}
+
 	// ============================================
 	// 第四步：装配 router + healthz（含 DB ping）
 	// ============================================
 	handler, err := api.NewRouter(api.RouterDeps{
-		Pool:        pool,
-		AuthService: authSvc,
-		RBACService: rbacSvc,
+		Pool:            pool,
+		AuthService:     authSvc,
+		RBACService:     rbacSvc,
+		CustomerService: customerSvc,
+		ProjectService:  projectSvc,
+		FileService:     fileSvc,
+		FeedbackService: feedbackSvc,
+		QuoteService:    quoteSvc,
+		PaymentService:  paymentSvc,
 	})
 	if err != nil {
 		log.Fatalf("init router: %v", err)

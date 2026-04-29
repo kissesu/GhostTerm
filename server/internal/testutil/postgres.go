@@ -79,8 +79,9 @@ func StartPostgres(t *testing.T) (*pgxpool.Pool, func()) {
 	port := resource.GetPort("5432/tcp")
 	dsn := fmt.Sprintf("postgres://postgres:test@127.0.0.1:%s/progress_test?sslmode=disable", port)
 
-	// 连接 retry：postgres alpine 冷启动 1-3 秒，dockertest pool.Retry 默认 60s 够用
-	dPool.MaxWait = 30 * time.Second
+	// 连接 retry：postgres:16-alpine 在 arm64 OrbStack 模拟下冷启动可能 30-50s，
+	// 60s 给冷路径足够余量，避免热路径正常但冷启动假性 flake
+	dPool.MaxWait = 60 * time.Second
 
 	var sqlPool *pgxpool.Pool
 	if err := dPool.Retry(func() error {
