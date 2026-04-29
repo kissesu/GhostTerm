@@ -6,6 +6,7 @@ package oas
 type OperationName = string
 
 const (
+	AuthGetMeOperation                   OperationName = "AuthGetMe"
 	AuthLoginOperation                   OperationName = "AuthLogin"
 	AuthLogoutOperation                  OperationName = "AuthLogout"
 	AuthRefreshOperation                 OperationName = "AuthRefresh"
@@ -13,6 +14,7 @@ const (
 	CustomersGetOperation                OperationName = "CustomersGet"
 	CustomersListOperation               OperationName = "CustomersList"
 	CustomersUpdateOperation             OperationName = "CustomersUpdate"
+	DashboardGetRisksOperation           OperationName = "DashboardGetRisks"
 	FeedbacksUpdateOperation             OperationName = "FeedbacksUpdate"
 	FilesDownloadOperation               OperationName = "FilesDownload"
 	FilesUploadOperation                 OperationName = "FilesUpload"
@@ -36,9 +38,14 @@ const (
 	ProjectsStatusChangesOperation       OperationName = "ProjectsStatusChanges"
 	ProjectsTriggerEventOperation        OperationName = "ProjectsTriggerEvent"
 	ProjectsUpdateOperation              OperationName = "ProjectsUpdate"
+	RolesCreateOperation                 OperationName = "RolesCreate"
+	RolesGetPermissionsOperation         OperationName = "RolesGetPermissions"
 	RolesListOperation                   OperationName = "RolesList"
+	RolesUpdatePermissionsOperation      OperationName = "RolesUpdatePermissions"
+	UsersCreateOperation                 OperationName = "UsersCreate"
+	UsersDeleteOperation                 OperationName = "UsersDelete"
 	UsersListOperation                   OperationName = "UsersList"
-	UsersMeOperation                     OperationName = "UsersMe"
+	UsersUpdateOperation                 OperationName = "UsersUpdate"
 	WsNotificationsConnectOperation      OperationName = "WsNotificationsConnect"
 	WsTicketIssueOperation               OperationName = "WsTicketIssue"
 )

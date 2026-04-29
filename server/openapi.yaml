@@ -68,6 +68,26 @@ components:
         isActive: { type: boolean }
         createdAt: { type: string, format: date-time }
 
+    UserCreateRequest:
+      type: object
+      required: [username, email, password, roleId]
+      properties:
+        username: { type: string, minLength: 1, description: "登录用 username（唯一）" }
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8, description: "明文密码，服务端 bcrypt 后入库" }
+        displayName: { type: string, description: "可选展示名，缺省取 username" }
+        roleId: { type: integer, format: int64 }
+
+    UserUpdateRequest:
+      type: object
+      description: "PATCH 部分字段，所有字段 optional；密码字段独立显式传以便审计"
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+        displayName: { type: string }
+        roleId: { type: integer, format: int64 }
+        isActive: { type: boolean }
+
     Role:
       type: object
       required: [id, name, isSystem, createdAt]
@@ -77,6 +97,26 @@ components:
         description: { type: string, nullable: true }
         isSystem: { type: boolean }
         createdAt: { type: string, format: date-time }
+
+    RoleCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1 }
+        description: { type: string }
+        permissionIds:
+          type: array
+          description: "可选：创建时一并绑定的权限 id 列表"
+          items: { type: integer, format: int64 }
+
+    RolePermissionUpdateRequest:
+      type: object
+      required: [permissionIds]
+      properties:
+        permissionIds:
+          type: array
+          description: "目标权限 id 全集；服务端做差集替换"
+          items: { type: integer, format: int64 }
 
     Permission:
       type: object
@@ -461,6 +501,35 @@ components:
               settlementCount: { type: integer }
               lastPaidAt: { type: string, format: date-time, nullable: true }
 
+    # ===== Dashboard：风险总览（spec §11.2 line 1076） =====
+    RiskType:
+      type: string
+      description: "风险类型：临近 deadline / 已超期 / 应收逾期"
+      enum:
+        - deadline_warning
+        - overdue
+        - payment_overdue
+
+    RiskSeverity:
+      type: string
+      description: "风险严重度，前端用于颜色/排序"
+      enum:
+        - warning
+        - critical
+
+    RiskItem:
+      type: object
+      required: [projectId, customerName, riskType, dueAt, severity]
+      properties:
+        projectId: { type: integer, format: int64 }
+        customerName: { type: string, description: "客户微信昵称（冗余以避免前端 N+1）" }
+        riskType: { $ref: '#/components/schemas/RiskType' }
+        dueAt:
+          type: string
+          format: date-time
+          description: "对 deadline_warning/overdue 是 deadline；对 payment_overdue 是预计收款日"
+        severity: { $ref: '#/components/schemas/RiskSeverity' }
+
     # ===== Auth =====
     AuthLoginRequest:
       type: object
@@ -648,6 +717,20 @@ components:
       properties:
         data: { $ref: '#/components/schemas/EarningsSummary' }
 
+    RoleResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/Role' }
+
+    RiskListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/RiskItem' }
+
     AuthLoginEnvelope:
       type: object
       required: [data]
@@ -748,11 +831,11 @@ paths:
           description: 登出成功
         '401': { $ref: '#/components/responses/UnauthorizedError' }
 
-  /api/users/me:
+  /api/auth/me:
     get:
-      operationId: usersMe
+      operationId: authGetMe
       summary: 获取当前登录用户
-      tags: [users]
+      tags: [auth]
       responses:
         '200':
           description: OK
@@ -775,6 +858,60 @@ paths:
               schema: { $ref: '#/components/schemas/UserListResponse' }
         '401': { $ref: '#/components/responses/UnauthorizedError' }
         '403': { $ref: '#/components/responses/PermissionDeniedError' }
+    post:
+      operationId: usersCreate
+      summary: 创建用户（仅超管）
+      tags: [users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserCreateRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserResponse' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/PermissionDeniedError' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /api/users/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    patch:
+      operationId: usersUpdate
+      summary: 修改用户（仅超管）
+      tags: [users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserUpdateRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserResponse' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/PermissionDeniedError' }
+        '404': { $ref: '#/components/responses/NotFoundError' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      operationId: usersDelete
+      summary: 删除用户（仅超管，软删除：置 isActive=false 并失效 token_version）
+      tags: [users]
+      responses:
+        '204':
+          description: 已删除
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/PermissionDeniedError' }
+        '404': { $ref: '#/components/responses/NotFoundError' }
 
   # ===== Roles & Permissions =====
   /api/roles:
@@ -789,6 +926,62 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/RoleListResponse' }
         '401': { $ref: '#/components/responses/UnauthorizedError' }
+    post:
+      operationId: rolesCreate
+      summary: 创建角色（仅超管）
+      tags: [rbac]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RoleCreateRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RoleResponse' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/PermissionDeniedError' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /api/roles/{id}/permissions:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    get:
+      operationId: rolesGetPermissions
+      summary: 查询某角色绑定的权限列表
+      tags: [rbac]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PermissionListResponse' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '404': { $ref: '#/components/responses/NotFoundError' }
+    patch:
+      operationId: rolesUpdatePermissions
+      summary: 替换某角色的权限绑定（仅超管，按 permissionIds 全量覆盖）
+      tags: [rbac]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RolePermissionUpdateRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PermissionListResponse' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/PermissionDeniedError' }
+        '404': { $ref: '#/components/responses/NotFoundError' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /api/permissions:
     get:
@@ -1262,6 +1455,19 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/EarningsSummaryResponse' }
+
+  /api/dashboard/risks:
+    get:
+      operationId: dashboardGetRisks
+      summary: 风险总览（临近 deadline / 已超期 / 应收逾期），按 RBAC 过滤
+      tags: [dashboard]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RiskListResponse' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
 
   # ===== WebSocket ticket =====
   # 浏览器 WebSocket 不支持 Authorization header，先用 access token 换一个短期 ticket，

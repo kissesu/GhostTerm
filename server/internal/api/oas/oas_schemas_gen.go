@@ -500,10 +500,12 @@ func (s *ErrorEnvelope) SetError(val ErrorEnvelopeError) {
 	s.Error = val
 }
 
+func (*ErrorEnvelope) authGetMeRes()                   {}
 func (*ErrorEnvelope) authLogoutRes()                  {}
 func (*ErrorEnvelope) authRefreshRes()                 {}
 func (*ErrorEnvelope) customersGetRes()                {}
 func (*ErrorEnvelope) customersListRes()               {}
+func (*ErrorEnvelope) dashboardGetRisksRes()           {}
 func (*ErrorEnvelope) feedbacksUpdateRes()             {}
 func (*ErrorEnvelope) filesDownloadRes()               {}
 func (*ErrorEnvelope) notificationsMarkReadRes()       {}
@@ -516,7 +518,6 @@ func (*ErrorEnvelope) projectsGetRes()                 {}
 func (*ErrorEnvelope) projectsListRes()                {}
 func (*ErrorEnvelope) projectsStatusChangesRes()       {}
 func (*ErrorEnvelope) rolesListRes()                   {}
-func (*ErrorEnvelope) usersMeRes()                     {}
 func (*ErrorEnvelope) wsNotificationsConnectRes()      {}
 
 type ErrorEnvelopeError struct {
@@ -1643,6 +1644,52 @@ func (o OptFeedbackStatus) Or(d FeedbackStatus) FeedbackStatus {
 	return d
 }
 
+// NewOptInt64 returns new OptInt64 with value set to v.
+func NewOptInt64(v int64) OptInt64 {
+	return OptInt64{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptInt64 is optional int64.
+type OptInt64 struct {
+	Value int64
+	Set   bool
+}
+
+// IsSet returns true if OptInt64 was set.
+func (o OptInt64) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptInt64) Reset() {
+	var v int64
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptInt64) SetTo(v int64) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptInt64) Get() (v int64, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptInt64) Or(d int64) int64 {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptMoney returns new OptMoney with value set to v.
 func NewOptMoney(v Money) OptMoney {
 	return OptMoney{
@@ -2623,7 +2670,9 @@ func (s *PermissionListResponse) SetData(val []Permission) {
 	s.Data = val
 }
 
-func (*PermissionListResponse) permissionsListRes() {}
+func (*PermissionListResponse) permissionsListRes()        {}
+func (*PermissionListResponse) rolesGetPermissionsRes()    {}
+func (*PermissionListResponse) rolesUpdatePermissionsRes() {}
 
 // Ref: #/components/schemas/Project
 type Project struct {
@@ -3726,6 +3775,177 @@ func (s *QuoteChangeType) UnmarshalText(data []byte) error {
 	}
 }
 
+// Ref: #/components/schemas/RiskItem
+type RiskItem struct {
+	ProjectId int64 `json:"projectId"`
+	// 客户微信昵称（冗余以避免前端 N+1）.
+	CustomerName string   `json:"customerName"`
+	RiskType     RiskType `json:"riskType"`
+	// 对 deadline_warning/overdue 是 deadline；对 payment_overdue 是预计收款日.
+	DueAt    time.Time    `json:"dueAt"`
+	Severity RiskSeverity `json:"severity"`
+}
+
+// GetProjectId returns the value of ProjectId.
+func (s *RiskItem) GetProjectId() int64 {
+	return s.ProjectId
+}
+
+// GetCustomerName returns the value of CustomerName.
+func (s *RiskItem) GetCustomerName() string {
+	return s.CustomerName
+}
+
+// GetRiskType returns the value of RiskType.
+func (s *RiskItem) GetRiskType() RiskType {
+	return s.RiskType
+}
+
+// GetDueAt returns the value of DueAt.
+func (s *RiskItem) GetDueAt() time.Time {
+	return s.DueAt
+}
+
+// GetSeverity returns the value of Severity.
+func (s *RiskItem) GetSeverity() RiskSeverity {
+	return s.Severity
+}
+
+// SetProjectId sets the value of ProjectId.
+func (s *RiskItem) SetProjectId(val int64) {
+	s.ProjectId = val
+}
+
+// SetCustomerName sets the value of CustomerName.
+func (s *RiskItem) SetCustomerName(val string) {
+	s.CustomerName = val
+}
+
+// SetRiskType sets the value of RiskType.
+func (s *RiskItem) SetRiskType(val RiskType) {
+	s.RiskType = val
+}
+
+// SetDueAt sets the value of DueAt.
+func (s *RiskItem) SetDueAt(val time.Time) {
+	s.DueAt = val
+}
+
+// SetSeverity sets the value of Severity.
+func (s *RiskItem) SetSeverity(val RiskSeverity) {
+	s.Severity = val
+}
+
+// Ref: #/components/schemas/RiskListResponse
+type RiskListResponse struct {
+	Data []RiskItem `json:"data"`
+}
+
+// GetData returns the value of Data.
+func (s *RiskListResponse) GetData() []RiskItem {
+	return s.Data
+}
+
+// SetData sets the value of Data.
+func (s *RiskListResponse) SetData(val []RiskItem) {
+	s.Data = val
+}
+
+func (*RiskListResponse) dashboardGetRisksRes() {}
+
+// 风险严重度，前端用于颜色/排序.
+// Ref: #/components/schemas/RiskSeverity
+type RiskSeverity string
+
+const (
+	RiskSeverityWarning  RiskSeverity = "warning"
+	RiskSeverityCritical RiskSeverity = "critical"
+)
+
+// AllValues returns all RiskSeverity values.
+func (RiskSeverity) AllValues() []RiskSeverity {
+	return []RiskSeverity{
+		RiskSeverityWarning,
+		RiskSeverityCritical,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s RiskSeverity) MarshalText() ([]byte, error) {
+	switch s {
+	case RiskSeverityWarning:
+		return []byte(s), nil
+	case RiskSeverityCritical:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *RiskSeverity) UnmarshalText(data []byte) error {
+	switch RiskSeverity(data) {
+	case RiskSeverityWarning:
+		*s = RiskSeverityWarning
+		return nil
+	case RiskSeverityCritical:
+		*s = RiskSeverityCritical
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// 风险类型：临近 deadline / 已超期 / 应收逾期.
+// Ref: #/components/schemas/RiskType
+type RiskType string
+
+const (
+	RiskTypeDeadlineWarning RiskType = "deadline_warning"
+	RiskTypeOverdue         RiskType = "overdue"
+	RiskTypePaymentOverdue  RiskType = "payment_overdue"
+)
+
+// AllValues returns all RiskType values.
+func (RiskType) AllValues() []RiskType {
+	return []RiskType{
+		RiskTypeDeadlineWarning,
+		RiskTypeOverdue,
+		RiskTypePaymentOverdue,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s RiskType) MarshalText() ([]byte, error) {
+	switch s {
+	case RiskTypeDeadlineWarning:
+		return []byte(s), nil
+	case RiskTypeOverdue:
+		return []byte(s), nil
+	case RiskTypePaymentOverdue:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *RiskType) UnmarshalText(data []byte) error {
+	switch RiskType(data) {
+	case RiskTypeDeadlineWarning:
+		*s = RiskTypeDeadlineWarning
+		return nil
+	case RiskTypeOverdue:
+		*s = RiskTypeOverdue
+		return nil
+	case RiskTypePaymentOverdue:
+		*s = RiskTypePaymentOverdue
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
 // Ref: #/components/schemas/Role
 type Role struct {
 	ID          int64        `json:"id"`
@@ -3785,6 +4005,44 @@ func (s *Role) SetCreatedAt(val time.Time) {
 	s.CreatedAt = val
 }
 
+// Ref: #/components/schemas/RoleCreateRequest
+type RoleCreateRequest struct {
+	Name        string    `json:"name"`
+	Description OptString `json:"description"`
+	// 可选：创建时一并绑定的权限 id 列表.
+	PermissionIds []int64 `json:"permissionIds"`
+}
+
+// GetName returns the value of Name.
+func (s *RoleCreateRequest) GetName() string {
+	return s.Name
+}
+
+// GetDescription returns the value of Description.
+func (s *RoleCreateRequest) GetDescription() OptString {
+	return s.Description
+}
+
+// GetPermissionIds returns the value of PermissionIds.
+func (s *RoleCreateRequest) GetPermissionIds() []int64 {
+	return s.PermissionIds
+}
+
+// SetName sets the value of Name.
+func (s *RoleCreateRequest) SetName(val string) {
+	s.Name = val
+}
+
+// SetDescription sets the value of Description.
+func (s *RoleCreateRequest) SetDescription(val OptString) {
+	s.Description = val
+}
+
+// SetPermissionIds sets the value of PermissionIds.
+func (s *RoleCreateRequest) SetPermissionIds(val []int64) {
+	s.PermissionIds = val
+}
+
 // Ref: #/components/schemas/RoleListResponse
 type RoleListResponse struct {
 	Data []Role `json:"data"`
@@ -3801,6 +4059,75 @@ func (s *RoleListResponse) SetData(val []Role) {
 }
 
 func (*RoleListResponse) rolesListRes() {}
+
+// Ref: #/components/schemas/RolePermissionUpdateRequest
+type RolePermissionUpdateRequest struct {
+	// 目标权限 id 全集；服务端做差集替换.
+	PermissionIds []int64 `json:"permissionIds"`
+}
+
+// GetPermissionIds returns the value of PermissionIds.
+func (s *RolePermissionUpdateRequest) GetPermissionIds() []int64 {
+	return s.PermissionIds
+}
+
+// SetPermissionIds sets the value of PermissionIds.
+func (s *RolePermissionUpdateRequest) SetPermissionIds(val []int64) {
+	s.PermissionIds = val
+}
+
+// Ref: #/components/schemas/RoleResponse
+type RoleResponse struct {
+	Data Role `json:"data"`
+}
+
+// GetData returns the value of Data.
+func (s *RoleResponse) GetData() Role {
+	return s.Data
+}
+
+// SetData sets the value of Data.
+func (s *RoleResponse) SetData(val Role) {
+	s.Data = val
+}
+
+func (*RoleResponse) rolesCreateRes() {}
+
+type RolesCreateForbidden ErrorEnvelope
+
+func (*RolesCreateForbidden) rolesCreateRes() {}
+
+type RolesCreateUnauthorized ErrorEnvelope
+
+func (*RolesCreateUnauthorized) rolesCreateRes() {}
+
+type RolesCreateUnprocessableEntity ErrorEnvelope
+
+func (*RolesCreateUnprocessableEntity) rolesCreateRes() {}
+
+type RolesGetPermissionsNotFound ErrorEnvelope
+
+func (*RolesGetPermissionsNotFound) rolesGetPermissionsRes() {}
+
+type RolesGetPermissionsUnauthorized ErrorEnvelope
+
+func (*RolesGetPermissionsUnauthorized) rolesGetPermissionsRes() {}
+
+type RolesUpdatePermissionsForbidden ErrorEnvelope
+
+func (*RolesUpdatePermissionsForbidden) rolesUpdatePermissionsRes() {}
+
+type RolesUpdatePermissionsNotFound ErrorEnvelope
+
+func (*RolesUpdatePermissionsNotFound) rolesUpdatePermissionsRes() {}
+
+type RolesUpdatePermissionsUnauthorized ErrorEnvelope
+
+func (*RolesUpdatePermissionsUnauthorized) rolesUpdatePermissionsRes() {}
+
+type RolesUpdatePermissionsUnprocessableEntity ErrorEnvelope
+
+func (*RolesUpdatePermissionsUnprocessableEntity) rolesUpdatePermissionsRes() {}
 
 // Ref: #/components/schemas/StatusChangeLog
 type StatusChangeLog struct {
@@ -4213,6 +4540,68 @@ func (s *User) SetCreatedAt(val time.Time) {
 	s.CreatedAt = val
 }
 
+// Ref: #/components/schemas/UserCreateRequest
+type UserCreateRequest struct {
+	// 登录用 username（唯一）.
+	Username string `json:"username"`
+	Email    string `json:"email"`
+	// 明文密码，服务端 bcrypt 后入库.
+	Password string `json:"password"`
+	// 可选展示名，缺省取 username.
+	DisplayName OptString `json:"displayName"`
+	RoleId      int64     `json:"roleId"`
+}
+
+// GetUsername returns the value of Username.
+func (s *UserCreateRequest) GetUsername() string {
+	return s.Username
+}
+
+// GetEmail returns the value of Email.
+func (s *UserCreateRequest) GetEmail() string {
+	return s.Email
+}
+
+// GetPassword returns the value of Password.
+func (s *UserCreateRequest) GetPassword() string {
+	return s.Password
+}
+
+// GetDisplayName returns the value of DisplayName.
+func (s *UserCreateRequest) GetDisplayName() OptString {
+	return s.DisplayName
+}
+
+// GetRoleId returns the value of RoleId.
+func (s *UserCreateRequest) GetRoleId() int64 {
+	return s.RoleId
+}
+
+// SetUsername sets the value of Username.
+func (s *UserCreateRequest) SetUsername(val string) {
+	s.Username = val
+}
+
+// SetEmail sets the value of Email.
+func (s *UserCreateRequest) SetEmail(val string) {
+	s.Email = val
+}
+
+// SetPassword sets the value of Password.
+func (s *UserCreateRequest) SetPassword(val string) {
+	s.Password = val
+}
+
+// SetDisplayName sets the value of DisplayName.
+func (s *UserCreateRequest) SetDisplayName(val OptString) {
+	s.DisplayName = val
+}
+
+// SetRoleId sets the value of RoleId.
+func (s *UserCreateRequest) SetRoleId(val int64) {
+	s.RoleId = val
+}
+
 // Ref: #/components/schemas/UserListResponse
 type UserListResponse struct {
 	Data []User `json:"data"`
@@ -4245,7 +4634,98 @@ func (s *UserResponse) SetData(val User) {
 	s.Data = val
 }
 
-func (*UserResponse) usersMeRes() {}
+func (*UserResponse) authGetMeRes()   {}
+func (*UserResponse) usersCreateRes() {}
+func (*UserResponse) usersUpdateRes() {}
+
+// PATCH 部分字段，所有字段 optional；密码字段独立显式传以便审计.
+// Ref: #/components/schemas/UserUpdateRequest
+type UserUpdateRequest struct {
+	Email       OptString `json:"email"`
+	Password    OptString `json:"password"`
+	DisplayName OptString `json:"displayName"`
+	RoleId      OptInt64  `json:"roleId"`
+	IsActive    OptBool   `json:"isActive"`
+}
+
+// GetEmail returns the value of Email.
+func (s *UserUpdateRequest) GetEmail() OptString {
+	return s.Email
+}
+
+// GetPassword returns the value of Password.
+func (s *UserUpdateRequest) GetPassword() OptString {
+	return s.Password
+}
+
+// GetDisplayName returns the value of DisplayName.
+func (s *UserUpdateRequest) GetDisplayName() OptString {
+	return s.DisplayName
+}
+
+// GetRoleId returns the value of RoleId.
+func (s *UserUpdateRequest) GetRoleId() OptInt64 {
+	return s.RoleId
+}
+
+// GetIsActive returns the value of IsActive.
+func (s *UserUpdateRequest) GetIsActive() OptBool {
+	return s.IsActive
+}
+
+// SetEmail sets the value of Email.
+func (s *UserUpdateRequest) SetEmail(val OptString) {
+	s.Email = val
+}
+
+// SetPassword sets the value of Password.
+func (s *UserUpdateRequest) SetPassword(val OptString) {
+	s.Password = val
+}
+
+// SetDisplayName sets the value of DisplayName.
+func (s *UserUpdateRequest) SetDisplayName(val OptString) {
+	s.DisplayName = val
+}
+
+// SetRoleId sets the value of RoleId.
+func (s *UserUpdateRequest) SetRoleId(val OptInt64) {
+	s.RoleId = val
+}
+
+// SetIsActive sets the value of IsActive.
+func (s *UserUpdateRequest) SetIsActive(val OptBool) {
+	s.IsActive = val
+}
+
+type UsersCreateForbidden ErrorEnvelope
+
+func (*UsersCreateForbidden) usersCreateRes() {}
+
+type UsersCreateUnauthorized ErrorEnvelope
+
+func (*UsersCreateUnauthorized) usersCreateRes() {}
+
+type UsersCreateUnprocessableEntity ErrorEnvelope
+
+func (*UsersCreateUnprocessableEntity) usersCreateRes() {}
+
+type UsersDeleteForbidden ErrorEnvelope
+
+func (*UsersDeleteForbidden) usersDeleteRes() {}
+
+// UsersDeleteNoContent is response for UsersDelete operation.
+type UsersDeleteNoContent struct{}
+
+func (*UsersDeleteNoContent) usersDeleteRes() {}
+
+type UsersDeleteNotFound ErrorEnvelope
+
+func (*UsersDeleteNotFound) usersDeleteRes() {}
+
+type UsersDeleteUnauthorized ErrorEnvelope
+
+func (*UsersDeleteUnauthorized) usersDeleteRes() {}
 
 type UsersListForbidden ErrorEnvelope
 
@@ -4254,6 +4734,22 @@ func (*UsersListForbidden) usersListRes() {}
 type UsersListUnauthorized ErrorEnvelope
 
 func (*UsersListUnauthorized) usersListRes() {}
+
+type UsersUpdateForbidden ErrorEnvelope
+
+func (*UsersUpdateForbidden) usersUpdateRes() {}
+
+type UsersUpdateNotFound ErrorEnvelope
+
+func (*UsersUpdateNotFound) usersUpdateRes() {}
+
+type UsersUpdateUnauthorized ErrorEnvelope
+
+func (*UsersUpdateUnauthorized) usersUpdateRes() {}
+
+type UsersUpdateUnprocessableEntity ErrorEnvelope
+
+func (*UsersUpdateUnprocessableEntity) usersUpdateRes() {}
 
 // Ref: #/components/schemas/WSTicket
 type WSTicket struct {

@@ -8,6 +8,12 @@ import (
 
 // Handler handles operations described by OpenAPI v3 specification.
 type Handler interface {
+	// AuthGetMe implements authGetMe operation.
+	//
+	// 获取当前登录用户.
+	//
+	// GET /api/auth/me
+	AuthGetMe(ctx context.Context) (AuthGetMeRes, error)
 	// AuthLogin implements authLogin operation.
 	//
 	// 登录获取 access + refresh token.
@@ -46,6 +52,12 @@ type Handler interface {
 	//
 	// PATCH /api/customers/{id}
 	CustomersUpdate(ctx context.Context, req *CustomerUpdateRequest, params CustomersUpdateParams) (CustomersUpdateRes, error)
+	// DashboardGetRisks implements dashboardGetRisks operation.
+	//
+	// 风险总览（临近 deadline / 已超期 / 应收逾期），按 RBAC 过滤.
+	//
+	// GET /api/dashboard/risks
+	DashboardGetRisks(ctx context.Context) (DashboardGetRisksRes, error)
 	// FeedbacksUpdate implements feedbacksUpdate operation.
 	//
 	// 修改反馈状态（pending → done）.
@@ -172,24 +184,54 @@ type Handler interface {
 	//
 	// PATCH /api/projects/{id}
 	ProjectsUpdate(ctx context.Context, req *ProjectUpdateRequest, params ProjectsUpdateParams) (ProjectsUpdateRes, error)
+	// RolesCreate implements rolesCreate operation.
+	//
+	// 创建角色（仅超管）.
+	//
+	// POST /api/roles
+	RolesCreate(ctx context.Context, req *RoleCreateRequest) (RolesCreateRes, error)
+	// RolesGetPermissions implements rolesGetPermissions operation.
+	//
+	// 查询某角色绑定的权限列表.
+	//
+	// GET /api/roles/{id}/permissions
+	RolesGetPermissions(ctx context.Context, params RolesGetPermissionsParams) (RolesGetPermissionsRes, error)
 	// RolesList implements rolesList operation.
 	//
 	// 列出所有角色.
 	//
 	// GET /api/roles
 	RolesList(ctx context.Context) (RolesListRes, error)
+	// RolesUpdatePermissions implements rolesUpdatePermissions operation.
+	//
+	// 替换某角色的权限绑定（仅超管，按 permissionIds 全量覆盖）.
+	//
+	// PATCH /api/roles/{id}/permissions
+	RolesUpdatePermissions(ctx context.Context, req *RolePermissionUpdateRequest, params RolesUpdatePermissionsParams) (RolesUpdatePermissionsRes, error)
+	// UsersCreate implements usersCreate operation.
+	//
+	// 创建用户（仅超管）.
+	//
+	// POST /api/users
+	UsersCreate(ctx context.Context, req *UserCreateRequest) (UsersCreateRes, error)
+	// UsersDelete implements usersDelete operation.
+	//
+	// 删除用户（仅超管，软删除：置 isActive=false 并失效 token_version）.
+	//
+	// DELETE /api/users/{id}
+	UsersDelete(ctx context.Context, params UsersDeleteParams) (UsersDeleteRes, error)
 	// UsersList implements usersList operation.
 	//
 	// 列出所有用户（仅超管）.
 	//
 	// GET /api/users
 	UsersList(ctx context.Context) (UsersListRes, error)
-	// UsersMe implements usersMe operation.
+	// UsersUpdate implements usersUpdate operation.
 	//
-	// 获取当前登录用户.
+	// 修改用户（仅超管）.
 	//
-	// GET /api/users/me
-	UsersMe(ctx context.Context) (UsersMeRes, error)
+	// PATCH /api/users/{id}
+	UsersUpdate(ctx context.Context, req *UserUpdateRequest, params UsersUpdateParams) (UsersUpdateRes, error)
 	// WsNotificationsConnect implements wsNotificationsConnect operation.
 	//
 	// WebSocket 升级端点（非 HTTP REST，仅 OpenAPI 描述）。

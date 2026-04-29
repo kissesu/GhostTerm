@@ -13,6 +13,15 @@ type UnimplementedHandler struct{}
 
 var _ Handler = UnimplementedHandler{}
 
+// AuthGetMe implements authGetMe operation.
+//
+// 获取当前登录用户.
+//
+// GET /api/auth/me
+func (UnimplementedHandler) AuthGetMe(ctx context.Context) (r AuthGetMeRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // AuthLogin implements authLogin operation.
 //
 // 登录获取 access + refresh token.
@@ -69,6 +78,15 @@ func (UnimplementedHandler) CustomersList(ctx context.Context) (r CustomersListR
 //
 // PATCH /api/customers/{id}
 func (UnimplementedHandler) CustomersUpdate(ctx context.Context, req *CustomerUpdateRequest, params CustomersUpdateParams) (r CustomersUpdateRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// DashboardGetRisks implements dashboardGetRisks operation.
+//
+// 风险总览（临近 deadline / 已超期 / 应收逾期），按 RBAC 过滤.
+//
+// GET /api/dashboard/risks
+func (UnimplementedHandler) DashboardGetRisks(ctx context.Context) (r DashboardGetRisksRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -267,12 +285,57 @@ func (UnimplementedHandler) ProjectsUpdate(ctx context.Context, req *ProjectUpda
 	return r, ht.ErrNotImplemented
 }
 
+// RolesCreate implements rolesCreate operation.
+//
+// 创建角色（仅超管）.
+//
+// POST /api/roles
+func (UnimplementedHandler) RolesCreate(ctx context.Context, req *RoleCreateRequest) (r RolesCreateRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// RolesGetPermissions implements rolesGetPermissions operation.
+//
+// 查询某角色绑定的权限列表.
+//
+// GET /api/roles/{id}/permissions
+func (UnimplementedHandler) RolesGetPermissions(ctx context.Context, params RolesGetPermissionsParams) (r RolesGetPermissionsRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // RolesList implements rolesList operation.
 //
 // 列出所有角色.
 //
 // GET /api/roles
 func (UnimplementedHandler) RolesList(ctx context.Context) (r RolesListRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// RolesUpdatePermissions implements rolesUpdatePermissions operation.
+//
+// 替换某角色的权限绑定（仅超管，按 permissionIds 全量覆盖）.
+//
+// PATCH /api/roles/{id}/permissions
+func (UnimplementedHandler) RolesUpdatePermissions(ctx context.Context, req *RolePermissionUpdateRequest, params RolesUpdatePermissionsParams) (r RolesUpdatePermissionsRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UsersCreate implements usersCreate operation.
+//
+// 创建用户（仅超管）.
+//
+// POST /api/users
+func (UnimplementedHandler) UsersCreate(ctx context.Context, req *UserCreateRequest) (r UsersCreateRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UsersDelete implements usersDelete operation.
+//
+// 删除用户（仅超管，软删除：置 isActive=false 并失效 token_version）.
+//
+// DELETE /api/users/{id}
+func (UnimplementedHandler) UsersDelete(ctx context.Context, params UsersDeleteParams) (r UsersDeleteRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -285,12 +348,12 @@ func (UnimplementedHandler) UsersList(ctx context.Context) (r UsersListRes, _ er
 	return r, ht.ErrNotImplemented
 }
 
-// UsersMe implements usersMe operation.
+// UsersUpdate implements usersUpdate operation.
 //
-// 获取当前登录用户.
+// 修改用户（仅超管）.
 //
-// GET /api/users/me
-func (UnimplementedHandler) UsersMe(ctx context.Context) (r UsersMeRes, _ error) {
+// PATCH /api/users/{id}
+func (UnimplementedHandler) UsersUpdate(ctx context.Context, req *UserUpdateRequest, params UsersUpdateParams) (r UsersUpdateRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
