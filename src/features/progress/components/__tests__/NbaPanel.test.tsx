@@ -54,4 +54,12 @@ describe('NbaPanel', () => {
     render(<NbaPanel project={mockProject('paid')} onTriggerAction={vi.fn()} />);
     expect(screen.queryByRole('button', { name: /其它操作/ })).not.toBeInTheDocument();
   });
+
+  it('未知 status → 渲染降级提示而非崩溃', () => {
+    const { container } = render(
+      <NbaPanel project={{ id: 1, status: 'invalid_status' as any } as Project} onTriggerAction={vi.fn()} />
+    );
+    expect(container).toHaveTextContent(/未知状态/);
+    expect(screen.getByTestId('nba-panel-fallback')).toBeInTheDocument();
+  });
 });

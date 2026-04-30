@@ -32,6 +32,19 @@ interface NbaPanelProps {
 
 export function NbaPanel({ project, onTriggerAction, reasonContext }: NbaPanelProps): ReactElement {
   const cfg = NBA_CONFIG[project.status];
+
+  // 未知 status 降级：返回友好提示而非崩溃（W2）
+  if (!cfg) {
+    return (
+      <div data-testid="nba-panel-fallback" className={styles.nbaInformational}>
+        <div className={styles.nbaCard}>
+          <div className={styles.nbaLabel}>未知状态</div>
+          <p className={styles.nbaReason}>状态 "{String(project.status)}" 未配置。请联系管理员。</p>
+        </div>
+      </div>
+    );
+  }
+
   const reason = deriveReason(project.status, reasonContext ?? { daysSinceLastActivity: null });
   // informational 为 true 时视觉弱化：archived / cancelled 终态
   const informational = cfg.informational ?? false;
