@@ -22,6 +22,7 @@
  */
 
 import { useEffect, useState, type ReactElement } from 'react';
+import type { ActionMeta } from '../config/nbaConfig';
 import { ArrowLeft, User, Calendar, Wallet, Edit3 } from 'lucide-react';
 
 import { useProjectsStore } from '../stores/projectsStore';
@@ -38,7 +39,8 @@ import { ThesisVersionList } from './ThesisVersionList';
 import { FileUploadButton } from './FileUploadButton';
 import { QuoteChangeDialog } from './QuoteChangeDialog';
 import PaymentDialog from './PaymentDialog';
-import { EventActionButtons } from './EventActionButtons';
+import { NbaPanel } from './NbaPanel';
+import { EventTriggerDialog } from './EventTriggerDialog';
 
 interface ProjectDetailPageProps {
   /** 项目 id（来自 progressUiStore.selectedProjectId） */
@@ -58,6 +60,8 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
   const [showQuoteDialog, setShowQuoteDialog] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // NBA 动作触发：记录当前待触发的 action，null = 无弹窗
+  const [activeAction, setActiveAction] = useState<ActionMeta | null>(null);
 
   // 拉详情（首次挂载）
   // 用户需求修正 2026-04-30：客户从独立资源降级为字段，不再需要 fetchCustomers
@@ -225,13 +229,24 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
           </div>
         </header>
 
-        <EventActionButtons
-          projectId={projectId}
-          status={project.status}
-          onEventTriggered={() => {
-            // 触发事件成功后 store 已更新 project；不需要额外刷新
-          }}
+        <NbaPanel
+          project={project}
+          onTriggerAction={(action) => setActiveAction(action)}
         />
+
+        {/* NBA 事件触发弹窗：activeAction 非 null 时弹出，成功后刷新项目详情 */}
+        {activeAction !== null && (
+          <EventTriggerDialog
+            projectId={project.id}
+            event={activeAction.eventCode}
+            eventLabel={activeAction.label}
+            onClose={() => setActiveAction(null)}
+            onSuccess={() => {
+              setActiveAction(null);
+              void loadProject(project.id).catch(() => {});
+            }}
+          />
+        )}
       </aside>
 
       {/* ============================================
