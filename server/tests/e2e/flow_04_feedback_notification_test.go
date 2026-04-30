@@ -29,8 +29,7 @@ func TestFlow04_FeedbackTriggersNotification(t *testing.T) {
 	dev := newClient(e2eEnv.BaseURL)
 	dev.loginAs(t, e2eEnv.Dev1)
 
-	customer := createCustomer(t, cs, "feedback-customer")
-	project := createProject(t, cs, customer.ID, "feedback-project",
+	project := createProject(t, cs, "feedback-customer", "feedback-project",
 		time.Now().Add(10*24*time.Hour), "500.00")
 
 	// 记录 dev1 创建反馈前的通知数（基线）

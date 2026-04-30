@@ -40,12 +40,10 @@ func TestFlow01_HappyPath(t *testing.T) {
 	cs.loginAs(t, e2eEnv.CS)
 
 	// ============================================================
-	// 第一步：创建客户 + 项目（CS 身份）
+	// 第一步：创建项目（CS 身份）
+	// 用户需求修正 2026-04-30：客户从独立资源降级为 customerLabel 字段
 	// ============================================================
-	customer := createCustomer(t, cs, "happy-path-customer")
-	require.Greater(t, customer.ID, int64(0))
-
-	project := createProject(t, cs, customer.ID, "happy-path-project",
+	project := createProject(t, cs, "happy-path-customer", "happy-path-project",
 		time.Now().Add(30*24*time.Hour), "1000.00")
 	require.Equal(t, "dealing", project.Status)
 	require.NotNil(t, project.HolderRoleID)

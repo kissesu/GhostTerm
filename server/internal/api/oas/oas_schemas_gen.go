@@ -180,180 +180,6 @@ func (s *BearerAuth) SetRoles(val []string) {
 	s.Roles = val
 }
 
-// Ref: #/components/schemas/Customer
-type Customer struct {
-	ID         int64        `json:"id"`
-	NameWechat string       `json:"nameWechat"`
-	Remark     OptNilString `json:"remark"`
-	CreatedBy  int64        `json:"createdBy"`
-	CreatedAt  time.Time    `json:"createdAt"`
-	UpdatedAt  time.Time    `json:"updatedAt"`
-}
-
-// GetID returns the value of ID.
-func (s *Customer) GetID() int64 {
-	return s.ID
-}
-
-// GetNameWechat returns the value of NameWechat.
-func (s *Customer) GetNameWechat() string {
-	return s.NameWechat
-}
-
-// GetRemark returns the value of Remark.
-func (s *Customer) GetRemark() OptNilString {
-	return s.Remark
-}
-
-// GetCreatedBy returns the value of CreatedBy.
-func (s *Customer) GetCreatedBy() int64 {
-	return s.CreatedBy
-}
-
-// GetCreatedAt returns the value of CreatedAt.
-func (s *Customer) GetCreatedAt() time.Time {
-	return s.CreatedAt
-}
-
-// GetUpdatedAt returns the value of UpdatedAt.
-func (s *Customer) GetUpdatedAt() time.Time {
-	return s.UpdatedAt
-}
-
-// SetID sets the value of ID.
-func (s *Customer) SetID(val int64) {
-	s.ID = val
-}
-
-// SetNameWechat sets the value of NameWechat.
-func (s *Customer) SetNameWechat(val string) {
-	s.NameWechat = val
-}
-
-// SetRemark sets the value of Remark.
-func (s *Customer) SetRemark(val OptNilString) {
-	s.Remark = val
-}
-
-// SetCreatedBy sets the value of CreatedBy.
-func (s *Customer) SetCreatedBy(val int64) {
-	s.CreatedBy = val
-}
-
-// SetCreatedAt sets the value of CreatedAt.
-func (s *Customer) SetCreatedAt(val time.Time) {
-	s.CreatedAt = val
-}
-
-// SetUpdatedAt sets the value of UpdatedAt.
-func (s *Customer) SetUpdatedAt(val time.Time) {
-	s.UpdatedAt = val
-}
-
-// Ref: #/components/schemas/CustomerCreateRequest
-type CustomerCreateRequest struct {
-	NameWechat string    `json:"nameWechat"`
-	Remark     OptString `json:"remark"`
-}
-
-// GetNameWechat returns the value of NameWechat.
-func (s *CustomerCreateRequest) GetNameWechat() string {
-	return s.NameWechat
-}
-
-// GetRemark returns the value of Remark.
-func (s *CustomerCreateRequest) GetRemark() OptString {
-	return s.Remark
-}
-
-// SetNameWechat sets the value of NameWechat.
-func (s *CustomerCreateRequest) SetNameWechat(val string) {
-	s.NameWechat = val
-}
-
-// SetRemark sets the value of Remark.
-func (s *CustomerCreateRequest) SetRemark(val OptString) {
-	s.Remark = val
-}
-
-// Ref: #/components/schemas/CustomerListResponse
-type CustomerListResponse struct {
-	Data []Customer `json:"data"`
-}
-
-// GetData returns the value of Data.
-func (s *CustomerListResponse) GetData() []Customer {
-	return s.Data
-}
-
-// SetData sets the value of Data.
-func (s *CustomerListResponse) SetData(val []Customer) {
-	s.Data = val
-}
-
-func (*CustomerListResponse) customersListRes() {}
-
-// Ref: #/components/schemas/CustomerResponse
-type CustomerResponse struct {
-	Data Customer `json:"data"`
-}
-
-// GetData returns the value of Data.
-func (s *CustomerResponse) GetData() Customer {
-	return s.Data
-}
-
-// SetData sets the value of Data.
-func (s *CustomerResponse) SetData(val Customer) {
-	s.Data = val
-}
-
-func (*CustomerResponse) customersCreateRes() {}
-func (*CustomerResponse) customersGetRes()    {}
-func (*CustomerResponse) customersUpdateRes() {}
-
-// Ref: #/components/schemas/CustomerUpdateRequest
-type CustomerUpdateRequest struct {
-	NameWechat OptString    `json:"nameWechat"`
-	Remark     OptNilString `json:"remark"`
-}
-
-// GetNameWechat returns the value of NameWechat.
-func (s *CustomerUpdateRequest) GetNameWechat() OptString {
-	return s.NameWechat
-}
-
-// GetRemark returns the value of Remark.
-func (s *CustomerUpdateRequest) GetRemark() OptNilString {
-	return s.Remark
-}
-
-// SetNameWechat sets the value of NameWechat.
-func (s *CustomerUpdateRequest) SetNameWechat(val OptString) {
-	s.NameWechat = val
-}
-
-// SetRemark sets the value of Remark.
-func (s *CustomerUpdateRequest) SetRemark(val OptNilString) {
-	s.Remark = val
-}
-
-type CustomersCreateUnauthorized ErrorEnvelope
-
-func (*CustomersCreateUnauthorized) customersCreateRes() {}
-
-type CustomersCreateUnprocessableEntity ErrorEnvelope
-
-func (*CustomersCreateUnprocessableEntity) customersCreateRes() {}
-
-type CustomersUpdateNotFound ErrorEnvelope
-
-func (*CustomersUpdateNotFound) customersUpdateRes() {}
-
-type CustomersUpdateUnprocessableEntity ErrorEnvelope
-
-func (*CustomersUpdateUnprocessableEntity) customersUpdateRes() {}
-
 // Ref: #/components/schemas/EarningsSummary
 type EarningsSummary struct {
 	UserId          int64                         `json:"userId"`
@@ -504,8 +330,6 @@ func (s *ErrorEnvelope) SetError(val ErrorEnvelopeError) {
 func (*ErrorEnvelope) authGetMeRes()                   {}
 func (*ErrorEnvelope) authLogoutRes()                  {}
 func (*ErrorEnvelope) authRefreshRes()                 {}
-func (*ErrorEnvelope) customersGetRes()                {}
-func (*ErrorEnvelope) customersListRes()               {}
 func (*ErrorEnvelope) dashboardGetRisksRes()           {}
 func (*ErrorEnvelope) feedbacksUpdateRes()             {}
 func (*ErrorEnvelope) filesDownloadRes()               {}
@@ -2608,7 +2432,7 @@ func (*PaymentResponse) projectsCreatePaymentRes() {}
 // Ref: #/components/schemas/Permission
 type Permission struct {
 	ID int64 `json:"id"`
-	// 资源类型，如 project / customer / feedback.
+	// 资源类型，如 project / feedback / payment / file.
 	Resource string `json:"resource"`
 	// 动作，如 read / create / update / delete.
 	Action string `json:"action"`
@@ -2677,9 +2501,10 @@ func (*PermissionListResponse) rolesUpdatePermissionsRes() {}
 
 // Ref: #/components/schemas/Project
 type Project struct {
-	ID              int64             `json:"id"`
-	Name            string            `json:"name"`
-	CustomerId      int64             `json:"customerId"`
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+	// 客户标签（自由文本，例如 '张三 / 张三@wx'），由用户自由填写.
+	CustomerLabel   string            `json:"customerLabel"`
 	Description     string            `json:"description"`
 	Priority        ProjectPriority   `json:"priority"`
 	ThesisLevel     OptNilThesisLevel `json:"thesisLevel"`
@@ -2719,9 +2544,9 @@ func (s *Project) GetName() string {
 	return s.Name
 }
 
-// GetCustomerId returns the value of CustomerId.
-func (s *Project) GetCustomerId() int64 {
-	return s.CustomerId
+// GetCustomerLabel returns the value of CustomerLabel.
+func (s *Project) GetCustomerLabel() string {
+	return s.CustomerLabel
 }
 
 // GetDescription returns the value of Description.
@@ -2869,9 +2694,9 @@ func (s *Project) SetName(val string) {
 	s.Name = val
 }
 
-// SetCustomerId sets the value of CustomerId.
-func (s *Project) SetCustomerId(val int64) {
-	s.CustomerId = val
+// SetCustomerLabel sets the value of CustomerLabel.
+func (s *Project) SetCustomerLabel(val string) {
+	s.CustomerLabel = val
 }
 
 // SetDescription sets the value of Description.
@@ -3011,8 +2836,9 @@ func (s *Project) SetUpdatedAt(val time.Time) {
 
 // Ref: #/components/schemas/ProjectCreateRequest
 type ProjectCreateRequest struct {
-	Name          string             `json:"name"`
-	CustomerId    int64              `json:"customerId"`
+	Name string `json:"name"`
+	// 客户标签（自由文本）.
+	CustomerLabel string             `json:"customerLabel"`
 	Description   string             `json:"description"`
 	Priority      OptProjectPriority `json:"priority"`
 	ThesisLevel   OptThesisLevel     `json:"thesisLevel"`
@@ -3026,9 +2852,9 @@ func (s *ProjectCreateRequest) GetName() string {
 	return s.Name
 }
 
-// GetCustomerId returns the value of CustomerId.
-func (s *ProjectCreateRequest) GetCustomerId() int64 {
-	return s.CustomerId
+// GetCustomerLabel returns the value of CustomerLabel.
+func (s *ProjectCreateRequest) GetCustomerLabel() string {
+	return s.CustomerLabel
 }
 
 // GetDescription returns the value of Description.
@@ -3066,9 +2892,9 @@ func (s *ProjectCreateRequest) SetName(val string) {
 	s.Name = val
 }
 
-// SetCustomerId sets the value of CustomerId.
-func (s *ProjectCreateRequest) SetCustomerId(val int64) {
-	s.CustomerId = val
+// SetCustomerLabel sets the value of CustomerLabel.
+func (s *ProjectCreateRequest) SetCustomerLabel(val string) {
+	s.CustomerLabel = val
 }
 
 // SetDescription sets the value of Description.
@@ -3400,17 +3226,24 @@ func (s *ProjectStatus) UnmarshalText(data []byte) error {
 // PATCH 部分字段，全部 optional.
 // Ref: #/components/schemas/ProjectUpdateRequest
 type ProjectUpdateRequest struct {
-	Name        OptString          `json:"name"`
-	Description OptString          `json:"description"`
-	Priority    OptProjectPriority `json:"priority"`
-	ThesisLevel OptThesisLevel     `json:"thesisLevel"`
-	Subject     OptNilString       `json:"subject"`
-	Deadline    OptDateTime        `json:"deadline"`
+	Name OptString `json:"name"`
+	// 客户标签（自由文本），允许 cs/admin 修改.
+	CustomerLabel OptString          `json:"customerLabel"`
+	Description   OptString          `json:"description"`
+	Priority      OptProjectPriority `json:"priority"`
+	ThesisLevel   OptThesisLevel     `json:"thesisLevel"`
+	Subject       OptNilString       `json:"subject"`
+	Deadline      OptDateTime        `json:"deadline"`
 }
 
 // GetName returns the value of Name.
 func (s *ProjectUpdateRequest) GetName() OptString {
 	return s.Name
+}
+
+// GetCustomerLabel returns the value of CustomerLabel.
+func (s *ProjectUpdateRequest) GetCustomerLabel() OptString {
+	return s.CustomerLabel
 }
 
 // GetDescription returns the value of Description.
@@ -3441,6 +3274,11 @@ func (s *ProjectUpdateRequest) GetDeadline() OptDateTime {
 // SetName sets the value of Name.
 func (s *ProjectUpdateRequest) SetName(val OptString) {
 	s.Name = val
+}
+
+// SetCustomerLabel sets the value of CustomerLabel.
+func (s *ProjectUpdateRequest) SetCustomerLabel(val OptString) {
+	s.CustomerLabel = val
 }
 
 // SetDescription sets the value of Description.
@@ -3779,9 +3617,9 @@ func (s *QuoteChangeType) UnmarshalText(data []byte) error {
 // Ref: #/components/schemas/RiskItem
 type RiskItem struct {
 	ProjectId int64 `json:"projectId"`
-	// 客户微信昵称（冗余以避免前端 N+1）.
-	CustomerName string   `json:"customerName"`
-	RiskType     RiskType `json:"riskType"`
+	// 客户标签（来自 projects.customer_label）.
+	CustomerLabel string   `json:"customerLabel"`
+	RiskType      RiskType `json:"riskType"`
 	// 对 deadline_warning/overdue 是 deadline；对 payment_overdue 是预计收款日.
 	DueAt    time.Time    `json:"dueAt"`
 	Severity RiskSeverity `json:"severity"`
@@ -3792,9 +3630,9 @@ func (s *RiskItem) GetProjectId() int64 {
 	return s.ProjectId
 }
 
-// GetCustomerName returns the value of CustomerName.
-func (s *RiskItem) GetCustomerName() string {
-	return s.CustomerName
+// GetCustomerLabel returns the value of CustomerLabel.
+func (s *RiskItem) GetCustomerLabel() string {
+	return s.CustomerLabel
 }
 
 // GetRiskType returns the value of RiskType.
@@ -3817,9 +3655,9 @@ func (s *RiskItem) SetProjectId(val int64) {
 	s.ProjectId = val
 }
 
-// SetCustomerName sets the value of CustomerName.
-func (s *RiskItem) SetCustomerName(val string) {
-	s.CustomerName = val
+// SetCustomerLabel sets the value of CustomerLabel.
+func (s *RiskItem) SetCustomerLabel(val string) {
+	s.CustomerLabel = val
 }
 
 // SetRiskType sets the value of RiskType.

@@ -37,17 +37,16 @@ import (
 //   - 一个项目（CS 创建 + dev 是 member；non-member-dev 不是）
 //   - 两张占位 file_id 用于附件 INSERT
 type feedbackTestEnv struct {
-	pool         *pgxpool.Pool
-	cleanup      func()
-	svc          services.FeedbackService
-	adminID      int64
-	csID         int64
-	devID        int64
-	nonMemberID  int64
-	projectID    int64
-	customerID   int64
-	fileID1      int64
-	fileID2      int64
+	pool        *pgxpool.Pool
+	cleanup     func()
+	svc         services.FeedbackService
+	adminID     int64
+	csID        int64
+	devID       int64
+	nonMemberID int64
+	projectID   int64
+	fileID1     int64
+	fileID2     int64
 }
 
 func setupFeedbackEnv(t *testing.T) *feedbackTestEnv {
@@ -85,21 +84,13 @@ func setupFeedbackEnv(t *testing.T) *feedbackTestEnv {
 		RETURNING id
 	`, hash).Scan(&nonMemberID))
 
-	// 2. customer
-	var customerID int64
-	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO customers (name_wechat, created_by)
-		VALUES ('FbTestCustomer', $1)
-		RETURNING id
-	`, csID).Scan(&customerID))
-
-	// 3. 项目
+	// 2. 项目（用户需求修正 2026-04-30：客户降级为 customer_label 字段，不再 INSERT customers）
 	var projectID int64
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO projects (name, customer_id, description, deadline, created_by)
-		VALUES ('FbTestProject', $1, 'desc', NOW() + INTERVAL '30 days', $2)
+		INSERT INTO projects (name, customer_label, description, deadline, created_by)
+		VALUES ('FbTestProject', 'FbTestCustomer', 'desc', NOW() + INTERVAL '30 days', $1)
 		RETURNING id
-	`, customerID, csID).Scan(&projectID))
+	`, csID).Scan(&projectID))
 
 	// 4. project_members：CS 是 owner（创建人） + dev 是开发；non-member-dev 不加
 	//    project_member_role enum = (owner, dev, viewer)
@@ -132,7 +123,6 @@ func setupFeedbackEnv(t *testing.T) *feedbackTestEnv {
 		devID:       devID,
 		nonMemberID: nonMemberID,
 		projectID:   projectID,
-		customerID:  customerID,
 		fileID1:     fileID1,
 		fileID2:     fileID2,
 	}

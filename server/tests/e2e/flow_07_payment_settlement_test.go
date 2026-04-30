@@ -36,8 +36,7 @@ func TestFlow07_PaymentSettlementEarnings(t *testing.T) {
 	dev2 := newClient(e2eEnv.BaseURL)
 	dev2.loginAs(t, e2eEnv.Dev2)
 
-	customer := createCustomer(t, cs, "earnings-customer")
-	project := createProject(t, cs, customer.ID, "earnings-project",
+	project := createProject(t, cs, "earnings-customer", "earnings-project",
 		time.Now().Add(20*24*time.Hour), "5000.00")
 	// 推到 delivered
 	project = triggerEvent(t, cs, project.ID, "E1", "评估", nil)

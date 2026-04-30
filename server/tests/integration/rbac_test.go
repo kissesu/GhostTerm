@@ -83,24 +83,17 @@ func setupRBACEnv(t *testing.T) *rbacTestEnv {
 		RETURNING id
 	`, hash).Scan(&customerID))
 
-	// 2. customer 行（projects.customer_id 必填）
-	var custID int64
-	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO customers (name_wechat, created_by)
-		VALUES ('TestCustomer', $1)
-		RETURNING id
-	`, customerID).Scan(&custID))
-
-	// 3. 项目：客服创建；只把 dev（不是 otherDev）作为 member
+	// 2. 项目：客服创建；只把 dev（不是 otherDev）作为 member
+	//    用户需求修正 2026-04-30：客户从独立资源降级为 customer_label 字段
 	//    pool 直连不走 RLS（postgres 超级用户 == owner，FORCE RLS 也过不掉，
 	//    但 testutil 用 postgres 用户连接，FORCE 仅对非 superuser 起作用），
 	//    因此 setup 直接 INSERT 不需要 GUC；后面的 read 测试才在事务内 SET LOCAL
 	var projectID int64
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO projects (name, customer_id, description, deadline, created_by)
-		VALUES ('TestProject', $1, 'desc', NOW() + INTERVAL '30 days', $2)
+		INSERT INTO projects (name, customer_label, description, deadline, created_by)
+		VALUES ('TestProject', 'TestCustomer', 'desc', NOW() + INTERVAL '30 days', $1)
 		RETURNING id
-	`, custID, customerID).Scan(&projectID))
+	`, customerID).Scan(&projectID))
 
 	// 4. project_members 把 dev 加为成员；otherDev 不加
 	_, err = pool.Exec(ctx, `
@@ -129,7 +122,8 @@ func TestRBAC_HasPermission_AdminWildcard(t *testing.T) {
 	defer env.cleanup()
 
 	// admin (role_id=1) 由 0001 migration 预置 *:* 通配
-	for _, perm := range []string{"project:read", "customer:create", "event:E10", "anything:goes"} {
+	// 用户需求修正 2026-04-30：customer:create 权限已删除（客户降级为字段）
+	for _, perm := range []string{"project:read", "project:create", "event:E10", "anything:goes"} {
 		ok, err := env.rbacSvc.HasPermission(context.Background(), env.adminID, 1, perm)
 		require.NoError(t, err)
 		assert.True(t, ok, "admin 应拥有 %q 权限", perm)
@@ -142,13 +136,12 @@ func TestRBAC_HasPermission_DevHasMemberPerms(t *testing.T) {
 
 	// dev (role_id=2) 应有 project:read / project:update / file:upload 等
 	cases := map[string]bool{
-		"project:read":  true,
+		"project:read":   true,
 		"project:update": true,
-		"file:upload":   true,
-		"file:read":     true,
-		// dev 没有 project:create / customer:create
-		"project:create":  false,
-		"customer:create": false,
+		"file:upload":    true,
+		"file:read":      true,
+		// dev 没有 project:create
+		"project:create": false,
 	}
 	for perm, want := range cases {
 		got, err := env.rbacSvc.HasPermission(context.Background(), env.devID, 2, perm)
@@ -175,13 +168,13 @@ func TestRBAC_LoadUserPermissions(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, devPerms["project:read"], "dev 应有 project:read")
 	assert.True(t, devPerms["project:update"], "dev 应有 project:update")
-	assert.False(t, devPerms["customer:create"], "dev 不应有 customer:create")
+	assert.False(t, devPerms["project:create"], "dev 不应有 project:create")
 
-	// CS (role_id=3): 含 customer:create / project:create
+	// CS (role_id=3): 含 project:create（用户需求修正 2026-04-30：customer:* 已删除）
 	csPerms, err := env.rbacSvc.LoadUserPermissions(context.Background(), 3)
 	require.NoError(t, err)
-	assert.True(t, csPerms["customer:create"], "客服应有 customer:create")
 	assert.True(t, csPerms["project:create"], "客服应有 project:create")
+	assert.False(t, csPerms["customer:create"], "customer:* 权限应已被 0003 migration 删除")
 }
 
 // ============================================================
@@ -194,16 +187,13 @@ func TestRBAC_RLS_DevOnlySeesMemberProjects(t *testing.T) {
 	defer env.cleanup()
 
 	// 再造一个 dev2 不是 member 的项目（与 setup 中的 projectID 区分开）
-	var custID int64
-	require.NoError(t, env.pool.QueryRow(context.Background(), `
-		SELECT id FROM customers LIMIT 1
-	`).Scan(&custID))
+	// 用户需求修正 2026-04-30：客户降级为 customer_label 字段，不再 SELECT FROM customers
 	var otherProjectID int64
 	require.NoError(t, env.pool.QueryRow(context.Background(), `
-		INSERT INTO projects (name, customer_id, description, deadline, created_by)
-		VALUES ('SecretProject', $1, 'd', NOW() + INTERVAL '30 days', 1)
+		INSERT INTO projects (name, customer_label, description, deadline, created_by)
+		VALUES ('SecretProject', 'SecretCustomer', 'd', NOW() + INTERVAL '30 days', 1)
 		RETURNING id
-	`, custID).Scan(&otherProjectID))
+	`).Scan(&otherProjectID))
 
 	// 关键验证：dev 在 GUC 内 SELECT projects 只看到 env.projectID，不看到 otherProjectID
 	ctx := context.Background()

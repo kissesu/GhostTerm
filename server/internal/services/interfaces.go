@@ -14,11 +14,19 @@ package services
 
 import (
 	"context"
+	"errors"
 	"io"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 )
+
+// ErrInvalidSessionContext sc 类型断言失败（caller bug，非业务错误）。
+//
+// 业务背景：service 层拿到 SessionContext 后做 type-assert，失败返回此 sentinel；
+// 各 service 共享一份定义，避免重复声明。
+// 历史：原本在 customer_service.go 定义；2026-04-30 客户字段降级后移到此处共享。
+var ErrInvalidSessionContext = errors.New("services: invalid session context")
 
 // ============================================================
 // 通用类型（DTO 层占位）
@@ -154,20 +162,10 @@ type Role struct {
 }
 
 // ============================================================
-// CustomerService — Phase 4 (Worker A) 实现
-// ============================================================
-
-// CustomerService 客户 CRUD。
-type CustomerService interface {
-	List(ctx context.Context, sc SessionContext, q PageQuery) ([]any, error)
-	Get(ctx context.Context, sc SessionContext, id int64) (any, error)
-	Create(ctx context.Context, sc SessionContext, input any) (any, error)
-	Update(ctx context.Context, sc SessionContext, id int64, input any) (any, error)
-}
-
-// ============================================================
 // ProjectService — Phase 5 (Worker B) 实现
 // ============================================================
+// 注：原 CustomerService 接口已于 2026-04-30 移除，
+// 客户从独立资源降级为 projects 表上的 customer_label 字段。
 
 // ProjectService 项目 CRUD + 状态机驱动事件。
 //

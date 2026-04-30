@@ -49,38 +49,6 @@ func (UnimplementedHandler) AuthRefresh(ctx context.Context, req *AuthRefreshReq
 	return r, ht.ErrNotImplemented
 }
 
-// CustomersCreate implements customersCreate operation.
-//
-// 创建客户.
-//
-// POST /api/customers
-func (UnimplementedHandler) CustomersCreate(ctx context.Context, req *CustomerCreateRequest) (r CustomersCreateRes, _ error) {
-	return r, ht.ErrNotImplemented
-}
-
-// CustomersGet implements customersGet operation.
-//
-// GET /api/customers/{id}
-func (UnimplementedHandler) CustomersGet(ctx context.Context, params CustomersGetParams) (r CustomersGetRes, _ error) {
-	return r, ht.ErrNotImplemented
-}
-
-// CustomersList implements customersList operation.
-//
-// 列出客户（按权限过滤）.
-//
-// GET /api/customers
-func (UnimplementedHandler) CustomersList(ctx context.Context) (r CustomersListRes, _ error) {
-	return r, ht.ErrNotImplemented
-}
-
-// CustomersUpdate implements customersUpdate operation.
-//
-// PATCH /api/customers/{id}
-func (UnimplementedHandler) CustomersUpdate(ctx context.Context, req *CustomerUpdateRequest, params CustomersUpdateParams) (r CustomersUpdateRes, _ error) {
-	return r, ht.ErrNotImplemented
-}
-
 // DashboardGetRisks implements dashboardGetRisks operation.
 //
 // 风险总览（临近 deadline / 已超期 / 应收逾期），按 RBAC 过滤.

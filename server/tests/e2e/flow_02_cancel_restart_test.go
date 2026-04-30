@@ -35,8 +35,7 @@ func TestFlow02_CancelRestart(t *testing.T) {
 	// ============================================================
 	// 推进到 developing 状态
 	// ============================================================
-	customer := createCustomer(t, cs, "cancel-restart-customer")
-	project := createProject(t, cs, customer.ID, "cancel-restart-project",
+	project := createProject(t, cs, "cancel-restart-customer", "cancel-restart-project",
 		time.Now().Add(15*24*time.Hour), "2000.00")
 	project = triggerEvent(t, cs, project.ID, "E1", "评估", nil)
 	project = triggerEvent(t, dev, project.ID, "E2", "评估完成", nil)

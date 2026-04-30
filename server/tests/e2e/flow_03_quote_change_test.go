@@ -32,8 +32,7 @@ func TestFlow03_QuoteChange(t *testing.T) {
 	cs := newClient(e2eEnv.BaseURL)
 	cs.loginAs(t, e2eEnv.CS)
 
-	customer := createCustomer(t, cs, "quote-change-customer")
-	project := createProject(t, cs, customer.ID, "quote-change-project",
+	project := createProject(t, cs, "quote-change-customer", "quote-change-project",
 		time.Now().Add(20*24*time.Hour), "1000.00")
 	require.Equal(t, "1000.00", project.CurrentQuote)
 

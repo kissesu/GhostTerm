@@ -32,26 +32,6 @@ type Handler interface {
 	//
 	// POST /api/auth/refresh
 	AuthRefresh(ctx context.Context, req *AuthRefreshRequest) (AuthRefreshRes, error)
-	// CustomersCreate implements customersCreate operation.
-	//
-	// 创建客户.
-	//
-	// POST /api/customers
-	CustomersCreate(ctx context.Context, req *CustomerCreateRequest) (CustomersCreateRes, error)
-	// CustomersGet implements customersGet operation.
-	//
-	// GET /api/customers/{id}
-	CustomersGet(ctx context.Context, params CustomersGetParams) (CustomersGetRes, error)
-	// CustomersList implements customersList operation.
-	//
-	// 列出客户（按权限过滤）.
-	//
-	// GET /api/customers
-	CustomersList(ctx context.Context) (CustomersListRes, error)
-	// CustomersUpdate implements customersUpdate operation.
-	//
-	// PATCH /api/customers/{id}
-	CustomersUpdate(ctx context.Context, req *CustomerUpdateRequest, params CustomersUpdateParams) (CustomersUpdateRes, error)
 	// DashboardGetRisks implements dashboardGetRisks operation.
 	//
 	// 风险总览（临近 deadline / 已超期 / 应收逾期），按 RBAC 过滤.

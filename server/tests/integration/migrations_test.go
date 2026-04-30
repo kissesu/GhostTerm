@@ -53,11 +53,12 @@ func TestMigrations_RLSEnabledOnCoreTables(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	// 0002_rls 应在核心业务表上启用 RLS；这里抽样 customers / projects / project_members
+	// 0002_rls 应在核心业务表上启用 RLS；这里抽样 projects / project_members / feedbacks
+	// 用户需求修正 2026-04-30：customers 表已被 0003 migration drop（客户降级为 customer_label 字段）
 	rows, err := pool.Query(ctx, `
 		SELECT relname FROM pg_class
 		WHERE relrowsecurity = TRUE
-		  AND relname IN ('customers', 'projects', 'project_members')
+		  AND relname IN ('projects', 'project_members', 'feedbacks')
 		ORDER BY relname
 	`)
 	require.NoError(t, err)
@@ -70,5 +71,5 @@ func TestMigrations_RLSEnabledOnCoreTables(t *testing.T) {
 		names = append(names, n)
 	}
 	require.NoError(t, rows.Err())
-	assert.ElementsMatch(t, []string{"customers", "projects", "project_members"}, names)
+	assert.ElementsMatch(t, []string{"projects", "project_members", "feedbacks"}, names)
 }

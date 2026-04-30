@@ -38,7 +38,7 @@ function makeProject(): Project {
   return {
     id: 1,
     name: 'X',
-    customerId: 1,
+    customerLabel: '测试客户',
     description: 'd',
     priority: 'normal',
     status: 'quoting',

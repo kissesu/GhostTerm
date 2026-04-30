@@ -29,7 +29,6 @@
 import { useEffect, useMemo, type ReactElement } from 'react';
 
 import { useProjectsStore } from '../stores/projectsStore';
-import { useCustomersStore } from '../stores/customersStore';
 import { useProgressUiStore } from '../stores/progressUiStore';
 import type { Project, ProjectStatus } from '../api/projects';
 import {
@@ -76,42 +75,25 @@ export function ProjectListView(): ReactElement {
   const loadProjects = useProjectsStore((s) => s.load);
   const projects = useMemo(() => Array.from(projectsMap.values()), [projectsMap]);
 
-  const customers = useCustomersStore((s) => s.customers);
-  const fetchCustomers = useCustomersStore((s) => s.fetchAll);
-
   const searchQuery = useProgressUiStore((s) => s.searchQuery);
   const statusFilter = useProgressUiStore((s) => s.statusFilter);
   const setSelectedProject = useProgressUiStore((s) => s.setSelectedProject);
 
   // ============================================
-  // 首次挂载：并发拉取项目 + 客户
-  // 二者独立，失败时各自暴露给 store.error；不在 UI 阻断
+  // 首次挂载：拉取项目列表
+  // 用户需求修正 2026-04-30：客户从独立资源降级为字段，不再需要 fetchCustomers
   // ============================================
   useEffect(() => {
     void loadProjects().catch(() => {
       // 错误暴露在 store 中；列表会回退到空数据
     });
-    void fetchCustomers().catch(() => {
-      // 客户拉取失败 → 表格显示 customerId 数字而非名字（降级展示）
-    });
-  }, [loadProjects, fetchCustomers]);
-
-  // ============================================
-  // 客户 id → 名字 反查表（前端 join）
-  // ============================================
-  const customerNameById = useMemo(() => {
-    const map = new Map<number, string>();
-    for (const c of customers) {
-      map.set(c.id, c.nameWechat);
-    }
-    return map;
-  }, [customers]);
+  }, [loadProjects]);
 
   // ============================================
   // 应用过滤 + 排序
   // 业务规则：
   //  1. statusFilter !== 'all' 精确过滤
-  //  2. searchQuery contains 过滤（项目名 + 客户名 兼顾）
+  //  2. searchQuery contains 过滤（项目名 + 客户标签 兼顾）
   //  3. 按 deadline ASC 排序（最紧急在前）
   // ============================================
   const filteredProjects = useMemo(() => {
@@ -119,10 +101,9 @@ export function ProjectListView(): ReactElement {
     const filtered = projects.filter((p) => {
       if (statusFilter !== 'all' && p.status !== statusFilter) return false;
       if (lowered === '') return true;
-      const customerName = customerNameById.get(p.customerId) ?? '';
       return (
         p.name.toLowerCase().includes(lowered) ||
-        customerName.toLowerCase().includes(lowered)
+        p.customerLabel.toLowerCase().includes(lowered)
       );
     });
     // 按 deadline ASC（更早到期的项目排前面）
@@ -132,7 +113,7 @@ export function ProjectListView(): ReactElement {
       return ta - tb;
     });
     return filtered;
-  }, [projects, statusFilter, searchQuery, customerNameById]);
+  }, [projects, statusFilter, searchQuery]);
 
   if (projectsLoading && projects.length === 0) {
     return (
@@ -190,7 +171,6 @@ export function ProjectListView(): ReactElement {
           <ProjectRow
             key={p.id}
             project={p}
-            customerName={customerNameById.get(p.customerId)}
             onSelect={() => setSelectedProject(p.id)}
           />
         ))}
@@ -201,14 +181,13 @@ export function ProjectListView(): ReactElement {
 
 interface ProjectRowProps {
   project: Project;
-  customerName: string | undefined;
   onSelect: () => void;
 }
 
 /**
  * 单行渲染。拆出独立组件让 deadline 计算 + 行交互逻辑各自闭包。
  */
-function ProjectRow({ project, customerName, onSelect }: ProjectRowProps): ReactElement {
+function ProjectRow({ project, onSelect }: ProjectRowProps): ReactElement {
   const meta = STATUS_META[project.status];
   const deadlineDate = new Date(project.deadline);
   const days = daysUntil(deadlineDate);
@@ -232,8 +211,8 @@ function ProjectRow({ project, customerName, onSelect }: ProjectRowProps): React
         <span style={{ fontWeight: 500, color: 'var(--c-fg)' }}>{project.name}</span>
       </td>
       <td style={tdStyle}>
-        {customerName ?? (
-          <span style={{ color: 'var(--c-fg-muted)' }}>#{project.customerId}</span>
+        {project.customerLabel || (
+          <span style={{ color: 'var(--c-fg-muted)' }}>—</span>
         )}
       </td>
       <td style={tdStyle}>

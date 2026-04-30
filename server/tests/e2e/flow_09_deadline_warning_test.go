@@ -38,9 +38,8 @@ func TestFlow09_DeadlineWarning(t *testing.T) {
 	cs.loginAs(t, e2eEnv.CS)
 
 	// 项目 deadline = now + 5 天（落入 <=7 天的 deadline_approaching 阈值）
-	customer := createCustomer(t, cs, "deadline-customer")
 	deadline := time.Now().Add(5 * 24 * time.Hour)
-	project := createProject(t, cs, customer.ID, "deadline-project",
+	project := createProject(t, cs, "deadline-customer", "deadline-project",
 		deadline, "800.00")
 	require.Equal(t, "dealing", project.Status)
 

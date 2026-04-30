@@ -39,19 +39,19 @@ func TestValidateCreateInput(t *testing.T) {
 		wantErr bool
 	}{
 		{"valid 全字段", CreateProjectInput{
-			Name: "demo", CustomerID: 1, Description: "desc", Deadline: deadline,
+			Name: "demo", CustomerLabel: "测试客户", Description: "desc", Deadline: deadline,
 		}, false},
 		{"name 空", CreateProjectInput{
-			Name: "", CustomerID: 1, Description: "desc", Deadline: deadline,
+			Name: "", CustomerLabel: "测试客户", Description: "desc", Deadline: deadline,
 		}, true},
-		{"customerID 0", CreateProjectInput{
-			Name: "demo", CustomerID: 0, Description: "desc", Deadline: deadline,
+		{"customerLabel 空", CreateProjectInput{
+			Name: "demo", CustomerLabel: "", Description: "desc", Deadline: deadline,
 		}, true},
 		{"description 空", CreateProjectInput{
-			Name: "demo", CustomerID: 1, Description: "", Deadline: deadline,
+			Name: "demo", CustomerLabel: "测试客户", Description: "", Deadline: deadline,
 		}, true},
 		{"deadline zero", CreateProjectInput{
-			Name: "demo", CustomerID: 1, Description: "desc", Deadline: time.Time{},
+			Name: "demo", CustomerLabel: "测试客户", Description: "desc", Deadline: time.Time{},
 		}, true},
 	}
 	for _, c := range cases {
@@ -94,7 +94,7 @@ func TestCreate_RolePermissionDefense(t *testing.T) {
 		100, // userID
 		2,   // dev role
 		CreateProjectInput{
-			Name: "x", CustomerID: 1, Description: "y", Deadline: deadline,
+			Name: "x", CustomerLabel: "测试客户", Description: "y", Deadline: deadline,
 		},
 	)
 	if !errors.Is(err, ErrProjectPermissionDenied) {
@@ -106,7 +106,7 @@ func TestCreate_InvalidInputDefense(t *testing.T) {
 	svc := &ProjectServiceImpl{pool: nil}
 	_, err := svc.Create(context.Background(), 100, 3 /* cs */, CreateProjectInput{
 		// name 空
-		Name: "", CustomerID: 1, Description: "y", Deadline: time.Now().Add(time.Hour),
+		Name: "", CustomerLabel: "测试客户", Description: "y", Deadline: time.Now().Add(time.Hour),
 	})
 	if !errors.Is(err, ErrProjectInvalidInput) {
 		t.Errorf("err = %v；应返回 ErrProjectInvalidInput", err)

@@ -42,34 +42,6 @@ func encodeAuthRefreshRequest(
 	return nil
 }
 
-func encodeCustomersCreateRequest(
-	req *CustomerCreateRequest,
-	r *http.Request,
-) error {
-	const contentType = "application/json"
-	e := new(jx.Encoder)
-	{
-		req.Encode(e)
-	}
-	encoded := e.Bytes()
-	ht.SetBody(r, bytes.NewReader(encoded), contentType)
-	return nil
-}
-
-func encodeCustomersUpdateRequest(
-	req *CustomerUpdateRequest,
-	r *http.Request,
-) error {
-	const contentType = "application/json"
-	e := new(jx.Encoder)
-	{
-		req.Encode(e)
-	}
-	encoded := e.Bytes()
-	ht.SetBody(r, bytes.NewReader(encoded), contentType)
-	return nil
-}
-
 func encodeFeedbacksUpdateRequest(
 	req *FeedbackUpdateRequest,
 	r *http.Request,

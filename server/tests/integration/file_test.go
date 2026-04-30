@@ -87,19 +87,13 @@ func setupFileEnv(t *testing.T) *fileTestEnv {
 		RETURNING id
 	`, hash).Scan(&csID))
 
-	var customerID int64
-	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO customers (name_wechat, created_by)
-		VALUES ('TestCustomer', $1)
-		RETURNING id
-	`, csID).Scan(&customerID))
-
+	// 用户需求修正 2026-04-30：客户降级为 customer_label 字段
 	var projectID int64
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO projects (name, customer_id, description, deadline, created_by)
-		VALUES ('TestProject', $1, 'desc', NOW() + INTERVAL '30 days', $2)
+		INSERT INTO projects (name, customer_label, description, deadline, created_by)
+		VALUES ('TestProject', 'TestCustomer', 'desc', NOW() + INTERVAL '30 days', $1)
 		RETURNING id
-	`, customerID, csID).Scan(&projectID))
+	`, csID).Scan(&projectID))
 
 	// dev 加入 project_members 让 RLS 放行
 	_, err = pool.Exec(ctx, `

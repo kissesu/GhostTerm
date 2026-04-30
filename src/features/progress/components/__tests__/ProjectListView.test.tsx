@@ -4,25 +4,19 @@
  *              - 渲染表格行（基础结构）
  *              - 按 deadline ASC 排序（最紧急在前）
  *              - 状态过滤（statusFilter）
- *              - 搜索过滤（searchQuery 在项目名 + 客户名上 contains）
+ *              - 搜索过滤（searchQuery 在项目名 + 客户标签上 contains）
  *              - 行点击 → setSelectedProject
  *
- *              mock 策略：
- *              - mock api/projects + api/customers 让 store 不发真实请求
- *              - 通过 store.setProject 直接预置数据
+ *              用户需求修正 2026-04-30：客户从独立资源降级为 customerLabel 字段，
+ *              不再需要 mock customers store / api/customers。
  *
  * @author Atlas.oi
- * @date 2026-04-29
+ * @date 2026-04-30
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
-// ============================================
-// mock api 层（projectsStore / customersStore 的依赖）
-// 注意：useEffect 内 loadProjects/fetchAll 会调 mock；mock 返回的数据会
-// 覆盖手动 setProject 的预置；测试必须经 mock 设置数据
-// ============================================
 vi.mock('../../api/projects', async (importOriginal) => {
   const orig = (await importOriginal()) as Record<string, unknown>;
   return {
@@ -35,50 +29,19 @@ vi.mock('../../api/projects', async (importOriginal) => {
   };
 });
 
-vi.mock('../../api/customers', () => ({
-  customers: {
-    list: vi.fn().mockResolvedValue([]),
-    get: vi.fn(),
-    create: vi.fn(),
-    update: vi.fn(),
-  },
-}));
-
 import { ProjectListView } from '../ProjectListView';
 import { listProjects } from '../../api/projects';
-import { customers as customersApi } from '../../api/customers';
 import { useProjectsStore } from '../../stores/projectsStore';
-import { useCustomersStore } from '../../stores/customersStore';
 import { useProgressUiStore } from '../../stores/progressUiStore';
 import type { Project } from '../../api/projects';
-import type { CustomerPayload } from '../../api/schemas';
 
 const mockedList = vi.mocked(listProjects);
-const mockedCustomersList = vi.mocked(customersApi.list);
-
-const customer1: CustomerPayload = {
-  id: 1,
-  nameWechat: '李四@wx',
-  remark: null,
-  createdBy: 1,
-  createdAt: '2026-04-01T00:00:00Z',
-  updatedAt: '2026-04-01T00:00:00Z',
-};
-
-const customer2: CustomerPayload = {
-  id: 2,
-  nameWechat: '王五@wx',
-  remark: null,
-  createdBy: 1,
-  createdAt: '2026-04-01T00:00:00Z',
-  updatedAt: '2026-04-01T00:00:00Z',
-};
 
 function makeProject(over: Partial<Project>): Project {
   return {
     id: 1,
     name: '示例项目',
-    customerId: 1,
+    customerLabel: '李四@wx',
     description: '描述',
     priority: 'normal',
     status: 'dealing',
@@ -97,13 +60,9 @@ function makeProject(over: Partial<Project>): Project {
 
 beforeEach(() => {
   useProjectsStore.getState().clear();
-  useCustomersStore.getState().clear();
   useProgressUiStore.getState().reset();
   mockedList.mockReset();
-  mockedCustomersList.mockReset();
-  // 默认空数据；具体用例可 override
   mockedList.mockResolvedValue([]);
-  mockedCustomersList.mockResolvedValue([]);
 });
 
 describe('ProjectListView 基础渲染', () => {
@@ -113,8 +72,9 @@ describe('ProjectListView 基础渲染', () => {
   });
 
   it('有项目时渲染表格 + 行', async () => {
-    mockedList.mockResolvedValueOnce([makeProject({ id: 1, name: 'Alpha' })]);
-    mockedCustomersList.mockResolvedValueOnce([customer1]);
+    mockedList.mockResolvedValueOnce([
+      makeProject({ id: 1, name: 'Alpha', customerLabel: '李四@wx' }),
+    ]);
 
     render(<ProjectListView />);
 
@@ -127,7 +87,6 @@ describe('ProjectListView 基础渲染', () => {
 
 describe('ProjectListView 排序', () => {
   it('按 deadline ASC 排序（紧急在前）', async () => {
-    // 故意乱序：远期 / 近期 / 中期；UI 应把"近期"排第一
     mockedList.mockResolvedValueOnce([
       makeProject({ id: 1, name: 'Far', deadline: '2030-01-01T00:00:00Z' }),
       makeProject({ id: 2, name: 'Near', deadline: '2026-05-01T00:00:00Z' }),
@@ -138,7 +97,6 @@ describe('ProjectListView 排序', () => {
 
     await waitFor(() => expect(screen.getByTestId('project-list-view')).toBeInTheDocument());
 
-    // 严格匹配 project-row-<id>，排除 status / deadline 子元素的 testid
     const rows = screen.getAllByTestId(/^project-row-\d+$/);
     expect(rows[0]).toHaveAttribute('data-testid', 'project-row-2'); // Near (最早)
     expect(rows[1]).toHaveAttribute('data-testid', 'project-row-3'); // Mid
@@ -179,12 +137,11 @@ describe('ProjectListView 搜索过滤', () => {
     expect(screen.queryByTestId('project-row-2')).toBeNull();
   });
 
-  it('searchQuery 命中客户名', async () => {
+  it('searchQuery 命中客户标签', async () => {
     mockedList.mockResolvedValueOnce([
-      makeProject({ id: 1, customerId: 1, name: 'A' }),
-      makeProject({ id: 2, customerId: 2, name: 'B' }),
+      makeProject({ id: 1, customerLabel: '李四@wx', name: 'A' }),
+      makeProject({ id: 2, customerLabel: '王五@wx', name: 'B' }),
     ]);
-    mockedCustomersList.mockResolvedValueOnce([customer1, customer2]);
     useProgressUiStore.getState().setSearchQuery('王五');
 
     render(<ProjectListView />);

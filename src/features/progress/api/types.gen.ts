@@ -165,42 +165,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/customers": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 列出客户（按权限过滤） */
-        get: operations["customersList"];
-        put?: never;
-        /** 创建客户 */
-        post: operations["customersCreate"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/customers/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        get: operations["customersGet"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch: operations["customersUpdate"];
-        trace?: never;
-    };
     "/api/projects": {
         parameters: {
             query?: never;
@@ -622,32 +586,12 @@ export interface components {
         Permission: {
             /** Format: int64 */
             id: number;
-            /** @description 资源类型，如 project / customer / feedback */
+            /** @description 资源类型，如 project / feedback / payment / file */
             resource: string;
             /** @description 动作，如 read / create / update / delete */
             action: string;
             /** @description 范围，如 all / created_by_self / created_by_role:<id> */
             scope: string;
-        };
-        Customer: {
-            /** Format: int64 */
-            id: number;
-            nameWechat: string;
-            remark?: string | null;
-            /** Format: int64 */
-            createdBy: number;
-            /** Format: date-time */
-            createdAt: string;
-            /** Format: date-time */
-            updatedAt: string;
-        };
-        CustomerCreateRequest: {
-            nameWechat: string;
-            remark?: string;
-        };
-        CustomerUpdateRequest: {
-            nameWechat?: string;
-            remark?: string | null;
         };
         /** @enum {string} */
         ProjectStatus: "dealing" | "quoting" | "developing" | "confirming" | "delivered" | "paid" | "archived" | "after_sales" | "cancelled";
@@ -659,8 +603,8 @@ export interface components {
             /** Format: int64 */
             id: number;
             name: string;
-            /** Format: int64 */
-            customerId: number;
+            /** @description 客户标签（自由文本，例如 '张三 / 张三@wx'），由用户自由填写 */
+            customerLabel: string;
             description: string;
             priority: components["schemas"]["ProjectPriority"];
             thesisLevel?: components["schemas"]["ThesisLevel"] | null;
@@ -709,8 +653,8 @@ export interface components {
         };
         ProjectCreateRequest: {
             name: string;
-            /** Format: int64 */
-            customerId: number;
+            /** @description 客户标签（自由文本） */
+            customerLabel: string;
             description: string;
             priority?: components["schemas"]["ProjectPriority"];
             thesisLevel?: components["schemas"]["ThesisLevel"];
@@ -722,6 +666,8 @@ export interface components {
         /** @description PATCH 部分字段，全部 optional */
         ProjectUpdateRequest: {
             name?: string;
+            /** @description 客户标签（自由文本），允许 cs/admin 修改 */
+            customerLabel?: string;
             description?: string;
             priority?: components["schemas"]["ProjectPriority"];
             thesisLevel?: components["schemas"]["ThesisLevel"];
@@ -946,8 +892,8 @@ export interface components {
         RiskItem: {
             /** Format: int64 */
             projectId: number;
-            /** @description 客户微信昵称（冗余以避免前端 N+1） */
-            customerName: string;
+            /** @description 客户标签（来自 projects.customer_label） */
+            customerLabel: string;
             riskType: components["schemas"]["RiskType"];
             /**
              * Format: date-time
@@ -994,12 +940,6 @@ export interface components {
         };
         PermissionListResponse: {
             data: components["schemas"]["Permission"][];
-        };
-        CustomerResponse: {
-            data: components["schemas"]["Customer"];
-        };
-        CustomerListResponse: {
-            data: components["schemas"]["Customer"][];
         };
         ProjectResponse: {
             data: components["schemas"]["Project"];
@@ -1430,104 +1370,6 @@ export interface operations {
                 };
             };
             401: components["responses"]["UnauthorizedError"];
-        };
-    };
-    customersList: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CustomerListResponse"];
-                };
-            };
-            401: components["responses"]["UnauthorizedError"];
-        };
-    };
-    customersCreate: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CustomerCreateRequest"];
-            };
-        };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CustomerResponse"];
-                };
-            };
-            401: components["responses"]["UnauthorizedError"];
-            422: components["responses"]["ValidationError"];
-        };
-    };
-    customersGet: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CustomerResponse"];
-                };
-            };
-            404: components["responses"]["NotFoundError"];
-        };
-    };
-    customersUpdate: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CustomerUpdateRequest"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CustomerResponse"];
-                };
-            };
-            404: components["responses"]["NotFoundError"];
-            422: components["responses"]["ValidationError"];
         };
     };
     projectsList: {

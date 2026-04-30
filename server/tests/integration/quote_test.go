@@ -77,21 +77,17 @@ func setupQuoteEnv(t *testing.T) *quoteEnv {
 		VALUES ('dev2-quote', $1, 'Dev2', 2, TRUE) RETURNING id
 	`, hash).Scan(&otherDev))
 
-	var custID int64
-	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO customers (name_wechat, created_by) VALUES ('TC', $1) RETURNING id
-	`, csID).Scan(&custID))
-
 	// 项目：original_quote = 5000，current_quote = 5000，after_sales_total = 0
+	// 用户需求修正 2026-04-30：客户降级为 customer_label 字段
 	var projectID int64
 	require.NoError(t, pool.QueryRow(ctx, `
 		INSERT INTO projects
-		    (name, customer_id, description, deadline, created_by,
+		    (name, customer_label, description, deadline, created_by,
 		     original_quote, current_quote, after_sales_total)
-		VALUES ('Proj', $1, 'desc', NOW() + INTERVAL '30 days', $2,
+		VALUES ('Proj', 'TC', 'desc', NOW() + INTERVAL '30 days', $1,
 		        '5000.00', '5000.00', '0.00')
 		RETURNING id
-	`, custID, csID).Scan(&projectID))
+	`, csID).Scan(&projectID))
 
 	// 把客服 + dev 加为 member（owner / dev）；dev2 不加
 	_, err = pool.Exec(ctx, `

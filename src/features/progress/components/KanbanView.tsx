@@ -24,7 +24,6 @@ import { useEffect, useMemo, useState, type ReactElement } from 'react';
 import { ChevronRight, ChevronDown } from 'lucide-react';
 
 import { useProjectsStore } from '../stores/projectsStore';
-import { useCustomersStore } from '../stores/customersStore';
 import { useProgressUiStore } from '../stores/progressUiStore';
 import type { Project, ProjectStatus } from '../api/projects';
 import {
@@ -70,9 +69,6 @@ export function KanbanView(): ReactElement {
   const loadProjects = useProjectsStore((s) => s.load);
   const projects = useMemo(() => Array.from(projectsMap.values()), [projectsMap]);
 
-  const customers = useCustomersStore((s) => s.customers);
-  const fetchCustomers = useCustomersStore((s) => s.fetchAll);
-
   const searchQuery = useProgressUiStore((s) => s.searchQuery);
   const statusFilter = useProgressUiStore((s) => s.statusFilter);
 
@@ -81,18 +77,11 @@ export function KanbanView(): ReactElement {
     () => new Set(KANBAN_COLUMNS.filter((c) => c.collapsedByDefault).map((c) => c.status)),
   );
 
-  // 首次挂载：拉数据
+  // 首次挂载：拉项目数据
+  // 用户需求修正 2026-04-30：客户从独立资源降级为字段，不再需要 fetchCustomers
   useEffect(() => {
     void loadProjects().catch(() => {});
-    void fetchCustomers().catch(() => {});
-  }, [loadProjects, fetchCustomers]);
-
-  // 客户 join
-  const customerNameById = useMemo(() => {
-    const map = new Map<number, string>();
-    for (const c of customers) map.set(c.id, c.nameWechat);
-    return map;
-  }, [customers]);
+  }, [loadProjects]);
 
   // 按状态分组 + 应用搜索过滤
   const projectsByStatus = useMemo(() => {
@@ -102,12 +91,11 @@ export function KanbanView(): ReactElement {
       groups.set(col.status, []);
     }
     for (const p of projects) {
-      // 搜索过滤
+      // 搜索过滤（项目名 + 客户标签）
       if (lowered !== '') {
-        const customerName = customerNameById.get(p.customerId) ?? '';
         const hit =
           p.name.toLowerCase().includes(lowered) ||
-          customerName.toLowerCase().includes(lowered);
+          p.customerLabel.toLowerCase().includes(lowered);
         if (!hit) continue;
       }
       const arr = groups.get(p.status);
@@ -118,7 +106,7 @@ export function KanbanView(): ReactElement {
       arr.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
     }
     return groups;
-  }, [projects, customerNameById, searchQuery]);
+  }, [projects, searchQuery]);
 
   const toggleColumn = (status: ProjectStatus) => {
     setCollapsed((prev) => {
@@ -176,7 +164,6 @@ export function KanbanView(): ReactElement {
                 <KanbanCard
                   key={p.id}
                   project={p}
-                  customerName={customerNameById.get(p.customerId)}
                 />
               ))}
           </KanbanColumn>
@@ -278,14 +265,15 @@ function KanbanColumn({
 
 interface KanbanCardProps {
   project: Project;
-  customerName: string | undefined;
 }
 
 /**
- * 看板卡片：project 名 / 客户 / deadline 徽章 / 当前报价。
+ * 看板卡片：project 名 / 客户标签 / deadline 徽章 / 当前报价。
  * 点击调 setSelectedProject 跳详情。
+ *
+ * 用户需求修正 2026-04-30：客户标签直接读 project.customerLabel，不再走 store 反查。
  */
-function KanbanCard({ project, customerName }: KanbanCardProps): ReactElement {
+function KanbanCard({ project }: KanbanCardProps): ReactElement {
   const setSelectedProject = useProgressUiStore((s) => s.setSelectedProject);
   const days = daysUntil(new Date(project.deadline));
   const severity = severityFromDays(days);
@@ -307,7 +295,7 @@ function KanbanCard({ project, customerName }: KanbanCardProps): ReactElement {
     >
       <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--c-fg)' }}>{project.name}</div>
       <div style={{ fontSize: 11, color: 'var(--c-fg-muted)' }}>
-        {customerName ?? `#${project.customerId}`}
+        {project.customerLabel || '—'}
       </div>
       <div
         style={{

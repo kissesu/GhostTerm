@@ -38,8 +38,7 @@ func TestFlow08_WSNotification(t *testing.T) {
 	dev.loginAs(t, e2eEnv.Dev1)
 
 	// 创建项目（dev 自动 member）
-	customer := createCustomer(t, cs, "ws-customer")
-	project := createProject(t, cs, customer.ID, "ws-project",
+	project := createProject(t, cs, "ws-customer", "ws-project",
 		time.Now().Add(20*24*time.Hour), "1500.00")
 
 	// ============================================================

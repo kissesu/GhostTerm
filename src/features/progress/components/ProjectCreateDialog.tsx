@@ -1,24 +1,23 @@
 /**
  * @file ProjectCreateDialog.tsx
- * @description 项目创建对话框 —— 受控表单：客户/名称/描述/截止日期/优先级/论文级别/原始报价。
+ * @description 项目创建对话框 —— 受控表单：客户标签/名称/描述/截止日期/优先级/论文级别/原始报价。
  *
  *              业务背景：
  *              - 仅 admin / cs 调用此组件（PermissionGate 由调用方负责）
  *              - 提交后调 projectsStore.create；成功后关闭对话框 + onCreated 回调
  *              - 失败显示 Toast（调用方提供）；store 自身不存 error
  *
- *              字段必填：name / customerId / description / deadline
+ *              字段必填：name / customerLabel / description / deadline
  *              字段可选：priority（默认 normal）/ thesisLevel / subject / originalQuote（默认 0）
  *
- *              注：customer 列表由 Worker A (customer phase) 提供 store；当前组件
- *              暴露 customerId 字段，由调用方透传或通过下拉选择 —— v1 简化：
- *              用户直接输入 customerId（数字）。Phase 11 完整化后改为下拉。
+ *              用户需求修正 2026-04-30：客户从独立资源降级为 projects.customerLabel 字段，
+ *              此处用文本输入框代替原下拉选择；用户自由填写如 "张三 / 张三@wx"。
  *
  * @author Atlas.oi
- * @date 2026-04-29
+ * @date 2026-04-30
  */
 
-import { useEffect, useState, type FormEvent, type ReactElement } from 'react';
+import { useState, type FormEvent, type ReactElement } from 'react';
 
 import type {
   CreateProjectInput,
@@ -27,7 +26,6 @@ import type {
   ThesisLevel,
 } from '../api/projects';
 import { useProjectsStore } from '../stores/projectsStore';
-import { useCustomersStore } from '../stores/customersStore';
 
 interface ProjectCreateDialogProps {
   /** 是否显示弹窗 */
@@ -54,7 +52,7 @@ export function ProjectCreateDialog({
 }: ProjectCreateDialogProps): ReactElement | null {
   // 受控表单 state
   const [name, setName] = useState('');
-  const [customerId, setCustomerId] = useState<string>(''); // 字符串以便受控 input；提交时 parseInt
+  const [customerLabel, setCustomerLabel] = useState<string>('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<ProjectPriority>('normal');
   const [thesisLevel, setThesisLevel] = useState<ThesisLevel | ''>('');
@@ -65,17 +63,6 @@ export function ProjectCreateDialog({
   const [error, setError] = useState<string | null>(null);
 
   const create = useProjectsStore((s) => s.create);
-  const customers = useCustomersStore((s) => s.customers);
-  const fetchCustomers = useCustomersStore((s) => s.fetchAll);
-
-  // 打开时拉一次客户列表（已拉过则 store 已有缓存，再次拉只是 noop 网络请求）
-  useEffect(() => {
-    if (open) {
-      fetchCustomers().catch(() => {
-        // 错误进 store.error，UI 自行展示
-      });
-    }
-  }, [open, fetchCustomers]);
 
   if (!open) {
     return null;
@@ -91,9 +78,8 @@ export function ProjectCreateDialog({
       setError('请填写项目名称');
       return;
     }
-    const customerIdNum = Number.parseInt(customerId, 10);
-    if (!Number.isFinite(customerIdNum) || customerIdNum <= 0) {
-      setError('请填写有效的客户 ID');
+    if (!customerLabel.trim()) {
+      setError('请填写客户标签');
       return;
     }
     if (!description.trim()) {
@@ -119,7 +105,7 @@ export function ProjectCreateDialog({
 
     const input: CreateProjectInput = {
       name: name.trim(),
-      customerId: customerIdNum,
+      customerLabel: customerLabel.trim(),
       description: description.trim(),
       priority,
       deadline: deadlineISO,
@@ -145,7 +131,7 @@ export function ProjectCreateDialog({
 
   const resetForm = () => {
     setName('');
-    setCustomerId('');
+    setCustomerLabel('');
     setDescription('');
     setPriority('normal');
     setThesisLevel('');
@@ -179,25 +165,14 @@ export function ProjectCreateDialog({
 
         <label>
           客户
-          <select
-            value={customerId}
-            onChange={(e) => setCustomerId(e.target.value)}
+          <input
+            type="text"
+            value={customerLabel}
+            onChange={(e) => setCustomerLabel(e.target.value)}
             disabled={submitting}
+            placeholder="客户标签（如：张三 / 张三@wx）"
             data-testid="project-customer-input"
-          >
-            <option value="">请选择客户</option>
-            {customers.map((c) => (
-              <option key={c.id} value={String(c.id)}>
-                {c.nameWechat}
-                {c.remark ? `（${c.remark}）` : ''}
-              </option>
-            ))}
-          </select>
-          {customers.length === 0 && (
-            <span style={{ fontSize: 12, color: 'var(--c-fg-muted)', display: 'block', marginTop: 4 }}>
-              暂无客户，请先点工具栏"新建客户"创建
-            </span>
-          )}
+          />
         </label>
 
         <label>

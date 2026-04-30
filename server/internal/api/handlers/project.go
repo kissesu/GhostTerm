@@ -255,7 +255,7 @@ func projectToOAS(p *services.ProjectModel) oas.Project {
 	out := oas.Project{
 		ID:              p.ID,
 		Name:            p.Name,
-		CustomerId:      p.CustomerID,
+		CustomerLabel:   p.CustomerLabel,
 		Description:     p.Description,
 		Priority:        p.Priority,
 		Status:          p.Status,
@@ -339,10 +339,10 @@ func statusChangeToOAS(l *services.StatusChangeLogModel) oas.StatusChangeLog {
 // oasCreateToInput OAS 入参 → service input。
 func oasCreateToInput(req *oas.ProjectCreateRequest) (services.CreateProjectInput, error) {
 	in := services.CreateProjectInput{
-		Name:        req.Name,
-		CustomerID:  req.CustomerId,
-		Description: req.Description,
-		Deadline:    req.Deadline,
+		Name:          req.Name,
+		CustomerLabel: req.CustomerLabel,
+		Description:   req.Description,
+		Deadline:      req.Deadline,
 	}
 	if v, ok := req.Priority.Get(); ok {
 		in.Priority = v
@@ -371,6 +371,9 @@ func oasUpdateToInput(req *oas.ProjectUpdateRequest) services.UpdateProjectInput
 	in := services.UpdateProjectInput{}
 	if v, ok := req.Name.Get(); ok {
 		in.Name = &v
+	}
+	if v, ok := req.CustomerLabel.Get(); ok {
+		in.CustomerLabel = &v
 	}
 	if v, ok := req.Description.Get(); ok {
 		in.Description = &v

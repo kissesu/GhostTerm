@@ -45,8 +45,7 @@ func TestFlow06_RLSIsolation(t *testing.T) {
 	// ============================================================
 	// 创建项目并推到 delivered（可录 dev_settlement）
 	// ============================================================
-	customer := createCustomer(t, cs, "rls-isolation-customer")
-	project := createProject(t, cs, customer.ID, "rls-isolation-project",
+	project := createProject(t, cs, "rls-isolation-customer", "rls-isolation-project",
 		time.Now().Add(7*24*time.Hour), "5000.00")
 
 	// 通过 statemachine 推到 delivered

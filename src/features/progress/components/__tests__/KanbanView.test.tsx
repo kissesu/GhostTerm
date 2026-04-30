@@ -25,31 +25,21 @@ vi.mock('../../api/projects', async (importOriginal) => {
   };
 });
 
-vi.mock('../../api/customers', () => ({
-  customers: {
-    list: vi.fn().mockResolvedValue([]),
-    get: vi.fn(),
-    create: vi.fn(),
-    update: vi.fn(),
-  },
-}));
+// 用户需求修正 2026-04-30：客户从独立资源降级为字段，不再需要 mock customers store
 
 import { KanbanView } from '../KanbanView';
 import { listProjects } from '../../api/projects';
-import { customers as customersApi } from '../../api/customers';
 import { useProjectsStore } from '../../stores/projectsStore';
-import { useCustomersStore } from '../../stores/customersStore';
 import { useProgressUiStore } from '../../stores/progressUiStore';
 import type { Project } from '../../api/projects';
 
 const mockedList = vi.mocked(listProjects);
-const mockedCustomersList = vi.mocked(customersApi.list);
 
 function makeProject(over: Partial<Project>): Project {
   return {
     id: 1,
     name: '示例',
-    customerId: 1,
+    customerLabel: '李四@wx',
     description: '描述',
     priority: 'normal',
     status: 'dealing',
@@ -68,12 +58,9 @@ function makeProject(over: Partial<Project>): Project {
 
 beforeEach(() => {
   useProjectsStore.getState().clear();
-  useCustomersStore.getState().clear();
   useProgressUiStore.getState().reset();
   mockedList.mockReset();
-  mockedCustomersList.mockReset();
   mockedList.mockResolvedValue([]);
-  mockedCustomersList.mockResolvedValue([]);
 });
 
 describe('KanbanView 列结构', () => {

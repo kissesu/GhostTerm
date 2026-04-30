@@ -22,10 +22,9 @@
  */
 
 import { useEffect, useState, type ReactElement } from 'react';
-import { ArrowLeft, User, Calendar, Activity, Wallet, Edit3 } from 'lucide-react';
+import { ArrowLeft, User, Calendar, Wallet, Edit3 } from 'lucide-react';
 
 import { useProjectsStore } from '../stores/projectsStore';
-import { useCustomersStore } from '../stores/customersStore';
 import { useProgressUiStore } from '../stores/progressUiStore';
 import {
   daysUntil,
@@ -33,7 +32,6 @@ import {
   severityColor,
   deadlineLabel,
 } from '../utils/deadlineCountdown';
-import { CustomerEditDialog } from './CustomerEditDialog';
 import { FeedbackInput } from './FeedbackInput';
 import { FeedbackList } from './FeedbackList';
 import { ThesisVersionList } from './ThesisVersionList';
@@ -41,7 +39,6 @@ import { FileUploadButton } from './FileUploadButton';
 import { QuoteChangeDialog } from './QuoteChangeDialog';
 import PaymentDialog from './PaymentDialog';
 import { EventActionButtons } from './EventActionButtons';
-import type { CustomerPayload } from '../api/schemas';
 
 interface ProjectDetailPageProps {
   /** 项目 id（来自 progressUiStore.selectedProjectId） */
@@ -53,26 +50,21 @@ type DetailTab = 'feedback' | 'thesis' | 'files' | 'quote' | 'payment';
 export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactElement {
   const project = useProjectsStore((s) => s.projects.get(projectId));
   const loadProject = useProjectsStore((s) => s.loadOne);
-  const customers = useCustomersStore((s) => s.customers);
-  const fetchCustomers = useCustomersStore((s) => s.fetchAll);
   const setSelectedProject = useProgressUiStore((s) => s.setSelectedProject);
 
   const [activeTab, setActiveTab] = useState<DetailTab>('feedback');
-  const [showCustomerEdit, setShowCustomerEdit] = useState(false);
   const [showQuoteDialog, setShowQuoteDialog] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 拉详情 + 客户列表（首次挂载）
+  // 拉详情（首次挂载）
+  // 用户需求修正 2026-04-30：客户从独立资源降级为字段，不再需要 fetchCustomers
   useEffect(() => {
     void loadProject(projectId).catch((err) => {
       const msg = err instanceof Error ? err.message : String(err);
       setError(msg);
     });
-    void fetchCustomers().catch(() => {
-      // 客户拉取失败不阻断详情显示
-    });
-  }, [projectId, loadProject, fetchCustomers]);
+  }, [projectId, loadProject]);
 
   if (error !== null) {
     return (
@@ -96,7 +88,6 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
     );
   }
 
-  const customer = customers.find((c) => c.id === project.customerId) ?? null;
   const days = daysUntil(new Date(project.deadline));
   const severity = severityFromDays(days);
 
@@ -366,7 +357,7 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
       </section>
 
       {/* ============================================
-          右栏：客户卡 + 编辑入口
+          右栏：客户标签卡（用户需求修正 2026-04-30 改为只读文本）
           ============================================ */}
       <aside
         data-testid="project-detail-right"
@@ -378,59 +369,23 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
           overflow: 'auto',
         }}
       >
-        <CustomerCard
-          customer={customer}
-          customerId={project.customerId}
-          onEdit={() => setShowCustomerEdit(true)}
-        />
-
-        {/* 客户编辑模态：用 key={customer?.id ?? 'new'} 让弹窗随选中客户 remount，
-            避免 useState lazy init 残留旧 draft（user 偏好：feedback_modal_editor_needs_key_per_item） */}
-        {showCustomerEdit && (
-          <div
-            data-testid="customer-edit-overlay"
-            style={{
-              position: 'fixed',
-              inset: 0,
-              background: 'rgba(0,0,0,0.4)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              zIndex: 100,
-            }}
-            onClick={(e) => {
-              if (e.target === e.currentTarget) setShowCustomerEdit(false);
-            }}
-          >
-            <CustomerEditDialog
-              key={customer?.id ?? 'new'}
-              projectCustomer={customer}
-              onSave={(updated: CustomerPayload) => {
-                void updated;
-                setShowCustomerEdit(false);
-              }}
-              onCancel={() => setShowCustomerEdit(false)}
-            />
-          </div>
-        )}
+        <CustomerLabelCard customerLabel={project.customerLabel} />
       </aside>
     </div>
   );
 }
 
-interface CustomerCardProps {
-  customer: CustomerPayload | null;
-  customerId: number;
-  onEdit: () => void;
+interface CustomerLabelCardProps {
+  customerLabel: string;
 }
 
 /**
- * 客户卡片：客户名 / 备注 / 编辑按钮。
+ * 客户标签卡片：只读显示 projects.customerLabel。
  *
- * 业务背景：customers store 还没拉到时显示 #id 占位；显示编辑按钮始终可用，
- * 由 CustomerEditDialog 内部 PermissionGate 决定保存按钮是否渲染。
+ * 用户需求修正 2026-04-30：客户从独立资源降级为字段，
+ * 不再有客户实体的编辑入口；如需修改客户标签可走 PATCH /api/projects/{id}。
  */
-function CustomerCard({ customer, customerId, onEdit }: CustomerCardProps): ReactElement {
+function CustomerLabelCard({ customerLabel }: CustomerLabelCardProps): ReactElement {
   return (
     <div
       data-testid="project-detail-customer-card"
@@ -443,55 +398,22 @@ function CustomerCard({ customer, customerId, onEdit }: CustomerCardProps): Reac
         gap: 8,
       }}
     >
-      <div
+      <span
         style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
+          fontSize: 11,
+          fontWeight: 500,
+          color: 'var(--c-fg-muted)',
+          textTransform: 'uppercase',
+          letterSpacing: 0.5,
         }}
       >
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 500,
-            color: 'var(--c-fg-muted)',
-            textTransform: 'uppercase',
-            letterSpacing: 0.5,
-          }}
-        >
-          客户
-        </span>
-        <button
-          type="button"
-          onClick={onEdit}
-          data-testid="project-detail-customer-edit"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 4,
-            padding: '2px 6px',
-            borderRadius: 3,
-            border: '1px solid var(--c-border)',
-            background: 'transparent',
-            color: 'var(--c-fg-muted)',
-            cursor: 'pointer',
-            fontSize: 11,
-          }}
-        >
-          <Edit3 size={10} aria-hidden="true" /> 编辑
-        </button>
-      </div>
-      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--c-fg)' }}>
-        {customer?.nameWechat ?? <span style={{ color: 'var(--c-fg-muted)' }}>#{customerId}</span>}
-      </div>
-      {customer?.remark && (
-        <div style={{ fontSize: 12, color: 'var(--c-fg-muted)', whiteSpace: 'pre-wrap' }}>
-          {customer.remark}
-        </div>
-      )}
-      <div style={{ fontSize: 11, color: 'var(--c-fg-muted)' }}>
-        <Activity size={10} aria-hidden="true" style={{ marginRight: 4 }} />
-        ID: {customerId}
+        客户
+      </span>
+      <div
+        data-testid="project-detail-customer-label"
+        style={{ fontSize: 13, fontWeight: 500, color: 'var(--c-fg)', whiteSpace: 'pre-wrap' }}
+      >
+        {customerLabel || <span style={{ color: 'var(--c-fg-muted)' }}>未填写</span>}
       </div>
     </div>
   );

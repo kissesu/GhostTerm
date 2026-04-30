@@ -54,10 +54,12 @@ var (
 
 // CreateProjectInput 创建项目的入参。
 //
-// 业务背景：customerID 必须存在；金额（OriginalQuote）默认 0；priority/thesisLevel 可选。
+// 业务背景：CustomerLabel 必填非空（自由文本）；金额（OriginalQuote）默认 0；priority/thesisLevel 可选。
+// 用户需求修正 2026-04-30：客户从独立资源降级为 projects.customer_label 字段，
+// 不再校验客户存在性，只要求字段非空。
 type CreateProjectInput struct {
 	Name          string
-	CustomerID    int64
+	CustomerLabel string
 	Description   string
 	Priority      oas.ProjectPriority // "" 表示未指定，DB 默认 'normal'
 	ThesisLevel   *oas.ThesisLevel
@@ -70,22 +72,24 @@ type CreateProjectInput struct {
 //
 // 业务规则：
 // - status / holder_* 不能通过 Update 改，只能通过 TriggerEvent 推进状态机
-// - customer_id / created_by 不可改（修正必须删除重建）
+// - created_by 不可改（修正必须删除重建）
+// - customer_label 允许 cs/admin 修改（仅文本字段更新）
 type UpdateProjectInput struct {
-	Name        *string
-	Description *string
-	Priority    *oas.ProjectPriority
-	ThesisLevel *oas.ThesisLevel
-	Subject     *string // *string=nil 表示"不更新"；空指针指向空串表示"清空"
-	ClearSubject bool   // 单独的 clear flag 区分"不动"与"清空"
-	Deadline    *time.Time
+	Name          *string
+	CustomerLabel *string
+	Description   *string
+	Priority      *oas.ProjectPriority
+	ThesisLevel   *oas.ThesisLevel
+	Subject       *string // *string=nil 表示"不更新"；空指针指向空串表示"清空"
+	ClearSubject  bool    // 单独的 clear flag 区分"不动"与"清空"
+	Deadline      *time.Time
 }
 
 // ProjectModel 是 service 层返回的 DTO（与 DB 列对齐），handler 转 oas.Project。
 type ProjectModel struct {
 	ID              int64
 	Name            string
-	CustomerID      int64
+	CustomerLabel   string
 	Description     string
 	Priority        oas.ProjectPriority
 	ThesisLevel     *oas.ThesisLevel
@@ -214,7 +218,7 @@ func (s *ProjectServiceImpl) Create(
 		var p ProjectModel
 		err := tx.QueryRow(ctx, `
 			INSERT INTO projects (
-				name, customer_id, description, priority, thesis_level, subject,
+				name, customer_label, description, priority, thesis_level, subject,
 				status, holder_role_id, holder_user_id,
 				deadline,
 				original_quote, current_quote,
@@ -227,7 +231,7 @@ func (s *ProjectServiceImpl) Create(
 				$11
 			)
 			RETURNING
-				id, name, customer_id, description, priority, thesis_level, subject,
+				id, name, customer_label, description, priority, thesis_level, subject,
 				status, holder_role_id, holder_user_id,
 				deadline,
 				dealing_at, quoting_at, dev_started_at, confirming_at,
@@ -236,13 +240,13 @@ func (s *ProjectServiceImpl) Create(
 				opening_doc_id, assignment_doc_id, format_spec_doc_id,
 				created_by, created_at, updated_at
 		`,
-			in.Name, in.CustomerID, in.Description, string(priority), thesisLevel, subject,
+			in.Name, in.CustomerLabel, in.Description, string(priority), thesisLevel, subject,
 			statemachine.RoleCS, creatorUserID,
 			in.Deadline,
 			in.OriginalQuote,
 			creatorUserID,
 		).Scan(
-			&p.ID, &p.Name, &p.CustomerID, &p.Description,
+			&p.ID, &p.Name, &p.CustomerLabel, &p.Description,
 			&p.Priority, &p.ThesisLevel, &p.Subject,
 			&p.Status, &p.HolderRoleID, &p.HolderUserID,
 			&p.Deadline,
@@ -321,8 +325,8 @@ func validateCreateInput(in CreateProjectInput) error {
 	if in.Name == "" {
 		return fmt.Errorf("%w: name is required", ErrProjectInvalidInput)
 	}
-	if in.CustomerID <= 0 {
-		return fmt.Errorf("%w: customerId is required", ErrProjectInvalidInput)
+	if in.CustomerLabel == "" {
+		return fmt.Errorf("%w: customerLabel is required", ErrProjectInvalidInput)
 	}
 	if in.Description == "" {
 		return fmt.Errorf("%w: description is required", ErrProjectInvalidInput)
@@ -359,7 +363,7 @@ func (s *ProjectServiceImpl) List(
 		}
 		rows, err := tx.Query(ctx, `
 			SELECT
-				id, name, customer_id, description, priority, thesis_level, subject,
+				id, name, customer_label, description, priority, thesis_level, subject,
 				status, holder_role_id, holder_user_id,
 				deadline,
 				dealing_at, quoting_at, dev_started_at, confirming_at,
@@ -460,10 +464,15 @@ func (s *ProjectServiceImpl) Update(
 		if in.Deadline != nil {
 			deadline = *in.Deadline
 		}
+		var customerLabel any
+		if in.CustomerLabel != nil {
+			customerLabel = *in.CustomerLabel
+		}
 
 		row := tx.QueryRow(ctx, `
 			UPDATE projects SET
 				name           = COALESCE($2, name),
+				customer_label = COALESCE($8, customer_label),
 				description    = COALESCE($3, description),
 				priority       = COALESCE($4::project_priority, priority),
 				thesis_level   = COALESCE($5::thesis_level, thesis_level),
@@ -475,7 +484,7 @@ func (s *ProjectServiceImpl) Update(
 				updated_at     = NOW()
 			WHERE id = $1
 			RETURNING
-				id, name, customer_id, description, priority, thesis_level, subject,
+				id, name, customer_label, description, priority, thesis_level, subject,
 				status, holder_role_id, holder_user_id,
 				deadline,
 				dealing_at, quoting_at, dev_started_at, confirming_at,
@@ -483,7 +492,7 @@ func (s *ProjectServiceImpl) Update(
 				original_quote, current_quote, after_sales_total, total_received,
 				opening_doc_id, assignment_doc_id, format_spec_doc_id,
 				created_by, created_at, updated_at
-		`, projectID, name, desc, priority, thesisLevel, subjectArg, deadline)
+		`, projectID, name, desc, priority, thesisLevel, subjectArg, deadline, customerLabel)
 
 		p, err := scanProject(row)
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -650,7 +659,7 @@ func (s *ProjectServiceImpl) ListStatusChanges(
 // 出现列序漂移导致的 scan 错位。
 const projectSelectSQL = `
 	SELECT
-		id, name, customer_id, description, priority, thesis_level, subject,
+		id, name, customer_label, description, priority, thesis_level, subject,
 		status, holder_role_id, holder_user_id,
 		deadline,
 		dealing_at, quoting_at, dev_started_at, confirming_at,
@@ -670,7 +679,7 @@ type rowScanner interface {
 func scanProject(s rowScanner) (*ProjectModel, error) {
 	var p ProjectModel
 	err := s.Scan(
-		&p.ID, &p.Name, &p.CustomerID, &p.Description,
+		&p.ID, &p.Name, &p.CustomerLabel, &p.Description,
 		&p.Priority, &p.ThesisLevel, &p.Subject,
 		&p.Status, &p.HolderRoleID, &p.HolderUserID,
 		&p.Deadline,

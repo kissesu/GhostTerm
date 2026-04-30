@@ -43,11 +43,11 @@ var ErrNotImplementedYet = errors.New("not_implemented_yet")
 //
 // 注：Go 嵌入字段的"方法 ambiguous selector"规则会让"两个嵌入字段同名方法"导致编译失败；
 // 因此各 handler 不嵌入而是作为命名字段，由 oasHandler 自己声明方法做显式 forward。
-// Phase 10 Lead wireup：注册 worker A/B/C/D/E/F 的全部 handler。
+// Phase 10 Lead wireup：注册 worker B/C/D/E/F 的 handler。
+// 注：原 worker A (customer) 已于 2026-04-30 移除（客户降级为 project 字段）。
 type oasHandler struct {
 	auth         *handlers.AuthHandler
 	rbac         *handlers.RBACHandler
-	customer     *handlers.CustomerHandler
 	project      *handlers.ProjectHandler
 	file         *handlers.FileHandler
 	feedback     *handlers.FeedbackHandler
@@ -106,30 +106,6 @@ func (h *oasHandler) RolesGetPermissions(ctx context.Context, params oas.RolesGe
 // RolesUpdatePermissions 转发到 RBACHandler 实现
 func (h *oasHandler) RolesUpdatePermissions(ctx context.Context, req *oas.RolePermissionUpdateRequest, params oas.RolesUpdatePermissionsParams) (oas.RolesUpdatePermissionsRes, error) {
 	return h.rbac.RolesUpdatePermissions(ctx, req, params)
-}
-
-// ============================================================
-// Worker A — Customer：4 个方法 forward
-// ============================================================
-
-// CustomersList 转发到 CustomerHandler 实现
-func (h *oasHandler) CustomersList(ctx context.Context) (oas.CustomersListRes, error) {
-	return h.customer.CustomersList(ctx)
-}
-
-// CustomersGet 转发到 CustomerHandler 实现
-func (h *oasHandler) CustomersGet(ctx context.Context, params oas.CustomersGetParams) (oas.CustomersGetRes, error) {
-	return h.customer.CustomersGet(ctx, params)
-}
-
-// CustomersCreate 转发到 CustomerHandler 实现
-func (h *oasHandler) CustomersCreate(ctx context.Context, req *oas.CustomerCreateRequest) (oas.CustomersCreateRes, error) {
-	return h.customer.CustomersCreate(ctx, req)
-}
-
-// CustomersUpdate 转发到 CustomerHandler 实现
-func (h *oasHandler) CustomersUpdate(ctx context.Context, req *oas.CustomerUpdateRequest, params oas.CustomersUpdateParams) (oas.CustomersUpdateRes, error) {
-	return h.customer.CustomersUpdate(ctx, req, params)
 }
 
 // ============================================================
@@ -316,7 +292,6 @@ type RouterDeps struct {
 	Pool                *pgxpool.Pool
 	AuthService         services.AuthService
 	RBACService         services.RBACService
-	CustomerService     services.CustomerService
 	ProjectService      *services.ProjectServiceImpl
 	FileService         services.FileService
 	FeedbackService     services.FeedbackService
@@ -342,9 +317,6 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	}
 	if deps.Pool == nil {
 		return nil, errors.New("router: Pool is required")
-	}
-	if deps.CustomerService == nil {
-		return nil, errors.New("router: CustomerService is required")
 	}
 	if deps.ProjectService == nil {
 		return nil, errors.New("router: ProjectService is required")
@@ -409,7 +381,6 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	// ============================================================
 	authHandler := handlers.NewAuthHandler(deps.AuthService, deps.RBACService)
 	rbacHandler := handlers.NewRBACHandler(deps.RBACService, deps.Pool)
-	customerHandler := handlers.NewCustomerHandler(deps.CustomerService)
 	projectHandler := handlers.NewProjectHandler(deps.ProjectService)
 	fileHandler := handlers.NewFileHandler(deps.FileService)
 	feedbackHandler, err := handlers.NewFeedbackHandler(deps.FeedbackService, deps.RBACService)
@@ -427,7 +398,6 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 		&oasHandler{
 			auth:         authHandler,
 			rbac:         rbacHandler,
-			customer:     customerHandler,
 			project:      projectHandler,
 			file:         fileHandler,
 			feedback:     feedbackHandler,

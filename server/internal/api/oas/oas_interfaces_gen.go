@@ -17,22 +17,6 @@ type AuthRefreshRes interface {
 	authRefreshRes()
 }
 
-type CustomersCreateRes interface {
-	customersCreateRes()
-}
-
-type CustomersGetRes interface {
-	customersGetRes()
-}
-
-type CustomersListRes interface {
-	customersListRes()
-}
-
-type CustomersUpdateRes interface {
-	customersUpdateRes()
-}
-
 type DashboardGetRisksRes interface {
 	dashboardGetRisksRes()
 }

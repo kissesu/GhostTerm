@@ -45,7 +45,6 @@ type paymentTestEnv struct {
 	dev2ID     int64
 	csID       int64
 	projectID  int64
-	customerID int64
 	// 一个 dummy file 行，给 dev_settlement 的 screenshot_id 引用（DB 有 FK 到 files）
 	screenshotFileID int64
 }
@@ -81,18 +80,13 @@ func setupPaymentEnv(t *testing.T) *paymentTestEnv {
 		VALUES ('cs-pay', $1, 'CS', 3, TRUE) RETURNING id
 	`, hash).Scan(&csID))
 
-	// 2. customer + project
-	var customerID int64
-	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO customers (name_wechat, created_by) VALUES ('Customer', $1) RETURNING id
-	`, csID).Scan(&customerID))
-
+	// 2. project（用户需求修正 2026-04-30：客户降级为 customer_label 字段）
 	var projectID int64
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO projects (name, customer_id, description, deadline, created_by, current_quote, total_received)
-		VALUES ('TestProject', $1, 'desc', NOW() + INTERVAL '30 days', $2, '5000.00', '0.00')
+		INSERT INTO projects (name, customer_label, description, deadline, created_by, current_quote, total_received)
+		VALUES ('TestProject', 'Customer', 'desc', NOW() + INTERVAL '30 days', $1, '5000.00', '0.00')
 		RETURNING id
-	`, customerID, csID).Scan(&projectID))
+	`, csID).Scan(&projectID))
 
 	// 3. 把 dev1 / dev2 都加入 project_members（让 RLS 放行 SELECT）
 	_, err = pool.Exec(ctx, `INSERT INTO project_members (project_id, user_id, role) VALUES ($1, $2, 'dev')`, projectID, dev1ID)
@@ -120,7 +114,6 @@ func setupPaymentEnv(t *testing.T) *paymentTestEnv {
 		dev2ID:           dev2ID,
 		csID:             csID,
 		projectID:        projectID,
-		customerID:       customerID,
 		screenshotFileID: fileID,
 	}
 }

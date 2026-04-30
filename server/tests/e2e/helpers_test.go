@@ -23,10 +23,12 @@ import (
 // 业务背景：完整 oas.Project 字段非常多，e2e 关心的只是状态机相关
 // （status / holderRoleId / holderUserId / *_at）+ 金额字段；
 // 其它字段以 raw json 形式不解码。
+//
+// 用户需求修正 2026-04-30：customer 从独立资源降级为 customerLabel 字段。
 type projectModel struct {
 	ID            int64      `json:"id"`
 	Name          string     `json:"name"`
-	CustomerID    int64      `json:"customerId"`
+	CustomerLabel string     `json:"customerLabel"`
 	Description   string     `json:"description"`
 	Status        string     `json:"status"`
 	HolderRoleID  *int64     `json:"holderRoleId,omitempty"`
@@ -39,13 +41,6 @@ type projectModel struct {
 	CancelledAt   *time.Time `json:"cancelledAt,omitempty"`
 	PaidAt        *time.Time `json:"paidAt,omitempty"`
 	ArchivedAt    *time.Time `json:"archivedAt,omitempty"`
-}
-
-// customerModel e2e 视角的客户。
-type customerModel struct {
-	ID         int64  `json:"id"`
-	NameWechat string `json:"nameWechat"`
-	CreatedBy  int64  `json:"createdBy"`
 }
 
 // statusChangeLogModel e2e 视角的状态变更日志。
@@ -155,26 +150,15 @@ type errorEnvelope struct {
 // 操作 helper
 // ============================================================
 
-// createCustomer 通过 c 当前登录用户创建客户。
+// createProject 创建项目并返回。caller 传 customerLabel（自由文本）与 deadline。
 //
-// 业务背景：customers_insert RLS 仅要求 current_user_id() 非空，
-// 任何已登录身份都可建客户；e2e 默认让 cs 来建。
-func createCustomer(t *testing.T, c *httpClient, name string) customerModel {
-	t.Helper()
-	resp := c.do(t, http.MethodPost, "/api/customers", map[string]any{
-		"nameWechat": name,
-		"remark":     "e2e 测试客户",
-	}, true)
-	expectStatus(t, resp, http.StatusCreated, "create customer "+name)
-	return decodeEnvelope[customerModel](t, resp)
-}
-
-// createProject 创建项目并返回。caller 决定 customerID 与 deadline。
-func createProject(t *testing.T, c *httpClient, customerID int64, name string, deadline time.Time, originalQuote string) projectModel {
+// 用户需求修正 2026-04-30：客户从独立资源降级为 customerLabel 字段，
+// e2e 不再走 createCustomer + customerID 二步，直接传 label 字符串。
+func createProject(t *testing.T, c *httpClient, customerLabel string, name string, deadline time.Time, originalQuote string) projectModel {
 	t.Helper()
 	resp := c.do(t, http.MethodPost, "/api/projects", map[string]any{
 		"name":          name,
-		"customerId":    customerID,
+		"customerLabel": customerLabel,
 		"description":   "e2e flow 测试",
 		"deadline":      deadline.UTC().Format(time.RFC3339),
 		"originalQuote": originalQuote,

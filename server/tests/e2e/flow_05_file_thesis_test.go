@@ -34,8 +34,7 @@ func TestFlow05_FileAndThesisVersion(t *testing.T) {
 	cs := newClient(e2eEnv.BaseURL)
 	cs.loginAs(t, e2eEnv.CS)
 
-	customer := createCustomer(t, cs, "thesis-customer")
-	project := createProject(t, cs, customer.ID, "thesis-project",
+	project := createProject(t, cs, "thesis-customer", "thesis-project",
 		time.Now().Add(45*24*time.Hour), "3000.00")
 
 	// ============================================================

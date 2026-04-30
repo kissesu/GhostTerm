@@ -73,10 +73,7 @@ func main() {
 		log.Fatalf("init rbac service: %v", err)
 	}
 
-	customerSvc, err := services.NewCustomerService(services.CustomerServiceDeps{Pool: pool})
-	if err != nil {
-		log.Fatalf("init customer service: %v", err)
-	}
+	// 注：原 customerSvc 已于 2026-04-30 移除（客户从独立资源降级为 projects.customer_label 字段）
 
 	projectSvc, err := services.NewProjectService(services.ProjectServiceDeps{Pool: pool})
 	if err != nil {
@@ -144,7 +141,6 @@ func main() {
 		Pool:                pool,
 		AuthService:         authSvc,
 		RBACService:         rbacSvc,
-		CustomerService:     customerSvc,
 		ProjectService:      projectSvc,
 		FileService:         fileSvc,
 		FeedbackService:     feedbackSvc,

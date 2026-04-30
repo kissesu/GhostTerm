@@ -35,7 +35,10 @@ import (
 	"github.com/ghostterm/progress-server/internal/testutil"
 )
 
-// projectTestEnv 装配项目测试所需的最小环境：admin / cs / dev 各一 + 一个 customer。
+// projectTestEnv 装配项目测试所需的最小环境：admin / cs / dev 各一。
+//
+// 用户需求修正 2026-04-30：客户从独立 customers 表降级为 projects.customer_label 字段，
+// 不再需要 INSERT INTO customers，CreateProjectInput 直接传 customerLabel 文本即可。
 type projectTestEnv struct {
 	pool       *pgxpool.Pool
 	cleanup    func()
@@ -44,7 +47,6 @@ type projectTestEnv struct {
 	csID       int64
 	devID      int64
 	otherDevID int64
-	customerID int64
 }
 
 func setupProjectEnv(t *testing.T) *projectTestEnv {
@@ -77,12 +79,6 @@ func setupProjectEnv(t *testing.T) *projectTestEnv {
 		VALUES ('dev2-proj', $1, 'Dev2', 2, TRUE) RETURNING id
 	`, hash).Scan(&otherDevID))
 
-	var customerID int64
-	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO customers (name_wechat, created_by)
-		VALUES ('TestCustomer', $1) RETURNING id
-	`, csID).Scan(&customerID))
-
 	return &projectTestEnv{
 		pool:       pool,
 		cleanup:    cleanup,
@@ -91,16 +87,15 @@ func setupProjectEnv(t *testing.T) *projectTestEnv {
 		csID:       csID,
 		devID:      devID,
 		otherDevID: otherDevID,
-		customerID: customerID,
 	}
 }
 
 // validCreateInput 返回一个可通过 validate 的输入，用于构造测试项目。
-func validCreateInput(env *projectTestEnv, name string) services.CreateProjectInput {
+func validCreateInput(_ *projectTestEnv, name string) services.CreateProjectInput {
 	zero, _ := progressdb.MoneyFromString("0")
 	return services.CreateProjectInput{
 		Name:          name,
-		CustomerID:    env.customerID,
+		CustomerLabel: "TestCustomer",
 		Description:   "测试项目描述",
 		Deadline:      time.Now().Add(30 * 24 * time.Hour),
 		OriginalQuote: zero,

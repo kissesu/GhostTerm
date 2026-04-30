@@ -77,8 +77,7 @@ func TestFlow12_InvalidTransition(t *testing.T) {
 	cs := newClient(e2eEnv.BaseURL)
 	cs.loginAs(t, e2eEnv.CS)
 
-	customer := createCustomer(t, cs, "invalid-transition-customer")
-	project := createProject(t, cs, customer.ID, "invalid-transition-project",
+	project := createProject(t, cs, "invalid-transition-customer", "invalid-transition-project",
 		time.Now().Add(15*24*time.Hour), "1000.00")
 	require.Equal(t, "dealing", project.Status)
 
@@ -108,8 +107,7 @@ func TestFlow13_ConcurrentEventTrigger(t *testing.T) {
 	cs2 := newClient(e2eEnv.BaseURL)
 	cs2.loginAs(t, e2eEnv.CS)
 
-	customer := createCustomer(t, cs1, "concurrent-customer")
-	project := createProject(t, cs1, customer.ID, "concurrent-project",
+	project := createProject(t, cs1, "concurrent-customer", "concurrent-project",
 		time.Now().Add(10*24*time.Hour), "1000.00")
 
 	var wg sync.WaitGroup

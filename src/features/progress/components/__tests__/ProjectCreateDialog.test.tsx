@@ -43,7 +43,7 @@ function makeReturned(): Project {
   return {
     id: 100,
     name: '示例',
-    customerId: 5,
+    customerLabel: '测试客户',
     description: '描述',
     priority: 'normal',
     status: 'dealing',
@@ -88,7 +88,7 @@ describe('ProjectCreateDialog 表单校验', () => {
     render(<ProjectCreateDialog open onClose={onClose} />);
 
     // 不填 name，直接填其它必填，提交
-    fireEvent.change(screen.getByTestId('project-customer-input'), { target: { value: '1' } });
+    fireEvent.change(screen.getByTestId('project-customer-input'), { target: { value: '客户A' } });
     fireEvent.change(screen.getByTestId('project-description-input'), { target: { value: 'desc' } });
     fireEvent.change(screen.getByTestId('project-deadline-input'), {
       target: { value: '2026-12-31T00:00' },
@@ -100,17 +100,17 @@ describe('ProjectCreateDialog 表单校验', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it('客户 ID 为 0 时报错', async () => {
+  it('客户标签为空时报错', async () => {
     render(<ProjectCreateDialog open onClose={() => {}} />);
     fireEvent.change(screen.getByTestId('project-name-input'), { target: { value: 'demo' } });
-    fireEvent.change(screen.getByTestId('project-customer-input'), { target: { value: '0' } });
+    fireEvent.change(screen.getByTestId('project-customer-input'), { target: { value: '' } });
     fireEvent.change(screen.getByTestId('project-description-input'), { target: { value: 'd' } });
     fireEvent.change(screen.getByTestId('project-deadline-input'), {
       target: { value: '2026-12-31T00:00' },
     });
     fireEvent.click(screen.getByTestId('project-submit-btn'));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('请填写有效的客户 ID');
+    expect(await screen.findByRole('alert')).toHaveTextContent('请填写客户标签');
     expect(mockedCreate).not.toHaveBeenCalled();
   });
 });
@@ -128,7 +128,7 @@ describe('ProjectCreateDialog 提交成功路径', () => {
     render(<ProjectCreateDialog open onClose={onClose} onCreated={onCreated} />);
 
     fireEvent.change(screen.getByTestId('project-name-input'), { target: { value: 'demo' } });
-    fireEvent.change(screen.getByTestId('project-customer-input'), { target: { value: '5' } });
+    fireEvent.change(screen.getByTestId('project-customer-input'), { target: { value: '测试客户' } });
     fireEvent.change(screen.getByTestId('project-description-input'), { target: { value: 'desc' } });
     fireEvent.change(screen.getByTestId('project-deadline-input'), {
       target: { value: '2026-12-31T00:00' },
@@ -143,7 +143,7 @@ describe('ProjectCreateDialog 提交成功路径', () => {
     });
     const callArgs = mockedCreate.mock.calls[0]?.[0];
     expect(callArgs?.name).toBe('demo');
-    expect(callArgs?.customerId).toBe(5);
+    expect(callArgs?.customerLabel).toBe('测试客户');
     expect(callArgs?.priority).toBe('urgent');
 
     await waitFor(() => {
@@ -167,7 +167,7 @@ describe('ProjectCreateDialog 提交失败路径', () => {
     render(<ProjectCreateDialog open onClose={onClose} />);
 
     fireEvent.change(screen.getByTestId('project-name-input'), { target: { value: 'demo' } });
-    fireEvent.change(screen.getByTestId('project-customer-input'), { target: { value: '99' } });
+    fireEvent.change(screen.getByTestId('project-customer-input'), { target: { value: '客户A' } });
     fireEvent.change(screen.getByTestId('project-description-input'), { target: { value: 'desc' } });
     fireEvent.change(screen.getByTestId('project-deadline-input'), {
       target: { value: '2026-12-31T00:00' },

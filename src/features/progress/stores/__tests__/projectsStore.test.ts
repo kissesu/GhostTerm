@@ -53,7 +53,7 @@ function makeProject(overrides: Partial<Project> = {}): Project {
   return {
     id: 1,
     name: '示例项目',
-    customerId: 100,
+    customerLabel: '测试客户',
     description: '描述',
     priority: 'normal',
     status: 'dealing',
@@ -192,7 +192,7 @@ describe('projectsStore.create', () => {
 
     const got = await useProjectsStore.getState().create({
       name: 'new',
-      customerId: 1,
+      customerLabel: '测试客户',
       description: 'd',
       deadline: '2026-12-31T00:00:00Z',
     });
@@ -205,7 +205,7 @@ describe('projectsStore.create', () => {
     await expect(
       useProjectsStore.getState().create({
         name: 'x',
-        customerId: 1,
+        customerLabel: '测试客户',
         description: 'd',
         deadline: '2026-12-31T00:00:00Z',
       }),

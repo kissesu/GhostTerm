@@ -70,7 +70,7 @@ export type Money = z.infer<typeof MoneySchema>;
 export const ProjectSchema = z.object({
   id: z.number().int(),
   name: z.string(),
-  customerId: z.number().int(),
+  customerLabel: z.string(),
   description: z.string(),
   priority: ProjectPriorityEnum,
   thesisLevel: ThesisLevelEnum.nullable().optional(),
@@ -130,7 +130,7 @@ export const StatusChangeLogListSchema = z.array(StatusChangeLogSchema);
 
 export interface CreateProjectInput {
   name: string;
-  customerId: number;
+  customerLabel: string;
   description: string;
   priority?: ProjectPriority;
   thesisLevel?: ThesisLevel;
@@ -141,6 +141,7 @@ export interface CreateProjectInput {
 
 export interface UpdateProjectInput {
   name?: string;
+  customerLabel?: string;
   description?: string;
   priority?: ProjectPriority;
   thesisLevel?: ThesisLevel;
