@@ -4,7 +4,7 @@
  *
  *              业务背景：
  *              - 本组件仅做"调用 store.triggerEvent + 显示 loading"的最小骨架
- *              - Phase 11 (EventActionButtons + EventTriggerDialog) 会完整化：
+ *              - Phase 11 (NbaPanel + EventTriggerDialog) 会完整化：
  *                · 按当前 status + 角色筛选可触发事件
  *                · I2 focus trap 弹窗
  *                · remark / newHolderUserId 表单

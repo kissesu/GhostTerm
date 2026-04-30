@@ -3,7 +3,7 @@
  * @description 项目详情页（Phase 11）—— 三栏布局：左 header + 事件按钮，中 tabs，右 客户卡片。
  *
  *              业务背景（spec §10.3）：
- *              - 左：项目核心信息 + EventActionButtons
+ *              - 左：项目核心信息 + NbaPanel
  *              - 中：tabs（反馈 / 论文版本 / 文件 / 费用变更 / 收款）
  *              - 右：客户信息卡 + 编辑入口
  *
