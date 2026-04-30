@@ -16,7 +16,7 @@
  * @date 2026-04-29
  */
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Bell } from 'lucide-react';
 
 import { useNotificationsStore } from '../stores/notificationsStore';
@@ -24,12 +24,27 @@ import { NotificationPanel } from './NotificationPanel';
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
+  // 容器 ref：用于 click-outside 关闭判定（包裹 button + panel 共同区域）
+  const containerRef = useRef<HTMLDivElement>(null);
   // 直接订阅 notifications 数组（稳定引用），用 useMemo 之外的 selector 派生 unreadCount
   const notifications = useNotificationsStore((s) => s.notifications);
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
+  // 点击 panel 外部关闭：仅在 open 时挂载 listener，避免长期占用
+  useEffect(() => {
+    if (!open) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      const node = containerRef.current;
+      if (node && !node.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [open]);
+
   return (
-    <div style={{ position: 'relative', display: 'inline-flex' }}>
+    <div ref={containerRef} style={{ position: 'relative', display: 'inline-flex' }}>
       <button
         type="button"
         data-testid="notification-bell"
