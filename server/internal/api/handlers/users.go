@@ -231,6 +231,12 @@ func (h *UsersHandler) UsersDelete(ctx context.Context, params oas.UsersDeletePa
 // ============================================================
 
 func toOASUserView(u services.UserView) oas.User {
+	// Permissions 显式给空切片而非 nil：
+	// 业务背景：oas.User.Permissions 用 json:"permissions" 必填序列化；
+	//   nil slice 会编码成 "permissions": null，前端 zod schema
+	//   z.array(z.string()).optional().default([]) 不接受 null（仅接受 undefined），
+	//   会导致整列响应解析失败。Atlas 用户管理列表无需展示 permissions，
+	//   但为了字段稳定一律返回空数组。
 	return oas.User{
 		ID:          u.ID,
 		Username:    u.Username,
@@ -238,6 +244,7 @@ func toOASUserView(u services.UserView) oas.User {
 		RoleId:      u.RoleID,
 		IsActive:    u.IsActive,
 		CreatedAt:   u.CreatedAt,
+		Permissions: []string{},
 	}
 }
 

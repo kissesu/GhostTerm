@@ -4,7 +4,11 @@
  *
  *              业务背景：
  *              - 设计稿主板 6 列 S1-S6（dealing/quoting/developing/confirming/delivered/paid）
- *              - 右侧 278px side panel：今日重点 / 阶段占比 / 人员负载
+ *              - 用户需求 2026-04-30：原右侧 278px sidePanel（今日重点 / 阶段占比 / 人员负载）
+ *                迁出到 ProgressShell 中 summary 之下的 KanbanInsightStrip 横排区，
+ *                看板列恢复为单板布局占满主区宽度，节省垂直/横向空间。
+ *              - 用户需求 2026-04-30：删除原 viewHead（"01 看板视图"标题块），
+ *                让看板列直接占主区，给列内独立滚动腾出更多 viewport。
  *              - 9 状态枚举中 archived/after_sales/cancelled 不在主板列出，
  *                按 statusFilter 切换时仍可单独显示对应列（v1 简化为隐藏）
  *
@@ -16,7 +20,7 @@
  *              - searchQuery 全列 contains 过滤（项目名 / 客户名）
  *
  * @author Atlas.oi
- * @date 2026-04-29
+ * @date 2026-04-30
  */
 
 import { useEffect, useMemo, type ReactElement } from 'react';
@@ -105,52 +109,9 @@ export function KanbanView(): ReactElement {
     return KANBAN_COLUMNS.filter((c) => c.status === statusFilter);
   }, [statusFilter]);
 
-  // side panel 派生统计
-  const sidePanelStats = useMemo(() => {
-    let lateCount = 0;
-    let pendingQuote = 0;
-    let inDev = 0;
-    let inQuote = 0;
-    let done = 0;
-    for (const p of projects) {
-      const days = (() => {
-        try {
-          return daysUntil(new Date(p.deadline));
-        } catch {
-          return Number.POSITIVE_INFINITY;
-        }
-      })();
-      if (days < 0 && p.status !== 'paid' && p.status !== 'archived' && p.status !== 'delivered') {
-        lateCount++;
-      }
-      if (p.status === 'quoting') {
-        pendingQuote++;
-        inQuote++;
-      } else if (p.status === 'developing' || p.status === 'confirming') {
-        inDev++;
-      } else if (p.status === 'delivered' || p.status === 'paid') {
-        done++;
-      }
-    }
-    const total = projects.length || 1;
-    return {
-      lateCount,
-      pendingQuote,
-      pctDev: Math.round((inDev / total) * 100),
-      pctQuote: Math.round((inQuote / total) * 100),
-      pctDone: Math.round((done / total) * 100),
-    };
-  }, [projects]);
-
   if (projectsLoading && projects.length === 0) {
     return (
       <div className={styles.viewPanel}>
-        <header className={styles.viewHead}>
-          <div className={styles.viewTitle}>
-            <code>01</code>看板视图
-          </div>
-          <div className={styles.viewMeta}>按项目阶段拖拽流转</div>
-        </header>
         <div className={styles.emptyState} data-testid="kanban-loading">
           加载项目中…
         </div>
@@ -160,13 +121,8 @@ export function KanbanView(): ReactElement {
 
   return (
     <section className={styles.viewPanel} data-testid="kanban-view">
-      <header className={styles.viewHead}>
-        <div className={styles.viewTitle}>
-          <code>01</code>看板视图
-        </div>
-        <div className={styles.viewMeta}>按项目阶段拖拽流转</div>
-      </header>
-
+      {/* 用户需求 2026-04-30：删除"01 看板视图"viewHead；
+          看板列直接占主区，节省垂直空间，让列内独立滚动有更多可视高度。 */}
       <div className={styles.boardShell}>
         <div className={styles.board}>
           {visibleColumns.map((col) => {
@@ -186,73 +142,6 @@ export function KanbanView(): ReactElement {
             );
           })}
         </div>
-
-        {/* 右侧 sidePanel：今日重点 / 阶段占比 / 人员负载（占位，未来由后端提供聚合数据） */}
-        <aside className={styles.sidePanel} data-testid="kanban-side-panel">
-          <section className={styles.panelSection}>
-            <header className={styles.panelTitle}>
-              今日重点
-              <span className={styles.count}>
-                {sidePanelStats.lateCount + sidePanelStats.pendingQuote}
-              </span>
-            </header>
-            <div className={styles.panelBody}>
-              <div className={styles.miniCard}>
-                <strong>超期项目</strong>
-                <p>
-                  {sidePanelStats.lateCount > 0
-                    ? `共 ${sidePanelStats.lateCount} 个项目已超期，请优先处理`
-                    : '暂无超期项目'}
-                </p>
-              </div>
-              <div className={styles.miniCard}>
-                <strong>待报价</strong>
-                <p>
-                  {sidePanelStats.pendingQuote > 0
-                    ? `${sidePanelStats.pendingQuote} 个项目停留在报价中`
-                    : '暂无待报价项目'}
-                </p>
-              </div>
-            </div>
-          </section>
-
-          <section className={styles.panelSection}>
-            <header className={styles.panelTitle}>阶段占比</header>
-            <div className={styles.panelBody}>
-              <div className={styles.compactRow}>
-                <span>开发中</span>
-                <strong>{sidePanelStats.pctDev}%</strong>
-              </div>
-              <div className={styles.progressLine}>
-                <span style={{ width: `${sidePanelStats.pctDev}%` }} />
-              </div>
-              <div className={styles.compactRow}>
-                <span>报价中</span>
-                <strong>{sidePanelStats.pctQuote}%</strong>
-              </div>
-              <div className={styles.progressLine}>
-                <span style={{ width: `${sidePanelStats.pctQuote}%`, background: 'var(--amber)' }} />
-              </div>
-              <div className={styles.compactRow}>
-                <span>已完成</span>
-                <strong>{sidePanelStats.pctDone}%</strong>
-              </div>
-              <div className={styles.progressLine}>
-                <span style={{ width: `${sidePanelStats.pctDone}%`, background: 'var(--green)' }} />
-              </div>
-            </div>
-          </section>
-
-          {/* 人员负载占位：v1 仅显示当前用户 holder 占有数；TODO 接入 user 列表后改为按用户显示 */}
-          <section className={styles.panelSection}>
-            <header className={styles.panelTitle}>人员负载</header>
-            <div className={styles.panelBody}>
-              <div className={styles.compactRow}>
-                <span style={{ color: 'var(--faint)' }}>暂无聚合数据</span>
-              </div>
-            </div>
-          </section>
-        </aside>
       </div>
     </section>
   );
@@ -269,7 +158,10 @@ interface KanbanColumnProps {
 /**
  * 看板列容器：标题（含 stageCode S1-S6 + label）+ 计数 + 卡片列表。
  *
- * 设计稿规范：column-header 44px，列底色 #121210，列体内 .card-list padding 10px gap 10px
+ * 设计稿规范：column-header 44px，列底色 #121210，列体内 .card-list padding 10px gap 10px。
+ *
+ * 用户需求 2026-04-30：每列独立内滚（cardList overflow:auto + flex:1），
+ * 列高对齐 viewport，避免长列表把 progress 整体撑出全局滚动条。
  */
 function KanbanColumn({
   status,

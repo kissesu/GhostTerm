@@ -29,6 +29,7 @@ import LoginPage from './components/LoginPage';
 import { ProgressLayout } from './components/ProgressLayout';
 import { ProjectListView } from './components/ProjectListView';
 import { KanbanView } from './components/KanbanView';
+import { KanbanInsightStrip } from './components/KanbanInsightStrip';
 import { GanttView } from './components/GanttView';
 import { ProjectDetailPage } from './components/ProjectDetailPage';
 import { NotificationsCenterView } from './components/NotificationsCenterView';
@@ -97,6 +98,8 @@ export default function ProgressShell() {
   }
 
   // 决定主内容
+  // 用户需求 2026-04-30：看板视图在 KanbanView 之前注入 KanbanInsightStrip（横排 3 panel），
+  // 仅 currentView==='kanban' 且未选中项目（非详情态）时显示。
   let mainContent;
   if (selectedProjectId !== null) {
     mainContent = <ProjectDetailPage projectId={selectedProjectId} />;
@@ -107,7 +110,12 @@ export default function ProgressShell() {
   } else if (currentView === 'gantt') {
     mainContent = <GanttView />;
   } else {
-    mainContent = <KanbanView />;
+    mainContent = (
+      <>
+        <KanbanInsightStrip />
+        <KanbanView />
+      </>
+    );
   }
 
   return (

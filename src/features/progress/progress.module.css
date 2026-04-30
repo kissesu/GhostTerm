@@ -47,7 +47,9 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: auto;
+  /* 用户需求 2026-04-30：禁止外层整体滚动，改为每个看板列内部独立滚动；
+     toolbar/summary/insightStrip 始终固定在顶部，可视高度不被长卡片列表挤出。 */
+  overflow: hidden;
 
   /* 用户需求 2026-04-30：背景按 ui-mockup 纯 var(--bg) 填充，
      移除原 habitat-grid 顶部黄绿 + 右上青色双层 gradient overlay（造成色调偏紫绿）。
@@ -309,13 +311,39 @@
 
 /* ===================================================================
    View Stack（容纳每个视图面板）
+
+   用户需求 2026-04-30：habitatProgress overflow:hidden 后，viewStack 必须 min-height:0
+   并 overflow-y:auto，让看板视图的列内部独立滚（看板自身 overflow:hidden）；
+   列表/Gantt 视图天然高度大于 viewport 时由 viewStack 滚动，不影响 toolbar/summary 固定。
    =================================================================== */
 .viewStack {
-  display: grid;
+  /* 用户需求 2026-04-30：从 grid 改 flex column，让看板的 viewPanel(flex:1) 撑满剩余高度，
+     insightStrip(flex:0 0 auto) 自适应高度；列表/Gantt 单 viewPanel 同样 flex:1 自然占满。 */
+  display: flex;
+  flex-direction: column;
   gap: 18px;
   padding: 14px 16px 18px;
   flex: 1 1 auto;
   min-height: 0;
+  overflow-y: auto;
+}
+
+/* ===================================================================
+   Insight Strip（看板视图洞察横排，迁出自原 sidePanel）
+
+   用户需求 2026-04-30：summary 6 卡之下、看板列之上的横排 3 panel；
+   3 列等宽，各自包含一个 .panelSection；不参与 viewStack 内部纵向滚动
+   （横向并列且高度自适应内容）。
+   =================================================================== */
+.insightStrip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  flex: 0 0 auto;
+}
+
+.insightStrip .panelSection {
+  margin-bottom: 0;
 }
 
 .viewPanel {
@@ -323,6 +351,16 @@
   border-radius: 8px;
   background: var(--panel);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* 用户需求 2026-04-30：仅看板视图的 viewPanel 撑满 viewStack 剩余高度，
+   让列内部独立滚动有可计算可视高度；
+   :has(.boardShell) 精准命中而不影响列表/Gantt 视图的自然高度。 */
+.viewPanel:has(.boardShell) {
+  flex: 1 1 auto;
 }
 
 .viewHead {
@@ -361,13 +399,17 @@
 
 /* ===================================================================
    Board（看板视图）
+
+   用户需求 2026-04-30：sidePanel 已迁出，boardShell 单板单列；
+   每列独立滚动，boardShell 高度撑满 viewPanel 剩余空间（min-height:0 让
+   flex 子项可以收缩到 0 并把溢出交给 .cardList 内部滚动）。
    =================================================================== */
 .boardShell {
   display: grid;
-  grid-template-columns: 1fr 278px;
-  /* 用户需求 2026-04-30：恢复 min-height 让 boardShell 自然展开，
-     viewport 矮时由外层 .habitatProgress 整体上下滚动（不强制 boardShell 内部滚动） */
-  min-height: 612px;
+  grid-template-columns: 1fr;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .board {
@@ -375,10 +417,14 @@
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 10px;
   padding: 12px;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .column {
-  min-height: 588px;
+  /* min-height:0 是 flex item 内部 overflow:auto 生效的前提（默认 auto 会撑出滚动条到祖先）。
+     列高由 .board grid 自动撑满，列内部 .cardList 接管纵向滚动。 */
+  min-height: 0;
   border: 1px solid var(--line);
   border-radius: 7px;
   background: var(--panel);
@@ -440,6 +486,9 @@
   gap: 10px;
   padding: 10px;
   flex: 1 1 auto;
+  /* min-height:0 让父级 .column flex 容器允许 .cardList 收缩到 0 并触发自身滚动；
+     缺失会让 cardList 撑出列高 → 滚动条挂到外层 viewStack 上（违反"列独立滚动"语义）。 */
+  min-height: 0;
   overflow-y: auto;
   align-content: start;
 }

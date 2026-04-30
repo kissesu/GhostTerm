@@ -22,6 +22,74 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAtlasRolesStore } from '../stores/atlasRolesStore';
 import styles from '../atlas.module.css';
 
+/**
+ * 权限码 → 中文展示标签映射。
+ *
+ * 业务背景（用户需求 2026-04-30）：
+ *   - 矩阵列头原始为 `resource:action` 英文 code（PROJECT READ / FEEDBACK CREATE 等），
+ *     超管阅读成本高；按用户提供的对照表统一改中文。
+ *   - 找不到 code 的 fallback：把 resource 部分按 RESOURCE_CN 译成中文 +
+ *     action 部分按 ACTION_CN 译成中文，不再回落英文（避免中英混杂）。
+ *   - 事件 E* 单独保留 "E1/E2..." 编号，避免事件 9 起步时翻译表碰壁。
+ *   - `*:*` 通配权限统一译为"全部权限"。
+ */
+const PERMISSION_LABEL: Record<string, string> = {
+  '*:*': '全部权限',
+  'project:read': '项目查看',
+  'project:create': '项目创建',
+  'project:update': '项目编辑',
+  'feedback:read': '反馈查看',
+  'feedback:create': '反馈记录',
+  'payment:read': '收款查看',
+  'payment:create': '收款录入',
+  'file:read': '文件查看',
+  'file:upload': '文件上传',
+};
+
+/** resource → 中文 fallback（用户表外的 resource 也能展示中文） */
+const RESOURCE_CN: Record<string, string> = {
+  '*': '全部',
+  project: '项目',
+  feedback: '反馈',
+  payment: '收款',
+  file: '文件',
+  event: '事件',
+  user: '用户',
+  role: '角色',
+};
+
+/** action → 中文 fallback */
+const ACTION_CN: Record<string, string> = {
+  '*': '全部',
+  read: '查看',
+  create: '创建',
+  update: '编辑',
+  delete: '删除',
+  upload: '上传',
+};
+
+/**
+ * 把单条权限（resource/action）映射成展示文本。
+ *
+ * 业务规则：
+ *   1. 优先精确匹配 PERMISSION_LABEL（用户对照表）
+ *   2. event:E* → "事件 E*"（保留事件编号原值）
+ *   3. fallback：RESOURCE_CN[resource] + ACTION_CN[action]；任一缺失退回原 code
+ */
+function formatPermissionLabel(resource: string, action: string): string {
+  const code = `${resource}:${action}`;
+  const exact = PERMISSION_LABEL[code];
+  if (exact) return exact;
+  // event:E1 / event:E2 ... 走单独路径
+  if (resource === 'event' && /^E\d+$/.test(action)) {
+    return `事件 ${action}`;
+  }
+  const r = RESOURCE_CN[resource];
+  const a = ACTION_CN[action];
+  if (r && a) return `${r}${a}`;
+  return code;
+}
+
 export function RolesPermissionMatrix() {
   const roles = useAtlasRolesStore((s) => s.roles);
   const permissions = useAtlasRolesStore((s) => s.permissions);
@@ -86,9 +154,10 @@ export function RolesPermissionMatrix() {
                 {groupedPermissions.map((g) =>
                   g.items.map((p) => (
                     <th key={p.id} title={`${p.resource}:${p.action}（${p.scope}）`}>
-                      <span style={{ color: 'var(--muted)', fontWeight: 700 }}>{p.resource}</span>
-                      <br />
-                      <span style={{ color: 'var(--text)' }}>{p.action}</span>
+                      {/* 用户需求 2026-04-30：列头改中文展示，原始 code 保留在 title hover */}
+                      <span style={{ color: 'var(--text)', fontWeight: 700 }}>
+                        {formatPermissionLabel(p.resource, p.action)}
+                      </span>
                     </th>
                   )),
                 )}

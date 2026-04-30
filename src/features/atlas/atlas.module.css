@@ -85,10 +85,20 @@
   color: var(--text);
 }
 
+/* 用户需求 2026-04-30：激活态与 WorkspaceTabs 同款森青实底，提高辨识度。
+   背景色 = mockup tab active 主色（森青 hue 175，亮度 70%、彩度 0.13），
+   文字色 = mockup tab active ink（与 progress --bg 同色阶 15%）。 */
 .navItemActive {
-  background: var(--panel-2);
-  color: var(--text);
-  border-color: var(--line-strong);
+  background: oklch(70% 0.13 175);
+  color: oklch(15% 0.005 175);
+  border-color: transparent;
+  font-weight: 800;
+}
+
+.navItemActive:hover {
+  /* 激活态 hover 保持森青不退化为 panel-2，避免视觉上"按下后又变灰"反向 affordance */
+  background: oklch(70% 0.13 175);
+  color: oklch(15% 0.005 175);
 }
 
 /* ===================================================================
