@@ -64,37 +64,35 @@ beforeEach(() => {
 });
 
 describe('KanbanView 列结构', () => {
-  it('渲染 9 个状态列', async () => {
+  it('渲染设计稿 6 个核心列 S1-S6', async () => {
     render(<KanbanView />);
     await waitFor(() => expect(screen.getByTestId('kanban-view')).toBeInTheDocument());
 
-    // 7 主动状态 + archived + cancelled 共 9 列
+    // 设计稿主板 6 列：dealing / quoting / developing / confirming / delivered / paid
     expect(screen.getByTestId('kanban-column-dealing')).toBeInTheDocument();
     expect(screen.getByTestId('kanban-column-quoting')).toBeInTheDocument();
     expect(screen.getByTestId('kanban-column-developing')).toBeInTheDocument();
     expect(screen.getByTestId('kanban-column-confirming')).toBeInTheDocument();
     expect(screen.getByTestId('kanban-column-delivered')).toBeInTheDocument();
     expect(screen.getByTestId('kanban-column-paid')).toBeInTheDocument();
-    expect(screen.getByTestId('kanban-column-after_sales')).toBeInTheDocument();
-    expect(screen.getByTestId('kanban-column-archived')).toBeInTheDocument();
-    expect(screen.getByTestId('kanban-column-cancelled')).toBeInTheDocument();
   });
 
-  it('archived / cancelled 默认折叠（其他展开）', async () => {
+  it('archived / after_sales / cancelled 不在主板显示（仅通过 statusFilter 单独筛选时显示）', async () => {
     render(<KanbanView />);
     await waitFor(() => expect(screen.getByTestId('kanban-view')).toBeInTheDocument());
 
-    expect(screen.getByTestId('kanban-column-archived')).toHaveAttribute('data-collapsed', 'true');
-    expect(screen.getByTestId('kanban-column-cancelled')).toHaveAttribute('data-collapsed', 'true');
+    // 设计稿主板 1:1 复刻：仅 6 列；其他状态走 statusFilter
+    expect(screen.queryByTestId('kanban-column-archived')).toBeNull();
+    expect(screen.queryByTestId('kanban-column-after_sales')).toBeNull();
+    expect(screen.queryByTestId('kanban-column-cancelled')).toBeNull();
+  });
+
+  it('每列 data-collapsed=false（设计稿无折叠态）', async () => {
+    render(<KanbanView />);
+    await waitFor(() => expect(screen.getByTestId('kanban-view')).toBeInTheDocument());
+
     expect(screen.getByTestId('kanban-column-dealing')).toHaveAttribute('data-collapsed', 'false');
-  });
-
-  it('点击列 header 切换折叠态', async () => {
-    render(<KanbanView />);
-    await waitFor(() => expect(screen.getByTestId('kanban-view')).toBeInTheDocument());
-
-    fireEvent.click(screen.getByTestId('kanban-column-header-dealing'));
-    expect(screen.getByTestId('kanban-column-dealing')).toHaveAttribute('data-collapsed', 'true');
+    expect(screen.getByTestId('kanban-column-paid')).toHaveAttribute('data-collapsed', 'false');
   });
 });
 

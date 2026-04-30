@@ -1,0 +1,1093 @@
+/**
+ * @file progress.module.css
+ * @description 进度模块视觉契约 —— 1:1 复刻 designs/habitat-grid-progress.html。
+ *
+ *              业务背景：
+ *              - 设计稿是受测试守护的 protected 静态合约（src/test/designConceptSpec.test.ts）
+ *              - 本文件把设计稿全部 design tokens 与组件类名移植到 React 组件
+ *              - 所有规则都包裹在 .habitat-progress 根作用域内，避免外泄到其他模块
+ *
+ *              Tokens 命名严格沿用设计稿的 --bg / --bar / --panel / --accent 等，
+ *              不与项目主 token (--c-*) 混用 —— 进度模块是一个独立视觉空间。
+ *
+ * @author Atlas.oi
+ * @date 2026-04-29
+ */
+
+/* ===================================================================
+   根作用域 + Design Tokens
+   =================================================================== */
+.habitatProgress {
+  /* 设计稿 :root */
+  --bg: #0d0d0c;
+  --bar: #141412;
+  --panel: #191916;
+  --panel-2: #20201c;
+  --panel-3: #25251f;
+  --card: #22231f;
+  --line: rgba(233, 226, 204, 0.11);
+  --line-strong: rgba(233, 226, 204, 0.2);
+  --text: #f0eee4;
+  --muted: #b4ae9c;
+  --faint: #7e796c;
+  --accent: #b8ff6a;
+  --accent-ink: #10160a;
+  --cyan: #63d5ff;
+  --amber: #e7ba4a;
+  --red: #ef6862;
+  --green: #79d17c;
+  --shadow: 0 24px 70px rgba(0, 0, 0, 0.46);
+
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+
+  /* 设计稿 body：渐变 + 底色；字体 family 同步 */
+  background:
+    linear-gradient(180deg, rgba(184, 255, 106, 0.035), transparent 260px),
+    radial-gradient(circle at 75% 0%, rgba(99, 213, 255, 0.08), transparent 300px),
+    var(--bg);
+  color: var(--text);
+  font-family: 'Avenir Next', 'PingFang SC', 'Source Han Sans SC', 'Microsoft YaHei', sans-serif;
+}
+
+.habitatProgress *,
+.habitatProgress *::before,
+.habitatProgress *::after {
+  box-sizing: border-box;
+}
+
+.habitatProgress button {
+  font: inherit;
+}
+
+/* ===================================================================
+   用户栏（项目原有 user/logout，叠在 toolbar 上方）
+   设计稿无此区，沿用项目惯例但用 progress tokens 着色
+   =================================================================== */
+.userbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--line);
+  background: #10100f;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.userbarLogout {
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.userbarLogout:hover {
+  border-color: var(--line-strong);
+}
+
+/* ===================================================================
+   Toolbar
+   =================================================================== */
+.toolbar {
+  height: 50px;
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  gap: 14px;
+  align-items: center;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bar);
+  flex: 0 0 auto;
+}
+
+.segmented,
+.filters,
+.rightActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.segmented {
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #10100f;
+}
+
+.segmented button {
+  height: 30px;
+  min-width: 54px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.segmented button:hover {
+  color: var(--text);
+}
+
+.segmented .active {
+  color: var(--accent-ink);
+  background: var(--accent);
+}
+
+.segmented .active:hover {
+  color: var(--accent-ink);
+}
+
+.filter,
+.search,
+.primary,
+.iconButton {
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  background: #11110f;
+}
+
+.filter {
+  min-width: 122px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.filter:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+}
+
+.filterSelect {
+  /* native <select> 重置：移除浏览器默认样式贴近 .filter 视觉 */
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: none;
+  cursor: pointer;
+  padding-right: 28px; /* 给箭头预留 */
+}
+
+.filterArrow {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--faint);
+  font-size: 10px;
+}
+
+.filterWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.search {
+  width: 226px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.search input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  outline: none;
+  font: inherit;
+  min-width: 0;
+}
+
+.search input::placeholder {
+  color: var(--faint);
+}
+
+.primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: transparent;
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.primary:hover {
+  filter: brightness(1.05);
+}
+
+.iconButton {
+  width: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.iconButton:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+}
+
+.iconButton svg,
+.primary svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ===================================================================
+   Summary（6 张统计卡片）
+   =================================================================== */
+.summary {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: #0f0f0e;
+  flex: 0 0 auto;
+}
+
+.summaryCard {
+  min-height: 58px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: linear-gradient(180deg, #1b1b18, #141412);
+}
+
+.summaryCard span {
+  display: block;
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.summaryCard strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 800;
+}
+
+/* ===================================================================
+   View Stack（容纳每个视图面板）
+   =================================================================== */
+.viewStack {
+  display: grid;
+  gap: 18px;
+  padding: 14px 16px 18px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.viewPanel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.viewHead {
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--line);
+  background: #151513;
+}
+
+.viewTitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 850;
+  color: var(--text);
+}
+
+.viewTitle code {
+  padding: 4px 7px;
+  border-radius: 5px;
+  color: var(--accent-ink);
+  background: var(--accent);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.viewMeta {
+  color: var(--faint);
+  font-size: 11px;
+}
+
+/* ===================================================================
+   Board（看板视图）
+   =================================================================== */
+.boardShell {
+  display: grid;
+  grid-template-columns: 1fr 278px;
+  min-height: 612px;
+}
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px;
+}
+
+.column {
+  min-height: 588px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #121210;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.columnHeader {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  border-bottom: 1px solid rgba(233, 226, 204, 0.08);
+  flex: 0 0 auto;
+}
+
+.columnTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #e9e3d3;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.stageCode {
+  min-width: 28px;
+  height: 22px;
+  padding: 0 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  border: 1px solid var(--line-strong);
+  color: #ddd6c1;
+  background: #24231f;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.count {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #25251f;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.cardList {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  align-content: start;
+}
+
+.taskCard {
+  min-height: 110px;
+  padding: 12px;
+  border: 1px solid rgba(233, 226, 204, 0.09);
+  border-radius: 7px;
+  background: linear-gradient(180deg, #23231f, #1b1b18);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  transition: border-color 120ms ease;
+}
+
+.taskCard:hover {
+  border-color: rgba(184, 255, 106, 0.28);
+}
+
+.taskTitle {
+  margin: 0 0 8px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 850;
+  line-height: 1.45;
+}
+
+.meta {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.metaExtra {
+  margin-top: 8px;
+  margin-bottom: 0;
+}
+
+.assignee {
+  color: var(--cyan);
+  font-weight: 800;
+}
+
+.cardFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tag,
+.deadline,
+.amount {
+  min-height: 22px;
+  padding: 3px 7px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  color: #e4ddcb;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.tagUrgent {
+  color: #ffd8d4;
+  background: rgba(239, 104, 98, 0.16);
+}
+
+.tagFinance {
+  color: #ffe7aa;
+  background: rgba(231, 186, 74, 0.14);
+}
+
+.tagDone {
+  color: #d7ffd8;
+  background: rgba(121, 209, 124, 0.14);
+}
+
+.deadline {
+  color: #221a08;
+  background: var(--amber);
+}
+
+.deadlineSafe {
+  color: #081d0b;
+  background: var(--green);
+}
+
+.deadlineLate {
+  color: #fff1ef;
+  background: var(--red);
+}
+
+.amount {
+  color: #ddd6c4;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+/* ===================================================================
+   Side panel（看板右侧）
+   =================================================================== */
+.sidePanel {
+  border-left: 1px solid var(--line);
+  padding: 12px;
+  background: #11110f;
+  overflow-y: auto;
+}
+
+.panelSection {
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #181815;
+  overflow: hidden;
+}
+
+.panelTitle {
+  height: 36px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(233, 226, 204, 0.08);
+  color: #e2dccb;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.panelBody {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+}
+
+.compactRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.compactRow strong {
+  color: var(--text);
+}
+
+.progressLine {
+  height: 7px;
+  border-radius: 999px;
+  background: #292820;
+  overflow: hidden;
+}
+
+.progressLine span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.miniCard {
+  padding: 10px;
+  border: 1px solid rgba(233, 226, 204, 0.08);
+  border-radius: 7px;
+  background: #20201c;
+}
+
+.miniCard strong {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.miniCard p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+/* ===================================================================
+   Table（列表视图）
+   =================================================================== */
+.table {
+  display: grid;
+  padding: 8px 12px 12px;
+}
+
+.tableRow {
+  display: grid;
+  grid-template-columns: 1.35fr 0.8fr 0.7fr 0.8fr 0.65fr 0.7fr 0.65fr;
+  min-height: 42px;
+  align-items: center;
+  border-bottom: 1px solid rgba(233, 226, 204, 0.07);
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0 4px;
+  transition: background 120ms ease;
+}
+
+.tableRow:hover {
+  background: rgba(233, 226, 204, 0.03);
+}
+
+.tableRowHeader {
+  min-height: 34px;
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 850;
+  cursor: default;
+}
+
+.tableRowHeader:hover {
+  background: transparent;
+}
+
+.tableRow strong {
+  color: var(--text);
+}
+
+.statusChip {
+  width: max-content;
+  padding: 5px 8px;
+  border-radius: 5px;
+  color: #ded8c7;
+  background: #272620;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+/* ===================================================================
+   Gantt 视图
+   =================================================================== */
+.gantt {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  padding: 12px;
+}
+
+.ganttLeft,
+.ganttRight {
+  border: 1px solid var(--line);
+  background: #121210;
+}
+
+.ganttLeft {
+  border-radius: 7px 0 0 7px;
+  border-right: none;
+}
+
+.ganttRight {
+  border-radius: 0 7px 7px 0;
+  overflow: hidden;
+}
+
+.ganttRow,
+.timelineRow {
+  height: 42px;
+  display: grid;
+  align-items: center;
+  border-bottom: 1px solid rgba(233, 226, 204, 0.07);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ganttRow {
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  padding: 0 10px;
+}
+
+.ganttRowHeader,
+.timelineRowHeader {
+  height: 34px;
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.timelineRow {
+  position: relative;
+  grid-template-columns: repeat(14, 1fr);
+  background:
+    linear-gradient(90deg, rgba(233, 226, 204, 0.06) 1px, transparent 1px) 0 0 / calc(100% / 14) 100%;
+}
+
+.timelineRowHeader span {
+  padding-left: 8px;
+}
+
+.bar {
+  position: absolute;
+  height: 18px;
+  top: 12px;
+  border-radius: 5px;
+  background: var(--accent);
+  box-shadow: 0 0 18px rgba(184, 255, 106, 0.16);
+}
+
+.barQuote {
+  background: var(--amber);
+  box-shadow: 0 0 18px rgba(231, 186, 74, 0.18);
+}
+
+.barDev {
+  background: var(--cyan);
+  box-shadow: 0 0 18px rgba(99, 213, 255, 0.18);
+}
+
+.barLate {
+  background: var(--red);
+  box-shadow: 0 0 18px rgba(239, 104, 98, 0.22);
+}
+
+.barDone {
+  background: var(--green);
+  box-shadow: 0 0 18px rgba(121, 209, 124, 0.18);
+}
+
+.legend {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend i {
+  width: 18px;
+  height: 6px;
+  border-radius: 999px;
+  display: inline-block;
+  background: var(--accent);
+}
+
+/* ===================================================================
+   Empty / Loading
+   =================================================================== */
+.emptyState {
+  padding: 40px 16px;
+  text-align: center;
+  color: var(--faint);
+  font-size: 13px;
+}
+
+/* ===================================================================
+   Modal layer（新建项目弹窗）
+   =================================================================== */
+.modalLayer {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 54px;
+  background: rgba(5, 5, 4, 0.62);
+  backdrop-filter: blur(5px);
+  z-index: 1000;
+}
+
+.projectModal {
+  width: 920px;
+  max-width: 100%;
+  max-height: 100%;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: #171713;
+  box-shadow: 0 34px 90px rgba(0, 0, 0, 0.58);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Avenir Next', 'PingFang SC', 'Source Han Sans SC', 'Microsoft YaHei', sans-serif;
+  color: var(--text);
+}
+
+.modalHead {
+  height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--line);
+  background: #1d1d19;
+  flex: 0 0 auto;
+}
+
+.modalTitle {
+  display: grid;
+  gap: 4px;
+}
+
+.modalTitle strong {
+  font-size: 16px;
+  font-weight: 850;
+  color: var(--text);
+}
+
+.modalTitle span {
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.modalClose {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  background: #141412;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.modalClose:hover {
+  color: var(--text);
+}
+
+.modalBody {
+  display: grid;
+  grid-template-columns: 1fr 270px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.formArea {
+  padding: 18px;
+  border-right: 1px solid var(--line);
+  overflow-y: auto;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.field {
+  display: grid;
+  gap: 7px;
+}
+
+.fieldWide {
+  grid-column: 1 / -1;
+}
+
+.field label {
+  color: #d8d1bf;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.fieldBox {
+  min-height: 38px;
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  color: var(--text);
+  background: #10100f;
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  width: 100%;
+}
+
+.fieldBox::placeholder {
+  color: var(--faint);
+}
+
+.fieldBox:focus {
+  border-color: rgba(184, 255, 106, 0.34);
+  background: #151711;
+}
+
+.fieldBoxTextarea {
+  min-height: 78px;
+  align-items: flex-start;
+  padding-top: 10px;
+  line-height: 1.7;
+  resize: vertical;
+}
+
+.stagePicker {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.stageOption {
+  min-height: 54px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #11110f;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+
+.stageOption strong {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.stageOptionSelected {
+  border-color: rgba(184, 255, 106, 0.42);
+  background: rgba(184, 255, 106, 0.08);
+}
+
+.modalSide {
+  padding: 18px;
+  background: #121210;
+  overflow-y: auto;
+}
+
+.previewCard {
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: linear-gradient(180deg, #24231f, #1b1b18);
+}
+
+.previewCard h2 {
+  margin: 0 0 9px;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 850;
+}
+
+.previewCard p {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.modalSideSection {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.modalSideSection h3 {
+  margin: 0 0 10px;
+  color: #d8d1bf;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.checkRow {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.checkbox {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid var(--line-strong);
+  background: #181815;
+}
+
+.checkboxChecked {
+  border-color: transparent;
+  background: var(--accent);
+  box-shadow: inset 0 0 0 4px var(--accent);
+}
+
+.modalActions {
+  height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 18px;
+  border-top: 1px solid var(--line);
+  background: #151513;
+  flex: 0 0 auto;
+}
+
+.secondary {
+  height: 32px;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  background: #11110f;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.secondary:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+}
+
+.actionGroup {
+  display: flex;
+  gap: 8px;
+}
+
+.modalError {
+  padding: 8px 12px;
+  margin: 0 0 12px;
+  border: 1px solid rgba(239, 104, 98, 0.4);
+  border-radius: 6px;
+  background: rgba(239, 104, 98, 0.1);
+  color: #ffd8d4;
+  font-size: 12px;
+}
+
+/* ===================================================================
+   Detail page wrapper（详情页背景适配）
+   =================================================================== */
+.detailWrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px 16px 18px;
+}

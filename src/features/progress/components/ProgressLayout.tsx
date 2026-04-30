@@ -1,26 +1,29 @@
 /**
  * @file ProgressLayout.tsx
- * @description 进度模块顶层布局：toolbar（搜索 / 状态过滤 / 视图切换）+ 主内容 slot。
+ * @description 进度模块顶层布局：toolbar（segmented 视图切换 + filters + 搜索 + 新建项目）+ summary + 主内容 slot。
  *
- *              业务背景（spec §10.1）：
- *              - 顶部 toolbar 是固定栏，主内容根据 currentView / selectedProjectId 切换
- *              - 详情页打开时（selectedProjectId !== null）隐藏视图切换按钮
- *                避免在详情态切到看板/列表的歧义；用户应先返回列表再切换
- *
- *              交互细节：
- *              - 搜索框：受控；每次输入即更新 store.searchQuery，由列表/看板自行 filter
- *              - 状态过滤：select 下拉；spec §6.1 9 个状态 + "全部"
- *              - 视图切换：两个 icon button，激活态用 --c-accent 反色边框
+ *              业务背景（设计稿 1:1 复刻）：
+ *              - 顶部 toolbar 50px，grid 4 列：segmented | filters | spacer | rightActions
+ *              - segmented 三选一：看板 / 列表 / Gantt（active 用 accent 反色）
+ *              - filters：3 个下拉（所有项目 / 所有论文级别 / 所有学科）—— 当前 v1 仅状态过滤接入
+ *              - rightActions：刷新图标 / 字段筛选图标 / 搜索框 / 主按钮
+ *              - 详情页打开时（selectedProjectId !== null）隐藏 toolbar + summary，让详情独占视觉
  *
  * @author Atlas.oi
  * @date 2026-04-29
  */
 
-import { useState, type ReactElement, type ReactNode, type ChangeEvent } from 'react';
-import { List, Columns3, Search, Plus } from 'lucide-react';
+import {
+  useState,
+  type ChangeEvent,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 
-import { useProgressUiStore, type StatusFilter } from '../stores/progressUiStore';
+import { useProgressUiStore, type StatusFilter, type ProgressView } from '../stores/progressUiStore';
 import { ProjectCreateDialog } from './ProjectCreateDialog';
+import { ProgressSummary } from './ProgressSummary';
+import styles from '../progress.module.css';
 
 interface ProgressLayoutProps {
   children: ReactNode;
@@ -30,9 +33,10 @@ interface ProgressLayoutProps {
  * 状态过滤下拉项：与 spec §6.1 status 枚举一一对应；中文标签便于扫读。
  *
  * 业务背景：把 9 个状态都列出来，避免 UI 里 if-else 硬编码；新增状态时只改这里。
+ * "全部" 标签按设计稿改为 "所有项目"。
  */
 const STATUS_OPTIONS: ReadonlyArray<{ value: StatusFilter; label: string }> = [
-  { value: 'all', label: '全部' },
+  { value: 'all', label: '所有项目' },
   { value: 'dealing', label: '洽谈中' },
   { value: 'quoting', label: '报价中' },
   { value: 'developing', label: '开发中' },
@@ -42,6 +46,18 @@ const STATUS_OPTIONS: ReadonlyArray<{ value: StatusFilter; label: string }> = [
   { value: 'archived', label: '已归档' },
   { value: 'after_sales', label: '售后中' },
   { value: 'cancelled', label: '已取消' },
+];
+
+interface SegmentedItem {
+  value: ProgressView;
+  label: string;
+}
+
+/** segmented 视图切换 3 选项（设计稿：看板 / 列表 / Gantt） */
+const SEGMENTED_ITEMS: ReadonlyArray<SegmentedItem> = [
+  { value: 'kanban', label: '看板' },
+  { value: 'list', label: '列表' },
+  { value: 'gantt', label: 'Gantt' },
 ];
 
 export function ProgressLayout({ children }: ProgressLayoutProps): ReactElement {
@@ -54,7 +70,6 @@ export function ProgressLayout({ children }: ProgressLayoutProps): ReactElement 
   const selectedProjectId = useProgressUiStore((s) => s.selectedProjectId);
 
   // 新建项目对话框开关：本地 state（仅 toolbar 内部使用）
-  // 用户需求修正 2026-04-30：客户从独立资源降级为 customerLabel 字段，"新建客户"按钮已删除
   const [createOpen, setCreateOpen] = useState(false);
 
   const isDetail = selectedProjectId !== null;
@@ -68,159 +83,159 @@ export function ProgressLayout({ children }: ProgressLayoutProps): ReactElement 
   };
 
   return (
-    <div
-      data-testid="progress-layout"
-      style={{
-        width: '100%',
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        background: 'var(--c-bg)',
-        color: 'var(--c-fg)',
-        minHeight: 0,
-      }}
-    >
+    <>
       {/* ============================================
-          顶部 toolbar：搜索 + 状态过滤 + 视图切换
-          详情页时隐藏视图切换按钮（避免误操作）
+          顶部 toolbar（设计稿 §toolbar）
+          详情页时隐藏（避免误操作 + 让详情有更多空间）
           ============================================ */}
       {!isDetail && (
         <header
           data-testid="progress-toolbar"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            padding: '10px 16px',
-            borderBottom: '1px solid var(--c-border)',
-            background: 'var(--c-panel)',
-          }}
+          className={styles.toolbar}
+          aria-label="进度模块工具栏"
         >
-          {/* 搜索框 */}
+          {/* 1. 视图切换 segmented */}
           <div
-            style={{
-              position: 'relative',
-              flex: 1,
-              maxWidth: 320,
-              display: 'flex',
-              alignItems: 'center',
-            }}
-          >
-            <Search
-              size={14}
-              aria-hidden="true"
-              style={{
-                position: 'absolute',
-                left: 8,
-                color: 'var(--c-fg-muted)',
-              }}
-            />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={handleSearchChange}
-              placeholder="搜索项目名 / 客户"
-              data-testid="progress-search-input"
-              style={{
-                width: '100%',
-                padding: '6px 8px 6px 28px',
-                borderRadius: 6,
-                border: '1px solid var(--c-border)',
-                background: 'var(--c-bg)',
-                color: 'var(--c-fg)',
-                fontSize: 13,
-              }}
-            />
-          </div>
-
-          {/* 状态过滤 */}
-          <select
-            value={statusFilter}
-            onChange={handleStatusChange}
-            data-testid="progress-status-filter"
-            style={{
-              padding: '6px 8px',
-              borderRadius: 6,
-              border: '1px solid var(--c-border)',
-              background: 'var(--c-bg)',
-              color: 'var(--c-fg)',
-              fontSize: 13,
-            }}
-          >
-            {STATUS_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-
-          <div style={{ flex: 1 }} />
-
-          {/* 新建项目按钮 — 后端按 RBAC project:write 校验，前端不 gate */}
-          <button
-            type="button"
-            data-testid="progress-new-project"
-            onClick={() => setCreateOpen(true)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '6px 12px',
-              borderRadius: 6,
-              border: '1px solid var(--c-accent)',
-              background: 'var(--c-accent)',
-              color: 'var(--c-on-accent, var(--c-bg))',
-              cursor: 'pointer',
-              fontSize: 13,
-              fontWeight: 500,
-            }}
-          >
-            <Plus size={14} aria-hidden="true" />
-            新建项目
-          </button>
-
-          {/* 视图切换：两个图标按钮 */}
-          <div
+            className={styles.segmented}
             data-testid="progress-view-switcher"
             role="tablist"
             aria-label="视图切换"
-            style={{
-              display: 'inline-flex',
-              border: '1px solid var(--c-border)',
-              borderRadius: 6,
-              overflow: 'hidden',
-            }}
           >
-            <ViewSwitchButton
-              active={currentView === 'list'}
-              onClick={() => setCurrentView('list')}
-              testid="progress-view-list"
-              label="列表视图"
+            {SEGMENTED_ITEMS.map((item) => {
+              const active = currentView === item.value;
+              return (
+                <button
+                  key={item.value}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  data-active={active ? 'true' : 'false'}
+                  data-testid={`progress-view-${item.value}`}
+                  onClick={() => setCurrentView(item.value)}
+                  className={active ? styles.active : ''}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 2. filters：3 个下拉（v1 仅状态过滤接入；论文级别 / 学科占位） */}
+          <div className={styles.filters}>
+            <span className={styles.filterWrap}>
+              <select
+                value={statusFilter}
+                onChange={handleStatusChange}
+                data-testid="progress-status-filter"
+                className={`${styles.filter} ${styles.filterSelect}`}
+                aria-label="项目状态过滤"
+              >
+                {STATUS_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <span className={styles.filterArrow} aria-hidden="true">⌄</span>
+            </span>
+            {/* 占位：论文级别 / 学科 —— TODO: 等后端字段加入项目模型后接入 */}
+            <span className={styles.filterWrap}>
+              <button type="button" className={styles.filter} disabled>
+                所有论文级别 <span aria-hidden="true">⌄</span>
+              </button>
+            </span>
+            <span className={styles.filterWrap}>
+              <button type="button" className={styles.filter} disabled>
+                所有学科 <span aria-hidden="true">⌄</span>
+              </button>
+            </span>
+          </div>
+
+          {/* 3. spacer */}
+          <div />
+
+          {/* 4. rightActions：刷新 / 筛选 / 搜索 / 主按钮 */}
+          <div className={styles.rightActions}>
+            <button
+              type="button"
+              className={styles.iconButton}
+              aria-label="刷新进度"
+              data-testid="progress-refresh"
+              onClick={() => {
+                // 刷新走 store load；store 内部去重，重复点击安全
+                void import('../stores/projectsStore').then(({ useProjectsStore }) => {
+                  void useProjectsStore.getState().load().catch(() => {});
+                });
+              }}
             >
-              <List size={14} aria-hidden="true" />
-            </ViewSwitchButton>
-            <ViewSwitchButton
-              active={currentView === 'kanban'}
-              onClick={() => setCurrentView('kanban')}
-              testid="progress-view-kanban"
-              label="看板视图"
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M20 12a8 8 0 1 1-2.3-5.6" />
+                <path d="M20 4v6h-6" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className={styles.iconButton}
+              aria-label="筛选字段"
+              disabled
+              title="筛选字段（待开发）"
             >
-              <Columns3 size={14} aria-hidden="true" />
-            </ViewSwitchButton>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 6h16" />
+                <path d="M7 12h10" />
+                <path d="M10 18h4" />
+              </svg>
+            </button>
+            <label className={styles.search} aria-label="搜索">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="11" cy="11" r="7" />
+                <path d="m21 21-4.3-4.3" />
+              </svg>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={handleSearchChange}
+                placeholder="搜索项目 / 客户 / 反馈"
+                data-testid="progress-search-input"
+              />
+            </label>
+            <button
+              type="button"
+              className={styles.primary}
+              data-testid="progress-new-project"
+              onClick={() => setCreateOpen(true)}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 5v14" />
+                <path d="M5 12h14" />
+              </svg>
+              新建项目
+            </button>
           </div>
         </header>
       )}
 
       {/* ============================================
-          主内容区：list / kanban / detail 由调用方决定
+          顶部 6 卡 summary（设计稿 §summary）；详情页隐藏
+          ============================================ */}
+      {!isDetail && <ProgressSummary />}
+
+      {/* ============================================
+          主内容区：list / kanban / gantt / detail 由调用方决定
           ============================================ */}
       <main
         data-testid="progress-content"
-        style={{
-          flex: 1,
-          minHeight: 0,
-          overflow: 'auto',
-        }}
+        className={isDetail ? styles.detailWrap : styles.viewStack}
       >
         {children}
       </main>
@@ -231,54 +246,6 @@ export function ProgressLayout({ children }: ProgressLayoutProps): ReactElement 
         onClose={() => setCreateOpen(false)}
         onCreated={() => setCreateOpen(false)}
       />
-    </div>
-  );
-}
-
-interface ViewSwitchButtonProps {
-  active: boolean;
-  onClick: () => void;
-  testid: string;
-  label: string;
-  children: ReactNode;
-}
-
-/**
- * 视图切换按钮：扁平风（spec §10 视觉要求）；激活态用 accent 反色 + 边框。
- *
- * 拆为子组件让按钮 a11y 属性（role=tab / aria-selected）保持一致；
- * 同时压缩两个按钮的 inline 样式重复。
- */
-function ViewSwitchButton({
-  active,
-  onClick,
-  testid,
-  label,
-  children,
-}: ViewSwitchButtonProps): ReactElement {
-  // active 用 --c-accent 反色（fg / 背景）；非 active 透明背景
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      aria-label={label}
-      data-active={active ? 'true' : 'false'}
-      data-testid={testid}
-      onClick={onClick}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 4,
-        padding: '5px 10px',
-        border: 'none',
-        background: active ? 'var(--c-accent)' : 'transparent',
-        color: active ? 'var(--c-on-accent, var(--c-bg))' : 'var(--c-fg-muted)',
-        cursor: 'pointer',
-        fontSize: 12,
-      }}
-    >
-      {children}
-    </button>
+    </>
   );
 }

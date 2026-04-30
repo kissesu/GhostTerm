@@ -19,19 +19,24 @@ beforeEach(() => {
 });
 
 describe('progressUiStore.currentView', () => {
-  it('默认为 list 视图', () => {
-    expect(useProgressUiStore.getState().currentView).toBe('list');
-  });
-
-  it('setCurrentView 切换到 kanban', () => {
-    useProgressUiStore.getState().setCurrentView('kanban');
+  it('默认为 kanban 视图（设计稿 segmented 默认 active）', () => {
     expect(useProgressUiStore.getState().currentView).toBe('kanban');
   });
 
-  it('setCurrentView 切换回 list', () => {
-    useProgressUiStore.getState().setCurrentView('kanban');
+  it('setCurrentView 切换到 list', () => {
     useProgressUiStore.getState().setCurrentView('list');
     expect(useProgressUiStore.getState().currentView).toBe('list');
+  });
+
+  it('setCurrentView 切换到 gantt', () => {
+    useProgressUiStore.getState().setCurrentView('gantt');
+    expect(useProgressUiStore.getState().currentView).toBe('gantt');
+  });
+
+  it('setCurrentView 切换回 kanban', () => {
+    useProgressUiStore.getState().setCurrentView('list');
+    useProgressUiStore.getState().setCurrentView('kanban');
+    expect(useProgressUiStore.getState().currentView).toBe('kanban');
   });
 });
 
@@ -83,7 +88,7 @@ describe('progressUiStore.selectedProjectId', () => {
 describe('progressUiStore.reset', () => {
   it('reset 清空所有 UI 状态', () => {
     const s = useProgressUiStore.getState();
-    s.setCurrentView('kanban');
+    s.setCurrentView('list');
     s.setSearchQuery('xx');
     s.setStatusFilter('paid');
     s.setSelectedProject(99);
@@ -91,7 +96,7 @@ describe('progressUiStore.reset', () => {
     s.reset();
 
     const after = useProgressUiStore.getState();
-    expect(after.currentView).toBe('list');
+    expect(after.currentView).toBe('kanban');
     expect(after.searchQuery).toBe('');
     expect(after.statusFilter).toBe('all');
     expect(after.selectedProjectId).toBeNull();

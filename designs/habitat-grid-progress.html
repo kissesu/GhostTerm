@@ -50,6 +50,7 @@
       }
 
       .app {
+        position: relative;
         width: 1500px;
         min-height: 967px;
         margin: 0 auto;
@@ -668,6 +669,240 @@
       .footer strong {
         color: var(--accent);
       }
+
+      .modal-layer {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 54px;
+        background: rgba(5, 5, 4, 0.62);
+        backdrop-filter: blur(5px);
+      }
+
+      .modal-layer.is-hidden {
+        display: none;
+      }
+
+      .project-modal {
+        width: 920px;
+        border: 1px solid var(--line-strong);
+        border-radius: 9px;
+        background: #171713;
+        box-shadow: 0 34px 90px rgba(0, 0, 0, 0.58);
+        overflow: hidden;
+      }
+
+      .modal-head {
+        height: 58px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 18px;
+        border-bottom: 1px solid var(--line);
+        background: #1d1d19;
+      }
+
+      .modal-title {
+        display: grid;
+        gap: 4px;
+      }
+
+      .modal-title strong {
+        font-size: 16px;
+      }
+
+      .modal-title span {
+        color: var(--faint);
+        font-size: 11px;
+      }
+
+      .modal-close {
+        width: 30px;
+        height: 30px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--muted);
+        background: #141412;
+        font-size: 18px;
+      }
+
+      .modal-body {
+        display: grid;
+        grid-template-columns: 1fr 270px;
+        min-height: 520px;
+      }
+
+      .form-area {
+        padding: 18px;
+        border-right: 1px solid var(--line);
+      }
+
+      .form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .field {
+        display: grid;
+        gap: 7px;
+      }
+
+      .field.wide {
+        grid-column: 1 / -1;
+      }
+
+      .field label {
+        color: #d8d1bf;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .field-box {
+        min-height: 38px;
+        padding: 0 11px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: var(--muted);
+        background: #10100f;
+        font-size: 12px;
+      }
+
+      .field-box.textarea {
+        min-height: 78px;
+        align-items: flex-start;
+        padding-top: 10px;
+        line-height: 1.7;
+      }
+
+      .field-box.active {
+        color: var(--text);
+        border-color: rgba(184, 255, 106, 0.34);
+        background: #151711;
+      }
+
+      .stage-picker {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .stage-option {
+        min-height: 54px;
+        padding: 8px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #11110f;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .stage-option strong {
+        display: block;
+        margin-bottom: 5px;
+        color: var(--text);
+        font-size: 12px;
+      }
+
+      .stage-option.selected {
+        border-color: rgba(184, 255, 106, 0.42);
+        background: rgba(184, 255, 106, 0.08);
+      }
+
+      .modal-side {
+        padding: 18px;
+        background: #121210;
+      }
+
+      .preview-card {
+        padding: 13px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: linear-gradient(180deg, #24231f, #1b1b18);
+      }
+
+      .preview-card h2 {
+        margin: 0 0 9px;
+        color: var(--text);
+        font-size: 15px;
+      }
+
+      .preview-card p {
+        margin: 0 0 6px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.55;
+      }
+
+      .modal-side-section {
+        margin-top: 14px;
+        padding-top: 14px;
+        border-top: 1px solid var(--line);
+      }
+
+      .modal-side-section h3 {
+        margin: 0 0 10px;
+        color: #d8d1bf;
+        font-size: 12px;
+      }
+
+      .check-row {
+        display: grid;
+        grid-template-columns: 18px 1fr;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 8px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .checkbox {
+        width: 16px;
+        height: 16px;
+        border-radius: 4px;
+        border: 1px solid var(--line-strong);
+        background: #181815;
+      }
+
+      .checkbox.checked {
+        border-color: transparent;
+        background: var(--accent);
+        box-shadow: inset 0 0 0 4px var(--accent);
+      }
+
+      .modal-actions {
+        height: 58px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 0 18px;
+        border-top: 1px solid var(--line);
+        background: #151513;
+      }
+
+      .secondary {
+        height: 32px;
+        padding: 0 13px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        color: var(--muted);
+        background: #11110f;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .action-group {
+        display: flex;
+        gap: 8px;
+      }
     </style>
   </head>
   <body>
@@ -704,7 +939,7 @@
             </svg>
           </button>
           <div class="search">搜索项目 / 客户 / 反馈</div>
-          <button class="primary">
+          <button class="primary" data-open-project-modal>
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 5v14" />
               <path d="M5 12h14" />
@@ -1004,6 +1239,135 @@
         <span><strong>Habitat Grid / Progress</strong> · 看板 / 列表 / Gantt 三视图</span>
         <span>颜色只表达风险、到期和金额状态；阶段通过 S1-S6 标识</span>
       </footer>
+
+      <section class="modal-layer is-hidden" aria-label="新建项目弹窗" data-project-modal-layer>
+        <div class="project-modal">
+          <header class="modal-head">
+            <div class="modal-title">
+              <strong>新建项目</strong>
+              <span>创建后默认进入 S1 洽谈中，也可以直接指定阶段</span>
+            </div>
+            <button class="modal-close" aria-label="关闭" data-close-project-modal>×</button>
+          </header>
+
+          <div class="modal-body">
+            <section class="form-area">
+              <div class="form-grid">
+                <div class="field wide">
+                  <label>项目名称</label>
+                  <div class="field-box active">陈十六 · 硕士论文降重</div>
+                </div>
+
+                <div class="field">
+                  <label>客户信息</label>
+                  <div class="field-box">陈十六@wechat</div>
+                </div>
+
+                <div class="field">
+                  <label>流转负责人</label>
+                  <div class="field-box">@张开发 <span>⌄</span></div>
+                </div>
+
+                <div class="field">
+                  <label>论文级别</label>
+                  <div class="field-box">硕士 <span>⌄</span></div>
+                </div>
+
+                <div class="field">
+                  <label>学科方向</label>
+                  <div class="field-box">经济学 <span>⌄</span></div>
+                </div>
+
+                <div class="field">
+                  <label>报价金额</label>
+                  <div class="field-box">¥6,800</div>
+                </div>
+
+                <div class="field">
+                  <label>截止日期</label>
+                  <div class="field-box">2026-05-09</div>
+                </div>
+
+                <div class="field wide">
+                  <label>项目阶段</label>
+                  <div class="stage-picker">
+                    <div class="stage-option selected"><strong>S1</strong>洽谈中</div>
+                    <div class="stage-option"><strong>S2</strong>报价中</div>
+                    <div class="stage-option"><strong>S3</strong>开发中</div>
+                    <div class="stage-option"><strong>S4</strong>待验收</div>
+                    <div class="stage-option"><strong>S5</strong>已交付</div>
+                    <div class="stage-option"><strong>S6</strong>已收款</div>
+                  </div>
+                </div>
+
+                <div class="field wide">
+                  <label>客户需求</label>
+                  <div class="field-box textarea">需要在 10 天内完成降重，查重目标 15% 以下，保留原论文结构和参考文献格式。</div>
+                </div>
+              </div>
+            </section>
+
+            <aside class="modal-side">
+              <div class="preview-card">
+                <h2>陈十六 · 硕士论文降重</h2>
+                <p>客户：陈十六@wechat</p>
+                <p>流转在：<span class="assignee">@张开发</span></p>
+                <div class="card-foot" style="margin-top: 12px;">
+                  <div class="tags"><span class="tag">硕士</span><span class="tag">经济学</span></div>
+                  <span class="deadline safe">10d</span>
+                </div>
+              </div>
+
+              <div class="modal-side-section">
+                <h3>创建后同步</h3>
+                <div class="check-row"><span class="checkbox checked"></span><span>加入看板 S1</span></div>
+                <div class="check-row"><span class="checkbox checked"></span><span>写入列表视图</span></div>
+                <div class="check-row"><span class="checkbox checked"></span><span>生成 Gantt 时间条</span></div>
+                <div class="check-row"><span class="checkbox"></span><span>立即分配开发任务</span></div>
+              </div>
+
+              <div class="modal-side-section">
+                <h3>风险提示</h3>
+                <div class="mini-card">
+                  <strong>时间较紧</strong>
+                  <p>截止日期距离当前日期 10 天，建议创建后直接进入开发排期。</p>
+                </div>
+              </div>
+            </aside>
+          </div>
+
+          <footer class="modal-actions">
+            <button class="secondary">保存为草稿</button>
+            <div class="action-group">
+              <button class="secondary" data-close-project-modal>取消</button>
+              <button class="primary" data-close-project-modal>创建项目</button>
+            </div>
+          </footer>
+        </div>
+      </section>
     </main>
+    <script>
+      const modalLayer = document.querySelector('[data-project-modal-layer]');
+      const openButtons = document.querySelectorAll('[data-open-project-modal]');
+      const closeButtons = document.querySelectorAll('[data-close-project-modal]');
+
+      openButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+          modalLayer?.classList.remove('is-hidden');
+        });
+      });
+
+      closeButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+          modalLayer?.classList.add('is-hidden');
+        });
+      });
+
+      modalLayer?.addEventListener('click', (event) => {
+        if (event.target === modalLayer) {
+          modalLayer.classList.add('is-hidden');
+        }
+      });
+    </script>
   </body>
 </html>

@@ -1,14 +1,15 @@
 /**
  * @file ProgressShell.tsx
- * @description 进度模块外壳（Phase 2 + Phase 10 + Phase 11）。
+ * @description 进度模块外壳（设计稿 1:1 复刻：toolbar + summary + 3 视图 + 详情）。
  *
  *              业务流程：
  *              1. 挂载时若 refreshToken 有但 user/access 没有 → 调 store.refresh + loadMe
  *              2. 未登录（user==null）→ 渲染 <LoginPage />
- *              3. 已登录 + 无选中项目 → ProgressLayout + (ListView | KanbanView)
+ *              3. 已登录 + 无选中项目 → ProgressLayout + (KanbanView | ListView | GanttView)
  *              4. 已登录 + 有选中项目 → ProgressLayout + ProjectDetailPage
  *
- *              schema 类型自检保持原样：tsc --noEmit 时验证 OpenAPI types 与 zod schema 字段对齐。
+ *              设计稿契约：所有 progress 子组件都包裹在 .habitatProgress 根作用域下，
+ *              CSS 变量（--bg / --bar / --accent 等）只在此作用域生效。
  *
  * @author Atlas.oi
  * @date 2026-04-29
@@ -29,8 +30,10 @@ import LoginPage from './components/LoginPage';
 import { ProgressLayout } from './components/ProgressLayout';
 import { ProjectListView } from './components/ProjectListView';
 import { KanbanView } from './components/KanbanView';
+import { GanttView } from './components/GanttView';
 import { ProjectDetailPage } from './components/ProjectDetailPage';
 import { NotificationBell } from './components/NotificationBell';
+import styles from './progress.module.css';
 
 // ============================================
 // 类型自检：确保 OpenAPI 生成的类型与 zod schema 对齐
@@ -63,27 +66,18 @@ export default function ProgressShell() {
   const currentView = useProgressUiStore((s) => s.currentView);
   const selectedProjectId = useProgressUiStore((s) => s.selectedProjectId);
 
-  // ============================================
-  // 启动时自动恢复会话：localStorage 有 refresh 但内存无 access → 用 refresh 换 access + loadMe
-  // ============================================
+  // 启动时自动恢复会话
   useEffect(() => {
     if (!user && !accessToken && refreshToken) {
       refresh()
         .then(() => loadMe())
         .catch(() => {
-          // refresh 失败 store 已自动 clearLocal；此处不做 UI 反馈，让用户落到登录页
+          // refresh 失败 store 已自动 clearLocal；此处不做 UI 反馈
         });
     }
   }, [user, accessToken, refreshToken, refresh, loadMe]);
 
-  // ============================================
-  // Phase 12：登录后拉通知列表 + 连接 WS 推送通道
-  //
-  // 业务流程：
-  //  1. 登录后调 notifications.load() 一次性拉取最近 20 条
-  //  2. 调 connectNotificationsWS() 建立 WS 长连接
-  //  3. 登出 / 切用户：useEffect cleanup 调 disconnectWS + notifications.clear
-  // ============================================
+  // 登录后拉通知列表 + 连接 WS
   useEffect(() => {
     if (!user) {
       return;
@@ -104,70 +98,36 @@ export default function ProgressShell() {
     return <LoginPage />;
   }
 
-  // 已登录 → 主界面：toolbar + 视图分支
+  // 决定主内容
+  let mainContent;
+  if (selectedProjectId !== null) {
+    mainContent = <ProjectDetailPage projectId={selectedProjectId} />;
+  } else if (currentView === 'list') {
+    mainContent = <ProjectListView />;
+  } else if (currentView === 'gantt') {
+    mainContent = <GanttView />;
+  } else {
+    mainContent = <KanbanView />;
+  }
+
   return (
-    <div
-      data-testid="progress-shell"
-      style={{
-        width: '100%',
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        background: 'var(--c-bg)',
-        color: 'var(--c-fg)',
-        minHeight: 0,
-      }}
-    >
-      {/* 顶部用户信息 + 退出按钮（紧贴 toolbar 上方；Phase 12 通知中心也加在这里） */}
-      <div
-        data-testid="progress-userbar"
-        style={{
-          display: 'flex',
-          justifyContent: 'flex-end',
-          alignItems: 'center',
-          gap: 8,
-          padding: '6px 16px',
-          borderBottom: '1px solid var(--c-border)',
-          background: 'var(--c-panel)',
-          fontSize: 12,
-          color: 'var(--c-fg-muted)',
-        }}
-      >
+    <div data-testid="progress-shell" className={styles.habitatProgress}>
+      {/* 顶部用户栏（设计稿外，沿用项目惯例做用户/通知/退出） */}
+      <div className={styles.userbar} data-testid="progress-userbar">
         <NotificationBell />
         <span>{user.displayName ?? user.username}</span>
         <button
           type="button"
           onClick={() => void logout()}
           data-testid="progress-logout"
-          style={{
-            padding: '4px 8px',
-            borderRadius: 4,
-            border: '1px solid var(--c-border)',
-            background: 'transparent',
-            color: 'var(--c-fg)',
-            cursor: 'pointer',
-            fontSize: 11,
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 4,
-          }}
+          className={styles.userbarLogout}
         >
           <LogOut size={12} aria-hidden="true" />
           退出
         </button>
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        <ProgressLayout>
-          {selectedProjectId !== null ? (
-            <ProjectDetailPage projectId={selectedProjectId} />
-          ) : currentView === 'list' ? (
-            <ProjectListView />
-          ) : (
-            <KanbanView />
-          )}
-        </ProgressLayout>
-      </div>
+      <ProgressLayout>{mainContent}</ProgressLayout>
     </div>
   );
 }

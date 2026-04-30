@@ -25,8 +25,8 @@ import { create } from 'zustand';
 
 import type { ProjectStatus } from '../api/projects';
 
-/** 当前视图模式 */
-export type ProgressView = 'list' | 'kanban';
+/** 当前视图模式（设计稿 §toolbar segmented：看板 / 列表 / Gantt） */
+export type ProgressView = 'list' | 'kanban' | 'gantt';
 
 /** 状态过滤值；"all" 表示不过滤 */
 export type StatusFilter = ProjectStatus | 'all';
@@ -58,7 +58,8 @@ interface ProgressUiState {
 }
 
 export const useProgressUiStore = create<ProgressUiState>((set) => ({
-  currentView: 'list',
+  // 默认看板视图（设计稿 segmented 默认 active 是"看板"）
+  currentView: 'kanban',
   setCurrentView: (view) => set({ currentView: view }),
 
   searchQuery: '',
@@ -72,7 +73,7 @@ export const useProgressUiStore = create<ProgressUiState>((set) => ({
 
   reset: () =>
     set({
-      currentView: 'list',
+      currentView: 'kanban',
       searchQuery: '',
       statusFilter: 'all',
       selectedProjectId: null,
