@@ -3,7 +3,7 @@
  * @description 事件触发对话框（Phase 11） —— 为单次状态机事件提供模态表单。
  *
  *              业务流程（spec §6.2 + plan part3 §I2）：
- *              1. 用户在 EventActionButtons 点击事件按钮 → 本对话框打开
+ *              1. 用户在 NbaPanel 点击 CTA 按钮 → 本对话框打开
  *              2. note 必填（项目 project_events.note 列 NOT NULL）
  *              3. 部分事件需要附加 payload：
  *                 - E11 (归档) 不需要附加（仅 note）
@@ -60,6 +60,9 @@ export function EventTriggerDialog({
   onSuccess,
 }: EventTriggerDialogProps): ReactElement {
   const triggerEvent = useProjectsStore((s) => s.triggerEvent);
+
+  // 用于 aria-labelledby 关联对话框标题，保证无障碍朗读器可识别弹窗名称
+  const titleId = `event-dialog-title-${event}`;
 
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -151,8 +154,8 @@ export function EventTriggerDialog({
     <div
       ref={rootRef}
       role="dialog"
-      aria-label={`触发事件 ${eventLabel}`}
       aria-modal="true"
+      aria-labelledby={titleId}
       data-testid="event-trigger-dialog"
       data-event={event}
       onKeyDown={handleKeyDown}
@@ -168,7 +171,7 @@ export function EventTriggerDialog({
         fontFamily: 'inherit',
       }}
     >
-      <h3 style={{ margin: '0 0 14px', fontSize: 15, fontWeight: 800, color: 'var(--text)', letterSpacing: 0.2 }}>
+      <h3 id={titleId} style={{ margin: '0 0 14px', fontSize: 15, fontWeight: 800, color: 'var(--text)', letterSpacing: 0.2 }}>
         {eventLabel}
       </h3>
 

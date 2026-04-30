@@ -14,6 +14,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 vi.mock('../../api/projects', async (importOriginal) => {
   const orig = (await importOriginal()) as Record<string, unknown>;
@@ -149,6 +150,30 @@ describe('EventTriggerDialog 提交失败', () => {
       expect(screen.getByTestId('event-trigger-error')).toHaveTextContent('状态机非法迁移'),
     );
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+describe('EventTriggerDialog a11y', () => {
+  it('根节点有 role="dialog" + aria-modal="true" + aria-labelledby 指向 eventLabel', () => {
+    render(<EventTriggerDialog projectId={1} event="E1" eventLabel="提交报价评估" onClose={vi.fn()} />);
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    const titleId = dialog.getAttribute('aria-labelledby');
+    expect(titleId).toBeTruthy();
+    expect(document.getElementById(titleId!)).toHaveTextContent('提交报价评估');
+  });
+
+  it('打开时第一个表单字段获得焦点（既有 noteRef 行为）', () => {
+    render(<EventTriggerDialog projectId={1} event="E1" eventLabel="提交报价评估" onClose={vi.fn()} />);
+    expect(screen.getByLabelText(/事件备注|备注/)).toHaveFocus();
+  });
+
+  it('ESC 键关闭弹窗（既有 handleKeyDown 行为）', async () => {
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    render(<EventTriggerDialog projectId={1} event="E1" eventLabel="提交报价评估" onClose={onClose} />);
+    await user.keyboard('{Escape}');
+    expect(onClose).toHaveBeenCalled();
   });
 });
 
