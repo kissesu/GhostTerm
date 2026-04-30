@@ -274,21 +274,61 @@ type PaymentService interface {
 //
 // 实现要点（v2 part2 §W3）：
 // - Create 接受 tx 参数，与业务操作同事务（避免业务成功但通知丢失）
-// - Outbox worker 周期扫描 delivered_at IS NULL 的记录，调用 Hub.SendToUser 推送
+//   tx 内调 insert_notification_secure SECURITY DEFINER 函数（migration 0002 §insert_notification_secure），
+//   不允许业务层 raw INSERT 绕过权限校验
+// - Outbox worker 周期扫描 delivered_at IS NULL 的记录，调用 WSHub.Broadcast 推送
 // - 推送成功后 UPDATE delivered_at；用户离线时通知保留待下次连接拉取
 type NotificationService interface {
-	// Create 同事务写入通知（必须返回错误，由调用方决定是否回滚）
-	Create(ctx context.Context, tx pgx.Tx, input any) error
+	// Create 同事务写入通知；调用 insert_notification_secure SECURITY DEFINER 函数。
+	// projectID 可为 nil（系统级通知，如 settlement_received 不必关联 project）。
+	// 返回新建通知的 ID 与完整记录；调用方决定 tx 是否提交。
+	Create(
+		ctx context.Context,
+		tx pgx.Tx,
+		userID int64,
+		ntype string,
+		projectID *int64,
+		title, body string,
+	) (Notification, error)
 
-	// List 当前用户通知列表，可按 unreadOnly 过滤
-	List(ctx context.Context, sc SessionContext, unreadOnly bool) ([]any, error)
+	// List 当前用户通知列表，可按 unreadOnly 过滤；limit<=0 时由实现层兜底默认值
+	List(ctx context.Context, userID int64, unreadOnly bool, limit int) ([]Notification, error)
 
 	// MarkRead 单条标记
-	MarkRead(ctx context.Context, sc SessionContext, notificationID int64) error
+	MarkRead(ctx context.Context, userID, notificationID int64) error
 
 	// MarkAllRead 全部标记
-	MarkAllRead(ctx context.Context, sc SessionContext) error
+	MarkAllRead(ctx context.Context, userID int64) error
 
 	// FlushOutbox outbox worker 调用，扫描未投递通知并推送给在线连接
 	FlushOutbox(ctx context.Context) error
+}
+
+// Notification 是通知视图模型，对齐 oas.Notification + DB notifications 列。
+//
+// 业务背景：service 层不直接返回 oas.Notification 避免反向依赖；
+// handler 层做 services.Notification → oas.Notification 转换。
+type Notification struct {
+	ID          int64
+	UserID      int64
+	Type        string  // notification_type enum 字符串
+	ProjectID   *int64  // 可为 nil
+	Title       string
+	Body        string
+	IsRead      bool
+	CreatedAt   time.Time
+	ReadAt      *time.Time // 未读时为 nil
+	DeliveredAt *time.Time // outbox 已推送时间；nil 表示待推送
+}
+
+// WSHub 是 NotificationService 推送通知的下游接口。
+//
+// 业务背景：
+// - 解耦"产生通知"与"推送通道"，让 outbox worker 可以单独测试
+// - WSHub 实现挂在 router/main 层，存"在线连接 map<userID, []conn>"
+// - Broadcast 失败不阻塞 outbox 写 delivered_at —— 用户离线就保留 nil 让 List 时仍能取到
+type WSHub interface {
+	// Broadcast 把通知推送给指定用户的所有在线连接；用户离线时返回 ErrNoSubscribers。
+	// 实现必须并发安全（多个 goroutine 同时 Broadcast）。
+	Broadcast(notification Notification) error
 }
