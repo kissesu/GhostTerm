@@ -60,10 +60,10 @@ func NewAuthHandler(svc services.AuthService, rbac services.RBACService) *AuthHa
 //   - ErrUserInactive       → 401 unauthorized（不暴露 active 状态防 enumeration）
 //   - 其它                  → 500 internal（由 ogen 默认 ErrorHandler 包裹）
 func (h *AuthHandler) AuthLogin(ctx context.Context, req *oas.AuthLoginRequest) (oas.AuthLoginRes, error) {
-	access, refresh, raw, err := h.Svc.Login(ctx, req.Email, req.Password)
+	access, refresh, raw, err := h.Svc.Login(ctx, req.Username, req.Password)
 	if err != nil {
 		if errors.Is(err, services.ErrInvalidCredentials) || errors.Is(err, services.ErrUserInactive) {
-			return unauthorizedLoginRes("邮箱或密码错误"), nil
+			return unauthorizedLoginRes("用户名或密码错误"), nil
 		}
 		return nil, err
 	}
@@ -195,7 +195,7 @@ func (h *AuthHandler) WsTicketIssue(ctx context.Context) (*oas.WSTicketResponse,
 func toOASUser(u services.AuthUser) oas.User {
 	return oas.User{
 		ID:          u.ID,
-		Email:       u.Email,
+		Username:    u.Username,
 		DisplayName: u.DisplayName,
 		RoleId:      u.RoleID,
 		IsActive:    u.IsActive,

@@ -72,18 +72,18 @@ func setupFileEnv(t *testing.T) *fileTestEnv {
 
 	var adminID, devID, csID int64
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
-		VALUES ('admin@x.com', $1, 'Admin', 1, TRUE)
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+		VALUES ('admin-file', $1, 'Admin', 1, TRUE)
 		RETURNING id
 	`, hash).Scan(&adminID))
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
-		VALUES ('dev@x.com', $1, 'Dev', 2, TRUE)
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+		VALUES ('dev-file', $1, 'Dev', 2, TRUE)
 		RETURNING id
 	`, hash).Scan(&devID))
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
-		VALUES ('cs@x.com', $1, 'CS', 3, TRUE)
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+		VALUES ('cs-file', $1, 'CS', 3, TRUE)
 		RETURNING id
 	`, hash).Scan(&csID))
 

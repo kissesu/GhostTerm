@@ -57,12 +57,13 @@ components:
       description: '十进制金额，最多 12 位整数 + 2 位小数（与 Postgres NUMERIC(12,2) 对齐，前端用 decimal.js 处理）'
 
     # ===== 用户 / 角色 / 权限 =====
+    # 用户明确指令覆盖 spec §4：账号字段使用 username 而非 email
     User:
       type: object
-      required: [id, email, displayName, roleId, isActive, createdAt]
+      required: [id, username, displayName, roleId, isActive, createdAt]
       properties:
         id: { type: integer, format: int64 }
-        email: { type: string, format: email }
+        username: { type: string, minLength: 1, description: "登录用 username（唯一）" }
         displayName: { type: string }
         roleId: { type: integer, format: int64 }
         isActive: { type: boolean }
@@ -74,10 +75,9 @@ components:
 
     UserCreateRequest:
       type: object
-      required: [username, email, password, roleId]
+      required: [username, password, roleId]
       properties:
         username: { type: string, minLength: 1, description: "登录用 username（唯一）" }
-        email: { type: string, format: email }
         password: { type: string, minLength: 8, description: "明文密码，服务端 bcrypt 后入库" }
         displayName: { type: string, description: "可选展示名，缺省取 username" }
         roleId: { type: integer, format: int64 }
@@ -86,7 +86,7 @@ components:
       type: object
       description: "PATCH 部分字段，所有字段 optional；密码字段独立显式传以便审计"
       properties:
-        email: { type: string, format: email }
+        username: { type: string, minLength: 1 }
         password: { type: string, minLength: 8 }
         displayName: { type: string }
         roleId: { type: integer, format: int64 }
@@ -535,11 +535,12 @@ components:
         severity: { $ref: '#/components/schemas/RiskSeverity' }
 
     # ===== Auth =====
+    # 用户明确指令覆盖 spec §11：登录字段使用 username 而非 email
     AuthLoginRequest:
       type: object
-      required: [email, password]
+      required: [username, password]
       properties:
-        email: { type: string, format: email }
+        username: { type: string, minLength: 1, description: "登录用 username" }
         password: { type: string, minLength: 1 }
 
     AuthLoginResponse:

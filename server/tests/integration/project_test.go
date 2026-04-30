@@ -61,20 +61,20 @@ func setupProjectEnv(t *testing.T) *projectTestEnv {
 
 	var adminID, csID, devID, otherDevID int64
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
-		VALUES ('admin@x.com', $1, 'Admin', 1, TRUE) RETURNING id
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+		VALUES ('admin-proj', $1, 'Admin', 1, TRUE) RETURNING id
 	`, hash).Scan(&adminID))
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
-		VALUES ('cs@x.com', $1, 'CS', 3, TRUE) RETURNING id
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+		VALUES ('cs-proj', $1, 'CS', 3, TRUE) RETURNING id
 	`, hash).Scan(&csID))
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
-		VALUES ('dev@x.com', $1, 'Dev', 2, TRUE) RETURNING id
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+		VALUES ('dev-proj', $1, 'Dev', 2, TRUE) RETURNING id
 	`, hash).Scan(&devID))
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
-		VALUES ('dev2@x.com', $1, 'Dev2', 2, TRUE) RETURNING id
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+		VALUES ('dev2-proj', $1, 'Dev2', 2, TRUE) RETURNING id
 	`, hash).Scan(&otherDevID))
 
 	var customerID int64

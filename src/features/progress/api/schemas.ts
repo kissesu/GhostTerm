@@ -35,9 +35,10 @@ import { z } from 'zod';
  * 登录响应（AuthLoginResponse.user）的 permissions 留空数组，
  * 因为客户端拿到 access token 后会主动调 me 拉权限。
  */
+// 用户明确指令覆盖 spec §4：账号字段使用 username 而非 email
 export const UserSchema = z.object({
   id: z.number().int(),
-  email: z.string().email(),
+  username: z.string().min(1),
   displayName: z.string(),
   roleId: z.number().int(),
   isActive: z.boolean(),

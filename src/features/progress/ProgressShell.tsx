@@ -134,7 +134,7 @@ export default function ProgressShell() {
         }}
       >
         <NotificationBell />
-        <span>{user.displayName ?? user.email}</span>
+        <span>{user.displayName ?? user.username}</span>
         <button
           type="button"
           onClick={() => void logout()}

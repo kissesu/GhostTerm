@@ -61,20 +61,20 @@ func setupQuoteEnv(t *testing.T) *quoteEnv {
 	ctx := context.Background()
 	var adminID, csID, devID, otherDev int64
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
-		VALUES ('admin@x.com', $1, 'Admin', 1, TRUE) RETURNING id
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+		VALUES ('admin-quote', $1, 'Admin', 1, TRUE) RETURNING id
 	`, hash).Scan(&adminID))
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
-		VALUES ('cs@x.com', $1, 'CS', 3, TRUE) RETURNING id
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+		VALUES ('cs-quote', $1, 'CS', 3, TRUE) RETURNING id
 	`, hash).Scan(&csID))
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
-		VALUES ('dev@x.com', $1, 'Dev', 2, TRUE) RETURNING id
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+		VALUES ('dev-quote', $1, 'Dev', 2, TRUE) RETURNING id
 	`, hash).Scan(&devID))
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
-		VALUES ('dev2@x.com', $1, 'Dev2', 2, TRUE) RETURNING id
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+		VALUES ('dev2-quote', $1, 'Dev2', 2, TRUE) RETURNING id
 	`, hash).Scan(&otherDev))
 
 	var custID int64

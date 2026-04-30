@@ -71,9 +71,10 @@ CREATE TABLE role_permissions (
 );
 
 -- 用户表（C1 关键：在 roles 之后创建，FK role_id → roles.id 才能成立）
+-- 用户明确指令覆盖 spec §4：账号字段使用 username 而非 email
 CREATE TABLE users (
     id             BIGSERIAL PRIMARY KEY,
-    email          TEXT NOT NULL UNIQUE,
+    username       TEXT NOT NULL UNIQUE,
     password_hash  TEXT NOT NULL,
     display_name   TEXT NOT NULL,
     role_id        BIGINT NOT NULL REFERENCES roles(id),
@@ -466,6 +467,27 @@ INSERT INTO role_permissions (role_id, permission_id)
         ('file',     'read',   'member'),
         ('file',     'upload', 'all')
     );
+
+-- =========================================================
+-- 14.5 初始超级管理员账号（开发占位；生产部署必须立刻改密码）
+-- 用户明确指令：schema.sql 必须有初始超管账号
+--   username     : admin
+--   明文密码     : admin123
+--   bcrypt cost  : 12（与 auth_service 默认 cost 一致）
+--   role_id      : 1（对应上方预置 super_admin 角色）
+-- 该 hash 通过 cd server && go run /tmp/genbcrypt.go 真实生成，
+-- 任何环境 INSERT 失败（重复执行）都被 ON CONFLICT 静默吸收。
+-- =========================================================
+
+INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+VALUES (
+    'admin',
+    '$2a$12$/EKvylTUcANTdRurd6WUSeH3R2aN2rol81pqZDwdXLbmPZWtNXmP2',
+    '超级管理员',
+    1,
+    TRUE
+)
+ON CONFLICT (username) DO NOTHING;
 
 -- =========================================================
 -- 15. 初始 GRANT：progress_app 业务运行时权限

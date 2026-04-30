@@ -70,8 +70,8 @@ interface ProgressAuthState {
 
   // ============ actions ============
 
-  /** 邮箱 + 密码登录 */
-  login: (email: string, password: string) => Promise<void>;
+  /** 用户名 + 密码登录（用户明确指令覆盖 spec §11） */
+  login: (username: string, password: string) => Promise<void>;
   /** 用 refreshToken 换新 accessToken；失败会清空 refresh */
   refresh: () => Promise<void>;
   /** 登出：调后端 + 清空本地状态 + 清 localStorage */
@@ -92,7 +92,7 @@ export const useProgressAuthStore = create<ProgressAuthState>((set, get) => ({
   // ----------------------------------------------------------
   // login: POST /api/auth/login → { accessToken, refreshToken, user }
   // ----------------------------------------------------------
-  async login(email, password) {
+  async login(username, password) {
     set({ loading: true, error: null });
     try {
       const data: LoginResponsePayload = await apiFetch(
@@ -100,7 +100,7 @@ export const useProgressAuthStore = create<ProgressAuthState>((set, get) => ({
         {
           method: 'POST',
           anonymous: true, // 登录是公开 endpoint
-          body: JSON.stringify({ email, password }),
+          body: JSON.stringify({ username, password }),
         },
         LoginResponseSchema,
       );

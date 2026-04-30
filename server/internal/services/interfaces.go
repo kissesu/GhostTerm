@@ -51,8 +51,8 @@ type PageQuery struct {
 // - users.token_version 字段递增用于强制登出
 // - logout 不在数据库存 token，靠递增 version 让旧 token 失效
 type AuthService interface {
-	// Login 邮箱+密码换 access/refresh token
-	Login(ctx context.Context, email, password string) (accessToken, refreshToken string, user any, err error)
+	// Login username+密码换 access/refresh token
+	Login(ctx context.Context, username, password string) (accessToken, refreshToken string, user any, err error)
 
 	// Refresh 用 refresh token 换新 access token，校验 token_version 匹配
 	Refresh(ctx context.Context, refreshToken string) (accessToken string, err error)

@@ -65,23 +65,23 @@ func setupFeedbackEnv(t *testing.T) *feedbackTestEnv {
 	// 1. 用户：admin(1) / cs(3) / dev(2) / non-member-dev(2)
 	var adminID, csID, devID, nonMemberID int64
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
-		VALUES ('admin-fb@x.com', $1, 'Admin', 1, TRUE)
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+		VALUES ('admin-fb', $1, 'Admin', 1, TRUE)
 		RETURNING id
 	`, hash).Scan(&adminID))
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
-		VALUES ('cs-fb@x.com', $1, 'CS', 3, TRUE)
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+		VALUES ('cs-fb', $1, 'CS', 3, TRUE)
 		RETURNING id
 	`, hash).Scan(&csID))
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
-		VALUES ('dev-fb@x.com', $1, 'Dev', 2, TRUE)
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+		VALUES ('dev-fb', $1, 'Dev', 2, TRUE)
 		RETURNING id
 	`, hash).Scan(&devID))
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
-		VALUES ('outsider-fb@x.com', $1, 'Outsider', 2, TRUE)
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+		VALUES ('outsider-fb', $1, 'Outsider', 2, TRUE)
 		RETURNING id
 	`, hash).Scan(&nonMemberID))
 

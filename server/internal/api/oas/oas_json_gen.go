@@ -117,8 +117,8 @@ func (s *AuthLoginRequest) Encode(e *jx.Encoder) {
 // encodeFields encodes fields.
 func (s *AuthLoginRequest) encodeFields(e *jx.Encoder) {
 	{
-		e.FieldStart("email")
-		e.Str(s.Email)
+		e.FieldStart("username")
+		e.Str(s.Username)
 	}
 	{
 		e.FieldStart("password")
@@ -127,7 +127,7 @@ func (s *AuthLoginRequest) encodeFields(e *jx.Encoder) {
 }
 
 var jsonFieldsNameOfAuthLoginRequest = [2]string{
-	0: "email",
+	0: "username",
 	1: "password",
 }
 
@@ -140,17 +140,17 @@ func (s *AuthLoginRequest) Decode(d *jx.Decoder) error {
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
-		case "email":
+		case "username":
 			requiredBitSet[0] |= 1 << 0
 			if err := func() error {
 				v, err := d.Str()
-				s.Email = string(v)
+				s.Username = string(v)
 				if err != nil {
 					return err
 				}
 				return nil
 			}(); err != nil {
-				return errors.Wrap(err, "decode field \"email\"")
+				return errors.Wrap(err, "decode field \"username\"")
 			}
 		case "password":
 			requiredBitSet[0] |= 1 << 1
@@ -10100,8 +10100,8 @@ func (s *User) encodeFields(e *jx.Encoder) {
 		e.Int64(s.ID)
 	}
 	{
-		e.FieldStart("email")
-		e.Str(s.Email)
+		e.FieldStart("username")
+		e.Str(s.Username)
 	}
 	{
 		e.FieldStart("displayName")
@@ -10133,7 +10133,7 @@ func (s *User) encodeFields(e *jx.Encoder) {
 
 var jsonFieldsNameOfUser = [7]string{
 	0: "id",
-	1: "email",
+	1: "username",
 	2: "displayName",
 	3: "roleId",
 	4: "isActive",
@@ -10162,17 +10162,17 @@ func (s *User) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"id\"")
 			}
-		case "email":
+		case "username":
 			requiredBitSet[0] |= 1 << 1
 			if err := func() error {
 				v, err := d.Str()
-				s.Email = string(v)
+				s.Username = string(v)
 				if err != nil {
 					return err
 				}
 				return nil
 			}(); err != nil {
-				return errors.Wrap(err, "decode field \"email\"")
+				return errors.Wrap(err, "decode field \"username\"")
 			}
 		case "displayName":
 			requiredBitSet[0] |= 1 << 2
@@ -10311,10 +10311,6 @@ func (s *UserCreateRequest) encodeFields(e *jx.Encoder) {
 		e.Str(s.Username)
 	}
 	{
-		e.FieldStart("email")
-		e.Str(s.Email)
-	}
-	{
 		e.FieldStart("password")
 		e.Str(s.Password)
 	}
@@ -10330,12 +10326,11 @@ func (s *UserCreateRequest) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfUserCreateRequest = [5]string{
+var jsonFieldsNameOfUserCreateRequest = [4]string{
 	0: "username",
-	1: "email",
-	2: "password",
-	3: "displayName",
-	4: "roleId",
+	1: "password",
+	2: "displayName",
+	3: "roleId",
 }
 
 // Decode decodes UserCreateRequest from json.
@@ -10359,20 +10354,8 @@ func (s *UserCreateRequest) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"username\"")
 			}
-		case "email":
-			requiredBitSet[0] |= 1 << 1
-			if err := func() error {
-				v, err := d.Str()
-				s.Email = string(v)
-				if err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"email\"")
-			}
 		case "password":
-			requiredBitSet[0] |= 1 << 2
+			requiredBitSet[0] |= 1 << 1
 			if err := func() error {
 				v, err := d.Str()
 				s.Password = string(v)
@@ -10394,7 +10377,7 @@ func (s *UserCreateRequest) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"displayName\"")
 			}
 		case "roleId":
-			requiredBitSet[0] |= 1 << 4
+			requiredBitSet[0] |= 1 << 3
 			if err := func() error {
 				v, err := d.Int64()
 				s.RoleId = int64(v)
@@ -10415,7 +10398,7 @@ func (s *UserCreateRequest) Decode(d *jx.Decoder) error {
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [1]uint8{
-		0b00010111,
+		0b00001011,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -10671,9 +10654,9 @@ func (s *UserUpdateRequest) Encode(e *jx.Encoder) {
 // encodeFields encodes fields.
 func (s *UserUpdateRequest) encodeFields(e *jx.Encoder) {
 	{
-		if s.Email.Set {
-			e.FieldStart("email")
-			s.Email.Encode(e)
+		if s.Username.Set {
+			e.FieldStart("username")
+			s.Username.Encode(e)
 		}
 	}
 	{
@@ -10703,7 +10686,7 @@ func (s *UserUpdateRequest) encodeFields(e *jx.Encoder) {
 }
 
 var jsonFieldsNameOfUserUpdateRequest = [5]string{
-	0: "email",
+	0: "username",
 	1: "password",
 	2: "displayName",
 	3: "roleId",
@@ -10718,15 +10701,15 @@ func (s *UserUpdateRequest) Decode(d *jx.Decoder) error {
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
-		case "email":
+		case "username":
 			if err := func() error {
-				s.Email.Reset()
-				if err := s.Email.Decode(d); err != nil {
+				s.Username.Reset()
+				if err := s.Username.Decode(d); err != nil {
 					return err
 				}
 				return nil
 			}(); err != nil {
-				return errors.Wrap(err, "decode field \"email\"")
+				return errors.Wrap(err, "decode field \"username\"")
 			}
 		case "password":
 			if err := func() error {

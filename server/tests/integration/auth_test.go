@@ -36,7 +36,7 @@ type authTestEnv struct {
 	userID   int64
 	roleID   int64
 	password string
-	email    string
+	username string
 }
 
 // setupAuthEnv 启 postgres 容器、构造 AuthService、seed 一个 active 用户。
@@ -62,14 +62,14 @@ func setupAuthEnv(t *testing.T) *authTestEnv {
 	hash, err := auth.HashPassword(password, bcrypt.MinCost)
 	require.NoError(t, err)
 
-	const email = "alice@example.com"
+	const username = "alice"
 	const roleID = int64(2) // 开发，由 0001 migration 预置
 	var userID int64
 	err = pool.QueryRow(context.Background(), `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
 		VALUES ($1, $2, 'Alice', $3, TRUE)
 		RETURNING id
-	`, email, hash, roleID).Scan(&userID)
+	`, username, hash, roleID).Scan(&userID)
 	require.NoError(t, err)
 
 	return &authTestEnv{
@@ -79,7 +79,7 @@ func setupAuthEnv(t *testing.T) *authTestEnv {
 		userID:   userID,
 		roleID:   roleID,
 		password: password,
-		email:    email,
+		username: username,
 	}
 }
 
@@ -91,7 +91,7 @@ func TestAuth_LoginSuccess(t *testing.T) {
 	env := setupAuthEnv(t)
 	defer env.cleanup()
 
-	access, refresh, raw, err := env.svc.Login(context.Background(), env.email, env.password)
+	access, refresh, raw, err := env.svc.Login(context.Background(), env.username, env.password)
 	require.NoError(t, err)
 	assert.NotEmpty(t, access)
 	assert.NotEmpty(t, refresh)
@@ -99,7 +99,7 @@ func TestAuth_LoginSuccess(t *testing.T) {
 	user, ok := raw.(services.AuthUser)
 	require.True(t, ok, "Login 返回的 user 必须是 services.AuthUser")
 	assert.Equal(t, env.userID, user.ID)
-	assert.Equal(t, env.email, user.Email)
+	assert.Equal(t, env.username, user.Username)
 	assert.Equal(t, env.roleID, user.RoleID)
 	assert.True(t, user.IsActive)
 
@@ -116,16 +116,16 @@ func TestAuth_LoginWrongPassword(t *testing.T) {
 	env := setupAuthEnv(t)
 	defer env.cleanup()
 
-	_, _, _, err := env.svc.Login(context.Background(), env.email, "wrong-password")
+	_, _, _, err := env.svc.Login(context.Background(), env.username, "wrong-password")
 	assert.ErrorIs(t, err, services.ErrInvalidCredentials)
 }
 
-func TestAuth_LoginUnknownEmail(t *testing.T) {
+func TestAuth_LoginUnknownUsername(t *testing.T) {
 	env := setupAuthEnv(t)
 	defer env.cleanup()
 
-	_, _, _, err := env.svc.Login(context.Background(), "ghost@example.com", "anything")
-	// 未知 email 也返回 invalid_credentials（避免 user enumeration）
+	_, _, _, err := env.svc.Login(context.Background(), "ghost-user", "anything")
+	// 未知 username 也返回 invalid_credentials（避免 user enumeration）
 	assert.ErrorIs(t, err, services.ErrInvalidCredentials)
 }
 
@@ -137,7 +137,7 @@ func TestAuth_RefreshRotation(t *testing.T) {
 	env := setupAuthEnv(t)
 	defer env.cleanup()
 
-	_, refresh, _, err := env.svc.Login(context.Background(), env.email, env.password)
+	_, refresh, _, err := env.svc.Login(context.Background(), env.username, env.password)
 	require.NoError(t, err)
 
 	// 第一次 refresh 应当成功
@@ -167,7 +167,7 @@ func TestAuth_LogoutInvalidatesAccess(t *testing.T) {
 	env := setupAuthEnv(t)
 	defer env.cleanup()
 
-	access, refresh, _, err := env.svc.Login(context.Background(), env.email, env.password)
+	access, refresh, _, err := env.svc.Login(context.Background(), env.username, env.password)
 	require.NoError(t, err)
 
 	// 校验登出前 access 可用
@@ -206,7 +206,7 @@ func TestAuth_Me(t *testing.T) {
 	user, ok := raw.(services.AuthUser)
 	require.True(t, ok)
 	assert.Equal(t, env.userID, user.ID)
-	assert.Equal(t, env.email, user.Email)
+	assert.Equal(t, env.username, user.Username)
 }
 
 // ------------------------------------------------------------
@@ -258,7 +258,7 @@ func TestAuth_InactiveUserRejected(t *testing.T) {
 	defer env.cleanup()
 
 	// access 先签发 → 直接在 DB 改 is_active=FALSE → 再 Verify
-	access, _, _, err := env.svc.Login(context.Background(), env.email, env.password)
+	access, _, _, err := env.svc.Login(context.Background(), env.username, env.password)
 	require.NoError(t, err)
 
 	_, err = env.pool.Exec(context.Background(),
@@ -270,6 +270,6 @@ func TestAuth_InactiveUserRejected(t *testing.T) {
 	assert.ErrorIs(t, err, services.ErrUserInactive)
 
 	// 再次尝试 Login 也返回 inactive
-	_, _, _, err = env.svc.Login(context.Background(), env.email, env.password)
+	_, _, _, err = env.svc.Login(context.Background(), env.username, env.password)
 	assert.ErrorIs(t, err, services.ErrUserInactive)
 }

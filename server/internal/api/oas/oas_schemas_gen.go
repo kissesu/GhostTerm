@@ -31,13 +31,14 @@ func (*AuthLoginEnvelope) authLoginRes() {}
 
 // Ref: #/components/schemas/AuthLoginRequest
 type AuthLoginRequest struct {
-	Email    string `json:"email"`
+	// 登录用 username.
+	Username string `json:"username"`
 	Password string `json:"password"`
 }
 
-// GetEmail returns the value of Email.
-func (s *AuthLoginRequest) GetEmail() string {
-	return s.Email
+// GetUsername returns the value of Username.
+func (s *AuthLoginRequest) GetUsername() string {
+	return s.Username
 }
 
 // GetPassword returns the value of Password.
@@ -45,9 +46,9 @@ func (s *AuthLoginRequest) GetPassword() string {
 	return s.Password
 }
 
-// SetEmail sets the value of Email.
-func (s *AuthLoginRequest) SetEmail(val string) {
-	s.Email = val
+// SetUsername sets the value of Username.
+func (s *AuthLoginRequest) SetUsername(val string) {
+	s.Username = val
 }
 
 // SetPassword sets the value of Password.
@@ -4472,8 +4473,9 @@ func (*ThesisVersionResponse) projectsCreateThesisVersionRes() {}
 
 // Ref: #/components/schemas/User
 type User struct {
-	ID          int64     `json:"id"`
-	Email       string    `json:"email"`
+	ID int64 `json:"id"`
+	// 登录用 username（唯一）.
+	Username    string    `json:"username"`
 	DisplayName string    `json:"displayName"`
 	RoleId      int64     `json:"roleId"`
 	IsActive    bool      `json:"isActive"`
@@ -4488,9 +4490,9 @@ func (s *User) GetID() int64 {
 	return s.ID
 }
 
-// GetEmail returns the value of Email.
-func (s *User) GetEmail() string {
-	return s.Email
+// GetUsername returns the value of Username.
+func (s *User) GetUsername() string {
+	return s.Username
 }
 
 // GetDisplayName returns the value of DisplayName.
@@ -4523,9 +4525,9 @@ func (s *User) SetID(val int64) {
 	s.ID = val
 }
 
-// SetEmail sets the value of Email.
-func (s *User) SetEmail(val string) {
-	s.Email = val
+// SetUsername sets the value of Username.
+func (s *User) SetUsername(val string) {
+	s.Username = val
 }
 
 // SetDisplayName sets the value of DisplayName.
@@ -4557,7 +4559,6 @@ func (s *User) SetPermissions(val []string) {
 type UserCreateRequest struct {
 	// 登录用 username（唯一）.
 	Username string `json:"username"`
-	Email    string `json:"email"`
 	// 明文密码，服务端 bcrypt 后入库.
 	Password string `json:"password"`
 	// 可选展示名，缺省取 username.
@@ -4568,11 +4569,6 @@ type UserCreateRequest struct {
 // GetUsername returns the value of Username.
 func (s *UserCreateRequest) GetUsername() string {
 	return s.Username
-}
-
-// GetEmail returns the value of Email.
-func (s *UserCreateRequest) GetEmail() string {
-	return s.Email
 }
 
 // GetPassword returns the value of Password.
@@ -4593,11 +4589,6 @@ func (s *UserCreateRequest) GetRoleId() int64 {
 // SetUsername sets the value of Username.
 func (s *UserCreateRequest) SetUsername(val string) {
 	s.Username = val
-}
-
-// SetEmail sets the value of Email.
-func (s *UserCreateRequest) SetEmail(val string) {
-	s.Email = val
 }
 
 // SetPassword sets the value of Password.
@@ -4654,16 +4645,16 @@ func (*UserResponse) usersUpdateRes() {}
 // PATCH 部分字段，所有字段 optional；密码字段独立显式传以便审计.
 // Ref: #/components/schemas/UserUpdateRequest
 type UserUpdateRequest struct {
-	Email       OptString `json:"email"`
+	Username    OptString `json:"username"`
 	Password    OptString `json:"password"`
 	DisplayName OptString `json:"displayName"`
 	RoleId      OptInt64  `json:"roleId"`
 	IsActive    OptBool   `json:"isActive"`
 }
 
-// GetEmail returns the value of Email.
-func (s *UserUpdateRequest) GetEmail() OptString {
-	return s.Email
+// GetUsername returns the value of Username.
+func (s *UserUpdateRequest) GetUsername() OptString {
+	return s.Username
 }
 
 // GetPassword returns the value of Password.
@@ -4686,9 +4677,9 @@ func (s *UserUpdateRequest) GetIsActive() OptBool {
 	return s.IsActive
 }
 
-// SetEmail sets the value of Email.
-func (s *UserUpdateRequest) SetEmail(val OptString) {
-	s.Email = val
+// SetUsername sets the value of Username.
+func (s *UserUpdateRequest) SetUsername(val OptString) {
+	s.Username = val
 }
 
 // SetPassword sets the value of Password.

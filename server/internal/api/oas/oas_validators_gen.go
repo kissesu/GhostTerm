@@ -40,24 +40,24 @@ func (s *AuthLoginRequest) Validate() error {
 	var failures []validate.FieldError
 	if err := func() error {
 		if err := (validate.String{
-			MinLength:     0,
-			MinLengthSet:  false,
+			MinLength:     1,
+			MinLengthSet:  true,
 			MaxLength:     0,
 			MaxLengthSet:  false,
-			Email:         true,
+			Email:         false,
 			Hostname:      false,
 			Regex:         nil,
 			MinNumeric:    0,
 			MinNumericSet: false,
 			MaxNumeric:    0,
 			MaxNumericSet: false,
-		}).Validate(string(s.Email)); err != nil {
+		}).Validate(string(s.Username)); err != nil {
 			return errors.Wrap(err, "string")
 		}
 		return nil
 	}(); err != nil {
 		failures = append(failures, validate.FieldError{
-			Name:  "email",
+			Name:  "username",
 			Error: err,
 		})
 	}
@@ -2179,24 +2179,24 @@ func (s *User) Validate() error {
 	var failures []validate.FieldError
 	if err := func() error {
 		if err := (validate.String{
-			MinLength:     0,
-			MinLengthSet:  false,
+			MinLength:     1,
+			MinLengthSet:  true,
 			MaxLength:     0,
 			MaxLengthSet:  false,
-			Email:         true,
+			Email:         false,
 			Hostname:      false,
 			Regex:         nil,
 			MinNumeric:    0,
 			MinNumericSet: false,
 			MaxNumeric:    0,
 			MaxNumericSet: false,
-		}).Validate(string(s.Email)); err != nil {
+		}).Validate(string(s.Username)); err != nil {
 			return errors.Wrap(err, "string")
 		}
 		return nil
 	}(); err != nil {
 		failures = append(failures, validate.FieldError{
-			Name:  "email",
+			Name:  "username",
 			Error: err,
 		})
 	}
@@ -2232,29 +2232,6 @@ func (s *UserCreateRequest) Validate() error {
 	}(); err != nil {
 		failures = append(failures, validate.FieldError{
 			Name:  "username",
-			Error: err,
-		})
-	}
-	if err := func() error {
-		if err := (validate.String{
-			MinLength:     0,
-			MinLengthSet:  false,
-			MaxLength:     0,
-			MaxLengthSet:  false,
-			Email:         true,
-			Hostname:      false,
-			Regex:         nil,
-			MinNumeric:    0,
-			MinNumericSet: false,
-			MaxNumeric:    0,
-			MaxNumericSet: false,
-		}).Validate(string(s.Email)); err != nil {
-			return errors.Wrap(err, "string")
-		}
-		return nil
-	}(); err != nil {
-		failures = append(failures, validate.FieldError{
-			Name:  "email",
 			Error: err,
 		})
 	}
@@ -2357,14 +2334,14 @@ func (s *UserUpdateRequest) Validate() error {
 
 	var failures []validate.FieldError
 	if err := func() error {
-		if value, ok := s.Email.Get(); ok {
+		if value, ok := s.Username.Get(); ok {
 			if err := func() error {
 				if err := (validate.String{
-					MinLength:     0,
-					MinLengthSet:  false,
+					MinLength:     1,
+					MinLengthSet:  true,
 					MaxLength:     0,
 					MaxLengthSet:  false,
-					Email:         true,
+					Email:         false,
 					Hostname:      false,
 					Regex:         nil,
 					MinNumeric:    0,
@@ -2382,7 +2359,7 @@ func (s *UserUpdateRequest) Validate() error {
 		return nil
 	}(); err != nil {
 		failures = append(failures, validate.FieldError{
-			Name:  "email",
+			Name:  "username",
 			Error: err,
 		})
 	}

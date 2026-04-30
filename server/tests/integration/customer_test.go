@@ -66,20 +66,20 @@ func setupCustomerEnv(t *testing.T) *customerTestEnv {
 	// 用户 seed：admin / 两个客服 / 一个 dev
 	var adminID, csAID, csBID, devID int64
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
-		VALUES ('admin@x.com', $1, 'Admin', 1, TRUE) RETURNING id
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+		VALUES ('admin-x', $1, 'Admin', 1, TRUE) RETURNING id
 	`, hash).Scan(&adminID))
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
-		VALUES ('csA@x.com', $1, 'CS-A', 3, TRUE) RETURNING id
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+		VALUES ('csA-x', $1, 'CS-A', 3, TRUE) RETURNING id
 	`, hash).Scan(&csAID))
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
-		VALUES ('csB@x.com', $1, 'CS-B', 3, TRUE) RETURNING id
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+		VALUES ('csB-x', $1, 'CS-B', 3, TRUE) RETURNING id
 	`, hash).Scan(&csBID))
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
-		VALUES ('dev@x.com', $1, 'Dev', 2, TRUE) RETURNING id
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+		VALUES ('dev-x', $1, 'Dev', 2, TRUE) RETURNING id
 	`, hash).Scan(&devID))
 
 	// 客服 A 创建一个客户（pool 直连超级用户，不走 RLS）

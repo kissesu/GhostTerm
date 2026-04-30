@@ -42,9 +42,10 @@ import { getAccessToken, useProgressAuthStore } from '../progressAuthStore';
 
 const mockedApiFetch = vi.mocked(apiFetch);
 
+// 用户明确指令覆盖 spec §4：账号字段使用 username 而非 email
 const SAMPLE_USER = {
   id: 1,
-  email: 'alice@example.com',
+  username: 'alice',
   displayName: 'Alice',
   roleId: 2,
   isActive: true,
@@ -77,7 +78,7 @@ describe('progressAuthStore.login', () => {
       user: SAMPLE_USER,
     });
 
-    await useProgressAuthStore.getState().login('alice@example.com', 'password');
+    await useProgressAuthStore.getState().login('alice', 'password');
 
     const state = useProgressAuthStore.getState();
     expect(state.accessToken).toBe('access-1');
@@ -89,17 +90,17 @@ describe('progressAuthStore.login', () => {
   });
 
   it('登录失败时清空 token 并写 error', async () => {
-    const apiErr = new ProgressApiError(401, 'unauthorized', '邮箱或密码错误');
+    const apiErr = new ProgressApiError(401, 'unauthorized', '用户名或密码错误');
     mockedApiFetch.mockRejectedValueOnce(apiErr);
 
     await expect(
-      useProgressAuthStore.getState().login('bad@example.com', 'wrong'),
+      useProgressAuthStore.getState().login('bad-user', 'wrong'),
     ).rejects.toBe(apiErr);
 
     const state = useProgressAuthStore.getState();
     expect(state.accessToken).toBeNull();
     expect(state.user).toBeNull();
-    expect(state.error).toBe('邮箱或密码错误');
+    expect(state.error).toBe('用户名或密码错误');
     expect(state.loading).toBe(false);
   });
 });

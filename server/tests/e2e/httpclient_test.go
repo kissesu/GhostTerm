@@ -46,9 +46,10 @@ type httpClient struct {
 // loginUserResponse 是 /api/auth/login 返回 envelope.user 的字段。
 //
 // 仅声明 e2e 关心的字段；ogen 输出的 nullable 字段（roleId 等）按需补。
+// 用户明确指令覆盖 spec §4：账号字段使用 username 而非 email。
 type loginUserResponse struct {
 	ID          int64  `json:"id"`
-	Email       string `json:"email"`
+	Username    string `json:"username"`
 	DisplayName string `json:"displayName"`
 	RoleID      int64  `json:"roleId"`
 	IsActive    bool   `json:"isActive"`
@@ -77,12 +78,12 @@ func newClient(baseURL string) *httpClient {
 func (c *httpClient) loginAs(t *testing.T, u testUser) {
 	t.Helper()
 	body := map[string]string{
-		"email":    u.Email,
+		"username": u.Username,
 		"password": u.Password,
 	}
 	resp := c.do(t, http.MethodPost, "/api/auth/login", body, false)
 	require.Equalf(t, http.StatusOK, resp.statusCode,
-		"login %s expected 200, got %d body=%s", u.Email, resp.statusCode, resp.bodyString())
+		"login %s expected 200, got %d body=%s", u.Username, resp.statusCode, resp.bodyString())
 
 	var env loginEnvelope
 	require.NoError(t, json.Unmarshal(resp.body, &env), "decode login envelope")

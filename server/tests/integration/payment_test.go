@@ -65,20 +65,20 @@ func setupPaymentEnv(t *testing.T) *paymentTestEnv {
 	// 1. 用户：admin / dev1 / dev2 / cs（结算给 dev1+dev2 用，cs 录入项目）
 	var adminID, dev1ID, dev2ID, csID int64
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
-		VALUES ('admin@p.com', $1, 'Admin', 1, TRUE) RETURNING id
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+		VALUES ('admin-pay', $1, 'Admin', 1, TRUE) RETURNING id
 	`, hash).Scan(&adminID))
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
-		VALUES ('dev1@p.com', $1, 'Dev1', 2, TRUE) RETURNING id
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+		VALUES ('dev1-pay', $1, 'Dev1', 2, TRUE) RETURNING id
 	`, hash).Scan(&dev1ID))
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
-		VALUES ('dev2@p.com', $1, 'Dev2', 2, TRUE) RETURNING id
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+		VALUES ('dev2-pay', $1, 'Dev2', 2, TRUE) RETURNING id
 	`, hash).Scan(&dev2ID))
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
-		VALUES ('cs@p.com', $1, 'CS', 3, TRUE) RETURNING id
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+		VALUES ('cs-pay', $1, 'CS', 3, TRUE) RETURNING id
 	`, hash).Scan(&csID))
 
 	// 2. customer + project

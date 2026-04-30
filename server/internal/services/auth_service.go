@@ -40,9 +40,10 @@ type AuthContext struct {
 }
 
 // AuthUser 是 Login / Me 返回给 handler 的用户视图（与 oas.User 字段对齐）。
+// 用户明确指令覆盖 spec §4：账号字段使用 Username 而非 Email。
 type AuthUser struct {
 	ID          int64
-	Email       string
+	Username    string
 	DisplayName string
 	RoleID      int64
 	IsActive    bool
@@ -139,10 +140,10 @@ var ErrInvalidWSTicket = errors.New("invalid_ws_ticket")
 // Login
 // ============================================================
 
-// Login 邮箱+密码换 access/refresh。
+// Login username+密码换 access/refresh。
 //
 // 业务流程：
-//  1. 按 email 取 users 行（含 password_hash / token_version / is_active）
+//  1. 按 username 取 users 行（含 password_hash / token_version / is_active）
 //  2. bcrypt 校验密码；任何失败统一返回 ErrInvalidCredentials（避免 user enumeration）
 //  3. is_active = false → ErrUserInactive
 //  4. 签 access（带 token_version） + 签 refresh
@@ -150,23 +151,22 @@ var ErrInvalidWSTicket = errors.New("invalid_ws_ticket")
 //  6. 返回 access / refresh / AuthUser
 //
 // 设计取舍：
-//   - email 不区分大小写：DB UNIQUE constraint 是 case-sensitive，调用方应该在前端
-//     toLowerCase；本层不做规范化以免遮盖 DB 实际状态
+//   - username 大小写敏感：DB UNIQUE constraint 是 case-sensitive；本层不做规范化
 //   - INSERT refresh_tokens 不在事务里：选 token 与 INSERT 是独立操作，
 //     单条 INSERT 自身就是原子的；rotate 路径才需要事务（因为有 UPDATE+INSERT 两步）
-func (s *authService) Login(ctx context.Context, email, password string) (string, string, any, error) {
+func (s *authService) Login(ctx context.Context, username, password string) (string, string, any, error) {
 	var (
 		user      AuthUser
 		passHash  string
 		tokenVer  int64
 	)
 	row := s.pool.QueryRow(ctx, `
-		SELECT id, email, display_name, role_id, is_active, created_at,
+		SELECT id, username, display_name, role_id, is_active, created_at,
 		       password_hash, token_version
-		FROM users WHERE email = $1
-	`, email)
+		FROM users WHERE username = $1
+	`, username)
 	err := row.Scan(
-		&user.ID, &user.Email, &user.DisplayName, &user.RoleID, &user.IsActive, &user.CreatedAt,
+		&user.ID, &user.Username, &user.DisplayName, &user.RoleID, &user.IsActive, &user.CreatedAt,
 		&passHash, &tokenVer,
 	)
 	if err != nil {
@@ -357,10 +357,10 @@ func (s *authService) Me(ctx context.Context, sc SessionContext) (any, error) {
 	}
 	var u AuthUser
 	if err := s.pool.QueryRow(ctx, `
-		SELECT id, email, display_name, role_id, is_active, created_at
+		SELECT id, username, display_name, role_id, is_active, created_at
 		FROM users WHERE id = $1
 	`, ac.UserID).Scan(
-		&u.ID, &u.Email, &u.DisplayName, &u.RoleID, &u.IsActive, &u.CreatedAt,
+		&u.ID, &u.Username, &u.DisplayName, &u.RoleID, &u.IsActive, &u.CreatedAt,
 	); err != nil {
 		return nil, fmt.Errorf("auth_service: read me: %w", err)
 	}

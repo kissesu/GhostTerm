@@ -63,23 +63,23 @@ func setupRBACEnv(t *testing.T) *rbacTestEnv {
 	// 1. 用户：admin / dev / other_dev / customer
 	var adminID, devID, otherDevID, customerID int64
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
-		VALUES ('admin@x.com', $1, 'Admin', 1, TRUE)
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+		VALUES ('admin-rbac', $1, 'Admin', 1, TRUE)
 		RETURNING id
 	`, hash).Scan(&adminID))
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
-		VALUES ('dev@x.com', $1, 'Dev', 2, TRUE)
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+		VALUES ('dev-rbac', $1, 'Dev', 2, TRUE)
 		RETURNING id
 	`, hash).Scan(&devID))
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
-		VALUES ('dev2@x.com', $1, 'Dev2', 2, TRUE)
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+		VALUES ('dev2-rbac', $1, 'Dev2', 2, TRUE)
 		RETURNING id
 	`, hash).Scan(&otherDevID))
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, role_id, is_active)
-		VALUES ('cs@x.com', $1, 'Customer Service', 3, TRUE)
+		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
+		VALUES ('cs-rbac', $1, 'Customer Service', 3, TRUE)
 		RETURNING id
 	`, hash).Scan(&customerID))
 

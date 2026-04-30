@@ -570,8 +570,8 @@ export interface components {
         User: {
             /** Format: int64 */
             id: number;
-            /** Format: email */
-            email: string;
+            /** @description 登录用 username（唯一） */
+            username: string;
             displayName: string;
             /** Format: int64 */
             roleId: number;
@@ -584,8 +584,6 @@ export interface components {
         UserCreateRequest: {
             /** @description 登录用 username（唯一） */
             username: string;
-            /** Format: email */
-            email: string;
             /** @description 明文密码，服务端 bcrypt 后入库 */
             password: string;
             /** @description 可选展示名，缺省取 username */
@@ -595,8 +593,7 @@ export interface components {
         };
         /** @description PATCH 部分字段，所有字段 optional；密码字段独立显式传以便审计 */
         UserUpdateRequest: {
-            /** Format: email */
-            email?: string;
+            username?: string;
             password?: string;
             displayName?: string;
             /** Format: int64 */
@@ -960,8 +957,8 @@ export interface components {
             severity: components["schemas"]["RiskSeverity"];
         };
         AuthLoginRequest: {
-            /** Format: email */
-            email: string;
+            /** @description 登录用 username */
+            username: string;
             password: string;
         };
         AuthLoginResponse: {
