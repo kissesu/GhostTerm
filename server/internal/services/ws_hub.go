@@ -60,13 +60,21 @@ func NewWSHub() *wsHub {
 //  1. 加写锁 → 把 conn append 到 clients[userID]
 //  2. 返回 deregister 闭包，调用即从 list 中移除该 conn
 //
+// 参数 conn 接口签名为 any 是为了让 services 包不依赖 gorilla/websocket（保持 interface
+// 在 services 层无第三方耦合）；运行时这里立即断言为 *websocket.Conn，传错类型直接 fail-fast。
+//
 // 设计取舍：
 //   - 用闭包返回 deregister 而非"unregister(userID, conn)"两参数方法：
 //     调用方少传一个参数，且无法误传"别人的 conn"
 //   - 闭包是幂等的：同一 deregister 多次调用不会 panic（找不到对应 conn 直接返回）
-func (h *wsHub) RegisterClient(userID int64, conn *websocket.Conn) func() {
+func (h *wsHub) RegisterClient(userID int64, conn any) func() {
+	wsConn, ok := conn.(*websocket.Conn)
+	if !ok {
+		// fail-fast：错误类型只能是程序员错配，不应静默接受
+		panic("ws_hub: RegisterClient requires *websocket.Conn")
+	}
 	h.mu.Lock()
-	h.clients[userID] = append(h.clients[userID], conn)
+	h.clients[userID] = append(h.clients[userID], wsConn)
 	h.mu.Unlock()
 
 	var once sync.Once
@@ -76,7 +84,7 @@ func (h *wsHub) RegisterClient(userID int64, conn *websocket.Conn) func() {
 			defer h.mu.Unlock()
 			conns := h.clients[userID]
 			for i, c := range conns {
-				if c == conn {
+				if c == wsConn {
 					// 删除第 i 个：用 swap-and-pop 避免 O(n) 移动（顺序无关紧要）
 					conns[i] = conns[len(conns)-1]
 					conns = conns[:len(conns)-1]

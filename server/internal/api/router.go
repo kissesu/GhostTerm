@@ -43,15 +43,16 @@ var ErrNotImplementedYet = errors.New("not_implemented_yet")
 // 因此各 handler 不嵌入而是作为命名字段，由 oasHandler 自己声明方法做显式 forward。
 // Phase 10 Lead wireup：注册 worker A/B/C/D/E/F 的全部 handler。
 type oasHandler struct {
-	auth     *handlers.AuthHandler
-	rbac     *handlers.RBACHandler
-	customer *handlers.CustomerHandler
-	project  *handlers.ProjectHandler
-	file     *handlers.FileHandler
-	feedback *handlers.FeedbackHandler
-	quote    *handlers.QuoteHandler
-	payment  *handlers.PaymentHandler
-	earnings *handlers.EarningsHandler
+	auth         *handlers.AuthHandler
+	rbac         *handlers.RBACHandler
+	customer     *handlers.CustomerHandler
+	project      *handlers.ProjectHandler
+	file         *handlers.FileHandler
+	feedback     *handlers.FeedbackHandler
+	quote        *handlers.QuoteHandler
+	payment      *handlers.PaymentHandler
+	earnings     *handlers.EarningsHandler
+	notification *handlers.NotificationHandler
 	oas.UnimplementedHandler
 }
 
@@ -244,7 +245,28 @@ func (h *oasHandler) MeEarnings(ctx context.Context) (*oas.EarningsSummaryRespon
 	return h.earnings.MeEarnings(ctx)
 }
 
-// 编译时校验：oasHandler 满足 oas.Handler 接口（覆盖 worker A-F 全部方法 + Auth + RBAC）
+// ============================================================
+// Phase 12 — Notification：3 个 REST 方法 forward
+//
+// WS endpoint /api/ws/notifications 不走 ogen（chi 直接注册，见 NewRouter）
+// ============================================================
+
+// NotificationsList 转发到 NotificationHandler 实现
+func (h *oasHandler) NotificationsList(ctx context.Context, params oas.NotificationsListParams) (*oas.NotificationListResponse, error) {
+	return h.notification.NotificationsList(ctx, params)
+}
+
+// NotificationsMarkRead 转发到 NotificationHandler 实现
+func (h *oasHandler) NotificationsMarkRead(ctx context.Context, params oas.NotificationsMarkReadParams) (oas.NotificationsMarkReadRes, error) {
+	return h.notification.NotificationsMarkRead(ctx, params)
+}
+
+// NotificationsMarkAllRead 转发到 NotificationHandler 实现
+func (h *oasHandler) NotificationsMarkAllRead(ctx context.Context) error {
+	return h.notification.NotificationsMarkAllRead(ctx)
+}
+
+// 编译时校验：oasHandler 满足 oas.Handler 接口（覆盖 worker A-F 全部方法 + Auth + RBAC + Notification）
 var _ oas.Handler = (*oasHandler)(nil)
 
 // oasSecurityHandler 实现 ogen 的 SecurityHandler。
@@ -285,15 +307,17 @@ var _ oas.SecurityHandler = (*oasSecurityHandler)(nil)
 // Phase 3 起：必须传 RBACService。
 // Phase 10 Lead wireup：增加 worker A-F 的全部 service 依赖，缺失即返回 error。
 type RouterDeps struct {
-	Pool            *pgxpool.Pool
-	AuthService     services.AuthService
-	RBACService     services.RBACService
-	CustomerService services.CustomerService
-	ProjectService  *services.ProjectServiceImpl
-	FileService     services.FileService
-	FeedbackService services.FeedbackService
-	QuoteService    *services.QuoteService
-	PaymentService  services.PaymentService
+	Pool                *pgxpool.Pool
+	AuthService         services.AuthService
+	RBACService         services.RBACService
+	CustomerService     services.CustomerService
+	ProjectService      *services.ProjectServiceImpl
+	FileService         services.FileService
+	FeedbackService     services.FeedbackService
+	QuoteService        *services.QuoteService
+	PaymentService      services.PaymentService
+	NotificationService services.NotificationService
+	WSHub               services.WSHub
 }
 
 // NewRouter 装配 chi 基础中间件 + ogen 生成的 OpenAPI server。
@@ -331,6 +355,12 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	if deps.PaymentService == nil {
 		return nil, errors.New("router: PaymentService is required")
 	}
+	if deps.NotificationService == nil {
+		return nil, errors.New("router: NotificationService is required")
+	}
+	if deps.WSHub == nil {
+		return nil, errors.New("router: WSHub is required")
+	}
 	r := chi.NewRouter()
 
 	r.Use(chimw.RequestID)
@@ -362,20 +392,22 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	quoteHandler := handlers.NewQuoteHandler(deps.QuoteService)
 	paymentHandler := handlers.NewPaymentHandler(deps.PaymentService)
 	earningsHandler := handlers.NewEarningsHandler(deps.PaymentService)
+	notificationHandler := handlers.NewNotificationHandler(deps.NotificationService)
 
 	secHandler := &oasSecurityHandler{svc: deps.AuthService}
 
 	oasServer, err := oas.NewServer(
 		&oasHandler{
-			auth:     authHandler,
-			rbac:     rbacHandler,
-			customer: customerHandler,
-			project:  projectHandler,
-			file:     fileHandler,
-			feedback: feedbackHandler,
-			quote:    quoteHandler,
-			payment:  paymentHandler,
-			earnings: earningsHandler,
+			auth:         authHandler,
+			rbac:         rbacHandler,
+			customer:     customerHandler,
+			project:      projectHandler,
+			file:         fileHandler,
+			feedback:     feedbackHandler,
+			quote:        quoteHandler,
+			payment:      paymentHandler,
+			earnings:     earningsHandler,
+			notification: notificationHandler,
 		},
 		secHandler,
 		oas.WithErrorHandler(errorEnvelopeHandler),
@@ -383,6 +415,15 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// ============================================================
+	// WS endpoint：必须在 r.Mount("/") 之前注册，否则 ogen handler 会先匹配
+	// （chi router 按注册顺序解析具体路径优先于 mount 子树）
+	//
+	// 协议：GET /api/ws/notifications?ticket=<base64url> → upgrade 后服务端单向推送
+	// 不走 ogen 因为 ogen 不支持 WS 升级；openapi.yaml 中仅声明该 endpoint 元数据
+	// ============================================================
+	r.Get("/api/ws/notifications", handlers.NewWSHandler(deps.AuthService, deps.WSHub))
 
 	r.Mount("/", oasServer)
 	return r, nil

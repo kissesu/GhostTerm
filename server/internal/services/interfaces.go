@@ -327,8 +327,16 @@ type Notification struct {
 // - 解耦"产生通知"与"推送通道"，让 outbox worker 可以单独测试
 // - WSHub 实现挂在 router/main 层，存"在线连接 map<userID, []conn>"
 // - Broadcast 失败不阻塞 outbox 写 delivered_at —— 用户离线就保留 nil 让 List 时仍能取到
+//
+// Phase 12 wireup（ws.go handler）需要 RegisterClient 在升级握手成功后注册连接，
+// 因此 RegisterClient 直接进 interface（让 handler 仅依赖 services.WSHub 抽象）。
 type WSHub interface {
 	// Broadcast 把通知推送给指定用户的所有在线连接；用户离线时返回 ErrNoSubscribers。
 	// 实现必须并发安全（多个 goroutine 同时 Broadcast）。
 	Broadcast(notification Notification) error
+
+	// RegisterClient 注册一条 WS 连接到指定用户的列表。
+	// 返回 deregister 闭包：调用即从 hub 移除该 conn（read loop 检测到断线时调用）。
+	// conn 类型用 any 避免 services 包反向依赖 gorilla/websocket；handler 层断言为 *websocket.Conn。
+	RegisterClient(userID int64, conn any) func()
 }

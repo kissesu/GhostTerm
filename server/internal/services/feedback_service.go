@@ -99,15 +99,20 @@ type CreateFeedbackInput struct {
 
 // feedbackService 是 FeedbackService 的具体实现。
 type feedbackService struct {
-	pool *pgxpool.Pool
+	pool  *pgxpool.Pool
+	notif NotificationService // Phase 12：可选，nil 时跳过通知（向后兼容旧测试）
 }
 
 // 编译时校验
 var _ FeedbackService = (*feedbackService)(nil)
 
 // FeedbackServiceDeps 装配 NewFeedbackService 所需依赖。
+//
+// Phase 12：NotificationService 可选 —— 单元测试可不传，service 不发通知；
+// 生产 main.go 必传以驱动 new_feedback 通知。
 type FeedbackServiceDeps struct {
-	Pool *pgxpool.Pool
+	Pool                *pgxpool.Pool
+	NotificationService NotificationService
 }
 
 // NewFeedbackService 构造 FeedbackService。
@@ -115,7 +120,7 @@ func NewFeedbackService(deps FeedbackServiceDeps) (FeedbackService, error) {
 	if deps.Pool == nil {
 		return nil, errors.New("feedback_service: pool is required")
 	}
-	return &feedbackService{pool: deps.Pool}, nil
+	return &feedbackService{pool: deps.Pool, notif: deps.NotificationService}, nil
 }
 
 // ============================================================
@@ -294,6 +299,51 @@ func (s *feedbackService) Create(ctx context.Context, sc SessionContext, project
 			}
 			// 拼装到返回结构（保持调用方拿到的 Feedback 与 List 行为一致）
 			f.AttachmentIDs = append([]int64(nil), in.AttachmentIDs...)
+		}
+
+		// ============================================================
+		// Phase 12：同事务给项目成员（除录入人外）发 new_feedback 通知
+		//
+		// 业务流程：
+		//   1. 查 project_members where project_id 排除 ac.UserID
+		//   2. 对每个 user 调 notif.Create(tx, ...) 走 SECURITY DEFINER 函数
+		//   3. 任一失败 → 回滚整个 tx（feedback INSERT 也撤销）
+		//
+		// 设计取舍：
+		//   - notif=nil 时跳过通知（兼容老测试 / 不依赖通知模块的部署）
+		//   - 通知失败不静默吞 —— v2 part5 §NC2 "禁止降级回退"
+		//   - 排除录入人：自己录的反馈不需要通知自己
+		// ============================================================
+		if s.notif != nil {
+			rows, err := tx.Query(ctx, `
+				SELECT user_id FROM project_members
+				WHERE project_id = $1 AND user_id != $2
+			`, projectID, ac.UserID)
+			if err != nil {
+				return fmt.Errorf("feedback_service: query project members: %w", err)
+			}
+			var memberIDs []int64
+			for rows.Next() {
+				var uid int64
+				if err := rows.Scan(&uid); err != nil {
+					rows.Close()
+					return fmt.Errorf("feedback_service: scan member: %w", err)
+				}
+				memberIDs = append(memberIDs, uid)
+			}
+			rows.Close()
+			if err := rows.Err(); err != nil {
+				return fmt.Errorf("feedback_service: iterate members: %w", err)
+			}
+
+			pid := projectID
+			title := "新反馈"
+			body := "项目收到一条新反馈"
+			for _, uid := range memberIDs {
+				if _, err := s.notif.Create(ctx, tx, uid, "new_feedback", &pid, title, body); err != nil {
+					return fmt.Errorf("feedback_service: create notification for user %d: %w", uid, err)
+				}
+			}
 		}
 		return nil
 	})

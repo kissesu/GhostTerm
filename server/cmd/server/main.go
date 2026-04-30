@@ -23,6 +23,7 @@ import (
 
 	"github.com/ghostterm/progress-server/internal/api"
 	"github.com/ghostterm/progress-server/internal/config"
+	"github.com/ghostterm/progress-server/internal/cron"
 	"github.com/ghostterm/progress-server/internal/db"
 	"github.com/ghostterm/progress-server/internal/services"
 )
@@ -103,24 +104,54 @@ func main() {
 		log.Fatalf("init quote service: %v", err)
 	}
 
-	paymentSvc, err := services.NewPaymentService(services.PaymentServiceDeps{Pool: pool})
+	// ============================================
+	// Phase 12：WSHub + NotificationService + 后台 worker
+	//
+	// 业务背景：
+	//  - WSHub 必须在 NotificationService 之前 —— Notification 持有 hub 引用
+	//  - feedback / payment service 也持有 notif 引用（new_feedback / settlement_received）
+	//    所以这两个 service 在 notif 之后构造（覆盖前面已经写过的 feedbackSvc / paymentSvc）
+	// ============================================
+	wsHub := services.NewWSHub()
+	notifSvc, err := services.NewNotificationService(services.NotificationServiceDeps{
+		Pool: pool,
+		Hub:  wsHub,
+	})
 	if err != nil {
-		log.Fatalf("init payment service: %v", err)
+		log.Fatalf("init notification service: %v", err)
+	}
+
+	// 重新构造 feedback / payment service，注入通知（参见 worker D / F minimal touch）
+	feedbackSvc, err = services.NewFeedbackService(services.FeedbackServiceDeps{
+		Pool:                pool,
+		NotificationService: notifSvc,
+	})
+	if err != nil {
+		log.Fatalf("init feedback service (with notif): %v", err)
+	}
+	paymentSvc, err := services.NewPaymentService(services.PaymentServiceDeps{
+		Pool:                pool,
+		NotificationService: notifSvc,
+	})
+	if err != nil {
+		log.Fatalf("init payment service (with notif): %v", err)
 	}
 
 	// ============================================
 	// 第四步：装配 router + healthz（含 DB ping）
 	// ============================================
 	handler, err := api.NewRouter(api.RouterDeps{
-		Pool:            pool,
-		AuthService:     authSvc,
-		RBACService:     rbacSvc,
-		CustomerService: customerSvc,
-		ProjectService:  projectSvc,
-		FileService:     fileSvc,
-		FeedbackService: feedbackSvc,
-		QuoteService:    quoteSvc,
-		PaymentService:  paymentSvc,
+		Pool:                pool,
+		AuthService:         authSvc,
+		RBACService:         rbacSvc,
+		CustomerService:     customerSvc,
+		ProjectService:      projectSvc,
+		FileService:         fileSvc,
+		FeedbackService:     feedbackSvc,
+		QuoteService:        quoteSvc,
+		PaymentService:      paymentSvc,
+		NotificationService: notifSvc,
+		WSHub:               wsHub,
 	})
 	if err != nil {
 		log.Fatalf("init router: %v", err)
@@ -141,6 +172,23 @@ func main() {
 	// ============================================
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// ============================================
+	// Phase 12：后台 worker（注册到 ctx，SIGINT/SIGTERM 后随 ctx 退出）
+	//   - notification outbox：每 2 秒扫描 delivered_at IS NULL 推送
+	//   - deadline checker   ：每 30 分钟扫 projects.deadline_at 发提醒
+	// ============================================
+	outboxWorker := services.NewOutboxWorker(services.OutboxWorkerDeps{Svc: notifSvc})
+	go outboxWorker.Run(ctx)
+
+	deadlineChecker, err := cron.NewDeadlineChecker(cron.DeadlineCheckerDeps{
+		Pool:     pool,
+		NotifSvc: notifSvc,
+	})
+	if err != nil {
+		log.Fatalf("init deadline checker: %v", err)
+	}
+	go deadlineChecker.Run(ctx)
 
 	go func() {
 		log.Printf("progress-server listening on %s", cfg.HTTPAddr)

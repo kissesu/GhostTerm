@@ -146,13 +146,18 @@ type EarningsSummary struct {
 // ============================================================
 
 // PaymentServiceDeps 装配 NewPaymentService 所需依赖。
+//
+// Phase 12：NotificationService 可选 —— 单元测试可不传，service 不发通知；
+// 生产 main.go 必传以驱动 settlement_received 通知。
 type PaymentServiceDeps struct {
-	Pool *pgxpool.Pool
+	Pool                *pgxpool.Pool
+	NotificationService NotificationService
 }
 
 // paymentService 是 PaymentService 的具体实现。
 type paymentService struct {
-	pool *pgxpool.Pool
+	pool  *pgxpool.Pool
+	notif NotificationService // Phase 12：可选；nil 时跳过通知
 }
 
 // 编译时校验：实现满足 PaymentService 接口契约（interfaces.go 中已声明）
@@ -163,7 +168,7 @@ func NewPaymentService(deps PaymentServiceDeps) (PaymentService, error) {
 	if deps.Pool == nil {
 		return nil, errors.New("payment_service: pool is required")
 	}
-	return &paymentService{pool: deps.Pool}, nil
+	return &paymentService{pool: deps.Pool, notif: deps.NotificationService}, nil
 }
 
 // ============================================================
@@ -345,6 +350,24 @@ func (s *paymentService) Create(ctx context.Context, sc SessionContext, projectI
 				WHERE id = $2
 			`, input.Amount, projectID); err != nil {
 				return fmt.Errorf("payment: update project total_received: %w", err)
+			}
+		}
+
+		// ============================================================
+		// Phase 12：dev_settlement 触发 settlement_received 通知给被结算的开发者
+		//
+		// 业务流程：
+		//   - 仅在 direction=dev_settlement 时触发（customer_in 不通知）
+		//   - 通知接收人 = input.RelatedUserID（必填，已在校验阶段把关）
+		//   - notif=nil 时跳过（兼容老测试）
+		//   - 通知失败 → 回滚整个 tx（payment 写入也撤销）
+		// ============================================================
+		if s.notif != nil && input.Direction == PaymentDirectionDevSettlement && input.RelatedUserID != nil {
+			pid := projectID
+			title := "结算到账"
+			body := fmt.Sprintf("您有一笔金额 %s 的结算到账", input.Amount.Decimal.StringFixed(2))
+			if _, err := s.notif.Create(ctx, tx, *input.RelatedUserID, "settlement_received", &pid, title, body); err != nil {
+				return fmt.Errorf("payment: create settlement notification: %w", err)
 			}
 		}
 

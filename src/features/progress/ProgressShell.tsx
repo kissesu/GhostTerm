@@ -23,11 +23,14 @@ import { LoginResponseSchema, UserSchema } from './api/schemas';
 import { apiFetch, ProgressApiError } from './api/client';
 import { useProgressAuthStore } from './stores/progressAuthStore';
 import { useProgressUiStore } from './stores/progressUiStore';
+import { useNotificationsStore } from './stores/notificationsStore';
+import { connectNotificationsWS, disconnectWS } from './api/wsClient';
 import LoginPage from './components/LoginPage';
 import { ProgressLayout } from './components/ProgressLayout';
 import { ProjectListView } from './components/ProjectListView';
 import { KanbanView } from './components/KanbanView';
 import { ProjectDetailPage } from './components/ProjectDetailPage';
+import { NotificationBell } from './components/NotificationBell';
 
 // ============================================
 // 类型自检：确保 OpenAPI 生成的类型与 zod schema 对齐
@@ -73,6 +76,29 @@ export default function ProgressShell() {
     }
   }, [user, accessToken, refreshToken, refresh, loadMe]);
 
+  // ============================================
+  // Phase 12：登录后拉通知列表 + 连接 WS 推送通道
+  //
+  // 业务流程：
+  //  1. 登录后调 notifications.load() 一次性拉取最近 20 条
+  //  2. 调 connectNotificationsWS() 建立 WS 长连接
+  //  3. 登出 / 切用户：useEffect cleanup 调 disconnectWS + notifications.clear
+  // ============================================
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+    const store = useNotificationsStore.getState();
+    void store.load();
+    void connectNotificationsWS((notif) => {
+      useNotificationsStore.getState().pushNotification(notif);
+    });
+    return () => {
+      disconnectWS();
+      useNotificationsStore.getState().clear();
+    };
+  }, [user]);
+
   // 未登录 → 登录页
   if (!user) {
     return <LoginPage />;
@@ -107,6 +133,7 @@ export default function ProgressShell() {
           color: 'var(--c-fg-muted)',
         }}
       >
+        <NotificationBell />
         <span>{user.displayName ?? user.email}</span>
         <button
           type="button"
