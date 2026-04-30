@@ -1143,3 +1143,45 @@
   overflow: auto;
   padding: 14px 16px 18px;
 }
+
+/* ============================================
+   Pipeline Stepper（Task 4 新增 2026-04-30）
+   ============================================ */
+.pipeline {
+  display: flex;
+  margin-bottom: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.step {
+  flex: 1;
+  padding: 14px 16px;
+  border-top: 3px solid var(--line);
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  position: relative;
+}
+.step:last-child { border-right: none; }
+.step[data-state='done'] { border-top-color: var(--green); }
+.step[data-state='current'] {
+  border-top-color: var(--accent);
+  background: linear-gradient(180deg, rgba(184, 255, 106, 0.10), var(--panel));
+}
+.step[data-state='current'] .stepName { color: var(--accent); }
+.step[data-state='future'] .stepName { color: var(--muted); }
+.step[data-state='future'] .stepMeta { color: var(--faint); }
+.step[data-state='dim'] { opacity: 0.45; }
+
+.stepName {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  color: var(--text);
+}
+.stepMeta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted);
+}
