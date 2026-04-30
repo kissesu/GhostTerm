@@ -1329,3 +1329,52 @@
   transition: all 0.15s;
 }
 .cardCta:hover { background: var(--accent); color: var(--accent-ink); }
+
+/* ============================================================================
+   EventTriggerDialog 动态字段（Task 12 C2/C4）
+   - 每条字段一行 label + control + 可选错误提示
+   - inputBox/selectBox/textareaBox 复用 progress 模块色板
+   ============================================================================ */
+.eventTriggerForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.dialogField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dialogFieldLabel {
+  font-size: 12px;
+  color: #d8d1bf;
+  font-weight: 600;
+}
+.inputBox,
+.selectBox,
+.textareaBox {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #11110f;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+  line-height: 1.6;
+}
+.textareaBox {
+  resize: vertical;
+  min-height: 80px;
+}
+.inputBox:focus,
+.selectBox:focus,
+.textareaBox:focus {
+  border-color: rgba(184, 255, 106, 0.34);
+}
+.fieldError {
+  margin: 4px 0 0;
+  color: var(--red);
+  font-size: 11px;
+}
