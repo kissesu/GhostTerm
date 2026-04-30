@@ -219,7 +219,7 @@ function deadlineBadge(deadline: string): { cls: string; text: string } {
  *  - 已交付/已收款显示 amount 徽章；附加 finance/done tag
  */
 function KanbanCard({ project }: KanbanCardProps): ReactElement {
-  const setSelectedProject = useProgressUiStore((s) => s.setSelectedProject);
+  const openProjectFromView = useProgressUiStore((s) => s.openProjectFromView);
   const badge = deadlineBadge(project.deadline);
   const holder = project.holderUserId
     ? `@u${project.holderUserId}`
@@ -243,7 +243,7 @@ function KanbanCard({ project }: KanbanCardProps): ReactElement {
     <article
       className={styles.taskCard}
       data-testid={`kanban-card-${project.id}`}
-      onClick={() => setSelectedProject(project.id)}
+      onClick={() => openProjectFromView(project.id, 'kanban')}
     >
       <h2 className={styles.taskTitle}>{project.name}</h2>
       <div className={styles.meta}>

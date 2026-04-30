@@ -102,3 +102,25 @@ describe('progressUiStore.reset', () => {
     expect(after.selectedProjectId).toBeNull();
   });
 });
+
+describe('openProjectFromView 统一入口（M4 修复）', () => {
+  it('从 kanban 进详情 priorView=kanban', () => {
+    const { openProjectFromView } = useProgressUiStore.getState();
+    openProjectFromView(42, 'kanban');
+    const s = useProgressUiStore.getState();
+    expect(s.selectedProjectId).toBe(42);
+    expect(s.priorView).toBe('kanban');
+  });
+
+  it('从 list 进详情 priorView=list', () => {
+    const { openProjectFromView } = useProgressUiStore.getState();
+    openProjectFromView(7, 'list');
+    expect(useProgressUiStore.getState().priorView).toBe('list');
+  });
+
+  it('从 notifications 进详情 priorView=notifications', () => {
+    const { openProjectFromView } = useProgressUiStore.getState();
+    openProjectFromView(99, 'notifications');
+    expect(useProgressUiStore.getState().priorView).toBe('notifications');
+  });
+});

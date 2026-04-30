@@ -3,7 +3,7 @@
  * @description Phase 10 看板视图 RTL 单测：
  *              - 渲染 9 个状态列（archived / cancelled 默认折叠）
  *              - 项目按 status 分组
- *              - 卡片点击 → setSelectedProject
+ *              - 卡片点击 → openProjectFromView (M4 修复)
  *              - statusFilter 应用时只显示对应列
  *
  * @author Atlas.oi
@@ -121,7 +121,7 @@ describe('KanbanView 卡片分组', () => {
 });
 
 describe('KanbanView 卡片点击', () => {
-  it('点击卡片 setSelectedProject', async () => {
+  it('点击卡片 openProjectFromView 设置 selectedProjectId + priorView=kanban', async () => {
     mockedList.mockResolvedValueOnce([makeProject({ id: 42, status: 'dealing' })]);
     render(<KanbanView />);
     await waitFor(() => expect(screen.getByTestId('kanban-card-42')).toBeInTheDocument());
@@ -129,6 +129,7 @@ describe('KanbanView 卡片点击', () => {
     fireEvent.click(screen.getByTestId('kanban-card-42'));
 
     expect(useProgressUiStore.getState().selectedProjectId).toBe(42);
+    expect(useProgressUiStore.getState().priorView).toBe('kanban');
   });
 });
 
