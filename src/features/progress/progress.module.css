@@ -40,6 +40,7 @@
   --red: #ef6862;
   --green: #79d17c;
   --shadow: 0 24px 70px rgba(0, 0, 0, 0.46);
+  --blue: #5b9fff;
 
   position: relative;
   width: 100%;
@@ -721,14 +722,41 @@
   color: var(--text);
 }
 
-.statusChip {
-  width: max-content;
-  padding: 5px 8px;
-  border-radius: 5px;
-  color: #ded8c7;
-  background: var(--panel-2);
+/* status-pill：收敛后用单 class + [data-status] attr-selector 驱动颜色，
+   彻底消除 9 个独立 pillXxx 规则（W5/W8）。
+   ::before 点缀符用 currentColor 自动跟随状态色，无需重复定义颜色。 */
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
   font-size: 11px;
   font-weight: 850;
+  width: max-content;
+}
+.statusPill::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.statusPill[data-status='dealing']    { background: rgba(91,159,255,0.18);  color: var(--blue); }
+.statusPill[data-status='quoting']    { background: rgba(231,186,74,0.18);  color: var(--amber); }
+.statusPill[data-status='developing'] { background: rgba(99,213,255,0.18);  color: var(--cyan); }
+.statusPill[data-status='confirming'] { background: rgba(184,255,106,0.18); color: var(--accent); }
+.statusPill[data-status='delivered']  { background: rgba(121,209,124,0.18); color: var(--green); }
+.statusPill[data-status='paid']       { background: rgba(121,209,124,0.28); color: var(--green); }
+.statusPill[data-status='archived']   { background: rgba(140,133,122,0.18); color: var(--muted); }
+.statusPill[data-status='after_sales']{ background: rgba(231,186,74,0.18);  color: var(--amber); }
+.statusPill[data-status='cancelled']  { background: rgba(239,104,98,0.18);  color: var(--red); }
+
+/* 无匹配 data-status 时用灰底兜底（W5 文字兜底配套） */
+.statusPill:not([data-status]) {
+  background: rgba(140,133,122,0.18);
+  color: var(--muted);
 }
 
 /* ===================================================================

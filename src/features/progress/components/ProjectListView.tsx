@@ -210,7 +210,7 @@ function ProjectRow({ project, onSelect }: ProjectRowProps): ReactElement {
     >
       <strong>{project.name}</strong>
       <span
-        className={styles.statusChip}
+        className={styles.statusPill}
         data-testid={`project-row-status-${project.id}`}
         data-status={project.status}
       >
