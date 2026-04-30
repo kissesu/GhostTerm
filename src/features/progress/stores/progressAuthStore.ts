@@ -112,6 +112,15 @@ export const useProgressAuthStore = create<ProgressAuthState>((set, get) => ({
         loading: false,
         error: null,
       });
+      // login 响应的 user 不含 permissions（仅 /api/auth/me 返回）；
+      // 立即拉一次 me 让 PermissionGate / usePermission 在登录后第一次渲染就拿到结果
+      try {
+        const me = await apiFetch('/api/auth/me', { method: 'GET' }, UserSchema);
+        set({ user: me });
+        useProgressPermissionStore.getState().hydrateFromMe(me);
+      } catch {
+        // 静默忽略：permissions 没 hydrate，PermissionGate 会降级隐藏；不阻断登录
+      }
     } catch (err) {
       // 错误暴露给 UI 做提示；同时清空 token 避免半状态
       const msg = err instanceof ProgressApiError ? err.message : String(err);

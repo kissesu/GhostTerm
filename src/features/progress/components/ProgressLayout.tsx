@@ -16,10 +16,12 @@
  * @date 2026-04-29
  */
 
-import type { ReactElement, ReactNode, ChangeEvent } from 'react';
-import { List, Columns3, Search } from 'lucide-react';
+import { useState, type ReactElement, type ReactNode, type ChangeEvent } from 'react';
+import { List, Columns3, Search, Plus, UserPlus } from 'lucide-react';
 
 import { useProgressUiStore, type StatusFilter } from '../stores/progressUiStore';
+import { ProjectCreateDialog } from './ProjectCreateDialog';
+import { CustomerEditDialog } from './CustomerEditDialog';
 
 interface ProgressLayoutProps {
   children: ReactNode;
@@ -51,6 +53,10 @@ export function ProgressLayout({ children }: ProgressLayoutProps): ReactElement 
   const statusFilter = useProgressUiStore((s) => s.statusFilter);
   const setStatusFilter = useProgressUiStore((s) => s.setStatusFilter);
   const selectedProjectId = useProgressUiStore((s) => s.selectedProjectId);
+
+  // 新建项目 / 新建客户对话框开关：本地 state（仅 toolbar 内部使用）
+  const [createOpen, setCreateOpen] = useState(false);
+  const [customerOpen, setCustomerOpen] = useState(false);
 
   const isDetail = selectedProjectId !== null;
 
@@ -151,6 +157,51 @@ export function ProgressLayout({ children }: ProgressLayoutProps): ReactElement 
 
           <div style={{ flex: 1 }} />
 
+          {/* 新建客户按钮 — 项目必须挂在客户下，先建客户再建项目 */}
+          <button
+            type="button"
+            data-testid="progress-new-customer"
+            onClick={() => setCustomerOpen(true)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '6px 12px',
+              borderRadius: 6,
+              border: '1px solid var(--c-border)',
+              background: 'transparent',
+              color: 'var(--c-fg)',
+              cursor: 'pointer',
+              fontSize: 13,
+            }}
+          >
+            <UserPlus size={14} aria-hidden="true" />
+            新建客户
+          </button>
+
+          {/* 新建项目按钮 — 后端按 RBAC project:write 校验，前端不 gate */}
+          <button
+            type="button"
+            data-testid="progress-new-project"
+            onClick={() => setCreateOpen(true)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '6px 12px',
+              borderRadius: 6,
+              border: '1px solid var(--c-accent)',
+              background: 'var(--c-accent)',
+              color: 'var(--c-on-accent, var(--c-bg))',
+              cursor: 'pointer',
+              fontSize: 13,
+              fontWeight: 500,
+            }}
+          >
+            <Plus size={14} aria-hidden="true" />
+            新建项目
+          </button>
+
           {/* 视图切换：两个图标按钮 */}
           <div
             data-testid="progress-view-switcher"
@@ -196,6 +247,23 @@ export function ProgressLayout({ children }: ProgressLayoutProps): ReactElement 
       >
         {children}
       </main>
+
+      {/* 新建项目对话框：受控在 layout 顶层渲染避免被列表/详情切换销毁 */}
+      <ProjectCreateDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={() => setCreateOpen(false)}
+      />
+
+      {/* 新建客户对话框：CustomerEditDialog 不接 open prop —— 由调用方决定是否渲染 */}
+      {customerOpen && (
+        <CustomerEditDialog
+          key="new-customer"
+          projectCustomer={null}
+          onSave={() => setCustomerOpen(false)}
+          onCancel={() => setCustomerOpen(false)}
+        />
+      )}
     </div>
   );
 }

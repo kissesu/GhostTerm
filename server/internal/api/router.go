@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -462,7 +463,10 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 //     代表已知业务失败；HTTP 应映射为 401 / 400 而非 500
 //   - ogen 框架包装为 *ogenerrors.SecurityError 时其 Code() = 401，需特例化映射
 //   - 未知 error 兜底 500 + code=internal，避免泄漏内部细节
-func errorEnvelopeHandler(_ context.Context, w http.ResponseWriter, _ *http.Request, err error) {
+func errorEnvelopeHandler(_ context.Context, w http.ResponseWriter, r *http.Request, err error) {
+	// 关键观察性：始终 log 原始 error，envelope 仅给 client 看脱敏 message
+	log.Printf("[ogen-error] %s %s: %v", r.Method, r.URL.Path, err)
+
 	status := http.StatusInternalServerError
 	code := string(oas.ErrorEnvelopeErrorCodeInternal)
 	msg := "internal server error"

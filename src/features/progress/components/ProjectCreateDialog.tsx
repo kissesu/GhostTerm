@@ -18,7 +18,7 @@
  * @date 2026-04-29
  */
 
-import { useState, type FormEvent, type ReactElement } from 'react';
+import { useEffect, useState, type FormEvent, type ReactElement } from 'react';
 
 import type {
   CreateProjectInput,
@@ -27,6 +27,7 @@ import type {
   ThesisLevel,
 } from '../api/projects';
 import { useProjectsStore } from '../stores/projectsStore';
+import { useCustomersStore } from '../stores/customersStore';
 
 interface ProjectCreateDialogProps {
   /** 是否显示弹窗 */
@@ -64,6 +65,17 @@ export function ProjectCreateDialog({
   const [error, setError] = useState<string | null>(null);
 
   const create = useProjectsStore((s) => s.create);
+  const customers = useCustomersStore((s) => s.customers);
+  const fetchCustomers = useCustomersStore((s) => s.fetchAll);
+
+  // 打开时拉一次客户列表（已拉过则 store 已有缓存，再次拉只是 noop 网络请求）
+  useEffect(() => {
+    if (open) {
+      fetchCustomers().catch(() => {
+        // 错误进 store.error，UI 自行展示
+      });
+    }
+  }, [open, fetchCustomers]);
 
   if (!open) {
     return null;
@@ -96,13 +108,22 @@ export function ProjectCreateDialog({
     // datetime-local 不带时区；转为 ISO 8601（按用户当地时区解释）
     const deadlineISO = new Date(deadline).toISOString();
 
+    // OpenAPI Money pattern 要求 ^-?\d+\.\d{2}$（必须 2 位小数）；前端用户输入可能是 "5000" / "5000.5"
+    // 这里 normalize：parse 浮点 → toFixed(2) → 字符串。3 位+ 小数会被截断（精度丢失警告由 Money 类型在 server 兜底）
+    const numQuote = Number.parseFloat(originalQuote);
+    if (!Number.isFinite(numQuote) || numQuote < 0) {
+      setError('原始报价必须为非负数字');
+      return;
+    }
+    const normalizedQuote = numQuote.toFixed(2);
+
     const input: CreateProjectInput = {
       name: name.trim(),
       customerId: customerIdNum,
       description: description.trim(),
       priority,
       deadline: deadlineISO,
-      originalQuote,
+      originalQuote: normalizedQuote,
     };
     if (thesisLevel) input.thesisLevel = thesisLevel;
     if (subject.trim()) input.subject = subject.trim();
@@ -157,14 +178,26 @@ export function ProjectCreateDialog({
         </label>
 
         <label>
-          客户 ID
-          <input
-            type="number"
+          客户
+          <select
             value={customerId}
             onChange={(e) => setCustomerId(e.target.value)}
             disabled={submitting}
             data-testid="project-customer-input"
-          />
+          >
+            <option value="">请选择客户</option>
+            {customers.map((c) => (
+              <option key={c.id} value={String(c.id)}>
+                {c.nameWechat}
+                {c.remark ? `（${c.remark}）` : ''}
+              </option>
+            ))}
+          </select>
+          {customers.length === 0 && (
+            <span style={{ fontSize: 12, color: 'var(--c-fg-muted)', display: 'block', marginTop: 4 }}>
+              暂无客户，请先点工具栏"新建客户"创建
+            </span>
+          )}
         </label>
 
         <label>
