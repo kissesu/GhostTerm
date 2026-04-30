@@ -20,7 +20,7 @@
  * @date 2026-04-29
  */
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 
 import { PERM } from '../api/permissions';
 import { useFeedbacksStore } from '../stores/feedbacksStore';
@@ -40,10 +40,22 @@ const SOURCE_LABEL: Record<Feedback['source'], string> = {
   other: '其他',
 };
 
+// 模块级稳定空数组：当 byProject.get(projectId) 为 undefined 时总返回同一引用，
+// 避免 React 19 useSyncExternalStore 报 "Maximum update depth exceeded"
+// （feedback_react19_zustand5_selector_stable_ref：selector 必须返回稳定引用）
+const EMPTY_FEEDBACKS: readonly Feedback[] = Object.freeze([]);
+
 export function FeedbackList({ projectId }: FeedbackListProps) {
-  const list = useFeedbacksStore((s) => s.byProject.get(projectId) ?? []);
-  const loading = useFeedbacksStore((s) => s.loadingByProject.has(projectId));
-  const error = useFeedbacksStore((s) => s.errorByProject.get(projectId) ?? null);
+  // 选 Map 引用（稳定），useMemo 内做 .get 兜底——避免 selector 每次创建新数组
+  const byProject = useFeedbacksStore((s) => s.byProject);
+  const list = useMemo(
+    () => byProject.get(projectId) ?? (EMPTY_FEEDBACKS as Feedback[]),
+    [byProject, projectId],
+  );
+  const loadingByProject = useFeedbacksStore((s) => s.loadingByProject);
+  const loading = useMemo(() => loadingByProject.has(projectId), [loadingByProject, projectId]);
+  const errorByProject = useFeedbacksStore((s) => s.errorByProject);
+  const error = useMemo(() => errorByProject.get(projectId) ?? null, [errorByProject, projectId]);
   const load = useFeedbacksStore((s) => s.load);
 
   // 项目切换 / 首次挂载时加载
