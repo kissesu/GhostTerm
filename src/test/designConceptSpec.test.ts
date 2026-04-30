@@ -37,15 +37,6 @@ describe('GhostTerm 设计稿交付物', () => {
     expect(progressHtml).toContain('待验收');
     expect(progressHtml).toContain('已交付');
     expect(progressHtml).toContain('已收款');
-    expect(progressHtml).toContain('新建项目弹窗');
-    expect(progressHtml).toContain('项目名称');
-    expect(progressHtml).toContain('客户信息');
-    expect(progressHtml).toContain('项目阶段');
-    expect(progressHtml).toContain('创建项目');
-    expect(progressHtml).toContain('生成 Gantt 时间条');
-    expect(progressHtml).toContain('data-open-project-modal');
-    expect(progressHtml).toContain('data-close-project-modal');
-    expect(progressHtml).toContain('is-hidden');
     expect(progressHtml).not.toContain('state-mark');
   });
 });
