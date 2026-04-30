@@ -29,6 +29,7 @@ import { useState } from 'react';
 
 import { createQuoteChange, isValidMoneyString, type QuoteChangeType } from '../api/quotes';
 import { useQuoteChangesStore } from '../stores/quoteChangesStore';
+import styles from '../progress.module.css';
 
 interface QuoteChangeDialogProps {
   /** 关联项目 id */
@@ -127,6 +128,7 @@ export function QuoteChangeDialog({
   return (
     <div
       data-testid="quote-change-backdrop"
+      className={styles.modalBackdrop}
       onClick={(e) => {
         if (e.target === e.currentTarget && !submitting) {
           onClose();

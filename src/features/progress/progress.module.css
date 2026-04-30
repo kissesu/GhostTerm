@@ -1432,3 +1432,25 @@
   }
   .step:last-child { border-bottom: none; }
 }
+
+/* ============================================
+   Modal 淡入动画（Task 17 I2，2026-04-30）
+   - modalBackdrop 类供 PaymentDialog / QuoteChangeDialog backdrop 用
+   - 18ms 淡入 opacity 0→1，backdrop-filter blur 0→4px
+   - 不用 transform：backdrop-filter 在 WKWebView 已有性能压力，
+     避免合并 layer 叠加 transform 引起掉帧
+   ============================================ */
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(4px);
+  }
+}
+
+.modalBackdrop {
+  animation: modalFadeIn 0.18s ease-out;
+}

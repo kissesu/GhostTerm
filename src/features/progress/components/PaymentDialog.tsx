@@ -31,6 +31,7 @@ import { useState, type FormEvent } from 'react';
 import { usePaymentsStore } from '../stores/paymentsStore';
 import { useEarningsStore } from '../stores/earningsStore';
 import type { PaymentDirection } from '../api/payments';
+import styles from '../progress.module.css';
 
 interface PaymentDialogProps {
   /** 项目 ID（必填，决定写入到哪个项目下） */
@@ -146,6 +147,7 @@ export default function PaymentDialog({
   return (
     <div
       data-testid="payment-backdrop"
+      className={styles.modalBackdrop}
       onClick={(e) => {
         if (e.target === e.currentTarget && !submitting) {
           onClose();
