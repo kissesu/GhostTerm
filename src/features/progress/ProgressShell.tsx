@@ -16,7 +16,6 @@
  */
 
 import { useEffect } from 'react';
-import { LogOut } from 'lucide-react';
 
 import type { components } from './api/types.gen';
 import type { LoginResponsePayload, UserPayload } from './api/schemas';
@@ -33,7 +32,6 @@ import { KanbanView } from './components/KanbanView';
 import { GanttView } from './components/GanttView';
 import { ProjectDetailPage } from './components/ProjectDetailPage';
 import { NotificationsCenterView } from './components/NotificationsCenterView';
-import { NotificationBell } from './components/NotificationBell';
 import styles from './progress.module.css';
 
 // ============================================
@@ -62,7 +60,6 @@ export default function ProgressShell() {
   const refreshToken = useProgressAuthStore((s) => s.refreshToken);
   const refresh = useProgressAuthStore((s) => s.refresh);
   const loadMe = useProgressAuthStore((s) => s.loadMe);
-  const logout = useProgressAuthStore((s) => s.logout);
 
   const currentView = useProgressUiStore((s) => s.currentView);
   const selectedProjectId = useProgressUiStore((s) => s.selectedProjectId);
@@ -115,21 +112,8 @@ export default function ProgressShell() {
 
   return (
     <div data-testid="progress-shell" className={styles.habitatProgress}>
-      {/* 顶部用户栏（设计稿外，沿用项目惯例做用户/通知/退出） */}
-      <div className={styles.userbar} data-testid="progress-userbar">
-        <NotificationBell />
-        <span>{user.displayName ?? user.username}</span>
-        <button
-          type="button"
-          onClick={() => void logout()}
-          data-testid="progress-logout"
-          className={styles.userbarLogout}
-        >
-          <LogOut size={12} aria-hidden="true" />
-          退出
-        </button>
-      </div>
-
+      {/* 用户需求 2026-04-30：模块内 userbar 已迁至 AppLayout 顶层 WindowTitleBar.UserBar，
+          此处不再重复渲染（之前会出现两条横向 user header）。 */}
       <ProgressLayout>{mainContent}</ProgressLayout>
     </div>
   );

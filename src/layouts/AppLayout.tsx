@@ -307,21 +307,23 @@ interface WorkspaceTabsProps {
 }
 
 function WorkspaceTabs({ active, onChange, isAdmin }: WorkspaceTabsProps) {
+  // 用户需求 2026-04-30：激活态对齐 progress 模块"看板/列表/Gantt"风格 = OKLCH 森青 accent 实底 + 暗文 + 加粗
   const tabBase: React.CSSProperties = {
     border: 'none',
     background: 'transparent',
     color: 'var(--c-fg-muted)',
     cursor: 'pointer',
-    padding: '4px 10px',
+    padding: '5px 12px',
     fontSize: 12,
-    fontWeight: 500,
+    fontWeight: 700,
     borderRadius: 6,
+    fontFamily: 'inherit',
     transition: 'background 0.12s, color 0.12s',
   };
-  // 用 --c-panel（浮起面板）作为激活背景；--c-surface-* 不存在于现有令牌（见 App.css）
   const activeStyle: React.CSSProperties = {
-    background: 'var(--c-panel)',
-    color: 'var(--c-fg)',
+    background: 'oklch(70% 0.13 175)',
+    color: 'oklch(15% 0.005 175)',
+    fontWeight: 800,
   };
 
   return (
@@ -382,6 +384,21 @@ function UserBar({ displayName, onLogout, onOpenSettings }: UserBarProps) {
         gap: 6,
       }}
     >
+      {/* 用户需求 2026-04-30：齿轮在通知中心左侧（顺序左→右：齿轮 · 铃铛 · 用户名 · 退出） */}
+      <button
+        type="button"
+        onClick={onOpenSettings}
+        className="btn-icon"
+        style={{ width: 28, height: 28 }}
+        aria-label="打开设置"
+        data-testid="open-settings-button"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 8.5a3.5 3.5 0 1 0 0 7a3.5 3.5 0 0 0 0-7Z" stroke="currentColor" strokeWidth="1.8" />
+          <path d="M19.4 15a1 1 0 0 0 .2 1.1l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1 1 0 0 0-1.1-.2a1 1 0 0 0-.6.9V20a2 2 0 0 1-4 0v-.2a1 1 0 0 0-.6-.9a1 1 0 0 0-1.1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1 1 0 0 0 .2-1.1a1 1 0 0 0-.9-.6H4a2 2 0 0 1 0-4h.2a1 1 0 0 0 .9-.6a1 1 0 0 0-.2-1.1l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1 1 0 0 0 1.1.2H9a1 1 0 0 0 .6-.9V4a2 2 0 0 1 4 0v.2a1 1 0 0 0 .6.9a1 1 0 0 0 1.1-.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1 1 0 0 0-.2 1.1V9c0 .4.2.8.6.9H20a2 2 0 0 1 0 4h-.2a1 1 0 0 0-.9.6Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+
       <NotificationBell />
 
       <span
@@ -426,20 +443,6 @@ function UserBar({ displayName, onLogout, onOpenSettings }: UserBarProps) {
         退出
       </button>
 
-      <button
-        type="button"
-        onClick={onOpenSettings}
-        className="btn-icon"
-        style={{ width: 28, height: 28 }}
-        aria-label="打开设置"
-        data-testid="open-settings-button"
-      >
-        {/* 齿轮图标 */}
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M12 8.5a3.5 3.5 0 1 0 0 7a3.5 3.5 0 0 0 0-7Z" stroke="currentColor" strokeWidth="1.8" />
-          <path d="M19.4 15a1 1 0 0 0 .2 1.1l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1 1 0 0 0-1.1-.2a1 1 0 0 0-.6.9V20a2 2 0 0 1-4 0v-.2a1 1 0 0 0-.6-.9a1 1 0 0 0-1.1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1 1 0 0 0 .2-1.1a1 1 0 0 0-.9-.6H4a2 2 0 0 1 0-4h.2a1 1 0 0 0 .9-.6a1 1 0 0 0-.2-1.1l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1 1 0 0 0 1.1.2H9a1 1 0 0 0 .6-.9V4a2 2 0 0 1 4 0v.2a1 1 0 0 0 .6.9a1 1 0 0 0 1.1-.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1 1 0 0 0-.2 1.1V9c0 .4.2.8.6.9H20a2 2 0 0 1 0 4h-.2a1 1 0 0 0-.9.6Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
     </div>
   );
 }
