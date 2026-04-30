@@ -18,13 +18,16 @@
    根作用域 + Design Tokens
    =================================================================== */
 .habitatProgress {
-  /* 设计稿 :root */
-  --bg: #0d0d0c;
-  --bar: #141412;
-  --panel: #191916;
-  --panel-2: #20201c;
-  --panel-3: #25251f;
-  --card: #22231f;
+  /* 用户需求 2026-04-30：背景色阶严格对齐 ui-mockup.html 的 3 阶森青（hue 175）。
+     mockup 仅定义 --c-bg(15%) / --c-panel(19%) / --c-panel-2(22%) 三阶 + border(28%)，
+     不存在 bar/panel-3/card 中间值。把进度模块原 6 阶收敛到 3 阶（--bar=--panel, --card=--panel,
+     --panel-3=--panel-2），让顶栏/卡片/panel 同色靠 border 区分，重现 mockup 的扁平层次。 */
+  --bg: oklch(15% 0.005 175);
+  --bar: oklch(19% 0.008 175);
+  --panel: oklch(19% 0.008 175);
+  --panel-2: oklch(22% 0.01 175);
+  --panel-3: oklch(22% 0.01 175);
+  --card: oklch(19% 0.008 175);
   --line: rgba(233, 226, 204, 0.11);
   --line-strong: rgba(233, 226, 204, 0.2);
   --text: #f0eee4;
@@ -46,11 +49,10 @@
   min-height: 0;
   overflow: auto;
 
-  /* 设计稿 body：渐变 + 底色；字体 family 同步 */
-  background:
-    linear-gradient(180deg, rgba(184, 255, 106, 0.035), transparent 260px),
-    radial-gradient(circle at 75% 0%, rgba(99, 213, 255, 0.08), transparent 300px),
-    var(--bg);
+  /* 用户需求 2026-04-30：背景按 ui-mockup 纯 var(--bg) 填充，
+     移除原 habitat-grid 顶部黄绿 + 右上青色双层 gradient overlay（造成色调偏紫绿）。
+     mockup 视觉是单一森青纯色 + border 分层，无光晕装饰。 */
+  background: var(--bg);
   color: var(--text);
   font-family: 'Avenir Next', 'PingFang SC', 'Source Han Sans SC', 'Microsoft YaHei', sans-serif;
 }
@@ -76,7 +78,7 @@
   gap: 8px;
   padding: 6px 16px;
   border-bottom: 1px solid var(--line);
-  background: #10100f;
+  background: var(--bg);
   font-size: 12px;
   color: var(--muted);
 }
@@ -125,7 +127,7 @@
   padding: 4px;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: #10100f;
+  background: var(--bg);
 }
 
 .segmented button {
@@ -162,7 +164,7 @@
   border: 1px solid var(--line);
   border-radius: 6px;
   color: var(--muted);
-  background: #11110f;
+  background: var(--bg);
 }
 
 .filter {
@@ -279,7 +281,7 @@
   gap: 10px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--line);
-  background: #0f0f0e;
+  background: var(--bg);
   flex: 0 0 auto;
 }
 
@@ -288,7 +290,7 @@
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: linear-gradient(180deg, #1b1b18, #141412);
+  background: var(--panel);
 }
 
 .summaryCard span {
@@ -330,7 +332,7 @@
   justify-content: space-between;
   padding: 0 12px;
   border-bottom: 1px solid var(--line);
-  background: #151513;
+  background: var(--panel);
 }
 
 .viewTitle {
@@ -377,7 +379,7 @@
   min-height: 588px;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: #121210;
+  background: var(--panel);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -412,7 +414,7 @@
   border-radius: 5px;
   border: 1px solid var(--line-strong);
   color: #ddd6c1;
-  background: #24231f;
+  background: var(--panel-2);
   font-size: 10px;
   font-weight: 900;
 }
@@ -425,7 +427,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #25251f;
+  background: var(--panel-2);
   color: var(--muted);
   font-size: 11px;
   font-weight: 850;
@@ -445,7 +447,7 @@
   padding: 12px;
   border: 1px solid rgba(233, 226, 204, 0.09);
   border-radius: 7px;
-  background: linear-gradient(180deg, #23231f, #1b1b18);
+  background: var(--panel-2);
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.2);
   cursor: pointer;
   transition: border-color 120ms ease;
@@ -550,7 +552,7 @@
 .sidePanel {
   border-left: 1px solid var(--line);
   padding: 12px;
-  background: #11110f;
+  background: var(--bg);
   overflow-y: auto;
 }
 
@@ -558,7 +560,7 @@
   margin-bottom: 12px;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: #181815;
+  background: var(--panel);
   overflow: hidden;
 }
 
@@ -596,7 +598,7 @@
 .progressLine {
   height: 7px;
   border-radius: 999px;
-  background: #292820;
+  background: var(--border);
   overflow: hidden;
 }
 
@@ -611,7 +613,7 @@
   padding: 10px;
   border: 1px solid rgba(233, 226, 204, 0.08);
   border-radius: 7px;
-  background: #20201c;
+  background: var(--panel-2);
 }
 
 .miniCard strong {
@@ -674,7 +676,7 @@
   padding: 5px 8px;
   border-radius: 5px;
   color: #ded8c7;
-  background: #272620;
+  background: var(--panel-2);
   font-size: 11px;
   font-weight: 850;
 }
@@ -691,7 +693,7 @@
 .ganttLeft,
 .ganttRight {
   border: 1px solid var(--line);
-  background: #121210;
+  background: var(--panel);
 }
 
 .ganttLeft {
@@ -820,7 +822,7 @@
   max-height: 100%;
   border: 1px solid var(--line-strong);
   border-radius: 9px;
-  background: #171713;
+  background: var(--panel);
   box-shadow: 0 34px 90px rgba(0, 0, 0, 0.58);
   overflow: hidden;
   display: flex;
@@ -836,7 +838,7 @@
   justify-content: space-between;
   padding: 0 18px;
   border-bottom: 1px solid var(--line);
-  background: #1d1d19;
+  background: var(--panel-2);
   flex: 0 0 auto;
 }
 
@@ -865,7 +867,7 @@
   align-items: center;
   justify-content: center;
   color: var(--muted);
-  background: #141412;
+  background: var(--panel);
   font-size: 18px;
   cursor: pointer;
 }
@@ -917,7 +919,7 @@
   display: flex;
   align-items: center;
   color: var(--text);
-  background: #10100f;
+  background: var(--bg);
   font-size: 12px;
   font-family: inherit;
   outline: none;
@@ -930,7 +932,7 @@
 
 .fieldBox:focus {
   border-color: rgba(184, 255, 106, 0.34);
-  background: #151711;
+  background: var(--panel);
 }
 
 .fieldBoxTextarea {
@@ -952,7 +954,7 @@
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #11110f;
+  background: var(--bg);
   color: var(--muted);
   font-size: 11px;
   cursor: pointer;
@@ -975,7 +977,7 @@
 
 .modalSide {
   padding: 18px;
-  background: #121210;
+  background: var(--panel);
   overflow-y: auto;
 }
 
@@ -983,7 +985,7 @@
   padding: 13px;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: linear-gradient(180deg, #24231f, #1b1b18);
+  background: var(--panel-2);
 }
 
 .previewCard h2 {
@@ -1028,7 +1030,7 @@
   height: 16px;
   border-radius: 4px;
   border: 1px solid var(--line-strong);
-  background: #181815;
+  background: var(--panel);
 }
 
 .checkboxChecked {
@@ -1045,7 +1047,7 @@
   gap: 12px;
   padding: 0 18px;
   border-top: 1px solid var(--line);
-  background: #151513;
+  background: var(--panel);
   flex: 0 0 auto;
 }
 
@@ -1055,7 +1057,7 @@
   border: 1px solid var(--line);
   border-radius: 6px;
   color: var(--muted);
-  background: #11110f;
+  background: var(--bg);
   font-size: 12px;
   font-weight: 800;
   cursor: pointer;
