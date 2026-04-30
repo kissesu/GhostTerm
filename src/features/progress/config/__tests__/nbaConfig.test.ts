@@ -48,5 +48,31 @@ describe('deriveReason', () => {
   it('developing + 久无反馈触发"建议催进"文案', () => {
     const reason = deriveReason('developing', { daysSinceLastActivity: 5 });
     expect(reason).toContain('建议');
+    expect(reason).toContain('5 天');  // 区分 default reason 同样含'建议'
+  });
+
+  it('developing days=4 边界：未到 5 天阈值，返回 default', () => {
+    const reason = deriveReason('developing', { daysSinceLastActivity: 4 });
+    expect(reason).toBe(NBA_CONFIG.developing.defaultReason);
+  });
+
+  it('confirming + 3 天无回复触发"建议提醒"文案', () => {
+    const reason = deriveReason('confirming', { daysSinceLastActivity: 3 });
+    expect(reason).toContain('提醒');
+    expect(reason).toContain('3 天');
+  });
+
+  it('delivered + 3 天未收款触发"建议催收"文案', () => {
+    const reason = deriveReason('delivered', { daysSinceLastActivity: 3 });
+    expect(reason).toContain('催收');
+  });
+
+  it('NaN 视同 null 走 defaultReason（防御 Date 算术失败）', () => {
+    const reason = deriveReason('developing', { daysSinceLastActivity: NaN });
+    expect(reason).toBe(NBA_CONFIG.developing.defaultReason);
+  });
+
+  it('getPrimaryAction 未知 status 抛错', () => {
+    expect(() => getPrimaryAction('unknown_status' as any)).toThrow(/未知 status/);
   });
 });

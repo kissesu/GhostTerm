@@ -325,12 +325,13 @@ export function getPrimaryAction(status: ProjectStatus): ActionMeta {
  *
  * @param status 当前项目 status
  * @param ctx 派生上下文（最近活动天数 / deadline 天数）
+ * @remarks daysSinceLastActivity 不接受 NaN/Infinity；NaN 视同 null 走 defaultReason。
  */
 export function deriveReason(status: ProjectStatus, ctx: ReasonContext): string {
   const def = NBA_CONFIG[status]?.defaultReason ?? '';
   const days = ctx.daysSinceLastActivity;
 
-  if (days === null) return def;
+  if (days === null || !Number.isFinite(days)) return def;
 
   if (status === 'developing' && days >= 5) {
     return '已 ' + days + ' 天无新反馈或活动，建议主动联系客户催进度或确认下一步。';
