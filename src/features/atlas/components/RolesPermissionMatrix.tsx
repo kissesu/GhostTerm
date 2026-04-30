@@ -170,14 +170,22 @@ export function RolesPermissionMatrix() {
                 const set = rolePermissions.get(role.id) ?? new Set<number>();
                 return (
                   <tr key={role.id} data-testid={`atlas-role-row-${role.id}`}>
-                    <td>
-                      {role.name}
+                    <td className={styles.roleNameCell}>
+                      <span className={styles.roleNameText}>{role.name}</span>
                       {role.isSystem && (
                         <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--faint)' }}>
                           系统
                         </span>
                       )}
-                      {dirty && <span className={styles.dirtyBadge}>未保存</span>}
+                      {dirty && (
+                        <span
+                          className={styles.dirtyBadge}
+                          aria-label="未保存"
+                          title="未保存的修改"
+                        >
+                          未保存
+                        </span>
+                      )}
                     </td>
                     {groupedPermissions.map((g) =>
                       g.items.map((p) => (

@@ -406,15 +406,31 @@
   accent-color: var(--accent);
 }
 
+/* 用户需求 2026-04-30：未保存标签从 inline 改 absolute 定位，避免撑高表格 cell。
+   td.roleNameCell 设 position:relative + white-space:nowrap 锁定单行；
+   badge 绝对定位到右侧不参与流式布局，row 高度由文字基线决定与其他行一致。 */
+.roleNameCell {
+  position: relative;
+  white-space: nowrap;
+  padding-right: 88px; /* 给 absolute badge 预留 */
+}
+
+.roleNameText {
+  font-weight: 700;
+}
+
 .dirtyBadge {
-  display: inline-block;
-  margin-left: 6px;
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
   padding: 1px 6px;
   border-radius: 4px;
   background: rgba(231, 186, 74, 0.18);
   color: var(--amber);
   font-size: 10px;
   font-weight: 700;
+  pointer-events: none;
 }
 
 /* ===================================================================
