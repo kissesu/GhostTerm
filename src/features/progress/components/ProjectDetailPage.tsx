@@ -51,6 +51,8 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
   const project = useProjectsStore((s) => s.projects.get(projectId));
   const loadProject = useProjectsStore((s) => s.loadOne);
   const setSelectedProject = useProgressUiStore((s) => s.setSelectedProject);
+  const priorView = useProgressUiStore((s) => s.priorView);
+  const setCurrentView = useProgressUiStore((s) => s.setCurrentView);
 
   const [activeTab, setActiveTab] = useState<DetailTab>('feedback');
   const [showQuoteDialog, setShowQuoteDialog] = useState(false);
@@ -92,6 +94,11 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
   const severity = severityFromDays(days);
 
   const handleBack = () => {
+    // priorView 由 NotificationPanel/NotificationsCenter 在 openProjectFromView 时记录；
+    // 默认回项目列表，priorView=notifications 时回通知中心
+    if (priorView === 'notifications') {
+      setCurrentView('notifications');
+    }
     setSelectedProject(null);
   };
 

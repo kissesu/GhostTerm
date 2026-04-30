@@ -104,22 +104,15 @@ describe('NotificationBell badge 渲染', () => {
   });
 });
 
-describe('NotificationBell 面板切换', () => {
-  it('初次渲染面板不可见', () => {
-    render(<NotificationBell />);
-    expect(screen.queryByTestId('notification-panel')).toBeNull();
-  });
-
-  it('点击铃铛显示面板', () => {
+describe('NotificationBell 切到通知中心 view', () => {
+  // 用户需求修正 2026-04-30：原 dropdown 升级为切到 currentView='notifications' 全屏页
+  it('点击铃铛切换 currentView 为 notifications', async () => {
+    const { useProgressUiStore } = await import('../../stores/progressUiStore');
+    useProgressUiStore.setState({ currentView: 'kanban', selectedProjectId: 42 });
     render(<NotificationBell />);
     fireEvent.click(screen.getByTestId('notification-bell'));
-    expect(screen.getByTestId('notification-panel')).toBeInTheDocument();
-  });
-
-  it('再次点击铃铛隐藏面板', () => {
-    render(<NotificationBell />);
-    fireEvent.click(screen.getByTestId('notification-bell'));
-    fireEvent.click(screen.getByTestId('notification-bell'));
-    expect(screen.queryByTestId('notification-panel')).toBeNull();
+    expect(useProgressUiStore.getState().currentView).toBe('notifications');
+    // 同时清除可能打开的详情页（避免遮挡通知中心）
+    expect(useProgressUiStore.getState().selectedProjectId).toBeNull();
   });
 });

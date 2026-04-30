@@ -16,40 +16,35 @@
  * @date 2026-04-29
  */
 
-import { useEffect, useRef, useState } from 'react';
 import { Bell } from 'lucide-react';
 
 import { useNotificationsStore } from '../stores/notificationsStore';
-import { NotificationPanel } from './NotificationPanel';
+import { useProgressUiStore } from '../stores/progressUiStore';
 
+/**
+ * 通知铃铛：点击进入通知中心全屏页面（progressUiStore.currentView='notifications'）。
+ * 用户需求修正 2026-04-30：原 dropdown panel 改为切到独立通知中心 view，
+ * 让"返回上一视图"语义清晰（详情页 handleBack 通过 priorView 字段决定回到哪）。
+ */
 export function NotificationBell() {
-  const [open, setOpen] = useState(false);
-  // 容器 ref：用于 click-outside 关闭判定（包裹 button + panel 共同区域）
-  const containerRef = useRef<HTMLDivElement>(null);
-  // 直接订阅 notifications 数组（稳定引用），用 useMemo 之外的 selector 派生 unreadCount
   const notifications = useNotificationsStore((s) => s.notifications);
   const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const setCurrentView = useProgressUiStore((s) => s.setCurrentView);
+  const setSelectedProject = useProgressUiStore((s) => s.setSelectedProject);
 
-  // 点击 panel 外部关闭：仅在 open 时挂载 listener，避免长期占用
-  useEffect(() => {
-    if (!open) return;
-    const handlePointerDown = (event: MouseEvent) => {
-      const node = containerRef.current;
-      if (node && !node.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handlePointerDown);
-    return () => document.removeEventListener('mousedown', handlePointerDown);
-  }, [open]);
+  const handleClick = () => {
+    // 关闭可能打开的详情页 + 切到通知中心全屏 view
+    setSelectedProject(null);
+    setCurrentView('notifications');
+  };
 
   return (
-    <div ref={containerRef} style={{ position: 'relative', display: 'inline-flex' }}>
+    <div style={{ position: 'relative', display: 'inline-flex' }}>
       <button
         type="button"
         data-testid="notification-bell"
         aria-label={unreadCount > 0 ? `${unreadCount} 条未读通知` : '通知中心'}
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={handleClick}
         style={{
           padding: 6,
           borderRadius: 4,
@@ -88,12 +83,6 @@ export function NotificationBell() {
           </span>
         )}
       </button>
-
-      {open && (
-        <NotificationPanel
-          onClose={() => setOpen(false)}
-        />
-      )}
     </div>
   );
 }

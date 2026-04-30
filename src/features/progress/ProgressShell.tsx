@@ -32,6 +32,7 @@ import { ProjectListView } from './components/ProjectListView';
 import { KanbanView } from './components/KanbanView';
 import { GanttView } from './components/GanttView';
 import { ProjectDetailPage } from './components/ProjectDetailPage';
+import { NotificationsCenterView } from './components/NotificationsCenterView';
 import { NotificationBell } from './components/NotificationBell';
 import styles from './progress.module.css';
 
@@ -102,6 +103,8 @@ export default function ProgressShell() {
   let mainContent;
   if (selectedProjectId !== null) {
     mainContent = <ProjectDetailPage projectId={selectedProjectId} />;
+  } else if (currentView === 'notifications') {
+    mainContent = <NotificationsCenterView />;
   } else if (currentView === 'list') {
     mainContent = <ProjectListView />;
   } else if (currentView === 'gantt') {

@@ -25,8 +25,8 @@ import { create } from 'zustand';
 
 import type { ProjectStatus } from '../api/projects';
 
-/** 当前视图模式（设计稿 §toolbar segmented：看板 / 列表 / Gantt） */
-export type ProgressView = 'list' | 'kanban' | 'gantt';
+/** 当前视图模式（设计稿 §toolbar segmented：看板 / 列表 / Gantt） + notifications 中心 */
+export type ProgressView = 'list' | 'kanban' | 'gantt' | 'notifications';
 
 /** 状态过滤值；"all" 表示不过滤 */
 export type StatusFilter = ProjectStatus | 'all';
@@ -53,6 +53,17 @@ interface ProgressUiState {
   selectedProjectId: number | null;
   setSelectedProject: (id: number | null) => void;
 
+  // ============ 详情页返回上一视图记忆 ============
+  /**
+   * 进入详情页前的视图（点列表行/通知 item 时记录），用于详情页"返回"按钮决定回哪：
+   * - 'kanban' / 'list' / 'gantt' → 回对应主视图
+   * - 'notifications' → 回通知中心
+   * 默认 null = 用 currentView 兜底
+   */
+  priorView: ProgressView | null;
+  /** 进详情页：原子设置 priorView + selectedProjectId */
+  openProjectFromView: (id: number, fromView: ProgressView) => void;
+
   // ============ 重置（登出 / 切换账号） ============
   reset: () => void;
 }
@@ -71,11 +82,15 @@ export const useProgressUiStore = create<ProgressUiState>((set) => ({
   selectedProjectId: null,
   setSelectedProject: (id) => set({ selectedProjectId: id }),
 
+  priorView: null,
+  openProjectFromView: (id, fromView) => set({ selectedProjectId: id, priorView: fromView }),
+
   reset: () =>
     set({
       currentView: 'kanban',
       searchQuery: '',
       statusFilter: 'all',
       selectedProjectId: null,
+      priorView: null,
     }),
 }));

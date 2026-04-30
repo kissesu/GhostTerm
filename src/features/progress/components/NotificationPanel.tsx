@@ -56,6 +56,8 @@ export function NotificationPanel({ onClose }: NotificationPanelProps) {
   const markRead = useNotificationsStore((s) => s.markRead);
   const markAllRead = useNotificationsStore((s) => s.markAllRead);
   const setSelectedProject = useProgressUiStore((s) => s.setSelectedProject);
+  const setCurrentView = useProgressUiStore((s) => s.setCurrentView);
+  const openProjectFromView = useProgressUiStore((s) => s.openProjectFromView);
 
   // 仅显示前 20 条
   const visible = notifications.slice(0, 20);
@@ -72,16 +74,20 @@ export function NotificationPanel({ onClose }: NotificationPanelProps) {
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
 
-  // 点击条目：若有 projectId 则跳转项目详情；同时标读
+  // 点击条目：若有 projectId 则跳转项目详情，记录 priorView=notifications 供详情页"返回"按钮智能回到通知中心
   const handleItemClick = (n: Notification) => {
     if (!n.isRead) {
       void markRead(n.id);
     }
     if (n.projectId !== null && n.projectId !== undefined) {
-      setSelectedProject(n.projectId);
+      // 切到通知中心 view + 记录 priorView，让详情页 handleBack 知道回哪
+      setCurrentView('notifications');
+      openProjectFromView(n.projectId, 'notifications');
       onClose();
     }
   };
+  // 兜底：避免 setSelectedProject 在 useNotificationPanel 未引用时被 lint 标 dead；保留 reference
+  void setSelectedProject;
 
   return (
     <div
