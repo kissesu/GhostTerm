@@ -10,6 +10,8 @@ vendor/
 # 本地环境配置（含 DB_URL/JWT_SECRET 等敏感信息）
 .env
 .env.*
+# 但 .env.example 是占位文档，必须入库供新人参考
+!.env.example
 
 # 本地文件存储与覆盖率
 data/

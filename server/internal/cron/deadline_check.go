@@ -157,10 +157,10 @@ func (c *DeadlineChecker) CheckDeadlines(ctx context.Context) error {
 			return fmt.Errorf("deadline_check: set admin context: %w", err)
 		}
 		rows, err := tx.Query(ctx, `
-			SELECT id, name, status::TEXT, deadline_at, holder_user_id
+			SELECT id, name, status::TEXT, deadline, holder_user_id
 			FROM projects
 			WHERE status NOT IN ('cancelled', 'archived')
-			  AND deadline_at IS NOT NULL
+			  AND deadline IS NOT NULL
 			  AND holder_user_id IS NOT NULL
 		`)
 		if err != nil {

@@ -1,0 +1,75 @@
+# @file docker-compose.yml
+# @description 本地开发态 docker-compose：postgres + 自动迁移 + (可选) progress-server。
+#              生产 compose 见 server/docs/deployment.md
+# @author Atlas.oi
+# @date 2026-04-29
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: devpass
+      POSTGRES_DB: progress
+      POSTGRES_INITDB_ARGS: "--no-locale --encoding=UTF8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "progress"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  # 一次性 migrate job：postgres healthy 后跑 migrations/ 下的 up
+  migrate:
+    image: migrate/migrate:v4.19.1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./migrations:/migrations:ro
+    command: >
+      -path=/migrations
+      -database=postgres://postgres:devpass@postgres:5432/progress?sslmode=disable
+      up
+    restart: "no"
+
+  # 可选：用 docker compose 也能起 server（生产推荐独立镜像 + secrets）
+  # 默认禁用避免 compose up 时干扰 `go run ./cmd/server` 本地开发
+  progress-server:
+    profiles: [full]
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM golang:1.25-alpine AS build
+        WORKDIR /src
+        COPY go.mod go.sum ./
+        RUN go mod download
+        COPY . .
+        RUN CGO_ENABLED=0 go build -o /out/progress-server ./cmd/server
+
+        FROM alpine:3.20
+        RUN apk add --no-cache ca-certificates
+        COPY --from=build /out/progress-server /usr/local/bin/progress-server
+        ENTRYPOINT ["/usr/local/bin/progress-server"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: "postgres://postgres:devpass@postgres:5432/progress?sslmode=disable"
+      HTTP_ADDR: ":8080"
+      JWT_ACCESS_SECRET: "dev-access-secret-32-bytes-min!!"
+      JWT_REFRESH_SECRET: "dev-refresh-secret-32-bytes-min!"
+      BCRYPT_COST: "10"
+      FILE_STORAGE_PATH: "/var/lib/ghostterm/files"
+      FILE_MAX_SIZE_MB: "100"
+    volumes:
+      - filedata:/var/lib/ghostterm/files
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:
+  filedata:

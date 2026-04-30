@@ -23,6 +23,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/ogen-go/ogen/ogenerrors"
 
 	"github.com/ghostterm/progress-server/internal/api/handlers"
 	apimw "github.com/ghostterm/progress-server/internal/api/middleware"
@@ -281,9 +282,13 @@ type oasSecurityHandler struct {
 }
 
 // HandleBearerAuth 是 ogen SecurityHandler 接口方法。
+//
+// 修正：缺失/无效 token 一律返回 services.ErrInvalidAccessToken，
+// 让 errorEnvelopeHandler 映射为 401 unauthorized；
+// 之前用裸 errors.New("unauthorized") 会落到 500 internal 兜底。
 func (h *oasSecurityHandler) HandleBearerAuth(ctx context.Context, _ oas.OperationName, t oas.BearerAuth) (context.Context, error) {
 	if t.Token == "" {
-		return ctx, errors.New("unauthorized")
+		return ctx, services.ErrInvalidAccessToken
 	}
 	sc, err := h.svc.VerifyAccessToken(ctx, t.Token)
 	if err != nil {
@@ -291,7 +296,7 @@ func (h *oasSecurityHandler) HandleBearerAuth(ctx context.Context, _ oas.Operati
 	}
 	ac, ok := sc.(services.AuthContext)
 	if !ok {
-		return ctx, errors.New("unauthorized")
+		return ctx, services.ErrInvalidAccessToken
 	}
 	return apimw.WithAuthContext(ctx, ac), nil
 }
@@ -434,11 +439,20 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 // 业务背景：
 //   - service 层的 sentinel error（ErrInvalidAccessToken / ErrInvalidWSTicket 等）
 //     代表已知业务失败；HTTP 应映射为 401 / 400 而非 500
+//   - ogen 框架包装为 *ogenerrors.SecurityError 时其 Code() = 401，需特例化映射
 //   - 未知 error 兜底 500 + code=internal，避免泄漏内部细节
 func errorEnvelopeHandler(_ context.Context, w http.ResponseWriter, _ *http.Request, err error) {
 	status := http.StatusInternalServerError
 	code := string(oas.ErrorEnvelopeErrorCodeInternal)
 	msg := "internal server error"
+
+	// ogen SecurityError → 401（含"missing Authorization header"）
+	var secErr *ogenerrors.SecurityError
+	if errors.As(err, &secErr) {
+		status = http.StatusUnauthorized
+		code = string(oas.ErrorEnvelopeErrorCodeUnauthorized)
+		msg = "未登录或会话已失效"
+	}
 
 	switch {
 	case errors.Is(err, services.ErrInvalidAccessToken),

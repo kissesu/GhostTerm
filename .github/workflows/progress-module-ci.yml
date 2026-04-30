@@ -1,0 +1,167 @@
+# @file progress-module-ci.yml
+# @description GhostTerm 进度模块 CI（Phase 13）：
+#              - lint：tsc --noEmit + go vet
+#              - frontend-test：vitest 全量
+#              - backend-unit：go test ./internal/... -short
+#              - backend-integration：dockertest 集成测试（postgres 服务容器）
+#              - e2e：完整端到端流程测试（同 service postgres + 编译产物启 server）
+#
+# 触发条件：push 到 feat/progress-module / main，以及任何相关 PR
+# @author Atlas.oi
+# @date 2026-04-29
+
+name: progress-module CI
+
+on:
+  push:
+    branches:
+      - feat/progress-module
+      - main
+  pull_request:
+    branches:
+      - feat/progress-module
+      - main
+
+# 在同一分支并发触发时取消上一次跑（节省 CI 资源）
+concurrency:
+  group: progress-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ============================================================
+  # 1. Lint —— tsc + go vet
+  # ============================================================
+  lint:
+    name: Lint (tsc + go vet)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Setup Go 1.25
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: server/go.sum
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: TypeScript type check
+        run: pnpm tsc --noEmit
+
+      - name: Go vet
+        working-directory: server
+        run: go vet ./...
+
+  # ============================================================
+  # 2. Frontend tests —— vitest
+  # ============================================================
+  frontend-test:
+    name: Frontend tests (vitest)
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Run vitest
+        run: pnpm test --run
+
+  # ============================================================
+  # 3. Backend unit tests
+  # ============================================================
+  backend-unit:
+    name: Backend unit tests
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: server/go.sum
+
+      - name: go test ./internal/...
+        working-directory: server
+        run: go test -count=1 -short -timeout 120s ./internal/...
+
+  # ============================================================
+  # 4. Backend integration tests (per-test postgres container)
+  # ============================================================
+  backend-integration:
+    name: Backend integration tests
+    runs-on: ubuntu-latest
+    needs: lint
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: progress_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: server/go.sum
+
+      - name: go test ./tests/integration/...
+        working-directory: server
+        # 注：当前 testutil 用 dockertest 自起容器，与 services.postgres 并存。
+        # services.postgres 主要为 e2e job 提供；integration 仍用 dockertest 路径。
+        run: go test -count=1 -timeout 600s ./tests/integration/...
+
+  # ============================================================
+  # 5. End-to-end tests (single shared postgres + compiled server binary)
+  # ============================================================
+  e2e:
+    name: End-to-end tests
+    runs-on: ubuntu-latest
+    needs:
+      - backend-unit
+      - backend-integration
+      - frontend-test
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: server/go.sum
+
+      - name: go test ./tests/e2e/...
+        working-directory: server
+        run: go test -count=1 -timeout 900s ./tests/e2e/...
