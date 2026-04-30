@@ -73,6 +73,15 @@ func main() {
 		log.Fatalf("init rbac service: %v", err)
 	}
 
+	// Atlas 模块用户管理（仅超管可调用）
+	userSvc, err := services.NewUserService(services.UserServiceDeps{
+		Pool:       pool,
+		BcryptCost: cfg.BcryptCost,
+	})
+	if err != nil {
+		log.Fatalf("init user service: %v", err)
+	}
+
 	// 注：原 customerSvc 已于 2026-04-30 移除（客户从独立资源降级为 projects.customer_label 字段）
 
 	projectSvc, err := services.NewProjectService(services.ProjectServiceDeps{Pool: pool})
@@ -141,6 +150,7 @@ func main() {
 		Pool:                pool,
 		AuthService:         authSvc,
 		RBACService:         rbacSvc,
+		UserService:         userSvc,
 		ProjectService:      projectSvc,
 		FileService:         fileSvc,
 		FeedbackService:     feedbackSvc,

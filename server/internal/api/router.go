@@ -48,6 +48,7 @@ var ErrNotImplementedYet = errors.New("not_implemented_yet")
 type oasHandler struct {
 	auth         *handlers.AuthHandler
 	rbac         *handlers.RBACHandler
+	users        *handlers.UsersHandler
 	project      *handlers.ProjectHandler
 	file         *handlers.FileHandler
 	feedback     *handlers.FeedbackHandler
@@ -106,6 +107,30 @@ func (h *oasHandler) RolesGetPermissions(ctx context.Context, params oas.RolesGe
 // RolesUpdatePermissions 转发到 RBACHandler 实现
 func (h *oasHandler) RolesUpdatePermissions(ctx context.Context, req *oas.RolePermissionUpdateRequest, params oas.RolesUpdatePermissionsParams) (oas.RolesUpdatePermissionsRes, error) {
 	return h.rbac.RolesUpdatePermissions(ctx, req, params)
+}
+
+// ============================================================
+// Atlas — Users CRUD（仅超管）：4 个方法 forward
+// ============================================================
+
+// UsersList 转发到 UsersHandler 实现
+func (h *oasHandler) UsersList(ctx context.Context) (oas.UsersListRes, error) {
+	return h.users.UsersList(ctx)
+}
+
+// UsersCreate 转发到 UsersHandler 实现
+func (h *oasHandler) UsersCreate(ctx context.Context, req *oas.UserCreateRequest) (oas.UsersCreateRes, error) {
+	return h.users.UsersCreate(ctx, req)
+}
+
+// UsersUpdate 转发到 UsersHandler 实现
+func (h *oasHandler) UsersUpdate(ctx context.Context, req *oas.UserUpdateRequest, params oas.UsersUpdateParams) (oas.UsersUpdateRes, error) {
+	return h.users.UsersUpdate(ctx, req, params)
+}
+
+// UsersDelete 转发到 UsersHandler 实现
+func (h *oasHandler) UsersDelete(ctx context.Context, params oas.UsersDeleteParams) (oas.UsersDeleteRes, error) {
+	return h.users.UsersDelete(ctx, params)
 }
 
 // ============================================================
@@ -292,6 +317,7 @@ type RouterDeps struct {
 	Pool                *pgxpool.Pool
 	AuthService         services.AuthService
 	RBACService         services.RBACService
+	UserService         services.UserService
 	ProjectService      *services.ProjectServiceImpl
 	FileService         services.FileService
 	FeedbackService     services.FeedbackService
@@ -314,6 +340,9 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	}
 	if deps.RBACService == nil {
 		return nil, errors.New("router: RBACService is required")
+	}
+	if deps.UserService == nil {
+		return nil, errors.New("router: UserService is required")
 	}
 	if deps.Pool == nil {
 		return nil, errors.New("router: Pool is required")
@@ -381,6 +410,7 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	// ============================================================
 	authHandler := handlers.NewAuthHandler(deps.AuthService, deps.RBACService)
 	rbacHandler := handlers.NewRBACHandler(deps.RBACService, deps.Pool)
+	usersHandler := handlers.NewUsersHandler(deps.UserService)
 	projectHandler := handlers.NewProjectHandler(deps.ProjectService)
 	fileHandler := handlers.NewFileHandler(deps.FileService)
 	feedbackHandler, err := handlers.NewFeedbackHandler(deps.FeedbackService, deps.RBACService)
@@ -398,6 +428,7 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 		&oasHandler{
 			auth:         authHandler,
 			rbac:         rbacHandler,
+			users:        usersHandler,
 			project:      projectHandler,
 			file:         fileHandler,
 			feedback:     feedbackHandler,

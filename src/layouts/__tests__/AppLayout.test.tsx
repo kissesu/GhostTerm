@@ -12,8 +12,21 @@ import AppLayout from '../AppLayout';
 import { useSidebarStore } from '../../features/sidebar';
 import { useFileTreeStore } from '../../features/sidebar';
 import { useProjectStore } from '../../features/sidebar';
+import { useGlobalAuthStore } from '../../shared/stores/globalAuthStore';
 
 const mockInvoke = vi.mocked(invoke);
+
+// AppLayout 顶层有"全局登录门"：未登录时直接返回 GlobalLoginPage。
+// 测试只关心布局/快捷键行为，统一在 beforeEach 注入已登录用户绕过登录门。
+const TEST_USER = {
+  id: 1,
+  username: 'tester',
+  displayName: 'Tester',
+  roleId: 2,
+  isActive: true,
+  createdAt: '2026-04-29T00:00:00Z',
+  permissions: [] as string[],
+};
 
 // AppLayout 测试只验证布局/键盘行为，特性组件 mock 为轻量占位
 // 避免 xterm.js/CodeMirror 依赖浏览器 API 在 jsdom 中报错
@@ -33,6 +46,13 @@ beforeEach(() => {
   useSidebarStore.setState({ activeTab: 'files', visible: true });
   useFileTreeStore.setState({ tree: [], expandedPaths: new Set() });
   useProjectStore.setState({ currentProject: null, recentProjects: [] });
+  useGlobalAuthStore.setState({
+    accessToken: 'test-token',
+    refreshToken: 'test-refresh',
+    user: TEST_USER,
+    loading: false,
+    error: null,
+  });
   // 启动恢复 effect 会调用 list_recent_projects_cmd，返回空数组跳过自动打开
   mockInvoke.mockResolvedValue([]);
 });

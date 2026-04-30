@@ -7,15 +7,22 @@
  */
 
 import { useEffect, useRef, useState, useCallback, lazy, Suspense } from 'react';
+import { LogOut } from 'lucide-react';
 import { useSidebarStore, useProjectStore } from '../features/sidebar';
 import { useKeyboardShortcuts } from '../shared/hooks/useKeyboardShortcuts';
 import WindowTitleBar from '../shared/components/WindowTitleBar';
 import { useSettingsStore } from '../shared/stores/settingsStore';
+import { useGlobalAuthStore } from '../shared/stores/globalAuthStore';
+import GlobalLoginPage from '../shared/components/GlobalLoginPage';
+import { NotificationBell } from '../features/progress/components/NotificationBell';
 import { ProjectWorkspace } from './ProjectWorkspace';
 
 // 进度模块按需懒加载：首次切换到「进度」Tab 时才下载 chunk，
 // 之后保持挂载（display:none），保留模块内部状态
 const ProgressShell = lazy(() => import('../features/progress/ProgressShell'));
+
+// Atlas 模块（超管专用：用户管理/角色权限/系统配置）按需懒加载
+const AtlasShell = lazy(() => import('../features/atlas/AtlasShell'));
 
 // 侧边栏自动折叠阈值（px）：窗口宽度小于此值时自动隐藏侧边栏
 const SIDEBAR_AUTO_COLLAPSE_WIDTH = 800;
@@ -33,19 +40,37 @@ export default function AppLayout() {
   const sidebarVisible = useSidebarStore((s) => s.visible);
   const openSettings = useSettingsStore((s) => s.openSettings);
 
+  // 全局认证状态：未登录时整个应用替换为登录页
+  const user = useGlobalAuthStore((s) => s.user);
+  const accessToken = useGlobalAuthStore((s) => s.accessToken);
+  const refreshToken = useGlobalAuthStore((s) => s.refreshToken);
+  const refresh = useGlobalAuthStore((s) => s.refresh);
+  const loadMe = useGlobalAuthStore((s) => s.loadMe);
+  const logout = useGlobalAuthStore((s) => s.logout);
+
   const [activePanel, setActivePanel] = useState<'editor' | 'terminal'>('editor');
   const userCollapsedRef = useRef(false);
 
   // ============================================
-  // 顶层工作区切换：work（终端+编辑器） / progress（进度模块）
+  // 顶层工作区切换：work（终端+编辑器） / progress（进度模块） / atlas（超管）
   // 切换通过 display:none 而非卸载，保留 xterm scrollback / Editor 状态
-  // 进度模块按需首次挂载（progressMounted=true 后保持）
+  // 子模块按需首次挂载（mounted 标记 true 后保持）
   // ============================================
-  const [activeWorkspace, setActiveWorkspace] = useState<'work' | 'progress'>('work');
+  const [activeWorkspace, setActiveWorkspace] = useState<'work' | 'progress' | 'atlas'>('work');
   const [progressMounted, setProgressMounted] = useState(false);
+  const [atlasMounted, setAtlasMounted] = useState(false);
   if (activeWorkspace === 'progress' && !progressMounted) {
     // 在渲染过程中调用 setState 是合法模式（React 会重渲染当前组件而非 schedule）
     setProgressMounted(true);
+  }
+  if (activeWorkspace === 'atlas' && !atlasMounted) {
+    setAtlasMounted(true);
+  }
+
+  // 非 admin 切回 work（防止 roleId 被踢下线后仍停留在 atlas）
+  const isAdmin = user?.roleId === 1;
+  if (activeWorkspace === 'atlas' && !isAdmin) {
+    setActiveWorkspace('work');
   }
 
   const handleFocusToggle = useCallback((panel: 'editor' | 'terminal') => {
@@ -61,9 +86,28 @@ export default function AppLayout() {
   useKeyboardShortcuts(handleFocusToggle, handleSidebarToggle);
 
   // ============================================
-  // 启动时恢复上次打开的项目
+  // 启动时自动恢复登录态：refreshToken 在 localStorage → refresh + loadMe
+  //
+  // 业务流程：
+  //  1. 检测 user==null && accessToken==null && refreshToken!=null
+  //  2. 调 refresh() 换新 access；成功后再 loadMe() 拿用户基本信息和权限
+  //  3. 失败 store 已自清，UI 回落到 GlobalLoginPage
   // ============================================
   useEffect(() => {
+    if (!user && !accessToken && refreshToken) {
+      refresh()
+        .then(() => loadMe())
+        .catch(() => {
+          // refresh 失败 store 已自动 clearLocal；此处不做 UI 反馈
+        });
+    }
+  }, [user, accessToken, refreshToken, refresh, loadMe]);
+
+  // ============================================
+  // 启动时恢复上次打开的项目（仅在已登录后才有意义）
+  // ============================================
+  useEffect(() => {
+    if (!user) return;
     const restore = async () => {
       const { loadRecentProjects, openProject } = useProjectStore.getState();
       await loadRecentProjects();
@@ -85,7 +129,7 @@ export default function AppLayout() {
       }
     };
     restore();
-  }, []);
+  }, [user]);
 
   // ============================================
   // 窗口宽度 < 800px 时自动折叠侧边栏
@@ -108,6 +152,30 @@ export default function AppLayout() {
     return () => window.removeEventListener('resize', checkWidth);
   }, []);
 
+  // ============================================
+  // 全局登录门：未登录直接返回登录页（标题栏仍渲染以保留窗口拖拽和最小化等控件）
+  // ============================================
+  if (!user) {
+    return (
+      <div
+        style={{
+          width: '100%',
+          height: '100%',
+          background: 'var(--c-bg)',
+          color: 'var(--c-fg)',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
+        <WindowTitleBar showBrand />
+        <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+          <GlobalLoginPage />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       data-active-panel={activePanel}
@@ -126,23 +194,15 @@ export default function AppLayout() {
           <WorkspaceTabs
             active={activeWorkspace}
             onChange={setActiveWorkspace}
+            isAdmin={isAdmin}
           />
         }
         right={
-          <button
-            type="button"
-            onClick={openSettings}
-            className="btn-icon"
-            style={{ width: 28, height: 28 }}
-            aria-label="打开设置"
-            data-testid="open-settings-button"
-          >
-            {/* 齿轮图标 */}
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M12 8.5a3.5 3.5 0 1 0 0 7a3.5 3.5 0 0 0 0-7Z" stroke="currentColor" strokeWidth="1.8" />
-              <path d="M19.4 15a1 1 0 0 0 .2 1.1l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1 1 0 0 0-1.1-.2a1 1 0 0 0-.6.9V20a2 2 0 0 1-4 0v-.2a1 1 0 0 0-.6-.9a1 1 0 0 0-1.1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1 1 0 0 0 .2-1.1a1 1 0 0 0-.9-.6H4a2 2 0 0 1 0-4h.2a1 1 0 0 0 .9-.6a1 1 0 0 0-.2-1.1l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1 1 0 0 0 1.1.2H9a1 1 0 0 0 .6-.9V4a2 2 0 0 1 4 0v.2a1 1 0 0 0 .6.9a1 1 0 0 0 1.1-.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1 1 0 0 0-.2 1.1V9c0 .4.2.8.6.9H20a2 2 0 0 1 0 4h-.2a1 1 0 0 0-.9.6Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
+          <UserBar
+            displayName={user.displayName ?? user.username}
+            onLogout={() => void logout()}
+            onOpenSettings={openSettings}
+          />
         }
       />
       {/* 工作区主机：display:none 切换两个工作区，
@@ -199,6 +259,37 @@ export default function AppLayout() {
             </Suspense>
           </div>
         )}
+        {atlasMounted && isAdmin && (
+          <div
+            data-testid="atlas-shell-host"
+            style={{
+              display: activeWorkspace === 'atlas' ? 'flex' : 'none',
+              flex: 1,
+              minHeight: 0,
+              flexDirection: 'column',
+            }}
+          >
+            <Suspense
+              fallback={
+                <div
+                  data-testid="atlas-shell-loading"
+                  style={{
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--c-fg-muted)',
+                    fontSize: 13,
+                  }}
+                >
+                  加载 Atlas 模块...
+                </div>
+              }
+            >
+              <AtlasShell />
+            </Suspense>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -207,13 +298,15 @@ export default function AppLayout() {
 // ============================================
 // 顶部 Workspace Tabs（紧贴品牌右侧）
 // 极简实现：不引入 clsx；样式贴合现有标题栏文字尺寸 12-13px
+// 角色过滤：所有用户看 work + progress；admin（roleId==1）额外看 atlas
 // ============================================
 interface WorkspaceTabsProps {
-  active: 'work' | 'progress';
-  onChange: (v: 'work' | 'progress') => void;
+  active: 'work' | 'progress' | 'atlas';
+  onChange: (v: 'work' | 'progress' | 'atlas') => void;
+  isAdmin: boolean;
 }
 
-function WorkspaceTabs({ active, onChange }: WorkspaceTabsProps) {
+function WorkspaceTabs({ active, onChange, isAdmin }: WorkspaceTabsProps) {
   const tabBase: React.CSSProperties = {
     border: 'none',
     background: 'transparent',
@@ -252,6 +345,100 @@ function WorkspaceTabs({ active, onChange }: WorkspaceTabsProps) {
         style={{ ...tabBase, ...(active === 'progress' ? activeStyle : {}) }}
       >
         进度
+      </button>
+      {isAdmin && (
+        <button
+          type="button"
+          role="tab"
+          aria-selected={active === 'atlas'}
+          data-testid="workspace-tab-atlas"
+          onClick={() => onChange('atlas')}
+          style={{ ...tabBase, ...(active === 'atlas' ? activeStyle : {}) }}
+        >
+          Atlas
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// 用户栏（标题栏右侧）：通知铃 + 用户名 + 退出 + 设置齿轮
+// 顺序（左→右）：bell · 用户名 · 退出 · 齿轮
+// ============================================
+interface UserBarProps {
+  displayName: string;
+  onLogout: () => void;
+  onOpenSettings: () => void;
+}
+
+function UserBar({ displayName, onLogout, onOpenSettings }: UserBarProps) {
+  return (
+    <div
+      data-testid="global-userbar"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+      }}
+    >
+      <NotificationBell />
+
+      <span
+        data-testid="global-userbar-name"
+        style={{
+          fontSize: 12,
+          color: 'var(--c-fg-muted)',
+          fontWeight: 600,
+          padding: '0 4px',
+          maxWidth: 120,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+        title={displayName}
+      >
+        {displayName}
+      </span>
+
+      <button
+        type="button"
+        onClick={onLogout}
+        data-testid="global-logout"
+        title="退出登录"
+        aria-label="退出登录"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 4,
+          height: 26,
+          padding: '0 8px',
+          border: '1px solid var(--c-border-sub)',
+          borderRadius: 6,
+          background: 'transparent',
+          color: 'var(--c-fg-muted)',
+          fontSize: 11,
+          fontFamily: 'inherit',
+          cursor: 'pointer',
+        }}
+      >
+        <LogOut size={12} aria-hidden="true" />
+        退出
+      </button>
+
+      <button
+        type="button"
+        onClick={onOpenSettings}
+        className="btn-icon"
+        style={{ width: 28, height: 28 }}
+        aria-label="打开设置"
+        data-testid="open-settings-button"
+      >
+        {/* 齿轮图标 */}
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 8.5a3.5 3.5 0 1 0 0 7a3.5 3.5 0 0 0 0-7Z" stroke="currentColor" strokeWidth="1.8" />
+          <path d="M19.4 15a1 1 0 0 0 .2 1.1l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1 1 0 0 0-1.1-.2a1 1 0 0 0-.6.9V20a2 2 0 0 1-4 0v-.2a1 1 0 0 0-.6-.9a1 1 0 0 0-1.1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1 1 0 0 0 .2-1.1a1 1 0 0 0-.9-.6H4a2 2 0 0 1 0-4h.2a1 1 0 0 0 .9-.6a1 1 0 0 0-.2-1.1l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1 1 0 0 0 1.1.2H9a1 1 0 0 0 .6-.9V4a2 2 0 0 1 4 0v.2a1 1 0 0 0 .6.9a1 1 0 0 0 1.1-.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1 1 0 0 0-.2 1.1V9c0 .4.2.8.6.9H20a2 2 0 0 1 0 4h-.2a1 1 0 0 0-.9.6Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </button>
     </div>
   );

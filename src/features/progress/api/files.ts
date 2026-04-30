@@ -20,7 +20,7 @@
 import { z } from 'zod';
 
 import { apiFetch, getBaseUrl, ProgressApiError } from './client';
-import { getAccessToken } from '../stores/progressAuthStore';
+import { getAccessToken } from '../../../shared/stores/globalAuthStore';
 
 // ============================================================
 // Schema：与 openapi.yaml components.schemas.* 对齐

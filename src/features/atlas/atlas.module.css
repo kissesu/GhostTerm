@@ -1,0 +1,434 @@
+/**
+ * @file atlas.module.css
+ * @description Atlas 模块视觉契约 —— 沿用进度模块 OKLCH 森青调 design tokens
+ *              （hue 175，与 progress.module.css 同源），保持视觉一致。
+ *
+ *              所有规则都包裹在 .atlasShell 根作用域内，避免外泄。
+ *              不直接 @import progress.module.css 因为 CSS Modules 的本地化作用域
+ *              会让 selector 哈希化导致继承失效；而是显式重声明 tokens。
+ *
+ * @author Atlas.oi
+ * @date 2026-04-29
+ */
+
+/* ===================================================================
+   根作用域 + Design Tokens（与 progress.module.css 同源 hue 175）
+   =================================================================== */
+.atlasShell {
+  --bg: oklch(15% 0.005 175);
+  --bar: oklch(19% 0.008 175);
+  --panel: oklch(19% 0.008 175);
+  --panel-2: oklch(22% 0.01 175);
+  --line: rgba(233, 226, 204, 0.11);
+  --line-strong: rgba(233, 226, 204, 0.2);
+  --text: #f0eee4;
+  --muted: #b4ae9c;
+  --faint: #7e796c;
+  --accent: #b8ff6a;
+  --accent-ink: #10160a;
+  --red: #ef6862;
+  --green: #79d17c;
+  --amber: #e7ba4a;
+
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: row;
+  min-height: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+}
+
+/* ===================================================================
+   左侧子导航
+   =================================================================== */
+.sidebar {
+  width: 200px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  padding: 18px 12px;
+  gap: 4px;
+}
+
+.sidebarTitle {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--faint);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  padding: 0 8px 12px;
+}
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.navItem:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.navItemActive {
+  background: var(--panel-2);
+  color: var(--text);
+  border-color: var(--line-strong);
+}
+
+/* ===================================================================
+   主内容区
+   =================================================================== */
+.main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  padding: 22px 26px;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 18px;
+}
+
+.pageTitle {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  margin: 0 0 4px;
+}
+
+.pageSubtitle {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.headerActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ===================================================================
+   通用按钮
+   =================================================================== */
+.btnPrimary {
+  height: 30px;
+  padding: 0 14px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.btnPrimary:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.btnGhost {
+  height: 28px;
+  padding: 0 12px;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.btnGhost:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+}
+
+.btnDanger {
+  height: 28px;
+  padding: 0 12px;
+  background: transparent;
+  color: var(--red);
+  border: 1px solid rgba(239, 104, 98, 0.45);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+/* ===================================================================
+   Table（用户列表 / 角色权限矩阵）
+   =================================================================== */
+.tableWrap {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--panel);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.table th {
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--faint);
+  text-transform: uppercase;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--line);
+}
+
+.table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  vertical-align: middle;
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.tagAdmin {
+  background: rgba(184, 255, 106, 0.12);
+  color: var(--accent);
+  border: 1px solid rgba(184, 255, 106, 0.3);
+}
+
+.tagActive {
+  background: rgba(121, 209, 124, 0.12);
+  color: var(--green);
+  border: 1px solid rgba(121, 209, 124, 0.3);
+}
+
+.tagInactive {
+  background: rgba(231, 186, 74, 0.12);
+  color: var(--amber);
+  border: 1px solid rgba(231, 186, 74, 0.3);
+}
+
+.actionCol {
+  display: inline-flex;
+  gap: 6px;
+}
+
+/* ===================================================================
+   Dialog（用户编辑）
+   =================================================================== */
+.dialogBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 12, 10, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.dialog {
+  width: 420px;
+  max-width: calc(100vw - 32px);
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.46);
+}
+
+.dialogTitle {
+  font-size: 15px;
+  font-weight: 800;
+  margin: 0 0 4px;
+  color: var(--text);
+}
+
+.label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.input,
+.select {
+  width: 100%;
+  height: 32px;
+  padding: 6px 10px;
+  background: oklch(11% 0.003 175);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+}
+
+.input:focus,
+.select:focus {
+  border-color: var(--accent);
+}
+
+.checkboxRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.dialogFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+  margin-top: 8px;
+}
+
+.errorBox {
+  padding: 8px 11px;
+  border: 1px solid rgba(239, 104, 98, 0.4);
+  background: rgba(239, 104, 98, 0.1);
+  color: #ffd8d4;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+/* ===================================================================
+   权限矩阵
+   =================================================================== */
+.matrixWrap {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  overflow: auto;
+}
+
+.matrix {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.matrix th,
+.matrix td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  text-align: center;
+  vertical-align: middle;
+}
+
+.matrix th:first-child,
+.matrix td:first-child {
+  text-align: left;
+  font-weight: 700;
+  background: var(--panel-2);
+  position: sticky;
+  left: 0;
+  z-index: 1;
+}
+
+.matrix thead th {
+  background: var(--panel-2);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.matrixCheckbox {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+.dirtyBadge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(231, 186, 74, 0.18);
+  color: var(--amber);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* ===================================================================
+   System config 面板
+   =================================================================== */
+.configList {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 10px 18px;
+  padding: 18px 20px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.configKey {
+  color: var(--muted);
+  font-weight: 600;
+  align-self: center;
+}
+
+.configValue {
+  color: var(--text);
+  font-family: 'JetBrains Mono', 'Geist Mono', monospace;
+  word-break: break-all;
+}

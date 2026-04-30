@@ -24,7 +24,7 @@
  */
 
 import { z } from 'zod';
-import { getAccessToken } from '../stores/progressAuthStore';
+import { getAccessToken } from '../../../shared/stores/globalAuthStore';
 
 // ============================================
 // 配置：API base URL
@@ -103,10 +103,10 @@ async function silentRefreshOnce(): Promise<boolean> {
   if (inflightRefresh) return inflightRefresh;
   inflightRefresh = (async () => {
     try {
-      const { useProgressAuthStore } = await import('../stores/progressAuthStore');
-      await useProgressAuthStore.getState().refresh();
+      const { useGlobalAuthStore } = await import('../../../shared/stores/globalAuthStore');
+      await useGlobalAuthStore.getState().refresh();
       // refresh 成功 → store 已更新 access token；调用方用新 token 重试
-      return useProgressAuthStore.getState().accessToken !== null;
+      return useGlobalAuthStore.getState().accessToken !== null;
     } catch {
       return false;
     } finally {
@@ -173,8 +173,8 @@ export async function apiFetch<T>(
   // 401 触发：silent refresh 已在第二步尝试过；retry 仍 401 = refresh token 也失效
   // 此时清登录态让 ProgressShell 切回 LoginPage（区别于 access 单纯过期的"伪 401"）
   if (res.status === 401 && !anonymous) {
-    const { useProgressAuthStore } = await import('../stores/progressAuthStore');
-    useProgressAuthStore.getState().clearLocal();
+    const { useGlobalAuthStore } = await import('../../../shared/stores/globalAuthStore');
+    useGlobalAuthStore.getState().clearLocal();
   }
   if (!res.ok) {
     const parsed = ErrorEnvelopeSchema.safeParse(body);

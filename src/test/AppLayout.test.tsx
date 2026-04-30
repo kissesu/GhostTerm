@@ -16,7 +16,20 @@ import { useSidebarStore } from '../features/sidebar';
 import { useFileTreeStore } from '../features/sidebar';
 import { useProjectStore } from '../features/sidebar';
 import { DEFAULT_TERMINAL_SETTINGS, useSettingsStore } from '../shared/stores/settingsStore';
+import { useGlobalAuthStore } from '../shared/stores/globalAuthStore';
 import { useTerminalStore } from '../features/terminal';
+
+// AppLayout 顶层有"全局登录门"：未登录时直接返回 GlobalLoginPage。
+// 测试只关心布局，统一在 beforeEach 注入已登录用户绕过登录门。
+const TEST_USER = {
+  id: 1,
+  username: 'tester',
+  displayName: 'Tester',
+  roleId: 2,
+  isActive: true,
+  createdAt: '2026-04-29T00:00:00Z',
+  permissions: [] as string[],
+};
 
 // AppLayout 测试只验证布局行为，Terminal 组件 mock 为轻量占位
 // 避免 xterm.js 依赖浏览器 API（WebGL）在 jsdom 中报错
@@ -43,6 +56,14 @@ beforeEach(() => {
   useProjectStore.setState({ currentProject: null, recentProjects: [] });
   useSettingsStore.setState({ appView: 'main', terminal: DEFAULT_TERMINAL_SETTINGS });
   useTerminalStore.setState({ sessions: {}, activeProjectPath: null });
+  // 注入已登录态绕过全局登录门
+  useGlobalAuthStore.setState({
+    accessToken: 'test-token',
+    refreshToken: 'test-refresh',
+    user: TEST_USER,
+    loading: false,
+    error: null,
+  });
   // 启动恢复 effect 会调用 list_recent_projects_cmd
   vi.mocked(invoke).mockResolvedValue([]);
 });
