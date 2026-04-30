@@ -157,21 +157,25 @@ export function EventTriggerDialog({
       data-event={event}
       onKeyDown={handleKeyDown}
       style={{
-        background: 'var(--c-panel)',
-        color: 'var(--c-fg)',
-        border: '1px solid var(--c-border)',
-        borderRadius: 8,
-        padding: 20,
-        minWidth: 360,
-        boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+        background: 'var(--panel)',
+        color: 'var(--text)',
+        border: '1px solid var(--line-strong)',
+        borderRadius: 9,
+        padding: '20px 22px',
+        minWidth: 380,
+        maxWidth: 480,
+        boxShadow: 'var(--shadow)',
+        fontFamily: 'inherit',
       }}
     >
-      <h3 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 600 }}>{eventLabel}</h3>
+      <h3 style={{ margin: '0 0 14px', fontSize: 15, fontWeight: 800, color: 'var(--text)', letterSpacing: 0.2 }}>
+        {eventLabel}
+      </h3>
 
       <form onSubmit={handleSubmit} noValidate>
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
-          <span style={{ fontSize: 12, color: 'var(--c-fg-muted)' }}>
-            备注 <span style={{ color: 'var(--c-red, #d8453b)' }}>*</span>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+          <span style={{ fontSize: 12, color: '#d8d1bf', fontWeight: 600 }}>
+            备注 <span style={{ color: 'var(--red)', marginLeft: 2 }}>*</span>
           </span>
           <textarea
             ref={noteRef}
@@ -182,14 +186,16 @@ export function EventTriggerDialog({
             rows={4}
             placeholder="请描述此次操作的原因 / 上下文"
             style={{
-              padding: '6px 8px',
-              borderRadius: 4,
-              border: '1px solid var(--c-border)',
-              background: 'var(--c-bg)',
-              color: 'var(--c-fg)',
-              fontSize: 13,
+              padding: '10px 11px',
+              borderRadius: 6,
+              border: '1px solid var(--line)',
+              background: '#11110f',
+              color: 'var(--text)',
+              fontSize: 12,
               fontFamily: 'inherit',
               resize: 'vertical',
+              outline: 'none',
+              lineHeight: 1.6,
             }}
           />
         </label>
@@ -199,9 +205,13 @@ export function EventTriggerDialog({
             data-testid="event-trigger-error"
             role="alert"
             style={{
+              padding: '8px 12px',
+              border: '1px solid rgba(239, 104, 98, 0.4)',
+              borderRadius: 6,
+              background: 'rgba(239, 104, 98, 0.1)',
+              color: '#ffd8d4',
               fontSize: 12,
-              color: 'var(--c-red, #d8453b)',
-              marginBottom: 10,
+              marginBottom: 12,
             }}
           >
             {error}
@@ -215,13 +225,16 @@ export function EventTriggerDialog({
             disabled={submitting}
             data-testid="event-trigger-cancel"
             style={{
-              padding: '6px 12px',
-              borderRadius: 4,
-              border: '1px solid var(--c-border)',
-              background: 'transparent',
-              color: 'var(--c-fg)',
+              height: 32,
+              padding: '0 14px',
+              borderRadius: 6,
+              border: '1px solid var(--line)',
+              background: '#11110f',
+              color: 'var(--muted)',
               cursor: submitting ? 'not-allowed' : 'pointer',
-              fontSize: 13,
+              fontSize: 12,
+              fontWeight: 800,
+              fontFamily: 'inherit',
             }}
           >
             取消
@@ -231,14 +244,16 @@ export function EventTriggerDialog({
             disabled={submitting}
             data-testid="event-trigger-submit"
             style={{
-              padding: '6px 12px',
-              borderRadius: 4,
-              border: 'none',
-              background: 'var(--c-accent)',
-              color: 'var(--c-on-accent, var(--c-bg))',
+              height: 32,
+              padding: '0 14px',
+              borderRadius: 6,
+              border: '1px solid transparent',
+              background: 'var(--accent)',
+              color: 'var(--accent-ink)',
               cursor: submitting ? 'not-allowed' : 'pointer',
-              fontSize: 13,
-              fontWeight: 500,
+              fontSize: 12,
+              fontWeight: 800,
+              fontFamily: 'inherit',
             }}
           >
             {submitting ? '提交中…' : '触发'}

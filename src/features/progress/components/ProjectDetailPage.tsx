@@ -72,7 +72,7 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
     return (
       <div
         data-testid="project-detail-error"
-        style={{ padding: 20, fontSize: 13, color: 'var(--c-red, #d8453b)' }}
+        style={{ padding: 20, fontSize: 13, color: 'var(--red)' }}
       >
         加载项目失败：{error}
       </div>
@@ -83,7 +83,7 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
     return (
       <div
         data-testid="project-detail-loading"
-        style={{ padding: 20, fontSize: 13, color: 'var(--c-fg-muted)' }}
+        style={{ padding: 20, fontSize: 13, color: 'var(--muted)' }}
       >
         加载项目中…
       </div>
@@ -112,8 +112,8 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
         padding: 16,
         height: '100%',
         minHeight: 0,
-        background: 'var(--c-bg)',
-        color: 'var(--c-fg)',
+        background: 'transparent',
+        color: 'var(--text)',
       }}
     >
       {/* ============================================
@@ -136,15 +136,17 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: 4,
-            padding: '4px 8px',
-            borderRadius: 4,
-            border: '1px solid var(--c-border)',
+            gap: 6,
+            padding: '6px 10px',
+            borderRadius: 6,
+            border: '1px solid var(--line)',
             background: 'transparent',
-            color: 'var(--c-fg)',
+            color: 'var(--muted)',
             cursor: 'pointer',
             fontSize: 12,
+            fontWeight: 700,
             alignSelf: 'flex-start',
+            fontFamily: 'inherit',
           }}
         >
           <ArrowLeft size={12} aria-hidden="true" /> 返回列表
@@ -152,30 +154,32 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
 
         <header
           style={{
-            padding: 12,
-            borderRadius: 6,
-            background: 'var(--c-panel)',
+            padding: 14,
+            borderRadius: 8,
+            border: '1px solid var(--line)',
+            background: 'linear-gradient(180deg, #1f1f1c, #161613)',
+            boxShadow: '0 8px 18px rgba(0, 0, 0, 0.18)',
             display: 'flex',
             flexDirection: 'column',
-            gap: 8,
+            gap: 10,
           }}
         >
           <div
             data-testid="project-detail-title"
-            style={{ fontSize: 15, fontWeight: 600, color: 'var(--c-fg)' }}
+            style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)', letterSpacing: 0.2 }}
           >
             {project.name}
           </div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', fontSize: 11 }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', fontSize: 11, fontWeight: 700 }}>
             <span
               data-testid="project-detail-status"
               data-status={project.status}
               style={{
-                padding: '2px 8px',
-                borderRadius: 3,
-                background: 'var(--c-bg)',
-                color: 'var(--c-fg)',
-                border: '1px solid var(--c-border)',
+                padding: '3px 8px',
+                borderRadius: 5,
+                background: 'var(--panel-3)',
+                color: '#ddd6c1',
+                border: '1px solid var(--line)',
               }}
             >
               {project.status}
@@ -184,31 +188,40 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
               data-testid="project-detail-deadline"
               data-severity={severity}
               style={{
-                padding: '2px 8px',
-                borderRadius: 3,
+                padding: '3px 8px',
+                borderRadius: 5,
                 color: severityColor(severity),
                 border: `1px solid ${severityColor(severity)}`,
+                background: 'rgba(255,255,255,0.02)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
               }}
             >
-              <Calendar size={10} aria-hidden="true" style={{ marginRight: 4 }} />
+              <Calendar size={10} aria-hidden="true" />
               {deadlineLabel(days)}
             </span>
           </div>
-          <div style={{ fontSize: 12, color: 'var(--c-fg-muted)' }}>
-            <User size={11} aria-hidden="true" style={{ marginRight: 4 }} />
-            流转在：
-            {project.holderUserId
-              ? `@u${project.holderUserId}`
-              : project.holderRoleId
-                ? `[role${project.holderRoleId}]`
-                : '—'}
+          <div style={{ fontSize: 12, color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <User size={11} aria-hidden="true" />
+            <span>
+              流转在：
+              {project.holderUserId
+                ? `@u${project.holderUserId}`
+                : project.holderRoleId
+                  ? `[role${project.holderRoleId}]`
+                  : '—'}
+            </span>
           </div>
           <div
             data-testid="project-detail-quote"
-            style={{ fontSize: 12, color: 'var(--c-fg-muted)' }}
+            style={{ fontSize: 12, color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', gap: 6 }}
           >
-            <Wallet size={11} aria-hidden="true" style={{ marginRight: 4 }} />
-            当前报价：¥{project.currentQuote}（原 ¥{project.originalQuote}）
+            <Wallet size={11} aria-hidden="true" />
+            <span>
+              当前报价：<strong style={{ color: 'var(--text)', fontWeight: 700 }}>¥{project.currentQuote}</strong>
+              <span style={{ color: 'var(--faint)', marginLeft: 6 }}>原 ¥{project.originalQuote}</span>
+            </span>
           </div>
         </header>
 
@@ -230,8 +243,9 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
           display: 'flex',
           flexDirection: 'column',
           minHeight: 0,
-          background: 'var(--c-panel)',
-          borderRadius: 6,
+          background: 'var(--panel)',
+          border: '1px solid var(--line)',
+          borderRadius: 8,
           overflow: 'hidden',
         }}
       >
@@ -241,8 +255,9 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
           data-testid="project-detail-tabs"
           style={{
             display: 'flex',
-            borderBottom: '1px solid var(--c-border)',
-            background: 'var(--c-bg)',
+            borderBottom: '1px solid var(--line)',
+            background: 'var(--bar)',
+            padding: '0 4px',
           }}
         >
           <DetailTabButton
@@ -283,7 +298,7 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
             flex: 1,
             minHeight: 0,
             overflow: 'auto',
-            padding: 12,
+            padding: 14,
             display: 'flex',
             flexDirection: 'column',
             gap: 12,
@@ -297,7 +312,7 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
           )}
           {activeTab === 'thesis' && <ThesisVersionList projectId={projectId} />}
           {activeTab === 'files' && (
-            <div data-testid="files-tab-body" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div data-testid="files-tab-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <FileUploadButton
                 onUploaded={() => {
                   // 上传完成后由 filesStore 自动追加；本组件不做额外动作
@@ -305,13 +320,13 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
                 label="上传附件"
                 projectIdForLoading={projectId}
               />
-              <div style={{ fontSize: 12, color: 'var(--c-fg-muted)' }}>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>
                 文件列表组件由后续 worker 阶段补全（论文版本见独立 tab）
               </div>
             </div>
           )}
           {activeTab === 'quote' && (
-            <div data-testid="quote-tab-body" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div data-testid="quote-tab-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <button
                 type="button"
                 onClick={() => setShowQuoteDialog(true)}
@@ -320,7 +335,7 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
               >
                 <Edit3 size={12} aria-hidden="true" /> 录入费用变更
               </button>
-              <div style={{ fontSize: 12, color: 'var(--c-fg-muted)' }}>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>
                 历史费用变更展示由后续 worker 阶段补全（quoteChangesStore 已就绪）
               </div>
               {showQuoteDialog && (
@@ -337,7 +352,7 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
             </div>
           )}
           {activeTab === 'payment' && (
-            <div data-testid="payment-tab-body" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div data-testid="payment-tab-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <button
                 type="button"
                 onClick={() => setShowPaymentDialog(true)}
@@ -346,7 +361,7 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
               >
                 <Edit3 size={12} aria-hidden="true" /> 录入财务流水
               </button>
-              <div style={{ fontSize: 12, color: 'var(--c-fg-muted)' }}>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>
                 历史 payment 列表展示由后续 worker 阶段补全（paymentsStore 已就绪）
               </div>
               {showPaymentDialog && (
@@ -397,9 +412,10 @@ function CustomerLabelCard({ customerLabel }: CustomerLabelCardProps): ReactElem
     <div
       data-testid="project-detail-customer-card"
       style={{
-        padding: 12,
-        background: 'var(--c-panel)',
-        borderRadius: 6,
+        padding: 14,
+        border: '1px solid var(--line)',
+        background: 'var(--panel)',
+        borderRadius: 8,
         display: 'flex',
         flexDirection: 'column',
         gap: 8,
@@ -408,19 +424,19 @@ function CustomerLabelCard({ customerLabel }: CustomerLabelCardProps): ReactElem
       <span
         style={{
           fontSize: 11,
-          fontWeight: 500,
-          color: 'var(--c-fg-muted)',
+          fontWeight: 700,
+          color: 'var(--faint)',
           textTransform: 'uppercase',
-          letterSpacing: 0.5,
+          letterSpacing: 0.6,
         }}
       >
         客户
       </span>
       <div
         data-testid="project-detail-customer-label"
-        style={{ fontSize: 13, fontWeight: 500, color: 'var(--c-fg)', whiteSpace: 'pre-wrap' }}
+        style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', whiteSpace: 'pre-wrap' }}
       >
-        {customerLabel || <span style={{ color: 'var(--c-fg-muted)' }}>未填写</span>}
+        {customerLabel || <span style={{ color: 'var(--faint)' }}>未填写</span>}
       </div>
     </div>
   );
@@ -448,16 +464,15 @@ function DetailTabButton({
       data-testid={testid}
       onClick={onClick}
       style={{
-        padding: '8px 14px',
+        padding: '10px 16px',
         border: 'none',
         background: 'transparent',
-        color: active ? 'var(--c-fg)' : 'var(--c-fg-muted)',
+        color: active ? 'var(--accent)' : 'var(--muted)',
         cursor: 'pointer',
         fontSize: 13,
-        fontWeight: active ? 500 : 400,
-        borderBottom: active
-          ? '2px solid var(--c-accent)'
-          : '2px solid transparent',
+        fontWeight: active ? 800 : 700,
+        borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
+        fontFamily: 'inherit',
       }}
     >
       {label}
@@ -468,14 +483,15 @@ function DetailTabButton({
 const primaryButtonStyle: React.CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
-  gap: 4,
-  padding: '6px 12px',
-  borderRadius: 4,
-  border: 'none',
-  background: 'var(--c-accent)',
-  color: 'var(--c-on-accent, var(--c-bg))',
+  gap: 6,
+  padding: '8px 14px',
+  borderRadius: 6,
+  border: '1px solid transparent',
+  background: 'var(--accent)',
+  color: 'var(--accent-ink)',
   cursor: 'pointer',
   fontSize: 12,
-  fontWeight: 500,
+  fontWeight: 800,
   alignSelf: 'flex-start',
+  fontFamily: 'inherit',
 };

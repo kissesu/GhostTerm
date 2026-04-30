@@ -20,6 +20,7 @@
 import { useState, type FormEvent } from 'react';
 
 import { useProgressAuthStore } from '../stores/progressAuthStore';
+import styles from '../progress.module.css';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -38,35 +39,19 @@ export default function LoginPage() {
     }
   };
 
+  // 业务背景：登录页位于 ProgressShell 未登录分支，无 .habitatProgress 包裹；
+  // 这里手动套上根作用域 className 让 habitat tokens 生效，并在登录卡片
+  // 上沿用 panel/line/accent 体系，与登录后界面视觉延续。
   return (
-    <div
-      data-testid="progress-login-page"
-      style={{
-        width: '100%',
-        height: '100%',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'var(--c-bg)',
-        color: 'var(--c-fg)',
-      }}
-    >
-      <form
-        onSubmit={onSubmit}
-        style={{
-          width: 320,
-          padding: 24,
-          background: 'var(--c-panel)',
-          borderRadius: 8,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
-        }}
-      >
-        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>登录到进度模块</h2>
+    <div data-testid="progress-login-page" className={styles.habitatProgress} style={loginScreenStyle}>
+      <form onSubmit={onSubmit} style={loginCardStyle}>
+        <h2 style={loginTitleStyle}>
+          <span style={loginAccentBarStyle} aria-hidden="true" />
+          登录到进度模块
+        </h2>
 
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
-          <span>用户名</span>
+        <label style={labelStyle}>
+          <span style={labelTextStyle}>用户名</span>
           <input
             type="text"
             required
@@ -78,8 +63,8 @@ export default function LoginPage() {
           />
         </label>
 
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
-          <span>密码</span>
+        <label style={labelStyle}>
+          <span style={labelTextStyle}>密码</span>
           <input
             type="password"
             required
@@ -94,7 +79,14 @@ export default function LoginPage() {
         {error ? (
           <div
             data-testid="progress-login-error"
-            style={{ fontSize: 12, color: 'var(--c-danger, #d8453b)' }}
+            style={{
+              padding: '8px 12px',
+              border: '1px solid rgba(239, 104, 98, 0.4)',
+              borderRadius: 6,
+              background: 'rgba(239, 104, 98, 0.1)',
+              color: '#ffd8d4',
+              fontSize: 12,
+            }}
           >
             {error}
           </div>
@@ -105,14 +97,17 @@ export default function LoginPage() {
           disabled={loading}
           data-testid="progress-login-submit"
           style={{
-            padding: '8px 12px',
+            height: 36,
+            padding: '0 16px',
             borderRadius: 6,
-            border: 'none',
-            background: 'var(--c-accent)',
-            color: 'var(--c-on-accent, #fff)',
+            border: '1px solid transparent',
+            background: 'var(--accent)',
+            color: 'var(--accent-ink)',
             cursor: loading ? 'wait' : 'pointer',
-            fontSize: 13,
-            fontWeight: 500,
+            fontSize: 12,
+            fontWeight: 800,
+            letterSpacing: 0.3,
+            fontFamily: 'inherit',
           }}
         >
           {loading ? '登录中…' : '登录'}
@@ -122,11 +117,69 @@ export default function LoginPage() {
   );
 }
 
+// ============================================
+// 内联样式（habitat 设计 tokens；与 progress.module.css 同源）
+// ============================================
+
+const loginScreenStyle: React.CSSProperties = {
+  width: '100%',
+  height: '100%',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+};
+
+const loginCardStyle: React.CSSProperties = {
+  width: 340,
+  padding: '28px 26px',
+  background: 'var(--panel)',
+  border: '1px solid var(--line-strong)',
+  borderRadius: 10,
+  boxShadow: 'var(--shadow)',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 14,
+};
+
+const loginTitleStyle: React.CSSProperties = {
+  margin: '0 0 4px',
+  fontSize: 16,
+  fontWeight: 800,
+  color: 'var(--text)',
+  letterSpacing: 0.3,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 10,
+};
+
+const loginAccentBarStyle: React.CSSProperties = {
+  width: 28,
+  height: 3,
+  borderRadius: 2,
+  background: 'var(--accent)',
+};
+
+const labelStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+};
+
+const labelTextStyle: React.CSSProperties = {
+  fontSize: 12,
+  color: '#d8d1bf',
+  fontWeight: 600,
+};
+
 const inputStyle: React.CSSProperties = {
-  padding: '6px 8px',
-  borderRadius: 4,
-  border: '1px solid var(--c-border)',
-  background: 'var(--c-bg)',
-  color: 'var(--c-fg)',
-  fontSize: 13,
+  width: '100%',
+  minHeight: 36,
+  padding: '8px 11px',
+  borderRadius: 6,
+  border: '1px solid var(--line)',
+  background: '#11110f',
+  color: 'var(--text)',
+  fontSize: 12,
+  fontFamily: 'inherit',
+  outline: 'none',
 };

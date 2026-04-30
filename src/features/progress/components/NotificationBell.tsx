@@ -46,16 +46,17 @@ export function NotificationBell() {
         aria-label={unreadCount > 0 ? `${unreadCount} 条未读通知` : '通知中心'}
         onClick={handleClick}
         style={{
-          padding: 6,
-          borderRadius: 4,
-          border: '1px solid var(--c-border)',
+          padding: '5px 8px',
+          borderRadius: 6,
+          border: '1px solid var(--line)',
           background: 'transparent',
-          color: 'var(--c-fg)',
+          color: 'var(--muted)',
           cursor: 'pointer',
           display: 'inline-flex',
           alignItems: 'center',
           gap: 4,
           position: 'relative',
+          fontFamily: 'inherit',
         }}
       >
         <Bell size={14} aria-hidden="true" />
@@ -71,12 +72,12 @@ export function NotificationBell() {
               height: 16,
               padding: '0 4px',
               borderRadius: 8,
-              background: 'var(--c-danger, #d04545)',
-              color: '#fff',
+              background: 'var(--red)',
+              color: '#fff5f4',
               fontSize: 10,
               lineHeight: '16px',
               textAlign: 'center',
-              fontWeight: 600,
+              fontWeight: 800,
             }}
           >
             {unreadCount > 99 ? '99+' : unreadCount}

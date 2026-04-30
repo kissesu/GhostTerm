@@ -73,8 +73,8 @@ export function NotificationsCenterView() {
         flexDirection: 'column',
         height: '100%',
         minHeight: 0,
-        background: 'var(--c-bg)',
-        color: 'var(--c-fg)',
+        background: 'transparent',
+        color: 'var(--text)',
       }}
     >
       <header
@@ -84,7 +84,8 @@ export function NotificationsCenterView() {
           justifyContent: 'space-between',
           gap: 12,
           padding: '14px 20px',
-          borderBottom: '1px solid var(--c-border)',
+          borderBottom: '1px solid var(--line)',
+          background: 'var(--bar)',
         }}
       >
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
@@ -95,20 +96,22 @@ export function NotificationsCenterView() {
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 4,
+              gap: 6,
               padding: '6px 10px',
               borderRadius: 6,
-              border: '1px solid var(--c-border)',
+              border: '1px solid var(--line)',
               background: 'transparent',
-              color: 'var(--c-fg)',
+              color: 'var(--muted)',
               cursor: 'pointer',
               fontSize: 12,
+              fontWeight: 700,
+              fontFamily: 'inherit',
             }}
           >
             <ArrowLeft size={12} aria-hidden="true" /> 返回看板
           </button>
-          <h2 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>通知中心</h2>
-          <span style={{ fontSize: 12, color: 'var(--c-fg-muted)' }}>
+          <h2 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: 'var(--text)' }}>通知中心</h2>
+          <span style={{ fontSize: 11, color: 'var(--faint)', fontWeight: 500 }}>
             共 {notifications.length} 条 · {notifications.filter((n) => !n.isRead).length} 条未读
           </span>
         </div>
@@ -120,14 +123,16 @@ export function NotificationsCenterView() {
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 4,
+              gap: 6,
               padding: '6px 10px',
               borderRadius: 6,
-              border: '1px solid var(--c-border)',
+              border: '1px solid var(--line)',
               background: 'transparent',
-              color: 'var(--c-fg-muted)',
+              color: 'var(--muted)',
               cursor: 'pointer',
               fontSize: 12,
+              fontWeight: 700,
+              fontFamily: 'inherit',
             }}
           >
             <CheckCheck size={12} aria-hidden="true" /> 全部已读
@@ -142,7 +147,7 @@ export function NotificationsCenterView() {
             style={{
               padding: '64px 20px',
               textAlign: 'center',
-              color: 'var(--c-fg-muted)',
+              color: 'var(--faint)',
               fontSize: 13,
             }}
           >
@@ -161,13 +166,12 @@ export function NotificationsCenterView() {
               width: '100%',
               textAlign: 'left',
               padding: '14px 20px',
-              borderBottom: '1px solid var(--c-border)',
-              background: n.isRead ? 'transparent' : 'var(--c-panel)',
               border: 'none',
-              borderTop: 'none',
-              borderLeft: 'none',
-              borderRight: 'none',
+              borderBottom: '1px solid var(--line)',
+              background: n.isRead ? 'transparent' : 'rgba(184, 255, 106, 0.04)',
               cursor: n.projectId ? 'pointer' : 'default',
+              color: 'var(--text)',
+              fontFamily: 'inherit',
             }}
           >
             <div
@@ -182,17 +186,17 @@ export function NotificationsCenterView() {
               <span
                 style={{
                   fontSize: 13,
-                  fontWeight: n.isRead ? 400 : 600,
-                  color: 'var(--c-fg)',
+                  fontWeight: n.isRead ? 600 : 800,
+                  color: 'var(--text)',
                 }}
               >
                 {n.title}
               </span>
-              <span style={{ fontSize: 11, color: 'var(--c-fg-muted)', flexShrink: 0 }}>
+              <span style={{ fontSize: 11, color: 'var(--faint)', flexShrink: 0, fontWeight: 500 }}>
                 {formatRelativeTime(n.createdAt)}
               </span>
             </div>
-            <div style={{ fontSize: 12, color: 'var(--c-fg-muted)', lineHeight: 1.5 }}>
+            <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.55 }}>
               {truncateBody(n.body)}
             </div>
           </button>

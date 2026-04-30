@@ -116,11 +116,12 @@ export function EventActionButtons({
       <div
         data-testid="event-action-buttons-empty"
         style={{
-          padding: 12,
+          padding: 14,
           fontSize: 12,
-          color: 'var(--c-fg-muted)',
-          background: 'var(--c-panel)',
-          borderRadius: 6,
+          color: 'var(--faint)',
+          background: 'var(--panel)',
+          border: '1px solid var(--line)',
+          borderRadius: 8,
         }}
       >
         当前状态下无可触发事件
@@ -135,19 +136,20 @@ export function EventActionButtons({
         display: 'flex',
         flexDirection: 'column',
         gap: 6,
-        padding: 12,
-        background: 'var(--c-panel)',
-        borderRadius: 6,
+        padding: 14,
+        background: 'var(--panel)',
+        border: '1px solid var(--line)',
+        borderRadius: 8,
       }}
     >
       <div
         style={{
           fontSize: 11,
-          fontWeight: 500,
-          color: 'var(--c-fg-muted)',
+          fontWeight: 800,
+          color: 'var(--faint)',
           marginBottom: 4,
           textTransform: 'uppercase',
-          letterSpacing: 0.5,
+          letterSpacing: 0.6,
         }}
       >
         可触发事件
@@ -160,17 +162,27 @@ export function EventActionButtons({
             onClick={() => setActiveEvent(meta)}
             data-testid={`event-action-${meta.code}`}
             style={{
-              padding: '6px 10px',
-              borderRadius: 4,
-              border: '1px solid var(--c-border)',
-              background: 'var(--c-bg)',
-              color: 'var(--c-fg)',
+              padding: '8px 12px',
+              borderRadius: 6,
+              border: '1px solid var(--line)',
+              background: 'var(--panel-2)',
+              color: 'var(--text)',
               cursor: 'pointer',
               fontSize: 12,
+              fontWeight: 600,
               textAlign: 'left',
+              fontFamily: 'inherit',
             }}
           >
-            <span style={{ fontFamily: 'monospace', color: 'var(--c-fg-muted)', marginRight: 6 }}>
+            <span
+              style={{
+                fontFamily: 'JetBrains Mono, SF Mono, monospace',
+                color: 'var(--accent)',
+                marginRight: 8,
+                fontWeight: 800,
+                fontSize: 11,
+              }}
+            >
               {meta.code}
             </span>
             {meta.label}
@@ -185,11 +197,13 @@ export function EventActionButtons({
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0, 0, 0, 0.4)',
+            background: 'rgba(5, 5, 4, 0.55)',
+            backdropFilter: 'blur(4px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 100,
+            zIndex: 1000,
+            padding: 24,
           }}
           onClick={(e) => {
             // 点击遮罩外（背景）关闭；点击对话框内不冒泡

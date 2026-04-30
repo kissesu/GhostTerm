@@ -98,10 +98,10 @@ export function NotificationPanel({ onClose }: NotificationPanelProps) {
         right: 0,
         width: 320,
         maxHeight: 400,
-        background: 'var(--c-panel)',
-        border: '1px solid var(--c-border)',
-        borderRadius: 6,
-        boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+        background: 'var(--panel)',
+        border: '1px solid var(--line)',
+        borderRadius: 8,
+        boxShadow: 'var(--shadow)',
         display: 'flex',
         flexDirection: 'column',
         zIndex: 50,
@@ -110,15 +110,15 @@ export function NotificationPanel({ onClose }: NotificationPanelProps) {
       {/* Header */}
       <div
         style={{
-          padding: '8px 12px',
-          borderBottom: '1px solid var(--c-border)',
+          padding: '10px 12px',
+          borderBottom: '1px solid var(--line)',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           fontSize: 12,
         }}
       >
-        <span style={{ fontWeight: 600, color: 'var(--c-fg)' }}>通知中心</span>
+        <span style={{ fontWeight: 800, color: 'var(--text)' }}>通知中心</span>
         {hasUnread && (
           <button
             type="button"
@@ -128,11 +128,13 @@ export function NotificationPanel({ onClose }: NotificationPanelProps) {
               border: 'none',
               background: 'transparent',
               cursor: 'pointer',
-              color: 'var(--c-fg-muted)',
+              color: 'var(--muted)',
               fontSize: 11,
               display: 'inline-flex',
               alignItems: 'center',
               gap: 4,
+              fontFamily: 'inherit',
+              fontWeight: 700,
             }}
           >
             <CheckCheck size={12} aria-hidden="true" /> 全部已读
@@ -154,7 +156,7 @@ export function NotificationPanel({ onClose }: NotificationPanelProps) {
             style={{
               padding: '32px 16px',
               textAlign: 'center',
-              color: 'var(--c-fg-muted)',
+              color: 'var(--faint)',
               fontSize: 12,
             }}
           >
@@ -173,20 +175,19 @@ export function NotificationPanel({ onClose }: NotificationPanelProps) {
               width: '100%',
               textAlign: 'left',
               padding: '10px 12px',
-              borderBottom: '1px solid var(--c-border)',
-              background: n.isRead ? 'transparent' : 'var(--c-bg)',
-              cursor: 'pointer',
               border: 'none',
-              borderTop: 'none',
-              borderLeft: 'none',
-              borderRight: 'none',
+              borderBottom: '1px solid var(--line)',
+              background: n.isRead ? 'transparent' : 'rgba(184, 255, 106, 0.04)',
+              cursor: 'pointer',
+              color: 'var(--text)',
+              fontFamily: 'inherit',
             }}
           >
             <div
               style={{
                 fontSize: 12,
-                fontWeight: n.isRead ? 400 : 600,
-                color: 'var(--c-fg)',
+                fontWeight: n.isRead ? 600 : 800,
+                color: 'var(--text)',
                 marginBottom: 2,
               }}
             >
@@ -195,8 +196,9 @@ export function NotificationPanel({ onClose }: NotificationPanelProps) {
             <div
               style={{
                 fontSize: 11,
-                color: 'var(--c-fg-muted)',
+                color: 'var(--muted)',
                 marginBottom: 4,
+                lineHeight: 1.55,
               }}
             >
               {truncateBody(n.body)}
@@ -204,7 +206,8 @@ export function NotificationPanel({ onClose }: NotificationPanelProps) {
             <div
               style={{
                 fontSize: 10,
-                color: 'var(--c-fg-muted)',
+                color: 'var(--faint)',
+                fontWeight: 500,
               }}
             >
               {formatRelativeTime(n.createdAt)}

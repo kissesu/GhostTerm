@@ -55,7 +55,7 @@ export function FeedbackList({ projectId }: FeedbackListProps) {
 
   if (loading && list.length === 0) {
     return (
-      <div data-testid="feedback-list-loading" style={{ padding: 12, fontSize: 12, color: 'var(--c-fg-muted)' }}>
+      <div data-testid="feedback-list-loading" style={{ padding: 12, fontSize: 12, color: 'var(--muted)' }}>
         加载反馈中…
       </div>
     );
@@ -65,7 +65,14 @@ export function FeedbackList({ projectId }: FeedbackListProps) {
     return (
       <div
         data-testid="feedback-list-error"
-        style={{ padding: 12, fontSize: 12, color: 'var(--c-danger, #d8453b)' }}
+        style={{
+          padding: '8px 12px',
+          border: '1px solid rgba(239, 104, 98, 0.4)',
+          borderRadius: 6,
+          background: 'rgba(239, 104, 98, 0.1)',
+          color: '#ffd8d4',
+          fontSize: 12,
+        }}
       >
         加载失败：{error}
       </div>
@@ -74,7 +81,7 @@ export function FeedbackList({ projectId }: FeedbackListProps) {
 
   if (list.length === 0) {
     return (
-      <div data-testid="feedback-list-empty" style={{ padding: 12, fontSize: 12, color: 'var(--c-fg-muted)' }}>
+      <div data-testid="feedback-list-empty" style={{ padding: 12, fontSize: 12, color: 'var(--faint)' }}>
         暂无反馈
       </div>
     );
@@ -90,6 +97,9 @@ export function FeedbackList({ projectId }: FeedbackListProps) {
         overflowY: 'auto',
         minHeight: 0,
         flex: 1,
+        border: '1px solid var(--line)',
+        borderRadius: 8,
+        background: 'var(--panel)',
       }}
     >
       {list.map((fb) => (
@@ -123,28 +133,36 @@ function FeedbackItem({ feedback }: { feedback: Feedback }) {
       data-testid={`feedback-item-${feedback.id}`}
       data-status={feedback.status}
       style={{
-        padding: '8px 12px',
-        borderBottom: '1px solid var(--c-border-sub, var(--c-border))',
+        padding: '10px 14px',
+        borderBottom: '1px solid var(--line)',
         display: 'flex',
         flexDirection: 'column',
-        gap: 4,
+        gap: 6,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 500 }}>
         <StatusBadge status={feedback.status} />
-        <span style={{ color: 'var(--c-fg-muted)' }}>{recordedAt}</span>
-        <span style={{ color: 'var(--c-fg-muted)' }}>· {SOURCE_LABEL[feedback.source]}</span>
+        <span style={{ color: 'var(--faint)' }}>{recordedAt}</span>
+        <span style={{ color: 'var(--faint)' }}>· {SOURCE_LABEL[feedback.source]}</span>
         {feedback.attachmentIds && feedback.attachmentIds.length > 0 ? (
           <span
             data-testid={`feedback-item-${feedback.id}-attachments`}
-            style={{ color: 'var(--c-fg-muted)', fontSize: 11 }}
+            style={{ color: 'var(--faint)', fontSize: 11 }}
           >
             · {feedback.attachmentIds.length} 个附件
           </span>
         ) : null}
       </div>
 
-      <div style={{ fontSize: 13, color: 'var(--c-fg)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+      <div
+        style={{
+          fontSize: 13,
+          color: 'var(--text)',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          lineHeight: 1.55,
+        }}
+      >
         {feedback.content}
       </div>
 
@@ -155,13 +173,16 @@ function FeedbackItem({ feedback }: { feedback: Feedback }) {
             onClick={onMarkDone}
             data-testid={`feedback-item-${feedback.id}-mark-done`}
             style={{
-              padding: '2px 8px',
-              borderRadius: 4,
-              border: '1px solid var(--c-border)',
-              background: 'var(--c-bg)',
-              color: 'var(--c-fg)',
+              height: 24,
+              padding: '0 10px',
+              borderRadius: 5,
+              border: '1px solid var(--line)',
+              background: 'var(--panel-2)',
+              color: 'var(--muted)',
               cursor: 'pointer',
               fontSize: 11,
+              fontWeight: 700,
+              fontFamily: 'inherit',
             }}
           >
             标为已处理
@@ -172,7 +193,7 @@ function FeedbackItem({ feedback }: { feedback: Feedback }) {
   );
 }
 
-/** 状态徽章：pending（橙色） / done（绿色），用 CSS 变量降级，无图标依赖 */
+/** 状态徽章：pending（黄色） / done（绿色） —— 用 habitat tokens */
 function StatusBadge({ status }: { status: Feedback['status'] }) {
   const isDone = status === 'done';
   return (
@@ -180,12 +201,13 @@ function StatusBadge({ status }: { status: Feedback['status'] }) {
       data-testid="feedback-status-badge"
       data-status={status}
       style={{
-        padding: '1px 6px',
-        borderRadius: 3,
+        padding: '2px 7px',
+        borderRadius: 4,
         fontSize: 11,
-        fontWeight: 500,
-        background: isDone ? 'var(--c-success-bg, #1f4030)' : 'var(--c-warning-bg, #4a3a1a)',
-        color: isDone ? 'var(--c-success, #4ade80)' : 'var(--c-warning, #fbbf24)',
+        fontWeight: 700,
+        letterSpacing: 0.2,
+        background: isDone ? 'rgba(121, 209, 124, 0.16)' : 'rgba(231, 186, 74, 0.18)',
+        color: isDone ? '#d7ffd8' : '#ffe7aa',
       }}
     >
       {isDone ? '已处理' : '待处理'}

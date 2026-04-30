@@ -11,10 +11,10 @@
  *              6. onSuccess 回调（让上层 invalidate 项目详情，因为 current_quote 变了）
  *              7. 关闭对话框
  *
- *              UI 决策（与全局设计语言对齐）：
- *              - 用 var(--c-panel) 浮起面板色
- *              - 错误信息红色（var(--c-status-error)）
- *              - 不引入第三方 Modal —— Phase 8 暂用最小 inline 样式，后续再统一抽 Dialog
+ *              UI 决策（与 habitat-grid-progress 设计稿对齐）：
+ *              - 用 var(--panel) 浮起面板色 + var(--shadow) 阴影
+ *              - 错误信息红色（var(--red) + 半透明背景）
+ *              - 自带 backdrop（rgba 黑色遮罩 + blur），与 PaymentDialog 同源
  *
  *              不在本组件做的事：
  *              - 不显示历史变更列表（QuoteChangesList 在 Phase 8 plan 内是独立组件，本 worker
@@ -122,122 +122,210 @@ export function QuoteChangeDialog({
     }
   }
 
+  // 业务背景：QuoteChangeDialog 由 quote tab 直接渲染（没有 caller 提供的 backdrop），
+  // 因此在此自带 backdrop + 居中布局，与 PaymentDialog 统一。
   return (
     <div
-      data-testid="quote-change-dialog"
-      role="dialog"
-      aria-label={isAfterSales ? '售后追加费用' : '费用变更'}
+      data-testid="quote-change-backdrop"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !submitting) {
+          onClose();
+        }
+      }}
       style={{
-        background: 'var(--c-panel)',
-        color: 'var(--c-fg)',
-        padding: 20,
-        borderRadius: 8,
-        boxShadow: '0 4px 20px rgba(0,0,0,0.18)',
-        minWidth: 360,
+        position: 'fixed',
+        inset: 0,
+        zIndex: 1000,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'rgba(5, 5, 4, 0.55)',
+        backdropFilter: 'blur(4px)',
+        padding: 24,
       }}
     >
-      <h3 style={{ margin: '0 0 12px' }}>
-        {isAfterSales ? '售后追加费用' : '费用变更'}
-      </h3>
+      <div
+        data-testid="quote-change-dialog"
+        role="dialog"
+        aria-label={isAfterSales ? '售后追加费用' : '费用变更'}
+        style={{
+          background: 'var(--panel)',
+          color: 'var(--text)',
+          padding: '20px 22px',
+          borderRadius: 9,
+          border: '1px solid var(--line-strong)',
+          boxShadow: 'var(--shadow)',
+          minWidth: 420,
+          maxWidth: 520,
+          width: '100%',
+          fontFamily: 'inherit',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+        }}
+      >
+        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: 'var(--text)', letterSpacing: 0.2 }}>
+          {isAfterSales ? '售后追加费用' : '费用变更'}
+        </h3>
 
-      {/* 类型选择（仅非售后模式展示） */}
-      {!isAfterSales && (
-        <label style={{ display: 'block', marginBottom: 10 }}>
-          <span style={{ display: 'block', marginBottom: 4 }}>类型</span>
-          <select
-            data-testid="qc-type"
-            value={changeType}
-            onChange={(e) => setChangeType(e.target.value as QuoteChangeType)}
-            style={{ width: '100%', padding: 6 }}
+        {/* 类型选择（仅非售后模式展示） */}
+        {!isAfterSales && (
+          <label style={qcLabelStyle}>
+            <span style={qcLabelTextStyle}>类型</span>
+            <select
+              data-testid="qc-type"
+              value={changeType}
+              onChange={(e) => setChangeType(e.target.value as QuoteChangeType)}
+              style={qcInputStyle}
+            >
+              {TYPE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {/* 金额输入：modify=新报价；其它=变化金额 */}
+        {changeType === 'modify' ? (
+          <label style={qcLabelStyle}>
+            <span style={qcLabelTextStyle}>新报价（元）</span>
+            <input
+              data-testid="qc-new-quote"
+              type="text"
+              inputMode="decimal"
+              value={newQuote}
+              onChange={(e) => setNewQuote(e.target.value)}
+              placeholder="例如 5000.00"
+              style={qcInputStyle}
+            />
+          </label>
+        ) : (
+          <label style={qcLabelStyle}>
+            <span style={qcLabelTextStyle}>变化金额（元）</span>
+            <input
+              data-testid="qc-delta"
+              type="text"
+              inputMode="decimal"
+              value={delta}
+              onChange={(e) => setDelta(e.target.value)}
+              placeholder="例如 1500.00"
+              style={qcInputStyle}
+            />
+          </label>
+        )}
+
+        {/* 原因（必填） */}
+        <label style={qcLabelStyle}>
+          <span style={qcLabelTextStyle}>
+            原因 <span style={{ color: 'var(--red)', marginLeft: 2 }}>*</span>
+          </span>
+          <textarea
+            data-testid="qc-reason"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={3}
+            placeholder="例如：客户加新功能，需追加费用"
+            style={{ ...qcInputStyle, resize: 'vertical', minHeight: 78, paddingTop: 10, lineHeight: 1.6 }}
+          />
+        </label>
+
+        {/* 错误提示 */}
+        {error !== null && (
+          <div
+            data-testid="qc-error"
+            role="alert"
+            style={{
+              padding: '8px 12px',
+              border: '1px solid rgba(239, 104, 98, 0.4)',
+              borderRadius: 6,
+              background: 'rgba(239, 104, 98, 0.1)',
+              color: '#ffd8d4',
+              fontSize: 12,
+            }}
           >
-            {TYPE_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
+            {error}
+          </div>
+        )}
 
-      {/* 金额输入：modify=新报价；其它=变化金额 */}
-      {changeType === 'modify' ? (
-        <label style={{ display: 'block', marginBottom: 10 }}>
-          <span style={{ display: 'block', marginBottom: 4 }}>新报价（元）</span>
-          <input
-            data-testid="qc-new-quote"
-            type="text"
-            inputMode="decimal"
-            value={newQuote}
-            onChange={(e) => setNewQuote(e.target.value)}
-            placeholder="例如 5000.00"
-            style={{ width: '100%', padding: 6 }}
-          />
-        </label>
-      ) : (
-        <label style={{ display: 'block', marginBottom: 10 }}>
-          <span style={{ display: 'block', marginBottom: 4 }}>变化金额（元）</span>
-          <input
-            data-testid="qc-delta"
-            type="text"
-            inputMode="decimal"
-            value={delta}
-            onChange={(e) => setDelta(e.target.value)}
-            placeholder="例如 1500.00"
-            style={{ width: '100%', padding: 6 }}
-          />
-        </label>
-      )}
-
-      {/* 原因（必填） */}
-      <label style={{ display: 'block', marginBottom: 10 }}>
-        <span style={{ display: 'block', marginBottom: 4 }}>原因</span>
-        <textarea
-          data-testid="qc-reason"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          rows={3}
-          placeholder="例如：客户加新功能，需追加费用"
-          style={{ width: '100%', padding: 6, resize: 'vertical' }}
-        />
-      </label>
-
-      {/* 错误提示 */}
-      {error !== null && (
-        <div
-          data-testid="qc-error"
-          role="alert"
-          style={{
-            color: 'var(--c-status-error, #d94c4c)',
-            background: 'rgba(217,76,76,0.08)',
-            padding: '6px 10px',
-            borderRadius: 4,
-            marginBottom: 10,
-            fontSize: 13,
-          }}
-        >
-          {error}
+        {/* 操作按钮 */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+          <button
+            data-testid="qc-cancel"
+            onClick={onClose}
+            disabled={submitting}
+            type="button"
+            style={qcSecondaryBtnStyle}
+          >
+            取消
+          </button>
+          <button
+            data-testid="qc-submit"
+            onClick={handleSubmit}
+            disabled={submitting}
+            type="button"
+            style={qcPrimaryBtnStyle}
+          >
+            {submitting ? '提交中…' : '提交'}
+          </button>
         </div>
-      )}
-
-      {/* 操作按钮 */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-        <button
-          data-testid="qc-cancel"
-          onClick={onClose}
-          disabled={submitting}
-          type="button"
-        >
-          取消
-        </button>
-        <button
-          data-testid="qc-submit"
-          onClick={handleSubmit}
-          disabled={submitting}
-          type="button"
-        >
-          {submitting ? '提交中…' : '提交'}
-        </button>
       </div>
     </div>
   );
 }
+
+// ============================================
+// 内联样式（与 habitat-grid-progress 设计稿对齐）
+// ============================================
+
+const qcLabelStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+};
+
+const qcLabelTextStyle: React.CSSProperties = {
+  fontSize: 12,
+  color: '#d8d1bf',
+  fontWeight: 600,
+};
+
+const qcInputStyle: React.CSSProperties = {
+  width: '100%',
+  minHeight: 36,
+  padding: '8px 11px',
+  borderRadius: 6,
+  border: '1px solid var(--line)',
+  background: '#11110f',
+  color: 'var(--text)',
+  fontSize: 12,
+  fontFamily: 'inherit',
+  outline: 'none',
+};
+
+const qcPrimaryBtnStyle: React.CSSProperties = {
+  height: 32,
+  padding: '0 14px',
+  borderRadius: 6,
+  border: '1px solid transparent',
+  background: 'var(--accent)',
+  color: 'var(--accent-ink)',
+  cursor: 'pointer',
+  fontSize: 12,
+  fontWeight: 800,
+  fontFamily: 'inherit',
+};
+
+const qcSecondaryBtnStyle: React.CSSProperties = {
+  height: 32,
+  padding: '0 14px',
+  borderRadius: 6,
+  border: '1px solid var(--line)',
+  background: '#11110f',
+  color: 'var(--muted)',
+  cursor: 'pointer',
+  fontSize: 12,
+  fontWeight: 800,
+  fontFamily: 'inherit',
+};

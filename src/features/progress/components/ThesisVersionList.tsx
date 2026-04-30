@@ -81,17 +81,29 @@ export function ThesisVersionList({
   };
 
   return (
-    <div data-testid="thesis-version-list">
-      <h4>论文版本（不可覆盖）</h4>
+    <div data-testid="thesis-version-list" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <h4 style={{ margin: 0, fontSize: 13, fontWeight: 800, color: 'var(--text)', letterSpacing: 0.2 }}>
+        论文版本（不可覆盖）
+      </h4>
 
       {canUpload && (
-        <div style={{ marginBottom: 12 }}>
+        <div
+          style={{
+            padding: 12,
+            border: '1px dashed var(--line-strong)',
+            borderRadius: 8,
+            background: 'var(--panel-2)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+          }}
+        >
           {pendingFile === null ? (
             <FileSelector onPick={(f) => setPendingFile(f)} />
           ) : (
-            <div data-testid="thesis-confirm-panel">
-              <div style={{ fontSize: 12, marginBottom: 6 }}>
-                已选：<strong>{pendingFile.name}</strong>
+            <div data-testid="thesis-confirm-panel" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                已选：<strong style={{ color: 'var(--text)' }}>{pendingFile.name}</strong>
               </div>
               <input
                 type="text"
@@ -100,33 +112,45 @@ export function ThesisVersionList({
                 onChange={(e) => setRemark(e.target.value)}
                 disabled={pending}
                 data-testid="thesis-remark-input"
+                style={thesisInputStyle}
               />
-              <button
-                type="button"
-                onClick={() => void handleConfirm()}
-                disabled={pending}
-                data-testid="thesis-confirm-btn"
-              >
-                {pending ? '上传中…' : '确认上传'}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setPendingFile(null);
-                  setRemark('');
-                  setError(null);
-                }}
-                disabled={pending}
-                data-testid="thesis-cancel-btn"
-              >
-                取消
-              </button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => void handleConfirm()}
+                  disabled={pending}
+                  data-testid="thesis-confirm-btn"
+                  style={thesisPrimaryBtnStyle}
+                >
+                  {pending ? '上传中…' : '确认上传'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPendingFile(null);
+                    setRemark('');
+                    setError(null);
+                  }}
+                  disabled={pending}
+                  data-testid="thesis-cancel-btn"
+                  style={thesisSecondaryBtnStyle}
+                >
+                  取消
+                </button>
+              </div>
             </div>
           )}
           {error !== null && (
             <div
               data-testid="thesis-upload-error"
-              style={{ color: 'var(--c-danger, #c33)', fontSize: 12 }}
+              style={{
+                padding: '6px 10px',
+                border: '1px solid rgba(239, 104, 98, 0.4)',
+                borderRadius: 6,
+                background: 'rgba(239, 104, 98, 0.1)',
+                color: '#ffd8d4',
+                fontSize: 12,
+              }}
               role="alert"
             >
               {error}
@@ -147,11 +171,24 @@ export function ThesisVersionList({
       )}
 
       {loading && versions.length === 0 ? (
-        <div data-testid="thesis-loading">加载中…</div>
+        <div data-testid="thesis-loading" style={{ fontSize: 12, color: 'var(--muted)', padding: 12 }}>
+          加载中…
+        </div>
       ) : (
-        <ul data-testid="thesis-version-items" style={{ listStyle: 'none', padding: 0 }}>
+        <ul
+          data-testid="thesis-version-items"
+          style={{
+            listStyle: 'none',
+            padding: 0,
+            margin: 0,
+            border: '1px solid var(--line)',
+            borderRadius: 8,
+            background: 'var(--panel)',
+            overflow: 'hidden',
+          }}
+        >
           {versions.length === 0 ? (
-            <li data-testid="thesis-empty" style={{ color: 'var(--c-text-muted, #888)' }}>
+            <li data-testid="thesis-empty" style={{ color: 'var(--faint)', fontSize: 12, padding: 14 }}>
               暂无版本
             </li>
           ) : (
@@ -176,14 +213,18 @@ function FileSelector({ onPick }: { onPick: (f: File) => void }) {
     e.target.value = '';
   };
   return (
-    <label data-testid="thesis-file-picker" style={{ cursor: 'pointer' }}>
+    <label data-testid="thesis-file-picker" style={{ cursor: 'pointer', display: 'inline-flex' }}>
       <input
         type="file"
         onChange={handleChange}
         style={{ display: 'none' }}
         data-testid="thesis-file-input"
       />
-      <button type="button" onClick={(e) => (e.currentTarget.previousSibling as HTMLInputElement).click()}>
+      <button
+        type="button"
+        onClick={(e) => (e.currentTarget.previousSibling as HTMLInputElement).click()}
+        style={thesisSecondaryBtnStyle}
+      >
         选择论文文件
       </button>
     </label>
@@ -219,20 +260,22 @@ function ThesisVersionRow({ v }: RowProps) {
       data-testid={`thesis-version-row-${v.versionNo}`}
       data-version-no={v.versionNo}
       style={{
-        padding: '8px 0',
-        borderBottom: '1px solid var(--c-border, #ddd)',
+        padding: '10px 14px',
+        borderBottom: '1px solid var(--line)',
         display: 'flex',
         gap: 12,
         alignItems: 'baseline',
+        fontSize: 12,
+        color: 'var(--muted)',
       }}
     >
-      <span style={{ fontWeight: 600 }}>v{v.versionNo}</span>
-      <span data-testid="thesis-filename">{v.file.filename}</span>
-      <span style={{ color: 'var(--c-text-muted, #888)', fontSize: 12 }}>
-        {formatTime(v.uploadedAt)}
+      <span style={{ fontWeight: 800, color: 'var(--accent)', fontFamily: 'monospace' }}>v{v.versionNo}</span>
+      <span data-testid="thesis-filename" style={{ color: 'var(--text)', fontWeight: 600 }}>
+        {v.file.filename}
       </span>
+      <span style={{ color: 'var(--faint)', fontSize: 11 }}>{formatTime(v.uploadedAt)}</span>
       {v.remark != null && v.remark !== '' && (
-        <span data-testid="thesis-remark" style={{ color: 'var(--c-text-muted, #888)' }}>
+        <span data-testid="thesis-remark" style={{ color: 'var(--faint)' }}>
           · {v.remark}
         </span>
       )}
@@ -241,14 +284,26 @@ function ThesisVersionRow({ v }: RowProps) {
         onClick={() => void handleDownload()}
         disabled={downloading}
         data-testid={`thesis-download-${v.versionNo}`}
-        style={{ marginLeft: 'auto' }}
+        style={{
+          marginLeft: 'auto',
+          height: 24,
+          padding: '0 10px',
+          borderRadius: 5,
+          border: '1px solid var(--line)',
+          background: 'var(--panel-2)',
+          color: 'var(--muted)',
+          cursor: downloading ? 'not-allowed' : 'pointer',
+          fontSize: 11,
+          fontWeight: 700,
+          fontFamily: 'inherit',
+        }}
       >
         {downloading ? '下载中…' : '下载'}
       </button>
       {error !== null && (
         <span
           data-testid={`thesis-download-error-${v.versionNo}`}
-          style={{ color: 'var(--c-danger, #c33)', fontSize: 12 }}
+          style={{ color: 'var(--red)', fontSize: 11 }}
           role="alert"
         >
           {error}
@@ -257,6 +312,49 @@ function ThesisVersionRow({ v }: RowProps) {
     </li>
   );
 }
+
+// ============================================
+// 共享按钮 / input 样式（与 habitat 设计一致）
+// ============================================
+
+const thesisInputStyle: React.CSSProperties = {
+  width: '100%',
+  minHeight: 32,
+  padding: '7px 11px',
+  borderRadius: 6,
+  border: '1px solid var(--line)',
+  background: '#11110f',
+  color: 'var(--text)',
+  fontSize: 12,
+  fontFamily: 'inherit',
+  outline: 'none',
+};
+
+const thesisPrimaryBtnStyle: React.CSSProperties = {
+  height: 30,
+  padding: '0 14px',
+  borderRadius: 6,
+  border: '1px solid transparent',
+  background: 'var(--accent)',
+  color: 'var(--accent-ink)',
+  cursor: 'pointer',
+  fontSize: 12,
+  fontWeight: 800,
+  fontFamily: 'inherit',
+};
+
+const thesisSecondaryBtnStyle: React.CSSProperties = {
+  height: 30,
+  padding: '0 14px',
+  borderRadius: 6,
+  border: '1px solid var(--line)',
+  background: '#11110f',
+  color: 'var(--muted)',
+  cursor: 'pointer',
+  fontSize: 12,
+  fontWeight: 800,
+  fontFamily: 'inherit',
+};
 
 /** 把 ISO timestamp 转成"YYYY-MM-DD HH:mm"局部时间字符串。 */
 function formatTime(iso: string): string {

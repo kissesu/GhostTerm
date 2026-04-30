@@ -90,7 +90,8 @@ export default function EarningsView() {
       data-testid="earnings-view"
       style={{
         padding: 20,
-        background: 'var(--c-panel)',
+        background: 'var(--panel)',
+        border: '1px solid var(--line)',
         borderRadius: 8,
         display: 'flex',
         flexDirection: 'column',
@@ -98,8 +99,10 @@ export default function EarningsView() {
       }}
     >
       <header style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Wallet size={18} aria-hidden="true" style={{ color: 'var(--c-accent)' }} />
-        <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>我的收益（仅自己可见）</h3>
+        <Wallet size={18} aria-hidden="true" style={{ color: 'var(--accent)' }} />
+        <h3 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: 'var(--text)', letterSpacing: 0.2 }}>
+          我的收益（仅自己可见）
+        </h3>
       </header>
 
       {/* 累计金额（大字号） */}
@@ -108,22 +111,22 @@ export default function EarningsView() {
         style={{
           display: 'flex',
           alignItems: 'baseline',
-          gap: 8,
+          gap: 10,
         }}
       >
-        <span style={{ fontSize: 28, fontWeight: 600, color: 'var(--c-fg)' }}>
+        <span style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', letterSpacing: 0.3 }}>
           {summary ? formatMoney(summary.totalEarned) : '¥—'}
         </span>
-        <span style={{ fontSize: 12, color: 'var(--c-fg-muted)' }}>累计已结算</span>
+        <span style={{ fontSize: 11, color: 'var(--faint)', fontWeight: 500 }}>累计已结算</span>
       </div>
 
       {/* 概要指标行 */}
-      <div style={{ display: 'flex', gap: 24, fontSize: 12, color: 'var(--c-fg-muted)' }}>
-        <span data-testid="earnings-count" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      <div style={{ display: 'flex', gap: 20, fontSize: 12, color: 'var(--muted)' }}>
+        <span data-testid="earnings-count" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <Coins size={12} aria-hidden="true" />
           {summary ? `${summary.settlementCount} 笔` : '—'}
         </span>
-        <span data-testid="earnings-last-paid" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <span data-testid="earnings-last-paid" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <TrendingUp size={12} aria-hidden="true" />
           上次：{summary ? formatDateTime(summary.lastPaidAt) : '—'}
         </span>
@@ -131,12 +134,22 @@ export default function EarningsView() {
 
       {/* 错误 / 加载提示 */}
       {error && (
-        <div data-testid="earnings-error" style={{ fontSize: 12, color: 'var(--c-danger, #d8453b)' }}>
+        <div
+          data-testid="earnings-error"
+          style={{
+            padding: '8px 12px',
+            border: '1px solid rgba(239, 104, 98, 0.4)',
+            borderRadius: 6,
+            background: 'rgba(239, 104, 98, 0.1)',
+            color: '#ffd8d4',
+            fontSize: 12,
+          }}
+        >
           加载失败：{error}
         </div>
       )}
       {loading && !summary && (
-        <div data-testid="earnings-loading" style={{ fontSize: 12, color: 'var(--c-fg-muted)' }}>
+        <div data-testid="earnings-loading" style={{ fontSize: 12, color: 'var(--faint)' }}>
           加载中…
         </div>
       )}
@@ -152,7 +165,7 @@ export default function EarningsView() {
           }}
         >
           <thead>
-            <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--c-border)' }}>
+            <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--line-strong)' }}>
               <th style={thStyle}>项目</th>
               <th style={{ ...thStyle, textAlign: 'right' }}>累计金额</th>
               <th style={{ ...thStyle, textAlign: 'right' }}>笔数</th>
@@ -164,7 +177,7 @@ export default function EarningsView() {
               <tr
                 key={p.projectId}
                 data-testid={`earnings-row-${p.projectId}`}
-                style={{ borderBottom: '1px solid var(--c-border-subtle, var(--c-border))' }}
+                style={{ borderBottom: '1px solid var(--line)' }}
               >
                 <td style={tdStyle}>{p.projectName}</td>
                 <td style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
@@ -179,7 +192,7 @@ export default function EarningsView() {
       )}
 
       {summary && summary.projects.length === 0 && !loading && (
-        <div data-testid="earnings-empty" style={{ fontSize: 12, color: 'var(--c-fg-muted)' }}>
+        <div data-testid="earnings-empty" style={{ fontSize: 12, color: 'var(--faint)' }}>
           暂无结算记录
         </div>
       )}
@@ -188,16 +201,19 @@ export default function EarningsView() {
 }
 
 // ============================================
-// 内联样式
+// 内联样式（habitat tokens）
 // ============================================
 
 const thStyle: React.CSSProperties = {
-  padding: '6px 4px',
-  fontWeight: 500,
-  color: 'var(--c-fg-muted)',
+  padding: '8px 6px',
+  fontWeight: 800,
+  fontSize: 11,
+  color: 'var(--faint)',
+  textTransform: 'uppercase',
+  letterSpacing: 0.5,
 };
 
 const tdStyle: React.CSSProperties = {
-  padding: '6px 4px',
-  color: 'var(--c-fg)',
+  padding: '8px 6px',
+  color: 'var(--text)',
 };

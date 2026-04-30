@@ -77,6 +77,7 @@ function FeedbackInputInner({ projectId }: FeedbackInputProps) {
     }
   };
 
+  const disabled = submitting || content.trim() === '';
   return (
     <form
       onSubmit={onSubmit}
@@ -84,10 +85,11 @@ function FeedbackInputInner({ projectId }: FeedbackInputProps) {
       style={{
         display: 'flex',
         flexDirection: 'column',
-        gap: 6,
-        padding: 8,
-        background: 'var(--c-panel)',
-        borderRadius: 6,
+        gap: 8,
+        padding: 12,
+        border: '1px solid var(--line)',
+        background: 'var(--panel)',
+        borderRadius: 8,
       }}
     >
       <textarea
@@ -97,29 +99,35 @@ function FeedbackInputInner({ projectId }: FeedbackInputProps) {
         data-testid="feedback-input-content"
         rows={3}
         style={{
-          padding: '6px 8px',
-          borderRadius: 4,
-          border: '1px solid var(--c-border)',
-          background: 'var(--c-bg)',
-          color: 'var(--c-fg)',
-          fontSize: 13,
+          padding: '10px 11px',
+          borderRadius: 6,
+          border: '1px solid var(--line)',
+          background: '#11110f',
+          color: 'var(--text)',
+          fontSize: 12,
           fontFamily: 'inherit',
           resize: 'vertical',
+          outline: 'none',
+          lineHeight: 1.55,
         }}
       />
 
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <select
           value={source}
           onChange={(e) => setSource(e.target.value as FeedbackSource)}
           data-testid="feedback-input-source"
           style={{
-            padding: '4px 6px',
-            borderRadius: 4,
-            border: '1px solid var(--c-border)',
-            background: 'var(--c-bg)',
-            color: 'var(--c-fg)',
+            height: 30,
+            padding: '0 10px',
+            borderRadius: 6,
+            border: '1px solid var(--line)',
+            background: '#11110f',
+            color: 'var(--muted)',
             fontSize: 12,
+            fontFamily: 'inherit',
+            cursor: 'pointer',
+            minWidth: 110,
           }}
         >
           {SOURCE_OPTIONS.map((opt) => (
@@ -131,18 +139,20 @@ function FeedbackInputInner({ projectId }: FeedbackInputProps) {
 
         <button
           type="submit"
-          disabled={submitting || content.trim() === ''}
+          disabled={disabled}
           data-testid="feedback-input-submit"
           style={{
-            padding: '4px 12px',
-            borderRadius: 4,
-            border: 'none',
-            background: 'var(--c-accent)',
-            color: 'var(--c-on-accent, #fff)',
-            cursor: submitting || content.trim() === '' ? 'not-allowed' : 'pointer',
+            height: 30,
+            padding: '0 14px',
+            borderRadius: 6,
+            border: '1px solid transparent',
+            background: 'var(--accent)',
+            color: 'var(--accent-ink)',
+            cursor: disabled ? 'not-allowed' : 'pointer',
             fontSize: 12,
-            fontWeight: 500,
-            opacity: submitting || content.trim() === '' ? 0.5 : 1,
+            fontWeight: 800,
+            fontFamily: 'inherit',
+            opacity: disabled ? 0.55 : 1,
           }}
         >
           {submitting ? '提交中…' : '提交'}
@@ -152,7 +162,14 @@ function FeedbackInputInner({ projectId }: FeedbackInputProps) {
       {error ? (
         <div
           data-testid="feedback-input-error"
-          style={{ fontSize: 12, color: 'var(--c-danger, #d8453b)' }}
+          style={{
+            padding: '6px 10px',
+            border: '1px solid rgba(239, 104, 98, 0.4)',
+            borderRadius: 6,
+            background: 'rgba(239, 104, 98, 0.1)',
+            color: '#ffd8d4',
+            fontSize: 12,
+          }}
         >
           {error}
         </div>

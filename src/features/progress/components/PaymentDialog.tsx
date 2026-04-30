@@ -142,158 +142,209 @@ export default function PaymentDialog({
     }
   };
 
+  // 业务背景：与 QuoteChangeDialog 一致，自带 backdrop + 居中浮起
   return (
-    <form
-      data-testid="payment-dialog"
-      onSubmit={handleSubmit}
+    <div
+      data-testid="payment-backdrop"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !submitting) {
+          onClose();
+        }
+      }}
       style={{
-        width: 360,
-        padding: 20,
-        background: 'var(--c-panel)',
-        borderRadius: 8,
+        position: 'fixed',
+        inset: 0,
+        zIndex: 1000,
         display: 'flex',
-        flexDirection: 'column',
-        gap: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'rgba(5, 5, 4, 0.55)',
+        backdropFilter: 'blur(4px)',
+        padding: 24,
       }}
     >
-      <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>录入财务流水</h3>
+      <form
+        data-testid="payment-dialog"
+        onSubmit={handleSubmit}
+        style={{
+          width: 440,
+          maxWidth: '100%',
+          padding: '20px 22px',
+          background: 'var(--panel)',
+          border: '1px solid var(--line-strong)',
+          borderRadius: 9,
+          boxShadow: 'var(--shadow)',
+          color: 'var(--text)',
+          fontFamily: 'inherit',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+        }}
+      >
+        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, letterSpacing: 0.2 }}>录入财务流水</h3>
 
-      <label style={labelStyle}>
-        <span>类型</span>
-        <select
-          value={direction}
-          onChange={(e) => setDirection(e.target.value as PaymentDirection)}
-          data-testid="payment-direction"
-          style={inputStyle}
-        >
-          <option value="customer_in">客户付款入账</option>
-          <option value="dev_settlement">结算给开发</option>
-        </select>
-      </label>
+        <label style={labelStyle}>
+          <span style={labelTextStyle}>类型</span>
+          <select
+            value={direction}
+            onChange={(e) => setDirection(e.target.value as PaymentDirection)}
+            data-testid="payment-direction"
+            style={inputStyle}
+          >
+            <option value="customer_in">客户付款入账</option>
+            <option value="dev_settlement">结算给开发</option>
+          </select>
+        </label>
 
-      <label style={labelStyle}>
-        <span>金额（¥）</span>
-        <input
-          type="number"
-          step="0.01"
-          min="0.01"
-          required
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          data-testid="payment-amount"
-          style={inputStyle}
-          placeholder="0.00"
-        />
-      </label>
+        <label style={labelStyle}>
+          <span style={labelTextStyle}>金额（¥）</span>
+          <input
+            type="number"
+            step="0.01"
+            min="0.01"
+            required
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            data-testid="payment-amount"
+            style={inputStyle}
+            placeholder="0.00"
+          />
+        </label>
 
-      {direction === 'dev_settlement' && (
-        <>
-          <label style={labelStyle}>
-            <span>开发用户 ID</span>
-            <input
-              type="number"
-              min="1"
-              value={relatedUserId}
-              onChange={(e) => setRelatedUserId(e.target.value)}
-              data-testid="payment-related-user-id"
-              style={inputStyle}
-              placeholder="user_id"
-            />
-          </label>
+        {direction === 'dev_settlement' && (
+          <>
+            <label style={labelStyle}>
+              <span style={labelTextStyle}>开发用户 ID</span>
+              <input
+                type="number"
+                min="1"
+                value={relatedUserId}
+                onChange={(e) => setRelatedUserId(e.target.value)}
+                data-testid="payment-related-user-id"
+                style={inputStyle}
+                placeholder="user_id"
+              />
+            </label>
 
-          <label style={labelStyle}>
-            <span>结算截图文件 ID</span>
-            <input
-              type="number"
-              min="1"
-              value={screenshotIdInput}
-              onChange={(e) => setScreenshotIdInput(e.target.value)}
-              data-testid="payment-screenshot-id"
-              style={inputStyle}
-              placeholder="先上传截图获取 file_id"
-            />
-          </label>
-        </>
-      )}
+            <label style={labelStyle}>
+              <span style={labelTextStyle}>结算截图文件 ID</span>
+              <input
+                type="number"
+                min="1"
+                value={screenshotIdInput}
+                onChange={(e) => setScreenshotIdInput(e.target.value)}
+                data-testid="payment-screenshot-id"
+                style={inputStyle}
+                placeholder="先上传截图获取 file_id"
+              />
+            </label>
+          </>
+        )}
 
-      <label style={labelStyle}>
-        <span>备注</span>
-        <textarea
-          required
-          rows={3}
-          value={remark}
-          onChange={(e) => setRemark(e.target.value)}
-          data-testid="payment-remark"
-          style={{ ...inputStyle, resize: 'vertical' }}
-        />
-      </label>
+        <label style={labelStyle}>
+          <span style={labelTextStyle}>备注</span>
+          <textarea
+            required
+            rows={3}
+            value={remark}
+            onChange={(e) => setRemark(e.target.value)}
+            data-testid="payment-remark"
+            style={{ ...inputStyle, resize: 'vertical', minHeight: 78, paddingTop: 10, lineHeight: 1.6 }}
+          />
+        </label>
 
-      {error && (
-        <div data-testid="payment-error" style={{ fontSize: 12, color: 'var(--c-danger, #d8453b)' }}>
-          {error}
+        {error && (
+          <div
+            data-testid="payment-error"
+            style={{
+              padding: '8px 12px',
+              border: '1px solid rgba(239, 104, 98, 0.4)',
+              borderRadius: 6,
+              background: 'rgba(239, 104, 98, 0.1)',
+              color: '#ffd8d4',
+              fontSize: 12,
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            data-testid="payment-cancel"
+            style={secondaryBtnStyle}
+          >
+            取消
+          </button>
+          <button
+            type="submit"
+            disabled={submitting}
+            data-testid="payment-submit"
+            style={primaryBtnStyle}
+          >
+            {submitting ? '提交中…' : '录入'}
+          </button>
         </div>
-      )}
-
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
-        <button
-          type="button"
-          onClick={onClose}
-          disabled={submitting}
-          data-testid="payment-cancel"
-          style={secondaryBtnStyle}
-        >
-          取消
-        </button>
-        <button
-          type="submit"
-          disabled={submitting}
-          data-testid="payment-submit"
-          style={primaryBtnStyle}
-        >
-          {submitting ? '提交中…' : '录入'}
-        </button>
-      </div>
-    </form>
+      </form>
+    </div>
   );
 }
 
 // ============================================
-// 内联样式（与 LoginPage 风格一致）
+// 内联样式（habitat 设计 tokens）
 // ============================================
 
 const labelStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
-  gap: 4,
+  gap: 6,
   fontSize: 12,
 };
 
+const labelTextStyle: React.CSSProperties = {
+  fontSize: 12,
+  color: '#d8d1bf',
+  fontWeight: 600,
+};
+
 const inputStyle: React.CSSProperties = {
-  padding: '6px 8px',
-  borderRadius: 4,
-  border: '1px solid var(--c-border)',
-  background: 'var(--c-bg)',
-  color: 'var(--c-fg)',
-  fontSize: 13,
+  width: '100%',
+  minHeight: 36,
+  padding: '8px 11px',
+  borderRadius: 6,
+  border: '1px solid var(--line)',
+  background: '#11110f',
+  color: 'var(--text)',
+  fontSize: 12,
+  fontFamily: 'inherit',
+  outline: 'none',
 };
 
 const primaryBtnStyle: React.CSSProperties = {
-  padding: '6px 12px',
+  height: 32,
+  padding: '0 14px',
   borderRadius: 6,
-  border: 'none',
-  background: 'var(--c-accent)',
-  color: 'var(--c-on-accent, #fff)',
+  border: '1px solid transparent',
+  background: 'var(--accent)',
+  color: 'var(--accent-ink)',
   cursor: 'pointer',
-  fontSize: 13,
-  fontWeight: 500,
+  fontSize: 12,
+  fontWeight: 800,
+  fontFamily: 'inherit',
 };
 
 const secondaryBtnStyle: React.CSSProperties = {
-  padding: '6px 12px',
+  height: 32,
+  padding: '0 14px',
   borderRadius: 6,
-  border: '1px solid var(--c-border)',
-  background: 'transparent',
-  color: 'var(--c-fg)',
+  border: '1px solid var(--line)',
+  background: '#11110f',
+  color: 'var(--muted)',
   cursor: 'pointer',
-  fontSize: 13,
+  fontSize: 12,
+  fontWeight: 800,
+  fontFamily: 'inherit',
 };

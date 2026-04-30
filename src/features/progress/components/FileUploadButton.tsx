@@ -110,9 +110,14 @@ export function FileUploadButton({
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       style={{
-        border: dragOver ? '2px dashed var(--c-accent, #88c)' : '2px dashed transparent',
-        padding: '12px',
-        borderRadius: '6px',
+        border: dragOver ? '1px dashed var(--accent)' : '1px dashed var(--line)',
+        background: dragOver ? 'rgba(184, 255, 106, 0.06)' : 'var(--panel)',
+        padding: 14,
+        borderRadius: 8,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        transition: 'border-color 120ms ease, background 120ms ease',
       }}
     >
       <button
@@ -121,6 +126,20 @@ export function FileUploadButton({
         disabled={isDisabled}
         data-testid="file-upload-trigger"
         aria-label={label}
+        style={{
+          height: 32,
+          padding: '0 14px',
+          borderRadius: 6,
+          border: '1px solid var(--line)',
+          background: '#11110f',
+          color: isDisabled ? 'var(--faint)' : 'var(--text)',
+          cursor: isDisabled ? 'not-allowed' : 'pointer',
+          fontSize: 12,
+          fontWeight: 800,
+          fontFamily: 'inherit',
+          alignSelf: 'flex-start',
+          opacity: isDisabled ? 0.6 : 1,
+        }}
       >
         {uploading ? '上传中…' : label}
       </button>
@@ -135,14 +154,21 @@ export function FileUploadButton({
       {localError !== null && (
         <div
           data-testid="file-upload-error"
-          style={{ color: 'var(--c-danger, #c33)', fontSize: 12, marginTop: 6 }}
+          style={{
+            padding: '6px 10px',
+            border: '1px solid rgba(239, 104, 98, 0.4)',
+            borderRadius: 6,
+            background: 'rgba(239, 104, 98, 0.1)',
+            color: '#ffd8d4',
+            fontSize: 12,
+          }}
           role="alert"
         >
           {localError}
         </div>
       )}
       {dragOver && (
-        <div data-testid="file-upload-drag-hint" style={{ fontSize: 12, marginTop: 6 }}>
+        <div data-testid="file-upload-drag-hint" style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 700 }}>
           松开鼠标完成上传
         </div>
       )}
