@@ -97,17 +97,27 @@ interface ApiFetchOptions extends RequestInit {
  * @returns      经 schema.parse 校验过的数据载荷
  * @throws       ProgressApiError
  */
-export async function apiFetch<T>(
-  path: string,
-  init: ApiFetchOptions | undefined,
-  schema: z.ZodType<T>,
-): Promise<T> {
-  const { anonymous, headers: initHeaders, ...rest } = init ?? {};
+// 单飞 refresh：多个 401 同时触发时只发一次 /api/auth/refresh，避免风暴
+let inflightRefresh: Promise<boolean> | null = null;
+async function silentRefreshOnce(): Promise<boolean> {
+  if (inflightRefresh) return inflightRefresh;
+  inflightRefresh = (async () => {
+    try {
+      const { useProgressAuthStore } = await import('../stores/progressAuthStore');
+      await useProgressAuthStore.getState().refresh();
+      // refresh 成功 → store 已更新 access token；调用方用新 token 重试
+      return useProgressAuthStore.getState().accessToken !== null;
+    } catch {
+      return false;
+    } finally {
+      // 下次 401 可重新发起新 refresh
+      inflightRefresh = null;
+    }
+  })();
+  return inflightRefresh;
+}
 
-  // ============================================
-  // 第一步：构造 headers
-  // 默认 application/json；非匿名请求注入 Authorization
-  // ============================================
+async function doFetch(path: string, rest: RequestInit, anonymous: boolean | undefined, initHeaders: Record<string, string> | undefined): Promise<Response> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...((initHeaders as Record<string, string> | undefined) ?? {}),
@@ -118,13 +128,28 @@ export async function apiFetch<T>(
       headers.Authorization = `Bearer ${token}`;
     }
   }
+  return fetch(`${BASE_URL}${path}`, { ...rest, headers });
+}
+
+export async function apiFetch<T>(
+  path: string,
+  init: ApiFetchOptions | undefined,
+  schema: z.ZodType<T>,
+): Promise<T> {
+  const { anonymous, headers: initHeaders, ...rest } = init ?? {};
 
   // ============================================
-  // 第二步：发起请求
-  // 网络层失败（DNS / 拒绝连接）由 fetch 自身抛 TypeError，
-  // 上层 try/catch 即可识别；这里不做包装以保留原始堆栈
+  // 第一步 + 第二步合并：构造 headers + 发起请求
+  // 401 silent refresh + retry 一次（access token 过期是预期行为，不应直接 logout）
   // ============================================
-  const res = await fetch(`${BASE_URL}${path}`, { ...rest, headers });
+  let res = await doFetch(path, rest, anonymous, initHeaders as Record<string, string> | undefined);
+  if (res.status === 401 && !anonymous) {
+    // access 过期 → 单飞 refresh → 成功则用新 token 重试一次；失败再走 401 → clearLocal
+    const refreshed = await silentRefreshOnce();
+    if (refreshed) {
+      res = await doFetch(path, rest, anonymous, initHeaders as Record<string, string> | undefined);
+    }
+  }
 
   // ============================================
   // 第三步：解析响应体（容错：可能不是 JSON）
@@ -145,10 +170,9 @@ export async function apiFetch<T>(
   // ============================================
   // 第四步：错误分支
   // ============================================
-  // 401 自动 clearLocal 触发 ProgressShell 切回 LoginPage（防止死锁在 error 页面）
-  // 排除 anonymous 接口（login/refresh）：这些接口的 401 是凭据错误而非会话失效
+  // 401 触发：silent refresh 已在第二步尝试过；retry 仍 401 = refresh token 也失效
+  // 此时清登录态让 ProgressShell 切回 LoginPage（区别于 access 单纯过期的"伪 401"）
   if (res.status === 401 && !anonymous) {
-    // 动态 import 避免循环依赖（client.ts 已 import getAccessToken 同 store，扩展 dynamic import）
     const { useProgressAuthStore } = await import('../stores/progressAuthStore');
     useProgressAuthStore.getState().clearLocal();
   }
