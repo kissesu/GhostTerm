@@ -1185,3 +1185,61 @@
   font-size: 11px;
   color: var(--muted);
 }
+
+/* ============================================
+   NBA Secondary Actions（Task 5 新增 2026-04-30）
+   ============================================ */
+.nbaSecondary {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.nbaSecondaryHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
+}
+.nbaSecondaryLabel {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.nbaSecondaryToggle {
+  color: var(--muted);
+  transition: transform 0.2s;
+  font-size: 14px;
+}
+.nbaSecondaryOpen .nbaSecondaryToggle { transform: rotate(180deg); }
+.nbaSecondaryBody { margin-top: 12px; }
+.nbaSecondaryItem,
+.nbaSecondaryItemDanger {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+.nbaSecondaryItemDanger { color: #ffd8d4; }
+.nbaSecondaryItem:hover,
+.nbaSecondaryItemDanger:hover {
+  border-color: var(--line);
+  background: var(--panel-2);
+}
