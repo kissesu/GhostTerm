@@ -29,6 +29,7 @@ import { useProjectsStore } from '../stores/projectsStore';
 import { useProgressUiStore } from '../stores/progressUiStore';
 import type { Project, ProjectStatus, ThesisLevel } from '../api/projects';
 import { daysUntil } from '../utils/deadlineCountdown';
+import { PipelineStepper } from './PipelineStepper';
 import styles from '../progress.module.css';
 
 /**
@@ -123,6 +124,8 @@ export function KanbanView(): ReactElement {
     <section className={styles.viewPanel} data-testid="kanban-view">
       {/* 用户需求 2026-04-30：删除"01 看板视图"viewHead；
           看板列直接占主区，节省垂直空间，让列内独立滚动有更多可视高度。 */}
+      {/* NBA 漏斗：把全部项目按 stage 聚合，让用户一眼看出各阶段积压量 */}
+      <PipelineStepper projects={projects} />
       <div className={styles.boardShell}>
         <div className={styles.board}>
           {visibleColumns.map((col) => {
