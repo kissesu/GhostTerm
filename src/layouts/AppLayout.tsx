@@ -42,7 +42,6 @@ export default function AppLayout() {
 
   // 全局认证状态：未登录时整个应用替换为登录页
   const user = useGlobalAuthStore((s) => s.user);
-  const accessToken = useGlobalAuthStore((s) => s.accessToken);
   const refreshToken = useGlobalAuthStore((s) => s.refreshToken);
   const refresh = useGlobalAuthStore((s) => s.refresh);
   const loadMe = useGlobalAuthStore((s) => s.loadMe);
@@ -86,22 +85,38 @@ export default function AppLayout() {
   useKeyboardShortcuts(handleFocusToggle, handleSidebarToggle);
 
   // ============================================
-  // 启动时自动恢复登录态：refreshToken 在 localStorage → refresh + loadMe
-  //
-  // 业务流程：
-  //  1. 检测 user==null && accessToken==null && refreshToken!=null
-  //  2. 调 refresh() 换新 access；成功后再 loadMe() 拿用户基本信息和权限
-  //  3. 失败 store 已自清，UI 回落到 GlobalLoginPage
+  // 用户需求 2026-04-30：启动时全局校验登录态（任何 tab 都要先验证），未完成前显示 LoginPage。
+  // 之前 work tab 不调后端纯前端 → 即使 token 过期也能用，切到 progress 才挡门
   // ============================================
+  const [sessionVerified, setSessionVerified] = useState(false);
+
   useEffect(() => {
-    if (!user && !accessToken && refreshToken) {
-      refresh()
-        .then(() => loadMe())
-        .catch(() => {
-          // refresh 失败 store 已自动 clearLocal；此处不做 UI 反馈
-        });
-    }
-  }, [user, accessToken, refreshToken, refresh, loadMe]);
+    let cancelled = false;
+    const verify = async () => {
+      // 已有 user：直接通过（之前已校验过）
+      if (user) {
+        if (!cancelled) setSessionVerified(true);
+        return;
+      }
+      // 有 refreshToken 但无 access：尝试 refresh + loadMe
+      if (refreshToken) {
+        try {
+          await refresh();
+          await loadMe();
+        } catch {
+          // refresh 失败 store 已自清
+        }
+      }
+      // 完全没 token：跳过验证直接挡门
+      if (!cancelled) setSessionVerified(true);
+    };
+    void verify();
+    return () => {
+      cancelled = true;
+    };
+    // 仅在 mount 时跑一次；user 后续变化由其他 effect 管
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ============================================
   // 启动时恢复上次打开的项目（仅在已登录后才有意义）
@@ -153,9 +168,9 @@ export default function AppLayout() {
   }, []);
 
   // ============================================
-  // 全局登录门：未登录直接返回登录页（标题栏仍渲染以保留窗口拖拽和最小化等控件）
+  // 全局登录门：未登录或 session 验证未完成直接返回登录页
   // ============================================
-  if (!user) {
+  if (!sessionVerified || !user) {
     return (
       <div
         style={{

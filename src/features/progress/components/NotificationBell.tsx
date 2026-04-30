@@ -72,8 +72,11 @@ export function NotificationBell() {
               height: 16,
               padding: '0 4px',
               borderRadius: 8,
-              background: 'var(--red)',
-              color: '#fff5f4',
+              /* 用户需求 2026-04-30：badge 在 titlebar（.habitatProgress 作用域外）渲染，
+                 var(--red) 解析失败退化为透明；用绝对 OKLCH/hex 保证 titlebar 也醒目 */
+              background: 'oklch(67% 0.22 25)',
+              color: '#fff',
+              boxShadow: '0 0 0 1px rgba(0,0,0,0.4)',
               fontSize: 10,
               lineHeight: '16px',
               textAlign: 'center',

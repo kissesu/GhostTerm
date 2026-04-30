@@ -365,10 +365,9 @@
 .boardShell {
   display: grid;
   grid-template-columns: 1fr 278px;
-  /* 用户需求 2026-04-30：侧栏内容超长时应在自身区域内滚动；
-     min-height 改为不限，让 grid item 可以收缩，sidePanel 的 overflow-y:auto 才生效 */
-  flex: 1;
-  min-height: 0;
+  /* 用户需求 2026-04-30：恢复 min-height 让 boardShell 自然展开，
+     viewport 矮时由外层 .habitatProgress 整体上下滚动（不强制 boardShell 内部滚动） */
+  min-height: 612px;
 }
 
 .board {
@@ -556,11 +555,6 @@
   border-left: 1px solid var(--line);
   padding: 12px;
   background: var(--bg);
-  overflow-y: auto;
-  /* 用户需求 2026-04-30：grid item min-height auto 会让 sidePanel 撑开父容器无法滚动；
-     强制 min-height:0 + max-height:100% 让自身区域内 overflow-y:auto 生效 */
-  min-height: 0;
-  max-height: 100%;
 }
 
 .panelSection {
