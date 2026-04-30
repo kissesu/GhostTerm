@@ -1,13 +1,12 @@
 /**
  * @file ProgressShell.tsx
- * @description 进度模块外壳（Phase 2 - 接入 auth gate）。
+ * @description 进度模块外壳（Phase 2 + Phase 10 + Phase 11）。
  *
  *              业务流程：
  *              1. 挂载时若 refreshToken 有但 user/access 没有 → 调 store.refresh + loadMe
  *              2. 未登录（user==null）→ 渲染 <LoginPage />
- *              3. 已登录 → 渲染主界面占位 + "退出"按钮
- *
- *              auth 之上的真实业务页面在 Phase 4-12 的 worker 阶段陆续接入。
+ *              3. 已登录 + 无选中项目 → ProgressLayout + (ListView | KanbanView)
+ *              4. 已登录 + 有选中项目 → ProgressLayout + ProjectDetailPage
  *
  *              schema 类型自检保持原样：tsc --noEmit 时验证 OpenAPI types 与 zod schema 字段对齐。
  *
@@ -16,14 +15,19 @@
  */
 
 import { useEffect } from 'react';
-import { Activity, LogOut } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 
 import type { components } from './api/types.gen';
 import type { LoginResponsePayload, UserPayload } from './api/schemas';
 import { LoginResponseSchema, UserSchema } from './api/schemas';
 import { apiFetch, ProgressApiError } from './api/client';
 import { useProgressAuthStore } from './stores/progressAuthStore';
+import { useProgressUiStore } from './stores/progressUiStore';
 import LoginPage from './components/LoginPage';
+import { ProgressLayout } from './components/ProgressLayout';
+import { ProjectListView } from './components/ProjectListView';
+import { KanbanView } from './components/KanbanView';
+import { ProjectDetailPage } from './components/ProjectDetailPage';
 
 // ============================================
 // 类型自检：确保 OpenAPI 生成的类型与 zod schema 对齐
@@ -53,6 +57,9 @@ export default function ProgressShell() {
   const loadMe = useProgressAuthStore((s) => s.loadMe);
   const logout = useProgressAuthStore((s) => s.logout);
 
+  const currentView = useProgressUiStore((s) => s.currentView);
+  const selectedProjectId = useProgressUiStore((s) => s.selectedProjectId);
+
   // ============================================
   // 启动时自动恢复会话：localStorage 有 refresh 但内存无 access → 用 refresh 换 access + loadMe
   // ============================================
@@ -71,7 +78,7 @@ export default function ProgressShell() {
     return <LoginPage />;
   }
 
-  // 已登录 → 主界面占位
+  // 已登录 → 主界面：toolbar + 视图分支
   return (
     <div
       data-testid="progress-shell"
@@ -80,42 +87,60 @@ export default function ProgressShell() {
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 12,
         background: 'var(--c-bg)',
-        color: 'var(--c-fg-muted)',
-        userSelect: 'none',
+        color: 'var(--c-fg)',
+        minHeight: 0,
       }}
     >
-      <Activity size={32} strokeWidth={1.5} aria-hidden="true" />
-      <div style={{ fontSize: 14, fontWeight: 500 }}>
-        进度模块（已登录: {user.displayName ?? user.email}）
-      </div>
-      <div style={{ fontSize: 12, opacity: 0.7 }}>
-        Phase 2 auth 已就绪，业务页面将随 Worker 阶段陆续上线
-      </div>
-      <button
-        type="button"
-        onClick={() => void logout()}
-        data-testid="progress-logout"
+      {/* 顶部用户信息 + 退出按钮（紧贴 toolbar 上方；Phase 12 通知中心也加在这里） */}
+      <div
+        data-testid="progress-userbar"
         style={{
-          marginTop: 8,
-          padding: '6px 10px',
-          borderRadius: 6,
-          border: '1px solid var(--c-border)',
-          background: 'transparent',
-          color: 'var(--c-fg)',
-          cursor: 'pointer',
-          fontSize: 12,
-          display: 'inline-flex',
+          display: 'flex',
+          justifyContent: 'flex-end',
           alignItems: 'center',
-          gap: 6,
+          gap: 8,
+          padding: '6px 16px',
+          borderBottom: '1px solid var(--c-border)',
+          background: 'var(--c-panel)',
+          fontSize: 12,
+          color: 'var(--c-fg-muted)',
         }}
       >
-        <LogOut size={14} aria-hidden="true" />
-        退出
-      </button>
+        <span>{user.displayName ?? user.email}</span>
+        <button
+          type="button"
+          onClick={() => void logout()}
+          data-testid="progress-logout"
+          style={{
+            padding: '4px 8px',
+            borderRadius: 4,
+            border: '1px solid var(--c-border)',
+            background: 'transparent',
+            color: 'var(--c-fg)',
+            cursor: 'pointer',
+            fontSize: 11,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+          }}
+        >
+          <LogOut size={12} aria-hidden="true" />
+          退出
+        </button>
+      </div>
+
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <ProgressLayout>
+          {selectedProjectId !== null ? (
+            <ProjectDetailPage projectId={selectedProjectId} />
+          ) : currentView === 'list' ? (
+            <ProjectListView />
+          ) : (
+            <KanbanView />
+          )}
+        </ProgressLayout>
+      </div>
     </div>
   );
 }
