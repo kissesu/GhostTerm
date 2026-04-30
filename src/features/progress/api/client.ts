@@ -145,6 +145,13 @@ export async function apiFetch<T>(
   // ============================================
   // 第四步：错误分支
   // ============================================
+  // 401 自动 clearLocal 触发 ProgressShell 切回 LoginPage（防止死锁在 error 页面）
+  // 排除 anonymous 接口（login/refresh）：这些接口的 401 是凭据错误而非会话失效
+  if (res.status === 401 && !anonymous) {
+    // 动态 import 避免循环依赖（client.ts 已 import getAccessToken 同 store，扩展 dynamic import）
+    const { useProgressAuthStore } = await import('../stores/progressAuthStore');
+    useProgressAuthStore.getState().clearLocal();
+  }
   if (!res.ok) {
     const parsed = ErrorEnvelopeSchema.safeParse(body);
     if (parsed.success) {
