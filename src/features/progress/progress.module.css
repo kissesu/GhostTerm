@@ -1406,3 +1406,29 @@
   color: var(--red);
   font-size: 11px;
 }
+
+/* ============================================
+   Responsive（Task 14 新增 2026-04-30）
+   ============================================ */
+
+/* 1024px 以下：详情页双栏收为单栏，NBA 面板取消 sticky */
+@media (max-width: 1024px) {
+  .detailGrid {
+    grid-template-columns: 1fr;
+  }
+  .nba, .nbaInformational {
+    position: static;
+  }
+}
+
+/* 720px 以下：PipelineStepper 横排改竖排，步骤改下边框分隔 */
+@media (max-width: 720px) {
+  .pipeline {
+    flex-direction: column;
+  }
+  .step {
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+  .step:last-child { border-bottom: none; }
+}

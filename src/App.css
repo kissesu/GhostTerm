@@ -70,6 +70,14 @@
   --c-git-deleted:    oklch(68% 0.19 22);
   --c-git-renamed:    oklch(75% 0.12 200);
   --c-git-untracked:  oklch(52% 0.025 270);
+
+  /* 间距 token（Task 14 新增 2026-04-30）
+     统一 4px 网格，供各模块组件引用，避免 magic number 散落 */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
 }
 
 /* ============================================================
