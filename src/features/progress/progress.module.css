@@ -1308,3 +1308,24 @@
   color: var(--muted);
   font-size: 11px;
 }
+
+/* KanbanCard NBA primary CTA —— 卡片底部主推下一步按钮。
+   accent 描边+浅底，hover 时实填 accent，让紧急卡片醒目但不喧宾夺主。 */
+.cardCta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px 8px;
+  border: 1px solid rgba(184, 255, 106, 0.3);
+  border-radius: 5px;
+  background: rgba(184, 255, 106, 0.08);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 850;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.cardCta:hover { background: var(--accent); color: var(--accent-ink); }
