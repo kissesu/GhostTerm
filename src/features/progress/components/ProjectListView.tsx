@@ -109,7 +109,7 @@ export function ProjectListView(): ReactElement {
 
   const searchQuery = useProgressUiStore((s) => s.searchQuery);
   const statusFilter = useProgressUiStore((s) => s.statusFilter);
-  const setSelectedProject = useProgressUiStore((s) => s.setSelectedProject);
+  const openProjectFromView = useProgressUiStore((s) => s.openProjectFromView);
 
   useEffect(() => {
     void loadProjects().catch(() => {});
@@ -188,7 +188,7 @@ export function ProjectListView(): ReactElement {
           <ProjectRow
             key={p.id}
             project={p}
-            onSelect={() => setSelectedProject(p.id)}
+            onSelect={() => openProjectFromView(p.id, 'list')}
           />
         ))}
       </div>
@@ -210,7 +210,7 @@ function ProjectRow({ project, onSelect }: ProjectRowProps): ReactElement {
     >
       <strong>{project.name}</strong>
       <span
-        className={styles.statusChip}
+        className={styles.statusPill}
         data-testid={`project-row-status-${project.id}`}
         data-status={project.status}
       >

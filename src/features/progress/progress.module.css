@@ -40,6 +40,7 @@
   --red: #ef6862;
   --green: #79d17c;
   --shadow: 0 24px 70px rgba(0, 0, 0, 0.46);
+  --blue: #5b9fff;
 
   position: relative;
   width: 100%;
@@ -721,14 +722,41 @@
   color: var(--text);
 }
 
-.statusChip {
-  width: max-content;
-  padding: 5px 8px;
-  border-radius: 5px;
-  color: #ded8c7;
-  background: var(--panel-2);
+/* status-pill：收敛后用单 class + [data-status] attr-selector 驱动颜色，
+   彻底消除 9 个独立 pillXxx 规则（W5/W8）。
+   ::before 点缀符用 currentColor 自动跟随状态色，无需重复定义颜色。 */
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
   font-size: 11px;
   font-weight: 850;
+  width: max-content;
+}
+.statusPill::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.statusPill[data-status='dealing']    { background: rgba(91,159,255,0.18);  color: var(--blue); }
+.statusPill[data-status='quoting']    { background: rgba(231,186,74,0.18);  color: var(--amber); }
+.statusPill[data-status='developing'] { background: rgba(99,213,255,0.18);  color: var(--cyan); }
+.statusPill[data-status='confirming'] { background: rgba(184,255,106,0.18); color: var(--accent); }
+.statusPill[data-status='delivered']  { background: rgba(121,209,124,0.18); color: var(--green); }
+.statusPill[data-status='paid']       { background: rgba(121,209,124,0.28); color: var(--green); }
+.statusPill[data-status='archived']   { background: rgba(140,133,122,0.18); color: var(--muted); }
+.statusPill[data-status='after_sales']{ background: rgba(231,186,74,0.18);  color: var(--amber); }
+.statusPill[data-status='cancelled']  { background: rgba(239,104,98,0.18);  color: var(--red); }
+
+/* 无匹配 data-status 时用灰底兜底（W5 文字兜底配套） */
+.statusPill:not([data-status]) {
+  background: rgba(140,133,122,0.18);
+  color: var(--muted);
 }
 
 /* ===================================================================
@@ -1142,4 +1170,287 @@
   min-height: 0;
   overflow: auto;
   padding: 14px 16px 18px;
+}
+
+/* ============================================
+   Pipeline Stepper（Task 4 新增 2026-04-30）
+   ============================================ */
+.pipeline {
+  display: flex;
+  margin-bottom: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.step {
+  flex: 1;
+  padding: 14px 16px;
+  border-top: 3px solid var(--line);
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  position: relative;
+}
+.step:last-child { border-right: none; }
+.step[data-state='done'] { border-top-color: var(--green); }
+.step[data-state='current'] {
+  border-top-color: var(--accent);
+  background: linear-gradient(180deg, rgba(184, 255, 106, 0.10), var(--panel));
+}
+.step[data-state='current'] .stepName { color: var(--accent); }
+.step[data-state='future'] .stepName { color: var(--muted); }
+.step[data-state='future'] .stepMeta { color: var(--faint); }
+.step[data-state='dim'] { opacity: 0.45; }
+
+.stepName {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  color: var(--text);
+}
+.stepMeta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ============================================
+   NBA Secondary Actions（Task 5 新增 2026-04-30）
+   ============================================ */
+.nbaSecondary {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.nbaSecondaryHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
+}
+.nbaSecondaryLabel {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.nbaSecondaryToggle {
+  color: var(--muted);
+  transition: transform 0.2s;
+  font-size: 14px;
+}
+.nbaSecondaryOpen .nbaSecondaryToggle { transform: rotate(180deg); }
+.nbaSecondaryBody { margin-top: 12px; }
+.nbaSecondaryItem,
+.nbaSecondaryItemDanger {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+.nbaSecondaryItemDanger { color: #ffd8d4; }
+.nbaSecondaryItem:hover,
+.nbaSecondaryItemDanger:hover {
+  border-color: var(--line);
+  background: var(--panel-2);
+}
+
+/* ============================================
+   NBA Panel（Task 6 新增 2026-04-30）
+   ============================================ */
+.nba { position: sticky; top: 16px; }
+.nbaInformational { position: sticky; top: 16px; opacity: 0.85; }
+
+.nbaCard {
+  padding: 20px;
+  border: 1px solid rgba(184, 255, 106, 0.4);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(184, 255, 106, 0.08), var(--panel));
+}
+.nbaInformational .nbaCard {
+  border-color: var(--line);
+  background: var(--panel);
+}
+
+.nbaLabel {
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.nbaInformational .nbaLabel { color: var(--muted); }
+
+.nbaTitle { margin: 0 0 10px; font-size: 18px; line-height: 1.3; color: var(--text); }
+.nbaReason {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border-left: 2px solid rgba(184, 255, 106, 0.4);
+  background: rgba(184, 255, 106, 0.04);
+  border-radius: 0 6px 6px 0;
+  line-height: 1.6;
+}
+.nbaInformational .nbaReason {
+  border-left-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.nbaCta {
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 14px;
+  font-weight: 850;
+  cursor: pointer;
+  font-family: inherit;
+}
+.nbaCta:hover { transform: translateY(-1px); }
+
+.nbaMeta {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* KanbanCard NBA primary CTA —— 卡片底部主推下一步按钮。
+   accent 描边+浅底，hover 时实填 accent，让紧急卡片醒目但不喧宾夺主。 */
+.cardCta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px 8px;
+  border: 1px solid rgba(184, 255, 106, 0.3);
+  border-radius: 5px;
+  background: rgba(184, 255, 106, 0.08);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 850;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.cardCta:hover { background: var(--accent); color: var(--accent-ink); }
+
+/* ============================================================================
+   EventTriggerDialog 动态字段（Task 12 C2/C4）
+   - 每条字段一行 label + control + 可选错误提示
+   - inputBox/selectBox/textareaBox 复用 progress 模块色板
+   ============================================================================ */
+.eventTriggerForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.dialogField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dialogFieldLabel {
+  font-size: 12px;
+  color: #d8d1bf;
+  font-weight: 600;
+}
+.inputBox,
+.selectBox,
+.textareaBox {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #11110f;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+  line-height: 1.6;
+}
+.textareaBox {
+  resize: vertical;
+  min-height: 80px;
+}
+.inputBox:focus,
+.selectBox:focus,
+.textareaBox:focus {
+  border-color: rgba(184, 255, 106, 0.34);
+}
+.fieldError {
+  margin: 4px 0 0;
+  color: var(--red);
+  font-size: 11px;
+}
+
+/* ============================================
+   Responsive（Task 14 新增 2026-04-30）
+   ============================================ */
+
+/* 1024px 以下：详情页双栏收为单栏，NBA 面板取消 sticky */
+@media (max-width: 1024px) {
+  .detailGrid {
+    grid-template-columns: 1fr;
+  }
+  .nba, .nbaInformational {
+    position: static;
+  }
+}
+
+/* 720px 以下：PipelineStepper 横排改竖排，步骤改下边框分隔 */
+@media (max-width: 720px) {
+  .pipeline {
+    flex-direction: column;
+  }
+  .step {
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+  .step:last-child { border-bottom: none; }
+}
+
+/* ============================================
+   Modal 淡入动画（Task 17 I2，2026-04-30）
+   - modalBackdrop 类供 PaymentDialog / QuoteChangeDialog backdrop 用
+   - 18ms 淡入 opacity 0→1，backdrop-filter blur 0→4px
+   - 不用 transform：backdrop-filter 在 WKWebView 已有性能压力，
+     避免合并 layer 叠加 transform 引起掉帧
+   ============================================ */
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(4px);
+  }
+}
+
+.modalBackdrop {
+  animation: modalFadeIn 0.18s ease-out;
 }

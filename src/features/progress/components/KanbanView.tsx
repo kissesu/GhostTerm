@@ -23,12 +23,15 @@
  * @date 2026-04-30
  */
 
-import { useEffect, useMemo, type ReactElement } from 'react';
+import { useEffect, useMemo, useState, type ReactElement } from 'react';
 
 import { useProjectsStore } from '../stores/projectsStore';
 import { useProgressUiStore } from '../stores/progressUiStore';
 import type { Project, ProjectStatus, ThesisLevel } from '../api/projects';
 import { daysUntil } from '../utils/deadlineCountdown';
+import { PipelineStepper } from './PipelineStepper';
+import { getPrimaryAction, type ActionMeta } from '../config/nbaConfig';
+import { EventTriggerDialog } from './EventTriggerDialog';
 import styles from '../progress.module.css';
 
 /**
@@ -70,6 +73,12 @@ export function KanbanView(): ReactElement {
   const projectsLoading = useProjectsStore((s) => s.loading);
   const loadProjects = useProjectsStore((s) => s.load);
   const projects = useMemo(() => Array.from(projectsMap.values()), [projectsMap]);
+
+  // CTA 弹窗状态：记录当前激活的"主推动作"所属项目；null = 无弹窗
+  const [activeProjectAction, setActiveProjectAction] = useState<{
+    projectId: number;
+    action: ActionMeta;
+  } | null>(null);
 
   const searchQuery = useProgressUiStore((s) => s.searchQuery);
   const statusFilter = useProgressUiStore((s) => s.statusFilter);
@@ -123,6 +132,8 @@ export function KanbanView(): ReactElement {
     <section className={styles.viewPanel} data-testid="kanban-view">
       {/* 用户需求 2026-04-30：删除"01 看板视图"viewHead；
           看板列直接占主区，节省垂直空间，让列内独立滚动有更多可视高度。 */}
+      {/* NBA 漏斗：把全部项目按 stage 聚合，让用户一眼看出各阶段积压量 */}
+      <PipelineStepper projects={projects} />
       <div className={styles.boardShell}>
         <div className={styles.board}>
           {visibleColumns.map((col) => {
@@ -136,13 +147,23 @@ export function KanbanView(): ReactElement {
                 count={list.length}
               >
                 {list.map((p) => (
-                  <KanbanCard key={p.id} project={p} />
+                  <KanbanCard key={p.id} project={p} onCtaClick={setActiveProjectAction} />
                 ))}
               </KanbanColumn>
             );
           })}
         </div>
       </div>
+      {/* NBA primary CTA 触发弹窗：点卡片上的 CTA 按钮时打开，完成或取消后关闭 */}
+      {activeProjectAction !== null && (
+        <EventTriggerDialog
+          projectId={activeProjectAction.projectId}
+          event={activeProjectAction.action.eventCode}
+          eventLabel={activeProjectAction.action.label}
+          onClose={() => setActiveProjectAction(null)}
+          onSuccess={() => setActiveProjectAction(null)}
+        />
+      )}
     </section>
   );
 }
@@ -190,6 +211,8 @@ function KanbanColumn({
 
 interface KanbanCardProps {
   project: Project;
+  /** 点击 primary CTA 按钮时通知父组件打开弹窗；stopPropagation 在卡片内处理 */
+  onCtaClick: (payload: { projectId: number; action: ActionMeta }) => void;
 }
 
 /**
@@ -218,8 +241,10 @@ function deadlineBadge(deadline: string): { cls: string; text: string } {
  *  - .card-foot：tags（论文级别 / 紧急）+ deadline 徽章
  *  - 已交付/已收款显示 amount 徽章；附加 finance/done tag
  */
-function KanbanCard({ project }: KanbanCardProps): ReactElement {
-  const setSelectedProject = useProgressUiStore((s) => s.setSelectedProject);
+function KanbanCard({ project, onCtaClick }: KanbanCardProps): ReactElement {
+  const openProjectFromView = useProgressUiStore((s) => s.openProjectFromView);
+  // NBA 主推动作：根据当前 status 从 nbaConfig 取第一建议步骤
+  const primaryAction = getPrimaryAction(project.status);
   const badge = deadlineBadge(project.deadline);
   const holder = project.holderUserId
     ? `@u${project.holderUserId}`
@@ -243,7 +268,7 @@ function KanbanCard({ project }: KanbanCardProps): ReactElement {
     <article
       className={styles.taskCard}
       data-testid={`kanban-card-${project.id}`}
-      onClick={() => setSelectedProject(project.id)}
+      onClick={() => openProjectFromView(project.id, 'kanban')}
     >
       <h2 className={styles.taskTitle}>{project.name}</h2>
       <div className={styles.meta}>
@@ -288,6 +313,17 @@ function KanbanCard({ project }: KanbanCardProps): ReactElement {
           </span>
         </div>
       )}
+      {/* NBA primary CTA：e.stopPropagation 防止点按钮触发卡片 onClick（进详情页） */}
+      <button
+        type="button"
+        className={styles.cardCta}
+        onClick={(e) => {
+          e.stopPropagation();
+          onCtaClick({ projectId: project.id, action: primaryAction });
+        }}
+      >
+        {primaryAction.label}
+      </button>
     </article>
   );
 }

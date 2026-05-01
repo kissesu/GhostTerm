@@ -5,7 +5,7 @@
  *              - 按 deadline ASC 排序（最紧急在前）
  *              - 状态过滤（statusFilter）
  *              - 搜索过滤（searchQuery 在项目名 + 客户标签上 contains）
- *              - 行点击 → setSelectedProject
+ *              - 行点击 → openProjectFromView (M4 修复)
  *
  *              用户需求修正 2026-04-30：客户从独立资源降级为 customerLabel 字段，
  *              不再需要 mock customers store / api/customers。
@@ -153,7 +153,7 @@ describe('ProjectListView 搜索过滤', () => {
 });
 
 describe('ProjectListView 行点击', () => {
-  it('点击行调 setSelectedProject', async () => {
+  it('点击行调 openProjectFromView 设置 selectedProjectId + priorView=list', async () => {
     mockedList.mockResolvedValueOnce([makeProject({ id: 7, name: 'Click Me' })]);
 
     render(<ProjectListView />);
@@ -163,5 +163,6 @@ describe('ProjectListView 行点击', () => {
     fireEvent.click(screen.getByTestId('project-row-7'));
 
     expect(useProgressUiStore.getState().selectedProjectId).toBe(7);
+    expect(useProgressUiStore.getState().priorView).toBe('list');
   });
 });

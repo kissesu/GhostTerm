@@ -3,7 +3,7 @@
  * @description Phase 10 看板视图 RTL 单测：
  *              - 渲染 9 个状态列（archived / cancelled 默认折叠）
  *              - 项目按 status 分组
- *              - 卡片点击 → setSelectedProject
+ *              - 卡片点击 → openProjectFromView (M4 修复)
  *              - statusFilter 应用时只显示对应列
  *
  * @author Atlas.oi
@@ -12,6 +12,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 vi.mock('../../api/projects', async (importOriginal) => {
   const orig = (await importOriginal()) as Record<string, unknown>;
@@ -24,6 +25,10 @@ vi.mock('../../api/projects', async (importOriginal) => {
     triggerProjectEvent: vi.fn(),
   };
 });
+
+vi.mock('../PermissionGate', () => ({
+  PermissionGate: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
 
 // 用户需求修正 2026-04-30：客户从独立资源降级为字段，不再需要 mock customers store
 
@@ -55,6 +60,13 @@ function makeProject(over: Partial<Project>): Project {
     ...over,
   };
 }
+
+const developingProject: Project = makeProject({
+  id: 1,
+  status: 'developing',
+  name: '基于深度学习的图像分类研究',
+  customerLabel: '张三',
+});
 
 beforeEach(() => {
   useProjectsStore.getState().clear();
@@ -121,7 +133,7 @@ describe('KanbanView 卡片分组', () => {
 });
 
 describe('KanbanView 卡片点击', () => {
-  it('点击卡片 setSelectedProject', async () => {
+  it('点击卡片 openProjectFromView 设置 selectedProjectId + priorView=kanban', async () => {
     mockedList.mockResolvedValueOnce([makeProject({ id: 42, status: 'dealing' })]);
     render(<KanbanView />);
     await waitFor(() => expect(screen.getByTestId('kanban-card-42')).toBeInTheDocument());
@@ -129,6 +141,7 @@ describe('KanbanView 卡片点击', () => {
     fireEvent.click(screen.getByTestId('kanban-card-42'));
 
     expect(useProgressUiStore.getState().selectedProjectId).toBe(42);
+    expect(useProgressUiStore.getState().priorView).toBe('kanban');
   });
 });
 
@@ -141,5 +154,25 @@ describe('KanbanView statusFilter', () => {
     expect(screen.getByTestId('kanban-column-developing')).toBeInTheDocument();
     expect(screen.queryByTestId('kanban-column-dealing')).toBeNull();
     expect(screen.queryByTestId('kanban-column-quoting')).toBeNull();
+  });
+});
+
+describe('KanbanCard CTA', () => {
+  it('developing 卡片显示"标记开发完成" CTA', async () => {
+    // mockedList 返回 developing 项目，load() 完成后 store 会有该卡片
+    mockedList.mockResolvedValueOnce([developingProject]);
+    render(<KanbanView />);
+    await waitFor(() => expect(screen.getByTestId('kanban-card-1')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /标记开发完成/ })).toBeInTheDocument();
+  });
+
+  it('点 CTA 不进详情页（即不调 openProjectFromView）', async () => {
+    mockedList.mockResolvedValueOnce([developingProject]);
+    const user = userEvent.setup();
+    const openSpy = vi.spyOn(useProgressUiStore.getState(), 'openProjectFromView');
+    render(<KanbanView />);
+    await waitFor(() => expect(screen.getByTestId('kanban-card-1')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /标记开发完成/ }));
+    expect(openSpy).not.toHaveBeenCalled();
   });
 });

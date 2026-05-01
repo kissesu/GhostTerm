@@ -3,7 +3,7 @@
  * @description 项目详情页（Phase 11）—— 三栏布局：左 header + 事件按钮，中 tabs，右 客户卡片。
  *
  *              业务背景（spec §10.3）：
- *              - 左：项目核心信息 + EventActionButtons
+ *              - 左：项目核心信息 + NbaPanel
  *              - 中：tabs（反馈 / 论文版本 / 文件 / 费用变更 / 收款）
  *              - 右：客户信息卡 + 编辑入口
  *
@@ -21,11 +21,13 @@
  * @date 2026-04-29
  */
 
-import { useEffect, useState, type ReactElement } from 'react';
+import { useEffect, useMemo, useState, type ReactElement } from 'react';
+import type { ActionMeta } from '../config/nbaConfig';
 import { ArrowLeft, User, Calendar, Wallet, Edit3 } from 'lucide-react';
 
 import { useProjectsStore } from '../stores/projectsStore';
 import { useProgressUiStore } from '../stores/progressUiStore';
+import { useFeedbacksStore } from '../stores/feedbacksStore';
 import {
   daysUntil,
   severityFromDays,
@@ -38,7 +40,8 @@ import { ThesisVersionList } from './ThesisVersionList';
 import { FileUploadButton } from './FileUploadButton';
 import { QuoteChangeDialog } from './QuoteChangeDialog';
 import PaymentDialog from './PaymentDialog';
-import { EventActionButtons } from './EventActionButtons';
+import { NbaPanel } from './NbaPanel';
+import { EventTriggerDialog } from './EventTriggerDialog';
 
 interface ProjectDetailPageProps {
   /** 项目 id（来自 progressUiStore.selectedProjectId） */
@@ -58,6 +61,29 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
   const [showQuoteDialog, setShowQuoteDialog] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // NBA 动作触发：记录当前待触发的 action，null = 无弹窗
+  const [activeAction, setActiveAction] = useState<ActionMeta | null>(null);
+
+  // 从 feedbacksStore 读取当前项目反馈列表，派生"距最近活动天数"供 NbaPanel.deriveReason 使用
+  // 注意：不在 selector 内做 ?? []，否则每次 render 产生新数组引用，
+  // 触发 React 19 + Zustand 5 useSyncExternalStore "getSnapshot should be cached" 无限重渲。
+  // 改为在 selector 外用 useMemo 处理 undefined → []。
+  const feedbacksRaw = useFeedbacksStore((s) => s.byProject.get(projectId));
+  const feedbacks = useMemo(() => feedbacksRaw ?? [], [feedbacksRaw]);
+
+  const reasonContext = useMemo(() => {
+    if (feedbacks.length === 0) {
+      // 无反馈数据：传 null 让 NbaPanel 走 defaultReason
+      return { daysSinceLastActivity: null as number | null };
+    }
+    // 取反馈列表中 recordedAt 最大值（最新一条活动时间），不假设 ASC 排序
+    const latestMs = feedbacks.reduce((max, f) => {
+      const t = new Date(f.recordedAt).getTime();
+      return t > max ? t : max;
+    }, 0);
+    const days = Math.floor((Date.now() - latestMs) / 86_400_000);
+    return { daysSinceLastActivity: days };
+  }, [feedbacks]);
 
   // 拉详情（首次挂载）
   // 用户需求修正 2026-04-30：客户从独立资源降级为字段，不再需要 fetchCustomers
@@ -225,13 +251,25 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
           </div>
         </header>
 
-        <EventActionButtons
-          projectId={projectId}
-          status={project.status}
-          onEventTriggered={() => {
-            // 触发事件成功后 store 已更新 project；不需要额外刷新
-          }}
+        <NbaPanel
+          project={project}
+          onTriggerAction={(action) => setActiveAction(action)}
+          reasonContext={reasonContext}
         />
+
+        {/* NBA 事件触发弹窗：activeAction 非 null 时弹出，成功后刷新项目详情 */}
+        {activeAction !== null && (
+          <EventTriggerDialog
+            projectId={project.id}
+            event={activeAction.eventCode}
+            eventLabel={activeAction.label}
+            onClose={() => setActiveAction(null)}
+            onSuccess={() => {
+              setActiveAction(null);
+              void loadProject(project.id).catch(() => {});
+            }}
+          />
+        )}
       </aside>
 
       {/* ============================================
