@@ -56,6 +56,17 @@ if (!globalThis.navigator.clipboard) {
   disconnect() {}
 };
 
+// Mock IntersectionObserver - jsdom 不支持，DetailTimeline 用于无限滚动 sentinel
+// observe/disconnect 是空实现，测试不验证视口交叉，只确保不报错
+(globalThis as Record<string, unknown>).IntersectionObserver = class IntersectionObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+  takeRecords() {
+    return [];
+  }
+};
+
 // Mock window.matchMedia - jsdom 未实现，App.tsx 用于 Obsidian Forge 主题检测
 // 默认返回 matches=false（浅色模式），addEventListenr/removeEventListener 为空操作
 Object.defineProperty(window, 'matchMedia', {

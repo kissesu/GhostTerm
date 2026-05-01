@@ -123,6 +123,26 @@ vi.mock('../../stores/filesStore', () => ({
     }),
 }));
 
+const mockLoadActivities = vi.fn();
+const mockInvalidateActivities = vi.fn();
+vi.mock('../../stores/activitiesStore', () => ({
+  useActivitiesStore: Object.assign(
+    (selector: (s: object) => unknown) =>
+      selector({
+        byProject: new Map(),
+        loadActivities: mockLoadActivities,
+        invalidate: mockInvalidateActivities,
+      }),
+    {
+      getState: () => ({
+        byProject: new Map(),
+        loadActivities: mockLoadActivities,
+        invalidate: mockInvalidateActivities,
+      }),
+    },
+  ),
+}));
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -137,10 +157,11 @@ describe('ProjectDetailPage', () => {
     expect(screen.getByTestId('nba-panel')).toBeInTheDocument();
   });
 
-  it('默认 tab = 活动时间线，显示"暂无活动"', () => {
+  it('默认 tab = 进度时间线，显示"当前项目暂无进度动态"或 skeleton（store 空 state）', () => {
     render(<ProjectDetailPage projectId={7} />);
-    // 时间线 tab 内容
-    expect(screen.getByText('暂无活动')).toBeInTheDocument();
+    // 时间线 tab 内容：mock 的 store byProject 是空 Map，DetailTimeline 进入首屏 loading skeleton
+    // 断言 timeline tab 被选中即可（具体内容用 DetailTimeline 自己的测试覆盖）
+    expect(screen.getByRole('tab', { name: '进度时间线' }).getAttribute('aria-selected')).toBe('true');
   });
 
   it('点击 "反馈" tab → 渲染 FeedbackInput + FeedbackList', async () => {
@@ -183,10 +204,11 @@ describe('ProjectDetailPage', () => {
     expect(screen.getByTestId('event-dialog')).toBeInTheDocument();
   });
 
-  it('mount 后调用 loadOne + loadFeedbacks + clearTriggerError', () => {
+  it('mount 后调用 loadOne + loadFeedbacks + loadActivities + clearTriggerError', () => {
     render(<ProjectDetailPage projectId={7} />);
     expect(mockLoadOne).toHaveBeenCalledWith(7);
     expect(mockLoadFeedbacks).toHaveBeenCalledWith(7);
+    expect(mockLoadActivities).toHaveBeenCalledWith(7);
     expect(mockClearTriggerError).toHaveBeenCalledWith(7);
   });
 });

@@ -9,6 +9,7 @@
 import { useState, type ReactElement, type FormEvent } from 'react';
 import styles from '../progress.module.css';
 import { useFeedbacksStore } from '../stores/feedbacksStore';
+import { useActivitiesStore } from '../stores/activitiesStore';
 import type { FeedbackSource } from '../api/feedbacks';
 
 // UI 标签 → API enum 值的映射表
@@ -39,6 +40,8 @@ export function FeedbackInput({ projectId }: FeedbackInputProps): ReactElement {
     try {
       await add(projectId, { content: content.trim(), source });
       setContent('');
+      // 提交成功后让进度时间线重新拉取以包含新反馈
+      void useActivitiesStore.getState().invalidate(projectId);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {

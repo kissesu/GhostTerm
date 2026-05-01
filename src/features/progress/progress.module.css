@@ -878,3 +878,150 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* ============================================
+ * 进度时间线 - 7 类活动渲染器（Phase 7-8）
+ *
+ * 复用已有的 .timelineList / .timelineItem flex 容器，
+ * 在 timelineItem 内挂 .timelineIcon + .timelineBody，
+ * body 内 .timelineHeader 横排 chip + when，
+ * .what / .meta 沿用既有定义，但 chip 标签由变体控制配色。
+ * ============================================ */
+
+/* 圆角图标盒子 —— 28x28，按 kind 切换配色 */
+.timelineIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.iconAccent {
+  color: var(--c-accent);
+  background: oklch(from var(--c-accent) l c h / 0.10);
+}
+.iconWarning {
+  color: var(--c-warning);
+  background: oklch(from var(--c-warning) l c h / 0.10);
+}
+.iconSuccess {
+  color: var(--c-success);
+  background: oklch(from var(--c-success) l c h / 0.10);
+}
+.iconMuted {
+  color: var(--c-fg-muted);
+  background: oklch(from var(--c-fg-muted) l c h / 0.08);
+}
+
+/* timelineBody —— item 内右侧文字列 */
+.timelineBody {
+  flex: 1;
+  min-width: 0;
+}
+
+/* timelineHeader —— chip + when 同一行；chip 居左、when 居右靠拢 */
+.timelineHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.timelineHeader .when {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding-top: 0;
+}
+
+/* chip —— 小圆角 pill 作为 kind 标签 */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.chipAccent {
+  color: var(--c-accent);
+  background: oklch(from var(--c-accent) l c h / 0.14);
+}
+.chipWarning {
+  color: var(--c-warning);
+  background: oklch(from var(--c-warning) l c h / 0.14);
+}
+.chipSuccess {
+  color: var(--c-success);
+  background: oklch(from var(--c-success) l c h / 0.14);
+}
+.chipMuted {
+  color: var(--c-fg-muted);
+  background: oklch(from var(--c-fg-muted) l c h / 0.10);
+}
+
+/* what / meta 段落样式（覆盖默认 p 间距，紧凑展示） */
+.timelineBody .what {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text);
+}
+.timelineBody .meta {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--c-fg-muted);
+  line-height: 1.5;
+}
+
+/* skeleton / empty / error 三态 */
+.timelineSkeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 24px;
+}
+
+.skeletonRow {
+  height: 48px;
+  background: oklch(from var(--c-bg) l c h / 0.5);
+  border-radius: 8px;
+  animation: skeletonPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.timelineEmpty {
+  color: var(--c-fg-muted);
+  font-size: 13px;
+  padding: 16px 24px;
+  text-align: center;
+}
+
+.timelineError {
+  color: var(--c-danger);
+  font-size: 13px;
+  padding: 16px 24px;
+  text-align: center;
+}
+
+.linkButton {
+  background: none;
+  border: none;
+  color: var(--c-accent);
+  cursor: pointer;
+  text-decoration: underline;
+  font-size: inherit;
+  padding: 0;
+}
+
+/* IntersectionObserver sentinel —— 列表底部空 div，可见即触发下一页 */
+.timelineSentinel {
+  height: 1px;
+  margin-top: 8px;
+}

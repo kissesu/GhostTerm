@@ -28,6 +28,7 @@ import { useProjectsStore } from '../stores/projectsStore';
 import { useFeedbacksStore } from '../stores/feedbacksStore';
 import { usePaymentsStore } from '../stores/paymentsStore';
 import { useFilesStore } from '../stores/filesStore';
+import { useActivitiesStore } from '../stores/activitiesStore';
 import { createThesisVersion } from '../api/files';
 import { type ActionMeta } from '../config/nbaConfig';
 import { DetailMainHead } from './DetailMainHead';
@@ -64,6 +65,8 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
   const loadFiles = useFilesStore((s) => s.loadByProject);
   const files = useMemo(() => filesRaw ?? [], [filesRaw]);
 
+  const loadActivities = useActivitiesStore((s) => s.loadActivities);
+
   const [activeTab, setActiveTab] = useState<DetailTab>('timeline');
   const [activeAction, setActiveAction] = useState<ActionMeta | null>(null);
   const [showPayment, setShowPayment] = useState(false);
@@ -76,10 +79,15 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
     void loadOne(projectId);
   }, [projectId, loadOne]);
 
-  // 拉取反馈列表（供时间线 + 反馈 tab 使用）
+  // 拉取反馈列表（供反馈 tab 使用）
   useEffect(() => {
     void loadFeedbacks(projectId);
   }, [projectId, loadFeedbacks]);
+
+  // 进入详情页预加载进度时间线（与反馈列表并行；DetailTimeline 自身也会兜底拉首页）
+  useEffect(() => {
+    void loadActivities(projectId);
+  }, [projectId, loadActivities]);
 
   // 进入详情页清掉前一次操作的 trigger error（避免残留错误污染当前会话）
   useEffect(() => {
@@ -141,10 +149,12 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
     );
   }
 
-  // 论文上传成功回调：先创建 thesis version，再 bump refresh tick
+  // 论文上传成功回调：先创建 thesis version，bump refresh tick，再让进度时间线刷新
   const handleThesisUploadSuccess = async (fileId: number): Promise<void> => {
     await createThesisVersion(projectId, fileId);
     setThesisRefreshTick((n) => n + 1);
+    // 后端写入 thesis_versions 表 → 触发 thesis_version 类活动；前端直接 invalidate 拉新
+    void useActivitiesStore.getState().invalidate(projectId);
   };
 
   return (
@@ -168,8 +178,8 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
           </div>
           <DetailTabs active={activeTab} onChange={setActiveTab} />
 
-          {/* 活动时间线 tab */}
-          {activeTab === 'timeline' && <DetailTimeline feedbacks={feedbacks} />}
+          {/* 进度时间线 tab */}
+          {activeTab === 'timeline' && <DetailTimeline projectId={projectId} />}
 
           {/* 反馈 tab */}
           {activeTab === 'feedback' && (
@@ -200,8 +210,9 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
               <FileUploadButton
                 label="上传附件"
                 onUploadSuccess={async () => {
-                  // 上传后刷新附件列表
+                  // 上传后刷新附件列表 + 进度时间线（project_file_added 类活动）
                   void loadFiles(projectId);
+                  void useActivitiesStore.getState().invalidate(projectId);
                 }}
               />
               {files.length === 0 ? (
@@ -295,9 +306,10 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
           onClose={() => setActiveAction(null)}
           onSuccess={() => {
             setActiveAction(null);
-            // 提交成功后刷新项目数据和反馈列表
+            // 提交成功后刷新项目数据 + 反馈列表 + 进度时间线（status_change 类活动）
             void loadOne(project.id).catch(() => {});
             void loadFeedbacks(project.id).catch(() => {});
+            void useActivitiesStore.getState().invalidate(project.id);
           }}
         />
       )}
@@ -308,8 +320,9 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
           projectId={projectId}
           onClose={() => setShowPayment(false)}
           onSuccess={() => {
-            // 收款成功后刷新项目（totalReceived 更新）
+            // 收款成功后刷新项目（totalReceived 更新）+ 进度时间线（payment 类活动）
             void loadOne(projectId).catch(() => {});
+            void useActivitiesStore.getState().invalidate(projectId);
           }}
         />
       )}
@@ -320,8 +333,9 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
           projectId={projectId}
           onClose={() => setShowQuoteChange(false)}
           onSuccess={() => {
-            // 报价调整成功后刷新项目（currentQuote 更新）
+            // 报价调整成功后刷新项目（currentQuote 更新）+ 进度时间线（quote_change 类活动）
             void loadOne(projectId).catch(() => {});
+            void useActivitiesStore.getState().invalidate(projectId);
           }}
         />
       )}

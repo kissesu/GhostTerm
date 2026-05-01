@@ -19,6 +19,26 @@ vi.mock('../../stores/feedbacksStore', () => ({
     selector({ add: mockAdd }),
 }));
 
+// activitiesStore.invalidate 在提交成功路径被调用，需要 mock 避免真实 fetch
+const mockInvalidate = vi.fn();
+vi.mock('../../stores/activitiesStore', () => ({
+  useActivitiesStore: Object.assign(
+    (selector: (s: object) => unknown) =>
+      selector({
+        byProject: new Map(),
+        loadActivities: vi.fn(),
+        invalidate: mockInvalidate,
+      }),
+    {
+      getState: () => ({
+        byProject: new Map(),
+        loadActivities: vi.fn(),
+        invalidate: mockInvalidate,
+      }),
+    },
+  ),
+}));
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
