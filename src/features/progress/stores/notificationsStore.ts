@@ -28,7 +28,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const list = await listNotifications();
-      const unread = list.filter((n) => !n.read).length;
+      const unread = list.filter((n) => !n.isRead).length;
       set({ items: list, unreadCount: unread, loading: false });
     } catch (e) {
       set({ error: e instanceof Error ? e.message : String(e), loading: false });
@@ -37,8 +37,8 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
 
   markRead: async (id) => {
     await markNotificationRead(id);
-    const items = get().items.map((n) => (n.id === id ? { ...n, read: true } : n));
-    const unread = items.filter((n) => !n.read).length;
+    const items = get().items.map((n) => (n.id === id ? { ...n, isRead: true } : n));
+    const unread = items.filter((n) => !n.isRead).length;
     set({ items, unreadCount: unread });
   },
 

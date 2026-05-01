@@ -38,7 +38,7 @@ describe('feedbacksStore', () => {
     });
     const newFb = { id: 2, projectId: 1 } as any;
     vi.mocked(createFeedback).mockResolvedValue(newFb);
-    await useFeedbacksStore.getState().add(1, { content: 'x', source: 'wechat', status: 'pending' });
+    await useFeedbacksStore.getState().add(1, { content: 'x', source: 'wechat' });
     const list = useFeedbacksStore.getState().byProject.get(1);
     expect(list).toHaveLength(2);
     expect(list?.[1].id).toBe(2);
