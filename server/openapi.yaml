@@ -221,6 +221,20 @@ components:
         subject: { type: string }
         deadline: { type: string, format: date-time }
         originalQuote: { $ref: '#/components/schemas/Money' }
+        openingDocId:
+          type: integer
+          format: int64
+          nullable: true
+          description: "开题书文件 ID（先 POST /api/files 上传得 fileId，再带入此字段）"
+        assignmentDocId:
+          type: integer
+          format: int64
+          nullable: true
+          description: "任务书文件 ID（先 POST /api/files 上传得 fileId，再带入此字段）"
+        wechatChatFileIds:
+          type: array
+          items: { type: integer, format: int64 }
+          description: "微信聊天记录截图文件 ID 数组（多张图先逐个上传，再带 ID 数组；后端事务 INSERT project_files category=wechat_chat）"
 
     ProjectUpdateRequest:
       type: object
@@ -386,7 +400,7 @@ components:
         fileId: { type: integer, format: int64 }
         category:
           type: string
-          enum: [sample_doc, source_code]
+          enum: [sample_doc, source_code, wechat_chat]
         addedAt: { type: string, format: date-time }
         file: { $ref: '#/components/schemas/FileMetadata' }
 

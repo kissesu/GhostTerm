@@ -2845,6 +2845,13 @@ type ProjectCreateRequest struct {
 	Subject       OptString          `json:"subject"`
 	Deadline      time.Time          `json:"deadline"`
 	OriginalQuote OptMoney           `json:"originalQuote"`
+	// 开题书文件 ID（先 POST /api/files 上传得 fileId，再带入此字段）.
+	OpeningDocId OptNilInt64 `json:"openingDocId"`
+	// 任务书文件 ID（先 POST /api/files 上传得 fileId，再带入此字段）.
+	AssignmentDocId OptNilInt64 `json:"assignmentDocId"`
+	// 微信聊天记录截图文件 ID 数组（多张图先逐个上传，再带 ID
+	// 数组；后端事务 INSERT project_files category=wechat_chat）.
+	WechatChatFileIds []int64 `json:"wechatChatFileIds"`
 }
 
 // GetName returns the value of Name.
@@ -2887,6 +2894,21 @@ func (s *ProjectCreateRequest) GetOriginalQuote() OptMoney {
 	return s.OriginalQuote
 }
 
+// GetOpeningDocId returns the value of OpeningDocId.
+func (s *ProjectCreateRequest) GetOpeningDocId() OptNilInt64 {
+	return s.OpeningDocId
+}
+
+// GetAssignmentDocId returns the value of AssignmentDocId.
+func (s *ProjectCreateRequest) GetAssignmentDocId() OptNilInt64 {
+	return s.AssignmentDocId
+}
+
+// GetWechatChatFileIds returns the value of WechatChatFileIds.
+func (s *ProjectCreateRequest) GetWechatChatFileIds() []int64 {
+	return s.WechatChatFileIds
+}
+
 // SetName sets the value of Name.
 func (s *ProjectCreateRequest) SetName(val string) {
 	s.Name = val
@@ -2925,6 +2947,21 @@ func (s *ProjectCreateRequest) SetDeadline(val time.Time) {
 // SetOriginalQuote sets the value of OriginalQuote.
 func (s *ProjectCreateRequest) SetOriginalQuote(val OptMoney) {
 	s.OriginalQuote = val
+}
+
+// SetOpeningDocId sets the value of OpeningDocId.
+func (s *ProjectCreateRequest) SetOpeningDocId(val OptNilInt64) {
+	s.OpeningDocId = val
+}
+
+// SetAssignmentDocId sets the value of AssignmentDocId.
+func (s *ProjectCreateRequest) SetAssignmentDocId(val OptNilInt64) {
+	s.AssignmentDocId = val
+}
+
+// SetWechatChatFileIds sets the value of WechatChatFileIds.
+func (s *ProjectCreateRequest) SetWechatChatFileIds(val []int64) {
+	s.WechatChatFileIds = val
 }
 
 // Ref: #/components/schemas/ProjectFile
@@ -3002,6 +3039,7 @@ type ProjectFileCategory string
 const (
 	ProjectFileCategorySampleDoc  ProjectFileCategory = "sample_doc"
 	ProjectFileCategorySourceCode ProjectFileCategory = "source_code"
+	ProjectFileCategoryWechatChat ProjectFileCategory = "wechat_chat"
 )
 
 // AllValues returns all ProjectFileCategory values.
@@ -3009,6 +3047,7 @@ func (ProjectFileCategory) AllValues() []ProjectFileCategory {
 	return []ProjectFileCategory{
 		ProjectFileCategorySampleDoc,
 		ProjectFileCategorySourceCode,
+		ProjectFileCategoryWechatChat,
 	}
 }
 
@@ -3018,6 +3057,8 @@ func (s ProjectFileCategory) MarshalText() ([]byte, error) {
 	case ProjectFileCategorySampleDoc:
 		return []byte(s), nil
 	case ProjectFileCategorySourceCode:
+		return []byte(s), nil
+	case ProjectFileCategoryWechatChat:
 		return []byte(s), nil
 	default:
 		return nil, errors.Errorf("invalid value: %q", s)
@@ -3032,6 +3073,9 @@ func (s *ProjectFileCategory) UnmarshalText(data []byte) error {
 		return nil
 	case ProjectFileCategorySourceCode:
 		*s = ProjectFileCategorySourceCode
+		return nil
+	case ProjectFileCategoryWechatChat:
+		*s = ProjectFileCategoryWechatChat
 		return nil
 	default:
 		return errors.Errorf("invalid value: %q", data)

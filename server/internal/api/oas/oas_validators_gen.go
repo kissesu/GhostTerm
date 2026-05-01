@@ -1158,6 +1158,8 @@ func (s ProjectFileCategory) Validate() error {
 		return nil
 	case "source_code":
 		return nil
+	case "wechat_chat":
+		return nil
 	default:
 		return errors.Errorf("invalid value: %v", s)
 	}

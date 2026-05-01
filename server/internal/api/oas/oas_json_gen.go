@@ -5330,17 +5330,42 @@ func (s *ProjectCreateRequest) encodeFields(e *jx.Encoder) {
 			s.OriginalQuote.Encode(e)
 		}
 	}
+	{
+		if s.OpeningDocId.Set {
+			e.FieldStart("openingDocId")
+			s.OpeningDocId.Encode(e)
+		}
+	}
+	{
+		if s.AssignmentDocId.Set {
+			e.FieldStart("assignmentDocId")
+			s.AssignmentDocId.Encode(e)
+		}
+	}
+	{
+		if s.WechatChatFileIds != nil {
+			e.FieldStart("wechatChatFileIds")
+			e.ArrStart()
+			for _, elem := range s.WechatChatFileIds {
+				e.Int64(elem)
+			}
+			e.ArrEnd()
+		}
+	}
 }
 
-var jsonFieldsNameOfProjectCreateRequest = [8]string{
-	0: "name",
-	1: "customerLabel",
-	2: "description",
-	3: "priority",
-	4: "thesisLevel",
-	5: "subject",
-	6: "deadline",
-	7: "originalQuote",
+var jsonFieldsNameOfProjectCreateRequest = [11]string{
+	0:  "name",
+	1:  "customerLabel",
+	2:  "description",
+	3:  "priority",
+	4:  "thesisLevel",
+	5:  "subject",
+	6:  "deadline",
+	7:  "originalQuote",
+	8:  "openingDocId",
+	9:  "assignmentDocId",
+	10: "wechatChatFileIds",
 }
 
 // Decode decodes ProjectCreateRequest from json.
@@ -5348,7 +5373,7 @@ func (s *ProjectCreateRequest) Decode(d *jx.Decoder) error {
 	if s == nil {
 		return errors.New("invalid: unable to decode ProjectCreateRequest to nil")
 	}
-	var requiredBitSet [1]uint8
+	var requiredBitSet [2]uint8
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -5440,6 +5465,45 @@ func (s *ProjectCreateRequest) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"originalQuote\"")
 			}
+		case "openingDocId":
+			if err := func() error {
+				s.OpeningDocId.Reset()
+				if err := s.OpeningDocId.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"openingDocId\"")
+			}
+		case "assignmentDocId":
+			if err := func() error {
+				s.AssignmentDocId.Reset()
+				if err := s.AssignmentDocId.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"assignmentDocId\"")
+			}
+		case "wechatChatFileIds":
+			if err := func() error {
+				s.WechatChatFileIds = make([]int64, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem int64
+					v, err := d.Int64()
+					elem = int64(v)
+					if err != nil {
+						return err
+					}
+					s.WechatChatFileIds = append(s.WechatChatFileIds, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"wechatChatFileIds\"")
+			}
 		default:
 			return d.Skip()
 		}
@@ -5449,8 +5513,9 @@ func (s *ProjectCreateRequest) Decode(d *jx.Decoder) error {
 	}
 	// Validate required fields.
 	var failures []validate.FieldError
-	for i, mask := range [1]uint8{
+	for i, mask := range [2]uint8{
 		0b01000111,
+		0b00000000,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -5693,6 +5758,8 @@ func (s *ProjectFileCategory) Decode(d *jx.Decoder) error {
 		*s = ProjectFileCategorySampleDoc
 	case ProjectFileCategorySourceCode:
 		*s = ProjectFileCategorySourceCode
+	case ProjectFileCategoryWechatChat:
+		*s = ProjectFileCategoryWechatChat
 	default:
 		*s = ProjectFileCategory(v)
 	}

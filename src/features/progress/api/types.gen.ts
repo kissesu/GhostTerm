@@ -662,6 +662,18 @@ export interface components {
             /** Format: date-time */
             deadline: string;
             originalQuote?: components["schemas"]["Money"];
+            /**
+             * Format: int64
+             * @description 开题书文件 ID（先 POST /api/files 上传得 fileId，再带入此字段）
+             */
+            openingDocId?: number | null;
+            /**
+             * Format: int64
+             * @description 任务书文件 ID（先 POST /api/files 上传得 fileId，再带入此字段）
+             */
+            assignmentDocId?: number | null;
+            /** @description 微信聊天记录截图文件 ID 数组（多张图先逐个上传，再带 ID 数组；后端事务 INSERT project_files category=wechat_chat） */
+            wechatChatFileIds?: number[];
         };
         /** @description PATCH 部分字段，全部 optional */
         ProjectUpdateRequest: {
@@ -795,7 +807,7 @@ export interface components {
             /** Format: int64 */
             fileId: number;
             /** @enum {string} */
-            category: "sample_doc" | "source_code";
+            category: "sample_doc" | "source_code" | "wechat_chat";
             /** Format: date-time */
             addedAt: string;
             file: components["schemas"]["FileMetadata"];

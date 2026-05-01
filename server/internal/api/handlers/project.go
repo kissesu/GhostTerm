@@ -363,6 +363,19 @@ func oasCreateToInput(req *oas.ProjectCreateRequest) (services.CreateProjectInpu
 	} else {
 		in.OriginalQuote, _ = progressdb.MoneyFromString("0")
 	}
+	// 资料文件：openingDocId / assignmentDocId 是 OptNilInt64（既支持 unset 也支持 null）。
+	// 仅在 IsSet 且非 Null 时透传 ID；其它情况留空让 DB 写 NULL。
+	if req.OpeningDocId.IsSet() && !req.OpeningDocId.IsNull() {
+		v := req.OpeningDocId.Value
+		in.OpeningDocID = &v
+	}
+	if req.AssignmentDocId.IsSet() && !req.AssignmentDocId.IsNull() {
+		v := req.AssignmentDocId.Value
+		in.AssignmentDocID = &v
+	}
+	if len(req.WechatChatFileIds) > 0 {
+		in.WechatChatFileIDs = append(in.WechatChatFileIDs, req.WechatChatFileIds...)
+	}
 	return in, nil
 }
 

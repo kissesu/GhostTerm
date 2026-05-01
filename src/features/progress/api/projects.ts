@@ -147,6 +147,11 @@ export interface CreateProjectInput {
   subject?: string;
   deadline: string; // ISO 8601
   originalQuote?: Money;
+  // 资料文件 ID（先 POST /api/files 上传得 file.id 后带入；可选）：
+  openingDocId?: number;
+  assignmentDocId?: number;
+  // 微信聊天记录截图 ID 数组；后端事务 INSERT N 行 project_files (category='wechat_chat')
+  wechatChatFileIds?: number[];
 }
 
 export interface UpdateProjectInput {

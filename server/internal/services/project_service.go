@@ -66,6 +66,11 @@ type CreateProjectInput struct {
 	Subject       *string
 	Deadline      time.Time
 	OriginalQuote progressdb.Money // 默认 0；DB 列 NUMERIC(12,2) NOT NULL DEFAULT 0
+	// 创建时关联的资料文件 ID（先 POST /api/files 上传后带入；nil 表示不关联）：
+	OpeningDocID    *int64  // 开题书 → projects.opening_doc_id
+	AssignmentDocID *int64  // 任务书 → projects.assignment_doc_id
+	// 微信聊天记录截图文件 ID 数组；非空时事务内 INSERT N 行 project_files(category='wechat_chat')
+	WechatChatFileIDs []int64
 }
 
 // UpdateProjectInput 修改项目基础字段；nil 字段表示不变。
@@ -214,6 +219,14 @@ func (s *ProjectServiceImpl) Create(
 		if in.Subject != nil {
 			subject = *in.Subject
 		}
+		// 资料文件 ID（NULL 兼容）：DB 列 BIGINT NULL，FK 到 files(id)
+		var openingDocID, assignmentDocID any
+		if in.OpeningDocID != nil {
+			openingDocID = *in.OpeningDocID
+		}
+		if in.AssignmentDocID != nil {
+			assignmentDocID = *in.AssignmentDocID
+		}
 
 		var p ProjectModel
 		err := tx.QueryRow(ctx, `
@@ -222,13 +235,15 @@ func (s *ProjectServiceImpl) Create(
 				status, holder_role_id, holder_user_id,
 				deadline,
 				original_quote, current_quote,
+				opening_doc_id, assignment_doc_id,
 				created_by
 			) VALUES (
 				$1, $2, $3, $4, $5, $6,
 				'dealing', $7, $8,
 				$9,
 				$10, $10,
-				$11
+				$11, $12,
+				$13
 			)
 			RETURNING
 				id, name, customer_label, description, priority, thesis_level, subject,
@@ -244,6 +259,7 @@ func (s *ProjectServiceImpl) Create(
 			statemachine.RoleCS, creatorUserID,
 			in.Deadline,
 			in.OriginalQuote,
+			openingDocID, assignmentDocID,
 			creatorUserID,
 		).Scan(
 			&p.ID, &p.Name, &p.CustomerLabel, &p.Description,
@@ -309,6 +325,19 @@ func (s *ProjectServiceImpl) Create(
 		`, creatorUserID, p.ID, p.Name)
 		if err != nil {
 			return fmt.Errorf("project_service.Create insert notification: %w", err)
+		}
+
+		// 5) 微信聊天记录截图：逐个 INSERT project_files (category='wechat_chat')
+		// 文件本身已由前端先 POST /api/files 上传（拿到 file_id 入 in.WechatChatFileIDs）；
+		// 这里仅在事务内建立 project ↔ file 关联。任一失败 → 回滚保证 0 残留。
+		for _, fileID := range in.WechatChatFileIDs {
+			_, err = tx.Exec(ctx, `
+				INSERT INTO project_files (project_id, file_id, category)
+				VALUES ($1, $2, 'wechat_chat')
+			`, p.ID, fileID)
+			if err != nil {
+				return fmt.Errorf("project_service.Create insert wechat_chat file %d: %w", fileID, err)
+			}
 		}
 
 		project = &p

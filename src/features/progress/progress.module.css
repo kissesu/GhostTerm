@@ -554,6 +554,70 @@
   box-shadow: 0 24px 64px rgba(0,0,0,0.5);
 }
 
+/* 大尺寸 modal 修饰：用于含多区块表单（如新建项目附文档上传） */
+.modalWide {
+  width: 720px;
+}
+
+/* 文档上传区：3 类资料分组卡片（开题/任务书/微信聊天） */
+.docUploadGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 4px;
+}
+.docUploadCell {
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(255,255,255,0.015);
+}
+.docUploadCell label {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.docUploadCellWide {
+  grid-column: 1 / -1;
+}
+.docUploadFileName {
+  font-size: 12px;
+  color: var(--text);
+  margin-top: 6px;
+  word-break: break-all;
+}
+.docUploadHint {
+  font-size: 11px;
+  color: var(--faint);
+  margin-top: 4px;
+}
+.docUploadList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.docUploadChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(184,255,106,0.08);
+  color: var(--accent);
+  font-size: 11px;
+}
+.docUploadChip button {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 0 0 4px;
+  font-size: 13px;
+  line-height: 1;
+}
+
 /* 原 .modal-head */
 .modalHead {
   padding: 16px 20px;
