@@ -716,24 +716,30 @@
 .field textarea,
 .field select {
   width: 100%;
-  padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--bg);
   color: var(--text);
   font-family: inherit;
   font-size: 13px;
-  /* 修 #1：input/select/textarea 高度统一 - native select 默认 padding/box-sizing 与 input 不同，
-     强制 box-sizing:border-box + line-height 让三者像素级对齐 */
   box-sizing: border-box;
   line-height: 1.4;
 }
-/* textarea 自由拉高，由 modalBody overflow-y:auto 接管溢出滚动；不要锁 max-height
-   让用户拉到任意高度都行——modal max-height 锁住外框，body 内部滚动 */
-.field textarea {
-  resize: vertical;
-  min-height: 80px;
+/* input/select 显式 height 替代 padding 计算 — native select user-agent
+   padding 与自定义 padding 不一致，dropdown arrow 占位让 inner-box 不同；
+   显式 height 让三者像素级对齐（textarea multiline 例外用 padding 保留弹性） */
+.field input,
+.field select {
+  height: 42px;
+  padding: 0 12px;
 }
+.field textarea {
+  padding: 10px 12px;
+  min-height: 80px;
+  resize: vertical;
+}
+/* textarea 自由拉高，由 modalBody overflow-y:auto 接管溢出滚动；不锁 max-height
+   modal max-height 锁外框 + form flex column + modalBody overflow:auto 三件套接管 */
 
 /* 原 .field-error（plan §1 补充，设计稿隐含的表单错误提示） */
 .fieldError { color: var(--red); font-size: 11px; margin-top: 4px; }
