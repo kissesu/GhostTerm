@@ -547,6 +547,10 @@
 .modal {
   width: 480px;
   max-width: calc(100vw - 64px);
+  /* 防止内容撑出视口让 footer 按钮被压到屏幕外（用 flex 列让 body 弹性，foot 始终贴底） */
+  max-height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--line-strong);
   border-radius: 10px;
   background: var(--panel);
@@ -625,6 +629,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  /* flex 列里 head 不收缩，永远贴 modal 顶 */
+  flex-shrink: 0;
 }
 .modalHead h3 { margin: 0; font-size: 16px; }
 
@@ -638,7 +644,13 @@
 }
 
 /* 原 .modal-body */
-.modalBody { padding: 20px; }
+.modalBody {
+  padding: 20px;
+  /* flex 列下让 body 弹性占据剩余空间 + 内部超出滚动，保 footer 按钮永远可见 */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
 /* 原 .modal-body .transition（I5：重命名为 .modalTransition 避免与 CSS 属性名混淆） */
 .modalTransition {
   display: flex;
@@ -678,6 +690,8 @@
   justify-content: flex-end;
   gap: 8px;
   background: var(--panel-2);
+  /* flex 列里 foot 不收缩，永远贴 modal 底 */
+  flex-shrink: 0;
 }
 
 .btn {
