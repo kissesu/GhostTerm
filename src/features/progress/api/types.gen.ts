@@ -240,6 +240,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{id}/activities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        /** 查询项目进度时间线（聚合 7 类事件，时间倒序） */
+        get: operations["projectsListActivities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{id}/feedbacks": {
         parameters: {
             query?: never;
@@ -1013,6 +1032,87 @@ export interface components {
         WSTicketResponse: {
             data: components["schemas"]["WSTicket"];
         };
+        /** @enum {string} */
+        ActivityKind: "project_created" | "feedback" | "status_change" | "quote_change" | "payment" | "thesis_version" | "project_file_added";
+        Activity: {
+            /** @description 稳定展示 id（kind:sourceId） */
+            id: string;
+            /** Format: int64 */
+            sourceId: number;
+            /** Format: int64 */
+            projectId: number;
+            kind: components["schemas"]["ActivityKind"];
+            /** Format: date-time */
+            occurredAt: string;
+            /** Format: int64 */
+            actorId: number;
+            actorName?: string | null;
+            actorRoleName?: string | null;
+            payload: components["schemas"]["ProjectCreatedPayload"] | components["schemas"]["FeedbackActivityPayload"] | components["schemas"]["StatusChangeActivityPayload"] | components["schemas"]["QuoteChangeActivityPayload"] | components["schemas"]["PaymentActivityPayload"] | components["schemas"]["ThesisVersionActivityPayload"] | components["schemas"]["ProjectFileAddedPayload"];
+        };
+        ActivityListResponse: {
+            data: components["schemas"]["Activity"][];
+            nextCursor?: string | null;
+        };
+        ProjectCreatedPayload: {
+            name: string;
+            status: components["schemas"]["ProjectStatus"];
+            priority: components["schemas"]["ProjectPriority"];
+            /** Format: date-time */
+            deadline: string;
+            originalQuote: components["schemas"]["Money"];
+        };
+        FeedbackActivityPayload: {
+            content: string;
+            source: components["schemas"]["FeedbackSource"];
+            status: components["schemas"]["FeedbackStatus"];
+        };
+        StatusChangeActivityPayload: {
+            eventCode: string;
+            eventName: string;
+            fromStatus?: components["schemas"]["ProjectStatus"] | null;
+            toStatus: components["schemas"]["ProjectStatus"];
+            /** Format: int64 */
+            fromHolderRoleId?: number | null;
+            /** Format: int64 */
+            toHolderRoleId?: number | null;
+            /** Format: int64 */
+            fromHolderUserId?: number | null;
+            /** Format: int64 */
+            toHolderUserId?: number | null;
+            remark: string;
+        };
+        QuoteChangeActivityPayload: {
+            changeType: components["schemas"]["QuoteChangeType"];
+            delta: components["schemas"]["Money"];
+            oldQuote: components["schemas"]["Money"];
+            newQuote: components["schemas"]["Money"];
+            reason: string;
+            phase: components["schemas"]["ProjectStatus"];
+        };
+        PaymentActivityPayload: {
+            direction: components["schemas"]["PaymentDirection"];
+            amount: components["schemas"]["Money"];
+            /** Format: date-time */
+            paidAt: string;
+            /** Format: int64 */
+            relatedUserId?: number | null;
+            /** Format: int64 */
+            screenshotId?: number | null;
+            remark: string;
+        };
+        ThesisVersionActivityPayload: {
+            /** Format: int64 */
+            fileId: number;
+            versionNo: number;
+            remark?: string | null;
+        };
+        ProjectFileAddedPayload: {
+            /** Format: int64 */
+            fileId: number;
+            /** @enum {string} */
+            category: "sample_doc" | "source_code";
+        };
     };
     responses: {
         /** @description 缺失或无效凭证 */
@@ -1541,6 +1641,44 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFoundError"];
+        };
+    };
+    projectsListActivities: {
+        parameters: {
+            query?: {
+                limit?: number;
+                /** @description base64url JSON 游标（at, kind, sourceId 三元组） */
+                before?: string;
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 进度时间线分页数据 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityListResponse"];
+                };
+            };
+            401: components["responses"]["UnauthorizedError"];
+            403: components["responses"]["PermissionDeniedError"];
+            404: components["responses"]["NotFoundError"];
+            /** @description 游标非法 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     projectsListFeedbacks: {

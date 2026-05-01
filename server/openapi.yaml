@@ -734,6 +734,191 @@ components:
       properties:
         data: { $ref: '#/components/schemas/WSTicket' }
 
+    # ===== 进度时间线（聚合 7 类事件）=====
+    # 设计：单一 Activity + payload oneOf，避免 ogen 顶层 oneOf 生成 7 个子类型导致的代码膨胀
+    ActivityKind:
+      type: string
+      enum:
+        - project_created
+        - feedback
+        - status_change
+        - quote_change
+        - payment
+        - thesis_version
+        - project_file_added
+
+    Activity:
+      type: object
+      required: [id, sourceId, projectId, kind, occurredAt, actorId, payload]
+      properties:
+        id:
+          type: string
+          description: "稳定展示 id（kind:sourceId）"
+        sourceId:
+          type: integer
+          format: int64
+        projectId:
+          type: integer
+          format: int64
+        kind:
+          $ref: '#/components/schemas/ActivityKind'
+        occurredAt:
+          type: string
+          format: date-time
+        actorId:
+          type: integer
+          format: int64
+        actorName:
+          type: string
+          nullable: true
+        actorRoleName:
+          type: string
+          nullable: true
+        payload:
+          oneOf:
+            - $ref: '#/components/schemas/ProjectCreatedPayload'
+            - $ref: '#/components/schemas/FeedbackActivityPayload'
+            - $ref: '#/components/schemas/StatusChangeActivityPayload'
+            - $ref: '#/components/schemas/QuoteChangeActivityPayload'
+            - $ref: '#/components/schemas/PaymentActivityPayload'
+            - $ref: '#/components/schemas/ThesisVersionActivityPayload'
+            - $ref: '#/components/schemas/ProjectFileAddedPayload'
+
+    ActivityListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Activity'
+        nextCursor:
+          type: string
+          nullable: true
+
+    ProjectCreatedPayload:
+      type: object
+      required: [name, status, priority, deadline, originalQuote]
+      properties:
+        name:
+          type: string
+        status:
+          $ref: '#/components/schemas/ProjectStatus'
+        priority:
+          $ref: '#/components/schemas/ProjectPriority'
+        deadline:
+          type: string
+          format: date-time
+        originalQuote:
+          $ref: '#/components/schemas/Money'
+
+    FeedbackActivityPayload:
+      type: object
+      required: [content, source, status]
+      properties:
+        content:
+          type: string
+        source:
+          $ref: '#/components/schemas/FeedbackSource'
+        status:
+          $ref: '#/components/schemas/FeedbackStatus'
+
+    StatusChangeActivityPayload:
+      type: object
+      required: [eventCode, eventName, toStatus, remark]
+      properties:
+        eventCode:
+          type: string
+        eventName:
+          type: string
+        fromStatus:
+          allOf:
+            - $ref: '#/components/schemas/ProjectStatus'
+          nullable: true
+        toStatus:
+          $ref: '#/components/schemas/ProjectStatus'
+        fromHolderRoleId:
+          type: integer
+          format: int64
+          nullable: true
+        toHolderRoleId:
+          type: integer
+          format: int64
+          nullable: true
+        fromHolderUserId:
+          type: integer
+          format: int64
+          nullable: true
+        toHolderUserId:
+          type: integer
+          format: int64
+          nullable: true
+        remark:
+          type: string
+
+    QuoteChangeActivityPayload:
+      type: object
+      required: [changeType, delta, oldQuote, newQuote, reason, phase]
+      properties:
+        changeType:
+          $ref: '#/components/schemas/QuoteChangeType'
+        delta:
+          $ref: '#/components/schemas/Money'
+        oldQuote:
+          $ref: '#/components/schemas/Money'
+        newQuote:
+          $ref: '#/components/schemas/Money'
+        reason:
+          type: string
+        phase:
+          $ref: '#/components/schemas/ProjectStatus'
+
+    PaymentActivityPayload:
+      type: object
+      required: [direction, amount, paidAt, remark]
+      properties:
+        direction:
+          $ref: '#/components/schemas/PaymentDirection'
+        amount:
+          $ref: '#/components/schemas/Money'
+        paidAt:
+          type: string
+          format: date-time
+        relatedUserId:
+          type: integer
+          format: int64
+          nullable: true
+        screenshotId:
+          type: integer
+          format: int64
+          nullable: true
+        remark:
+          type: string
+
+    ThesisVersionActivityPayload:
+      type: object
+      required: [fileId, versionNo]
+      properties:
+        fileId:
+          type: integer
+          format: int64
+        versionNo:
+          type: integer
+        remark:
+          type: string
+          nullable: true
+
+    ProjectFileAddedPayload:
+      type: object
+      required: [fileId, category]
+      properties:
+        fileId:
+          type: integer
+          format: int64
+        category:
+          type: string
+          enum: [sample_doc, source_code]
+
   responses:
     UnauthorizedError:
       description: 缺失或无效凭证
@@ -1099,6 +1284,55 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/StatusChangeLogListResponse' }
         '404': { $ref: '#/components/responses/NotFoundError' }
+
+  /api/projects/{id}/activities:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      operationId: projectsListActivities
+      summary: 查询项目进度时间线（聚合 7 类事件，时间倒序）
+      tags: [projects]
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: before
+          in: query
+          required: false
+          description: base64url JSON 游标（at, kind, sourceId 三元组）
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 进度时间线分页数据
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/PermissionDeniedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          description: 游标非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      security:
+        - bearerAuth: []
 
   /api/projects/{id}/feedbacks:
     parameters:

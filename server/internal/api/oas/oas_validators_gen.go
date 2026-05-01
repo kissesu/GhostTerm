@@ -9,6 +9,140 @@ import (
 	"github.com/ogen-go/ogen/validate"
 )
 
+func (s *Activity) Validate() error {
+	if s == nil {
+		return validate.ErrNilPointer
+	}
+
+	var failures []validate.FieldError
+	if err := func() error {
+		if err := s.Kind.Validate(); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "kind",
+			Error: err,
+		})
+	}
+	if err := func() error {
+		if err := s.Payload.Validate(); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "payload",
+			Error: err,
+		})
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+	return nil
+}
+
+func (s ActivityKind) Validate() error {
+	switch s {
+	case "project_created":
+		return nil
+	case "feedback":
+		return nil
+	case "status_change":
+		return nil
+	case "quote_change":
+		return nil
+	case "payment":
+		return nil
+	case "thesis_version":
+		return nil
+	case "project_file_added":
+		return nil
+	default:
+		return errors.Errorf("invalid value: %v", s)
+	}
+}
+
+func (s *ActivityListResponse) Validate() error {
+	if s == nil {
+		return validate.ErrNilPointer
+	}
+
+	var failures []validate.FieldError
+	if err := func() error {
+		if s.Data == nil {
+			return errors.New("nil is invalid value")
+		}
+		var failures []validate.FieldError
+		for i, elem := range s.Data {
+			if err := func() error {
+				if err := elem.Validate(); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				failures = append(failures, validate.FieldError{
+					Name:  fmt.Sprintf("[%d]", i),
+					Error: err,
+				})
+			}
+		}
+		if len(failures) > 0 {
+			return &validate.Error{Fields: failures}
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "data",
+			Error: err,
+		})
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+	return nil
+}
+
+func (s ActivityPayload) Validate() error {
+	switch s.Type {
+	case ProjectCreatedPayloadActivityPayload:
+		if err := s.ProjectCreatedPayload.Validate(); err != nil {
+			return err
+		}
+		return nil
+	case FeedbackActivityPayloadActivityPayload:
+		if err := s.FeedbackActivityPayload.Validate(); err != nil {
+			return err
+		}
+		return nil
+	case StatusChangeActivityPayloadActivityPayload:
+		if err := s.StatusChangeActivityPayload.Validate(); err != nil {
+			return err
+		}
+		return nil
+	case QuoteChangeActivityPayloadActivityPayload:
+		if err := s.QuoteChangeActivityPayload.Validate(); err != nil {
+			return err
+		}
+		return nil
+	case PaymentActivityPayloadActivityPayload:
+		if err := s.PaymentActivityPayload.Validate(); err != nil {
+			return err
+		}
+		return nil
+	case ThesisVersionActivityPayloadActivityPayload:
+		return nil // no validation needed
+	case ProjectFileAddedPayloadActivityPayload:
+		if err := s.ProjectFileAddedPayload.Validate(); err != nil {
+			return err
+		}
+		return nil
+	default:
+		return errors.Errorf("invalid type %q", s.Type)
+	}
+}
+
 func (s *AuthLoginEnvelope) Validate() error {
 	if s == nil {
 		return validate.ErrNilPointer
@@ -418,6 +552,40 @@ func (s *Feedback) Validate() error {
 	return nil
 }
 
+func (s *FeedbackActivityPayload) Validate() error {
+	if s == nil {
+		return validate.ErrNilPointer
+	}
+
+	var failures []validate.FieldError
+	if err := func() error {
+		if err := s.Source.Validate(); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "source",
+			Error: err,
+		})
+	}
+	if err := func() error {
+		if err := s.Status.Validate(); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "status",
+			Error: err,
+		})
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+	return nil
+}
+
 func (s *FeedbackCreateRequest) Validate() error {
 	if s == nil {
 		return validate.ErrNilPointer
@@ -711,6 +879,40 @@ func (s NotificationType) Validate() error {
 }
 
 func (s *Payment) Validate() error {
+	if s == nil {
+		return validate.ErrNilPointer
+	}
+
+	var failures []validate.FieldError
+	if err := func() error {
+		if err := s.Direction.Validate(); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "direction",
+			Error: err,
+		})
+	}
+	if err := func() error {
+		if err := s.Amount.Validate(); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "amount",
+			Error: err,
+		})
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+	return nil
+}
+
+func (s *PaymentActivityPayload) Validate() error {
 	if s == nil {
 		return validate.ErrNilPointer
 	}
@@ -1129,6 +1331,51 @@ func (s *ProjectCreateRequest) Validate() error {
 	return nil
 }
 
+func (s *ProjectCreatedPayload) Validate() error {
+	if s == nil {
+		return validate.ErrNilPointer
+	}
+
+	var failures []validate.FieldError
+	if err := func() error {
+		if err := s.Status.Validate(); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "status",
+			Error: err,
+		})
+	}
+	if err := func() error {
+		if err := s.Priority.Validate(); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "priority",
+			Error: err,
+		})
+	}
+	if err := func() error {
+		if err := s.OriginalQuote.Validate(); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "originalQuote",
+			Error: err,
+		})
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+	return nil
+}
+
 func (s *ProjectFile) Validate() error {
 	if s == nil {
 		return validate.ErrNilPointer
@@ -1150,6 +1397,40 @@ func (s *ProjectFile) Validate() error {
 		return &validate.Error{Fields: failures}
 	}
 	return nil
+}
+
+func (s *ProjectFileAddedPayload) Validate() error {
+	if s == nil {
+		return validate.ErrNilPointer
+	}
+
+	var failures []validate.FieldError
+	if err := func() error {
+		if err := s.Category.Validate(); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "category",
+			Error: err,
+		})
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+	return nil
+}
+
+func (s ProjectFileAddedPayloadCategory) Validate() error {
+	switch s {
+	case "sample_doc":
+		return nil
+	case "source_code":
+		return nil
+	default:
+		return errors.Errorf("invalid value: %v", s)
+	}
 }
 
 func (s ProjectFileCategory) Validate() error {
@@ -1458,6 +1739,38 @@ func (s *ProjectsCreateUnprocessableEntity) Validate() error {
 	return nil
 }
 
+func (s *ProjectsListActivitiesForbidden) Validate() error {
+	alias := (*ErrorEnvelope)(s)
+	if err := alias.Validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *ProjectsListActivitiesNotFound) Validate() error {
+	alias := (*ErrorEnvelope)(s)
+	if err := alias.Validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *ProjectsListActivitiesUnauthorized) Validate() error {
+	alias := (*ErrorEnvelope)(s)
+	if err := alias.Validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *ProjectsListActivitiesUnprocessableEntity) Validate() error {
+	alias := (*ErrorEnvelope)(s)
+	if err := alias.Validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (s ProjectsListFilesCategory) Validate() error {
 	switch s {
 	case "sample_doc":
@@ -1502,6 +1815,73 @@ func (s *ProjectsUpdateUnprocessableEntity) Validate() error {
 }
 
 func (s *QuoteChange) Validate() error {
+	if s == nil {
+		return validate.ErrNilPointer
+	}
+
+	var failures []validate.FieldError
+	if err := func() error {
+		if err := s.ChangeType.Validate(); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "changeType",
+			Error: err,
+		})
+	}
+	if err := func() error {
+		if err := s.Delta.Validate(); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "delta",
+			Error: err,
+		})
+	}
+	if err := func() error {
+		if err := s.OldQuote.Validate(); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "oldQuote",
+			Error: err,
+		})
+	}
+	if err := func() error {
+		if err := s.NewQuote.Validate(); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "newQuote",
+			Error: err,
+		})
+	}
+	if err := func() error {
+		if err := s.Phase.Validate(); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "phase",
+			Error: err,
+		})
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+	return nil
+}
+
+func (s *QuoteChangeActivityPayload) Validate() error {
 	if s == nil {
 		return validate.ErrNilPointer
 	}
@@ -1973,6 +2353,47 @@ func (s *RolesUpdatePermissionsUnprocessableEntity) Validate() error {
 	alias := (*ErrorEnvelope)(s)
 	if err := alias.Validate(); err != nil {
 		return err
+	}
+	return nil
+}
+
+func (s *StatusChangeActivityPayload) Validate() error {
+	if s == nil {
+		return validate.ErrNilPointer
+	}
+
+	var failures []validate.FieldError
+	if err := func() error {
+		if value, ok := s.FromStatus.Get(); ok {
+			if err := func() error {
+				if err := value.Validate(); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "fromStatus",
+			Error: err,
+		})
+	}
+	if err := func() error {
+		if err := s.ToStatus.Validate(); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "toStatus",
+			Error: err,
+		})
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
 	}
 	return nil
 }

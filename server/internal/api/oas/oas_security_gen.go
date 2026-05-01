@@ -52,6 +52,7 @@ var operationRolesBearerAuth = map[string][]string{
 	ProjectsCreateThesisVersionOperation: []string{},
 	ProjectsGetOperation:                 []string{},
 	ProjectsListOperation:                []string{},
+	ProjectsListActivitiesOperation:      []string{},
 	ProjectsListFeedbacksOperation:       []string{},
 	ProjectsListFilesOperation:           []string{},
 	ProjectsListPaymentsOperation:        []string{},

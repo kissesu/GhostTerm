@@ -26,6 +26,7 @@ const (
 	ProjectsCreateThesisVersionOperation OperationName = "ProjectsCreateThesisVersion"
 	ProjectsGetOperation                 OperationName = "ProjectsGet"
 	ProjectsListOperation                OperationName = "ProjectsList"
+	ProjectsListActivitiesOperation      OperationName = "ProjectsListActivities"
 	ProjectsListFeedbacksOperation       OperationName = "ProjectsListFeedbacks"
 	ProjectsListFilesOperation           OperationName = "ProjectsListFiles"
 	ProjectsListPaymentsOperation        OperationName = "ProjectsListPayments"

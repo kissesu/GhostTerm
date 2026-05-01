@@ -189,6 +189,15 @@ func (UnimplementedHandler) ProjectsList(ctx context.Context, params ProjectsLis
 	return r, ht.ErrNotImplemented
 }
 
+// ProjectsListActivities implements projectsListActivities operation.
+//
+// 查询项目进度时间线（聚合 7 类事件，时间倒序）.
+//
+// GET /api/projects/{id}/activities
+func (UnimplementedHandler) ProjectsListActivities(ctx context.Context, params ProjectsListActivitiesParams) (r ProjectsListActivitiesRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // ProjectsListFeedbacks implements projectsListFeedbacks operation.
 //
 // GET /api/projects/{id}/feedbacks

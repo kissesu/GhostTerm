@@ -65,6 +65,10 @@ type ProjectsGetRes interface {
 	projectsGetRes()
 }
 
+type ProjectsListActivitiesRes interface {
+	projectsListActivitiesRes()
+}
+
 type ProjectsListRes interface {
 	projectsListRes()
 }

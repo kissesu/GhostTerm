@@ -124,6 +124,12 @@ type Handler interface {
 	//
 	// GET /api/projects
 	ProjectsList(ctx context.Context, params ProjectsListParams) (ProjectsListRes, error)
+	// ProjectsListActivities implements projectsListActivities operation.
+	//
+	// 查询项目进度时间线（聚合 7 类事件，时间倒序）.
+	//
+	// GET /api/projects/{id}/activities
+	ProjectsListActivities(ctx context.Context, params ProjectsListActivitiesParams) (ProjectsListActivitiesRes, error)
 	// ProjectsListFeedbacks implements projectsListFeedbacks operation.
 	//
 	// GET /api/projects/{id}/feedbacks

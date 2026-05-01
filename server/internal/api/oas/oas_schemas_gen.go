@@ -12,6 +12,423 @@ import (
 	ht "github.com/ogen-go/ogen/http"
 )
 
+// Ref: #/components/schemas/Activity
+type Activity struct {
+	// 稳定展示 id（kind:sourceId）.
+	ID            string          `json:"id"`
+	SourceId      int64           `json:"sourceId"`
+	ProjectId     int64           `json:"projectId"`
+	Kind          ActivityKind    `json:"kind"`
+	OccurredAt    time.Time       `json:"occurredAt"`
+	ActorId       int64           `json:"actorId"`
+	ActorName     OptNilString    `json:"actorName"`
+	ActorRoleName OptNilString    `json:"actorRoleName"`
+	Payload       ActivityPayload `json:"payload"`
+}
+
+// GetID returns the value of ID.
+func (s *Activity) GetID() string {
+	return s.ID
+}
+
+// GetSourceId returns the value of SourceId.
+func (s *Activity) GetSourceId() int64 {
+	return s.SourceId
+}
+
+// GetProjectId returns the value of ProjectId.
+func (s *Activity) GetProjectId() int64 {
+	return s.ProjectId
+}
+
+// GetKind returns the value of Kind.
+func (s *Activity) GetKind() ActivityKind {
+	return s.Kind
+}
+
+// GetOccurredAt returns the value of OccurredAt.
+func (s *Activity) GetOccurredAt() time.Time {
+	return s.OccurredAt
+}
+
+// GetActorId returns the value of ActorId.
+func (s *Activity) GetActorId() int64 {
+	return s.ActorId
+}
+
+// GetActorName returns the value of ActorName.
+func (s *Activity) GetActorName() OptNilString {
+	return s.ActorName
+}
+
+// GetActorRoleName returns the value of ActorRoleName.
+func (s *Activity) GetActorRoleName() OptNilString {
+	return s.ActorRoleName
+}
+
+// GetPayload returns the value of Payload.
+func (s *Activity) GetPayload() ActivityPayload {
+	return s.Payload
+}
+
+// SetID sets the value of ID.
+func (s *Activity) SetID(val string) {
+	s.ID = val
+}
+
+// SetSourceId sets the value of SourceId.
+func (s *Activity) SetSourceId(val int64) {
+	s.SourceId = val
+}
+
+// SetProjectId sets the value of ProjectId.
+func (s *Activity) SetProjectId(val int64) {
+	s.ProjectId = val
+}
+
+// SetKind sets the value of Kind.
+func (s *Activity) SetKind(val ActivityKind) {
+	s.Kind = val
+}
+
+// SetOccurredAt sets the value of OccurredAt.
+func (s *Activity) SetOccurredAt(val time.Time) {
+	s.OccurredAt = val
+}
+
+// SetActorId sets the value of ActorId.
+func (s *Activity) SetActorId(val int64) {
+	s.ActorId = val
+}
+
+// SetActorName sets the value of ActorName.
+func (s *Activity) SetActorName(val OptNilString) {
+	s.ActorName = val
+}
+
+// SetActorRoleName sets the value of ActorRoleName.
+func (s *Activity) SetActorRoleName(val OptNilString) {
+	s.ActorRoleName = val
+}
+
+// SetPayload sets the value of Payload.
+func (s *Activity) SetPayload(val ActivityPayload) {
+	s.Payload = val
+}
+
+// Ref: #/components/schemas/ActivityKind
+type ActivityKind string
+
+const (
+	ActivityKindProjectCreated   ActivityKind = "project_created"
+	ActivityKindFeedback         ActivityKind = "feedback"
+	ActivityKindStatusChange     ActivityKind = "status_change"
+	ActivityKindQuoteChange      ActivityKind = "quote_change"
+	ActivityKindPayment          ActivityKind = "payment"
+	ActivityKindThesisVersion    ActivityKind = "thesis_version"
+	ActivityKindProjectFileAdded ActivityKind = "project_file_added"
+)
+
+// AllValues returns all ActivityKind values.
+func (ActivityKind) AllValues() []ActivityKind {
+	return []ActivityKind{
+		ActivityKindProjectCreated,
+		ActivityKindFeedback,
+		ActivityKindStatusChange,
+		ActivityKindQuoteChange,
+		ActivityKindPayment,
+		ActivityKindThesisVersion,
+		ActivityKindProjectFileAdded,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s ActivityKind) MarshalText() ([]byte, error) {
+	switch s {
+	case ActivityKindProjectCreated:
+		return []byte(s), nil
+	case ActivityKindFeedback:
+		return []byte(s), nil
+	case ActivityKindStatusChange:
+		return []byte(s), nil
+	case ActivityKindQuoteChange:
+		return []byte(s), nil
+	case ActivityKindPayment:
+		return []byte(s), nil
+	case ActivityKindThesisVersion:
+		return []byte(s), nil
+	case ActivityKindProjectFileAdded:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *ActivityKind) UnmarshalText(data []byte) error {
+	switch ActivityKind(data) {
+	case ActivityKindProjectCreated:
+		*s = ActivityKindProjectCreated
+		return nil
+	case ActivityKindFeedback:
+		*s = ActivityKindFeedback
+		return nil
+	case ActivityKindStatusChange:
+		*s = ActivityKindStatusChange
+		return nil
+	case ActivityKindQuoteChange:
+		*s = ActivityKindQuoteChange
+		return nil
+	case ActivityKindPayment:
+		*s = ActivityKindPayment
+		return nil
+	case ActivityKindThesisVersion:
+		*s = ActivityKindThesisVersion
+		return nil
+	case ActivityKindProjectFileAdded:
+		*s = ActivityKindProjectFileAdded
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/ActivityListResponse
+type ActivityListResponse struct {
+	Data       []Activity   `json:"data"`
+	NextCursor OptNilString `json:"nextCursor"`
+}
+
+// GetData returns the value of Data.
+func (s *ActivityListResponse) GetData() []Activity {
+	return s.Data
+}
+
+// GetNextCursor returns the value of NextCursor.
+func (s *ActivityListResponse) GetNextCursor() OptNilString {
+	return s.NextCursor
+}
+
+// SetData sets the value of Data.
+func (s *ActivityListResponse) SetData(val []Activity) {
+	s.Data = val
+}
+
+// SetNextCursor sets the value of NextCursor.
+func (s *ActivityListResponse) SetNextCursor(val OptNilString) {
+	s.NextCursor = val
+}
+
+func (*ActivityListResponse) projectsListActivitiesRes() {}
+
+// ActivityPayload represents sum type.
+type ActivityPayload struct {
+	Type                         ActivityPayloadType // switch on this field
+	ProjectCreatedPayload        ProjectCreatedPayload
+	FeedbackActivityPayload      FeedbackActivityPayload
+	StatusChangeActivityPayload  StatusChangeActivityPayload
+	QuoteChangeActivityPayload   QuoteChangeActivityPayload
+	PaymentActivityPayload       PaymentActivityPayload
+	ThesisVersionActivityPayload ThesisVersionActivityPayload
+	ProjectFileAddedPayload      ProjectFileAddedPayload
+}
+
+// ActivityPayloadType is oneOf type of ActivityPayload.
+type ActivityPayloadType string
+
+// Possible values for ActivityPayloadType.
+const (
+	ProjectCreatedPayloadActivityPayload        ActivityPayloadType = "ProjectCreatedPayload"
+	FeedbackActivityPayloadActivityPayload      ActivityPayloadType = "FeedbackActivityPayload"
+	StatusChangeActivityPayloadActivityPayload  ActivityPayloadType = "StatusChangeActivityPayload"
+	QuoteChangeActivityPayloadActivityPayload   ActivityPayloadType = "QuoteChangeActivityPayload"
+	PaymentActivityPayloadActivityPayload       ActivityPayloadType = "PaymentActivityPayload"
+	ThesisVersionActivityPayloadActivityPayload ActivityPayloadType = "ThesisVersionActivityPayload"
+	ProjectFileAddedPayloadActivityPayload      ActivityPayloadType = "ProjectFileAddedPayload"
+)
+
+// IsProjectCreatedPayload reports whether ActivityPayload is ProjectCreatedPayload.
+func (s ActivityPayload) IsProjectCreatedPayload() bool {
+	return s.Type == ProjectCreatedPayloadActivityPayload
+}
+
+// IsFeedbackActivityPayload reports whether ActivityPayload is FeedbackActivityPayload.
+func (s ActivityPayload) IsFeedbackActivityPayload() bool {
+	return s.Type == FeedbackActivityPayloadActivityPayload
+}
+
+// IsStatusChangeActivityPayload reports whether ActivityPayload is StatusChangeActivityPayload.
+func (s ActivityPayload) IsStatusChangeActivityPayload() bool {
+	return s.Type == StatusChangeActivityPayloadActivityPayload
+}
+
+// IsQuoteChangeActivityPayload reports whether ActivityPayload is QuoteChangeActivityPayload.
+func (s ActivityPayload) IsQuoteChangeActivityPayload() bool {
+	return s.Type == QuoteChangeActivityPayloadActivityPayload
+}
+
+// IsPaymentActivityPayload reports whether ActivityPayload is PaymentActivityPayload.
+func (s ActivityPayload) IsPaymentActivityPayload() bool {
+	return s.Type == PaymentActivityPayloadActivityPayload
+}
+
+// IsThesisVersionActivityPayload reports whether ActivityPayload is ThesisVersionActivityPayload.
+func (s ActivityPayload) IsThesisVersionActivityPayload() bool {
+	return s.Type == ThesisVersionActivityPayloadActivityPayload
+}
+
+// IsProjectFileAddedPayload reports whether ActivityPayload is ProjectFileAddedPayload.
+func (s ActivityPayload) IsProjectFileAddedPayload() bool {
+	return s.Type == ProjectFileAddedPayloadActivityPayload
+}
+
+// SetProjectCreatedPayload sets ActivityPayload to ProjectCreatedPayload.
+func (s *ActivityPayload) SetProjectCreatedPayload(v ProjectCreatedPayload) {
+	s.Type = ProjectCreatedPayloadActivityPayload
+	s.ProjectCreatedPayload = v
+}
+
+// GetProjectCreatedPayload returns ProjectCreatedPayload and true boolean if ActivityPayload is ProjectCreatedPayload.
+func (s ActivityPayload) GetProjectCreatedPayload() (v ProjectCreatedPayload, ok bool) {
+	if !s.IsProjectCreatedPayload() {
+		return v, false
+	}
+	return s.ProjectCreatedPayload, true
+}
+
+// NewProjectCreatedPayloadActivityPayload returns new ActivityPayload from ProjectCreatedPayload.
+func NewProjectCreatedPayloadActivityPayload(v ProjectCreatedPayload) ActivityPayload {
+	var s ActivityPayload
+	s.SetProjectCreatedPayload(v)
+	return s
+}
+
+// SetFeedbackActivityPayload sets ActivityPayload to FeedbackActivityPayload.
+func (s *ActivityPayload) SetFeedbackActivityPayload(v FeedbackActivityPayload) {
+	s.Type = FeedbackActivityPayloadActivityPayload
+	s.FeedbackActivityPayload = v
+}
+
+// GetFeedbackActivityPayload returns FeedbackActivityPayload and true boolean if ActivityPayload is FeedbackActivityPayload.
+func (s ActivityPayload) GetFeedbackActivityPayload() (v FeedbackActivityPayload, ok bool) {
+	if !s.IsFeedbackActivityPayload() {
+		return v, false
+	}
+	return s.FeedbackActivityPayload, true
+}
+
+// NewFeedbackActivityPayloadActivityPayload returns new ActivityPayload from FeedbackActivityPayload.
+func NewFeedbackActivityPayloadActivityPayload(v FeedbackActivityPayload) ActivityPayload {
+	var s ActivityPayload
+	s.SetFeedbackActivityPayload(v)
+	return s
+}
+
+// SetStatusChangeActivityPayload sets ActivityPayload to StatusChangeActivityPayload.
+func (s *ActivityPayload) SetStatusChangeActivityPayload(v StatusChangeActivityPayload) {
+	s.Type = StatusChangeActivityPayloadActivityPayload
+	s.StatusChangeActivityPayload = v
+}
+
+// GetStatusChangeActivityPayload returns StatusChangeActivityPayload and true boolean if ActivityPayload is StatusChangeActivityPayload.
+func (s ActivityPayload) GetStatusChangeActivityPayload() (v StatusChangeActivityPayload, ok bool) {
+	if !s.IsStatusChangeActivityPayload() {
+		return v, false
+	}
+	return s.StatusChangeActivityPayload, true
+}
+
+// NewStatusChangeActivityPayloadActivityPayload returns new ActivityPayload from StatusChangeActivityPayload.
+func NewStatusChangeActivityPayloadActivityPayload(v StatusChangeActivityPayload) ActivityPayload {
+	var s ActivityPayload
+	s.SetStatusChangeActivityPayload(v)
+	return s
+}
+
+// SetQuoteChangeActivityPayload sets ActivityPayload to QuoteChangeActivityPayload.
+func (s *ActivityPayload) SetQuoteChangeActivityPayload(v QuoteChangeActivityPayload) {
+	s.Type = QuoteChangeActivityPayloadActivityPayload
+	s.QuoteChangeActivityPayload = v
+}
+
+// GetQuoteChangeActivityPayload returns QuoteChangeActivityPayload and true boolean if ActivityPayload is QuoteChangeActivityPayload.
+func (s ActivityPayload) GetQuoteChangeActivityPayload() (v QuoteChangeActivityPayload, ok bool) {
+	if !s.IsQuoteChangeActivityPayload() {
+		return v, false
+	}
+	return s.QuoteChangeActivityPayload, true
+}
+
+// NewQuoteChangeActivityPayloadActivityPayload returns new ActivityPayload from QuoteChangeActivityPayload.
+func NewQuoteChangeActivityPayloadActivityPayload(v QuoteChangeActivityPayload) ActivityPayload {
+	var s ActivityPayload
+	s.SetQuoteChangeActivityPayload(v)
+	return s
+}
+
+// SetPaymentActivityPayload sets ActivityPayload to PaymentActivityPayload.
+func (s *ActivityPayload) SetPaymentActivityPayload(v PaymentActivityPayload) {
+	s.Type = PaymentActivityPayloadActivityPayload
+	s.PaymentActivityPayload = v
+}
+
+// GetPaymentActivityPayload returns PaymentActivityPayload and true boolean if ActivityPayload is PaymentActivityPayload.
+func (s ActivityPayload) GetPaymentActivityPayload() (v PaymentActivityPayload, ok bool) {
+	if !s.IsPaymentActivityPayload() {
+		return v, false
+	}
+	return s.PaymentActivityPayload, true
+}
+
+// NewPaymentActivityPayloadActivityPayload returns new ActivityPayload from PaymentActivityPayload.
+func NewPaymentActivityPayloadActivityPayload(v PaymentActivityPayload) ActivityPayload {
+	var s ActivityPayload
+	s.SetPaymentActivityPayload(v)
+	return s
+}
+
+// SetThesisVersionActivityPayload sets ActivityPayload to ThesisVersionActivityPayload.
+func (s *ActivityPayload) SetThesisVersionActivityPayload(v ThesisVersionActivityPayload) {
+	s.Type = ThesisVersionActivityPayloadActivityPayload
+	s.ThesisVersionActivityPayload = v
+}
+
+// GetThesisVersionActivityPayload returns ThesisVersionActivityPayload and true boolean if ActivityPayload is ThesisVersionActivityPayload.
+func (s ActivityPayload) GetThesisVersionActivityPayload() (v ThesisVersionActivityPayload, ok bool) {
+	if !s.IsThesisVersionActivityPayload() {
+		return v, false
+	}
+	return s.ThesisVersionActivityPayload, true
+}
+
+// NewThesisVersionActivityPayloadActivityPayload returns new ActivityPayload from ThesisVersionActivityPayload.
+func NewThesisVersionActivityPayloadActivityPayload(v ThesisVersionActivityPayload) ActivityPayload {
+	var s ActivityPayload
+	s.SetThesisVersionActivityPayload(v)
+	return s
+}
+
+// SetProjectFileAddedPayload sets ActivityPayload to ProjectFileAddedPayload.
+func (s *ActivityPayload) SetProjectFileAddedPayload(v ProjectFileAddedPayload) {
+	s.Type = ProjectFileAddedPayloadActivityPayload
+	s.ProjectFileAddedPayload = v
+}
+
+// GetProjectFileAddedPayload returns ProjectFileAddedPayload and true boolean if ActivityPayload is ProjectFileAddedPayload.
+func (s ActivityPayload) GetProjectFileAddedPayload() (v ProjectFileAddedPayload, ok bool) {
+	if !s.IsProjectFileAddedPayload() {
+		return v, false
+	}
+	return s.ProjectFileAddedPayload, true
+}
+
+// NewProjectFileAddedPayloadActivityPayload returns new ActivityPayload from ProjectFileAddedPayload.
+func NewProjectFileAddedPayloadActivityPayload(v ProjectFileAddedPayload) ActivityPayload {
+	var s ActivityPayload
+	s.SetProjectFileAddedPayload(v)
+	return s
+}
+
 // Ref: #/components/schemas/AuthLoginEnvelope
 type AuthLoginEnvelope struct {
 	Data AuthLoginResponse `json:"data"`
@@ -761,6 +1178,43 @@ func (s *Feedback) SetAttachmentIds(val []int64) {
 	s.AttachmentIds = val
 }
 
+// Ref: #/components/schemas/FeedbackActivityPayload
+type FeedbackActivityPayload struct {
+	Content string         `json:"content"`
+	Source  FeedbackSource `json:"source"`
+	Status  FeedbackStatus `json:"status"`
+}
+
+// GetContent returns the value of Content.
+func (s *FeedbackActivityPayload) GetContent() string {
+	return s.Content
+}
+
+// GetSource returns the value of Source.
+func (s *FeedbackActivityPayload) GetSource() FeedbackSource {
+	return s.Source
+}
+
+// GetStatus returns the value of Status.
+func (s *FeedbackActivityPayload) GetStatus() FeedbackStatus {
+	return s.Status
+}
+
+// SetContent sets the value of Content.
+func (s *FeedbackActivityPayload) SetContent(val string) {
+	s.Content = val
+}
+
+// SetSource sets the value of Source.
+func (s *FeedbackActivityPayload) SetSource(val FeedbackSource) {
+	s.Source = val
+}
+
+// SetStatus sets the value of Status.
+func (s *FeedbackActivityPayload) SetStatus(val FeedbackStatus) {
+	s.Status = val
+}
+
 // Ref: #/components/schemas/FeedbackCreateRequest
 type FeedbackCreateRequest struct {
 	Content       string            `json:"content"`
@@ -1463,6 +1917,52 @@ func (o OptFeedbackStatus) Get() (v FeedbackStatus, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptFeedbackStatus) Or(d FeedbackStatus) FeedbackStatus {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptInt returns new OptInt with value set to v.
+func NewOptInt(v int) OptInt {
+	return OptInt{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptInt is optional int.
+type OptInt struct {
+	Value int
+	Set   bool
+}
+
+// IsSet returns true if OptInt was set.
+func (o OptInt) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptInt) Reset() {
+	var v int
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptInt) SetTo(v int) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptInt) Get() (v int, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptInt) Or(d int) int {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -2285,6 +2785,76 @@ func (s *Payment) SetRecordedAt(val time.Time) {
 	s.RecordedAt = val
 }
 
+// Ref: #/components/schemas/PaymentActivityPayload
+type PaymentActivityPayload struct {
+	Direction     PaymentDirection `json:"direction"`
+	Amount        Money            `json:"amount"`
+	PaidAt        time.Time        `json:"paidAt"`
+	RelatedUserId OptNilInt64      `json:"relatedUserId"`
+	ScreenshotId  OptNilInt64      `json:"screenshotId"`
+	Remark        string           `json:"remark"`
+}
+
+// GetDirection returns the value of Direction.
+func (s *PaymentActivityPayload) GetDirection() PaymentDirection {
+	return s.Direction
+}
+
+// GetAmount returns the value of Amount.
+func (s *PaymentActivityPayload) GetAmount() Money {
+	return s.Amount
+}
+
+// GetPaidAt returns the value of PaidAt.
+func (s *PaymentActivityPayload) GetPaidAt() time.Time {
+	return s.PaidAt
+}
+
+// GetRelatedUserId returns the value of RelatedUserId.
+func (s *PaymentActivityPayload) GetRelatedUserId() OptNilInt64 {
+	return s.RelatedUserId
+}
+
+// GetScreenshotId returns the value of ScreenshotId.
+func (s *PaymentActivityPayload) GetScreenshotId() OptNilInt64 {
+	return s.ScreenshotId
+}
+
+// GetRemark returns the value of Remark.
+func (s *PaymentActivityPayload) GetRemark() string {
+	return s.Remark
+}
+
+// SetDirection sets the value of Direction.
+func (s *PaymentActivityPayload) SetDirection(val PaymentDirection) {
+	s.Direction = val
+}
+
+// SetAmount sets the value of Amount.
+func (s *PaymentActivityPayload) SetAmount(val Money) {
+	s.Amount = val
+}
+
+// SetPaidAt sets the value of PaidAt.
+func (s *PaymentActivityPayload) SetPaidAt(val time.Time) {
+	s.PaidAt = val
+}
+
+// SetRelatedUserId sets the value of RelatedUserId.
+func (s *PaymentActivityPayload) SetRelatedUserId(val OptNilInt64) {
+	s.RelatedUserId = val
+}
+
+// SetScreenshotId sets the value of ScreenshotId.
+func (s *PaymentActivityPayload) SetScreenshotId(val OptNilInt64) {
+	s.ScreenshotId = val
+}
+
+// SetRemark sets the value of Remark.
+func (s *PaymentActivityPayload) SetRemark(val string) {
+	s.Remark = val
+}
+
 // Ref: #/components/schemas/PaymentCreateRequest
 type PaymentCreateRequest struct {
 	Direction     PaymentDirection `json:"direction"`
@@ -2964,6 +3534,65 @@ func (s *ProjectCreateRequest) SetWechatChatFileIds(val []int64) {
 	s.WechatChatFileIds = val
 }
 
+// Ref: #/components/schemas/ProjectCreatedPayload
+type ProjectCreatedPayload struct {
+	Name          string          `json:"name"`
+	Status        ProjectStatus   `json:"status"`
+	Priority      ProjectPriority `json:"priority"`
+	Deadline      time.Time       `json:"deadline"`
+	OriginalQuote Money           `json:"originalQuote"`
+}
+
+// GetName returns the value of Name.
+func (s *ProjectCreatedPayload) GetName() string {
+	return s.Name
+}
+
+// GetStatus returns the value of Status.
+func (s *ProjectCreatedPayload) GetStatus() ProjectStatus {
+	return s.Status
+}
+
+// GetPriority returns the value of Priority.
+func (s *ProjectCreatedPayload) GetPriority() ProjectPriority {
+	return s.Priority
+}
+
+// GetDeadline returns the value of Deadline.
+func (s *ProjectCreatedPayload) GetDeadline() time.Time {
+	return s.Deadline
+}
+
+// GetOriginalQuote returns the value of OriginalQuote.
+func (s *ProjectCreatedPayload) GetOriginalQuote() Money {
+	return s.OriginalQuote
+}
+
+// SetName sets the value of Name.
+func (s *ProjectCreatedPayload) SetName(val string) {
+	s.Name = val
+}
+
+// SetStatus sets the value of Status.
+func (s *ProjectCreatedPayload) SetStatus(val ProjectStatus) {
+	s.Status = val
+}
+
+// SetPriority sets the value of Priority.
+func (s *ProjectCreatedPayload) SetPriority(val ProjectPriority) {
+	s.Priority = val
+}
+
+// SetDeadline sets the value of Deadline.
+func (s *ProjectCreatedPayload) SetDeadline(val time.Time) {
+	s.Deadline = val
+}
+
+// SetOriginalQuote sets the value of OriginalQuote.
+func (s *ProjectCreatedPayload) SetOriginalQuote(val Money) {
+	s.OriginalQuote = val
+}
+
 // Ref: #/components/schemas/ProjectFile
 type ProjectFile struct {
 	ID        int64               `json:"id"`
@@ -3032,6 +3661,73 @@ func (s *ProjectFile) SetAddedAt(val time.Time) {
 // SetFile sets the value of File.
 func (s *ProjectFile) SetFile(val FileMetadata) {
 	s.File = val
+}
+
+// Ref: #/components/schemas/ProjectFileAddedPayload
+type ProjectFileAddedPayload struct {
+	FileId   int64                           `json:"fileId"`
+	Category ProjectFileAddedPayloadCategory `json:"category"`
+}
+
+// GetFileId returns the value of FileId.
+func (s *ProjectFileAddedPayload) GetFileId() int64 {
+	return s.FileId
+}
+
+// GetCategory returns the value of Category.
+func (s *ProjectFileAddedPayload) GetCategory() ProjectFileAddedPayloadCategory {
+	return s.Category
+}
+
+// SetFileId sets the value of FileId.
+func (s *ProjectFileAddedPayload) SetFileId(val int64) {
+	s.FileId = val
+}
+
+// SetCategory sets the value of Category.
+func (s *ProjectFileAddedPayload) SetCategory(val ProjectFileAddedPayloadCategory) {
+	s.Category = val
+}
+
+type ProjectFileAddedPayloadCategory string
+
+const (
+	ProjectFileAddedPayloadCategorySampleDoc  ProjectFileAddedPayloadCategory = "sample_doc"
+	ProjectFileAddedPayloadCategorySourceCode ProjectFileAddedPayloadCategory = "source_code"
+)
+
+// AllValues returns all ProjectFileAddedPayloadCategory values.
+func (ProjectFileAddedPayloadCategory) AllValues() []ProjectFileAddedPayloadCategory {
+	return []ProjectFileAddedPayloadCategory{
+		ProjectFileAddedPayloadCategorySampleDoc,
+		ProjectFileAddedPayloadCategorySourceCode,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s ProjectFileAddedPayloadCategory) MarshalText() ([]byte, error) {
+	switch s {
+	case ProjectFileAddedPayloadCategorySampleDoc:
+		return []byte(s), nil
+	case ProjectFileAddedPayloadCategorySourceCode:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *ProjectFileAddedPayloadCategory) UnmarshalText(data []byte) error {
+	switch ProjectFileAddedPayloadCategory(data) {
+	case ProjectFileAddedPayloadCategorySampleDoc:
+		*s = ProjectFileAddedPayloadCategorySampleDoc
+		return nil
+	case ProjectFileAddedPayloadCategorySourceCode:
+		*s = ProjectFileAddedPayloadCategorySourceCode
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
 }
 
 type ProjectFileCategory string
@@ -3358,6 +4054,22 @@ type ProjectsCreateUnprocessableEntity ErrorEnvelope
 
 func (*ProjectsCreateUnprocessableEntity) projectsCreateRes() {}
 
+type ProjectsListActivitiesForbidden ErrorEnvelope
+
+func (*ProjectsListActivitiesForbidden) projectsListActivitiesRes() {}
+
+type ProjectsListActivitiesNotFound ErrorEnvelope
+
+func (*ProjectsListActivitiesNotFound) projectsListActivitiesRes() {}
+
+type ProjectsListActivitiesUnauthorized ErrorEnvelope
+
+func (*ProjectsListActivitiesUnauthorized) projectsListActivitiesRes() {}
+
+type ProjectsListActivitiesUnprocessableEntity ErrorEnvelope
+
+func (*ProjectsListActivitiesUnprocessableEntity) projectsListActivitiesRes() {}
+
 type ProjectsListFilesCategory string
 
 const (
@@ -3527,6 +4239,76 @@ func (s *QuoteChange) SetChangedBy(val int64) {
 // SetChangedAt sets the value of ChangedAt.
 func (s *QuoteChange) SetChangedAt(val time.Time) {
 	s.ChangedAt = val
+}
+
+// Ref: #/components/schemas/QuoteChangeActivityPayload
+type QuoteChangeActivityPayload struct {
+	ChangeType QuoteChangeType `json:"changeType"`
+	Delta      Money           `json:"delta"`
+	OldQuote   Money           `json:"oldQuote"`
+	NewQuote   Money           `json:"newQuote"`
+	Reason     string          `json:"reason"`
+	Phase      ProjectStatus   `json:"phase"`
+}
+
+// GetChangeType returns the value of ChangeType.
+func (s *QuoteChangeActivityPayload) GetChangeType() QuoteChangeType {
+	return s.ChangeType
+}
+
+// GetDelta returns the value of Delta.
+func (s *QuoteChangeActivityPayload) GetDelta() Money {
+	return s.Delta
+}
+
+// GetOldQuote returns the value of OldQuote.
+func (s *QuoteChangeActivityPayload) GetOldQuote() Money {
+	return s.OldQuote
+}
+
+// GetNewQuote returns the value of NewQuote.
+func (s *QuoteChangeActivityPayload) GetNewQuote() Money {
+	return s.NewQuote
+}
+
+// GetReason returns the value of Reason.
+func (s *QuoteChangeActivityPayload) GetReason() string {
+	return s.Reason
+}
+
+// GetPhase returns the value of Phase.
+func (s *QuoteChangeActivityPayload) GetPhase() ProjectStatus {
+	return s.Phase
+}
+
+// SetChangeType sets the value of ChangeType.
+func (s *QuoteChangeActivityPayload) SetChangeType(val QuoteChangeType) {
+	s.ChangeType = val
+}
+
+// SetDelta sets the value of Delta.
+func (s *QuoteChangeActivityPayload) SetDelta(val Money) {
+	s.Delta = val
+}
+
+// SetOldQuote sets the value of OldQuote.
+func (s *QuoteChangeActivityPayload) SetOldQuote(val Money) {
+	s.OldQuote = val
+}
+
+// SetNewQuote sets the value of NewQuote.
+func (s *QuoteChangeActivityPayload) SetNewQuote(val Money) {
+	s.NewQuote = val
+}
+
+// SetReason sets the value of Reason.
+func (s *QuoteChangeActivityPayload) SetReason(val string) {
+	s.Reason = val
+}
+
+// SetPhase sets the value of Phase.
+func (s *QuoteChangeActivityPayload) SetPhase(val ProjectStatus) {
+	s.Phase = val
 }
 
 // Ref: #/components/schemas/QuoteChangeListResponse
@@ -4012,6 +4794,109 @@ type RolesUpdatePermissionsUnprocessableEntity ErrorEnvelope
 
 func (*RolesUpdatePermissionsUnprocessableEntity) rolesUpdatePermissionsRes() {}
 
+// Ref: #/components/schemas/StatusChangeActivityPayload
+type StatusChangeActivityPayload struct {
+	EventCode        string              `json:"eventCode"`
+	EventName        string              `json:"eventName"`
+	FromStatus       OptNilProjectStatus `json:"fromStatus"`
+	ToStatus         ProjectStatus       `json:"toStatus"`
+	FromHolderRoleId OptNilInt64         `json:"fromHolderRoleId"`
+	ToHolderRoleId   OptNilInt64         `json:"toHolderRoleId"`
+	FromHolderUserId OptNilInt64         `json:"fromHolderUserId"`
+	ToHolderUserId   OptNilInt64         `json:"toHolderUserId"`
+	Remark           string              `json:"remark"`
+}
+
+// GetEventCode returns the value of EventCode.
+func (s *StatusChangeActivityPayload) GetEventCode() string {
+	return s.EventCode
+}
+
+// GetEventName returns the value of EventName.
+func (s *StatusChangeActivityPayload) GetEventName() string {
+	return s.EventName
+}
+
+// GetFromStatus returns the value of FromStatus.
+func (s *StatusChangeActivityPayload) GetFromStatus() OptNilProjectStatus {
+	return s.FromStatus
+}
+
+// GetToStatus returns the value of ToStatus.
+func (s *StatusChangeActivityPayload) GetToStatus() ProjectStatus {
+	return s.ToStatus
+}
+
+// GetFromHolderRoleId returns the value of FromHolderRoleId.
+func (s *StatusChangeActivityPayload) GetFromHolderRoleId() OptNilInt64 {
+	return s.FromHolderRoleId
+}
+
+// GetToHolderRoleId returns the value of ToHolderRoleId.
+func (s *StatusChangeActivityPayload) GetToHolderRoleId() OptNilInt64 {
+	return s.ToHolderRoleId
+}
+
+// GetFromHolderUserId returns the value of FromHolderUserId.
+func (s *StatusChangeActivityPayload) GetFromHolderUserId() OptNilInt64 {
+	return s.FromHolderUserId
+}
+
+// GetToHolderUserId returns the value of ToHolderUserId.
+func (s *StatusChangeActivityPayload) GetToHolderUserId() OptNilInt64 {
+	return s.ToHolderUserId
+}
+
+// GetRemark returns the value of Remark.
+func (s *StatusChangeActivityPayload) GetRemark() string {
+	return s.Remark
+}
+
+// SetEventCode sets the value of EventCode.
+func (s *StatusChangeActivityPayload) SetEventCode(val string) {
+	s.EventCode = val
+}
+
+// SetEventName sets the value of EventName.
+func (s *StatusChangeActivityPayload) SetEventName(val string) {
+	s.EventName = val
+}
+
+// SetFromStatus sets the value of FromStatus.
+func (s *StatusChangeActivityPayload) SetFromStatus(val OptNilProjectStatus) {
+	s.FromStatus = val
+}
+
+// SetToStatus sets the value of ToStatus.
+func (s *StatusChangeActivityPayload) SetToStatus(val ProjectStatus) {
+	s.ToStatus = val
+}
+
+// SetFromHolderRoleId sets the value of FromHolderRoleId.
+func (s *StatusChangeActivityPayload) SetFromHolderRoleId(val OptNilInt64) {
+	s.FromHolderRoleId = val
+}
+
+// SetToHolderRoleId sets the value of ToHolderRoleId.
+func (s *StatusChangeActivityPayload) SetToHolderRoleId(val OptNilInt64) {
+	s.ToHolderRoleId = val
+}
+
+// SetFromHolderUserId sets the value of FromHolderUserId.
+func (s *StatusChangeActivityPayload) SetFromHolderUserId(val OptNilInt64) {
+	s.FromHolderUserId = val
+}
+
+// SetToHolderUserId sets the value of ToHolderUserId.
+func (s *StatusChangeActivityPayload) SetToHolderUserId(val OptNilInt64) {
+	s.ToHolderUserId = val
+}
+
+// SetRemark sets the value of Remark.
+func (s *StatusChangeActivityPayload) SetRemark(val string) {
+	s.Remark = val
+}
+
 // Ref: #/components/schemas/StatusChangeLog
 type StatusChangeLog struct {
 	ID           int64               `json:"id"`
@@ -4293,6 +5178,43 @@ func (s *ThesisVersion) SetUploadedAt(val time.Time) {
 // SetFile sets the value of File.
 func (s *ThesisVersion) SetFile(val FileMetadata) {
 	s.File = val
+}
+
+// Ref: #/components/schemas/ThesisVersionActivityPayload
+type ThesisVersionActivityPayload struct {
+	FileId    int64        `json:"fileId"`
+	VersionNo int          `json:"versionNo"`
+	Remark    OptNilString `json:"remark"`
+}
+
+// GetFileId returns the value of FileId.
+func (s *ThesisVersionActivityPayload) GetFileId() int64 {
+	return s.FileId
+}
+
+// GetVersionNo returns the value of VersionNo.
+func (s *ThesisVersionActivityPayload) GetVersionNo() int {
+	return s.VersionNo
+}
+
+// GetRemark returns the value of Remark.
+func (s *ThesisVersionActivityPayload) GetRemark() OptNilString {
+	return s.Remark
+}
+
+// SetFileId sets the value of FileId.
+func (s *ThesisVersionActivityPayload) SetFileId(val int64) {
+	s.FileId = val
+}
+
+// SetVersionNo sets the value of VersionNo.
+func (s *ThesisVersionActivityPayload) SetVersionNo(val int) {
+	s.VersionNo = val
+}
+
+// SetRemark sets the value of Remark.
+func (s *ThesisVersionActivityPayload) SetRemark(val OptNilString) {
+	s.Remark = val
 }
 
 // Ref: #/components/schemas/ThesisVersionCreateRequest
