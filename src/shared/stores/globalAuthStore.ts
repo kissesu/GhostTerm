@@ -34,6 +34,7 @@ import type {
   UserPayload,
 } from '../../features/progress/api/schemas';
 import { useGlobalPermissionStore } from './globalPermissionStore';
+import { useProgressPermissionStore } from '../../features/progress/stores/progressPermissionStore';
 
 // ============================================
 // localStorage key —— 沿用历史 key，不破坏已有用户登录态
@@ -129,6 +130,7 @@ export const useGlobalAuthStore = create<GlobalAuthState>((set, get) => ({
         if (me) {
           set({ user: me });
           useGlobalPermissionStore.getState().hydrateFromMe(me);
+          useProgressPermissionStore.getState().set(me.permissions);
         }
       } catch {
         // 静默忽略：permissions 没 hydrate，PermissionGate 会降级隐藏；不阻断登录
@@ -179,6 +181,7 @@ export const useGlobalAuthStore = create<GlobalAuthState>((set, get) => ({
       writeRefresh(null);
       set({ accessToken: null, refreshToken: null, user: null, error: null });
       useGlobalPermissionStore.getState().clear();
+      useProgressPermissionStore.getState().clear();
     }
   },
 
