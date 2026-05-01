@@ -45,7 +45,8 @@ export function formatDeadline(days: number): string {
  * @returns CSS module class key
  */
 export function deadlineClass(days: number): 'deadlineHot' | 'deadlineWarm' | '' {
-  if (days < 0 || days < 7) return 'deadlineHot';
+  // days<7 包含负数（已超期），按设计稿都进 hot 视觉
+  if (days < 7) return 'deadlineHot';
   if (days < 14) return 'deadlineWarm';
   return '';
 }

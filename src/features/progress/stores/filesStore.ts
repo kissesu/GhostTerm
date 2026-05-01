@@ -30,6 +30,8 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   errorByProject: new Map(),
 
   loadByProject: async (projectId) => {
+    // 同一 projectId 已在加载中，直接 return 避免并发覆盖
+    if (get().loadingByProject.has(projectId)) return;
     const loading = new Set(get().loadingByProject);
     loading.add(projectId);
     set({ loadingByProject: loading });
