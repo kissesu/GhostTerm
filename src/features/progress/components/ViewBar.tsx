@@ -18,9 +18,11 @@ interface ViewBarProps {
   projectTitle?: string;
   /** detail 模式时点返回 */
   onBack?: () => void;
+  /** 右侧操作槽位（如"新建项目"按钮）；与 onBack 返回按钮互斥使用 */
+  actions?: ReactElement | null;
 }
 
-export function ViewBar({ mode, activeProjectCount, projectTitle, onBack }: ViewBarProps): ReactElement {
+export function ViewBar({ mode, activeProjectCount, projectTitle, onBack, actions }: ViewBarProps): ReactElement {
   return (
     <div className={styles.viewBar}>
       <div className={styles.crumb}>
@@ -48,6 +50,8 @@ export function ViewBar({ mode, activeProjectCount, projectTitle, onBack }: View
           返回看板
         </button>
       )}
+      {/* 右侧操作槽：kanban 模式下宿主可传"新建项目"等按钮 */}
+      {mode === 'kanban' && actions}
     </div>
   );
 }

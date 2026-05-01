@@ -5,8 +5,8 @@
  * @date 2026-05-01
  */
 import { create } from 'zustand';
-import type { Project, TriggerEventInput } from '../api/projects';
-import { listProjects, getProject, triggerProjectEvent } from '../api/projects';
+import type { Project, TriggerEventInput, CreateProjectInput } from '../api/projects';
+import { listProjects, getProject, triggerProjectEvent, createProject } from '../api/projects';
 
 interface ProjectsState {
   projects: Map<number, Project>;
@@ -20,6 +20,7 @@ interface ProjectsState {
   loadSeq: number;
   loadAll: () => Promise<void>;
   loadOne: (id: number) => Promise<void>;
+  create: (input: CreateProjectInput) => Promise<Project>;
   triggerEvent: (id: number, input: TriggerEventInput) => Promise<Project>;
   clearTriggerError: (id: number) => void;
   clear: () => void;
@@ -64,6 +65,15 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
       set({ loadError: msg });
       throw e;
     }
+  },
+
+  create: async (input) => {
+    // 创建成功后立即把新 Project 入 Map（失败时保持原 Map，错误向 caller bubble）
+    const created = await createProject(input);
+    const map = new Map(get().projects);
+    map.set(created.id, created);
+    set({ projects: map });
+    return created;
   },
 
   triggerEvent: async (id, input) => {

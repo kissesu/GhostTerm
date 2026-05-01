@@ -8,7 +8,7 @@
  * @author Atlas.oi
  * @date 2026-05-01
  */
-import { useEffect, useMemo, type ReactElement } from 'react';
+import { useEffect, useMemo, useState, type ReactElement } from 'react';
 import styles from './progress.module.css';
 import { useProjectsStore } from './stores/projectsStore';
 import { useNotificationsStore } from './stores/notificationsStore';
@@ -22,6 +22,7 @@ import { GanttView } from './components/GanttView';
 import { NotificationsCenterView } from './components/NotificationsCenterView';
 import { EarningsView } from './components/EarningsView';
 import { ProjectDetailPage } from './components/ProjectDetailPage';
+import { NewProjectDialog } from './components/NewProjectDialog';
 import { KANBAN_STAGES } from './config/nbaConfig';
 
 export default function ProgressShell(): ReactElement {
@@ -34,6 +35,8 @@ export default function ProgressShell(): ReactElement {
   const currentView = useProgressUiStore((s) => s.currentView);
   const selectedProjectId = useProgressUiStore((s) => s.selectedProjectId);
   const closeProject = useProgressUiStore((s) => s.closeProject);
+  const openProjectFromView = useProgressUiStore((s) => s.openProjectFromView);
+  const [showCreate, setShowCreate] = useState(false);
 
   // ============================================
   // 第二步：mount 时加载项目列表 + 通知数（每个依赖独立 effect 避免多余重跑）
@@ -91,8 +94,23 @@ export default function ProgressShell(): ReactElement {
         activeProjectCount={activeProjectCount}
         projectTitle={selectedProject?.name}
         onBack={selectedProject ? closeProject : undefined}
+        actions={!selectedProject ? (
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            onClick={() => setShowCreate(true)}
+          >
+            + 新建项目
+          </button>
+        ) : null}
       />
       {mainContent}
+      {showCreate && (
+        <NewProjectDialog
+          onClose={() => setShowCreate(false)}
+          onSuccess={(id) => openProjectFromView(id, 'kanban')}
+        />
+      )}
       <Toast />
     </div>
   );
