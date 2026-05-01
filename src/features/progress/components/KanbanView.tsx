@@ -54,14 +54,16 @@ export function KanbanView(): ReactElement {
                 <div className={styles.colName}>{STATUS_LABEL[stage]}</div>
                 <div className={styles.colCount}>{items.length}</div>
               </div>
-              {items.map((p) => (
-                <KanbanCard
-                  key={p.id}
-                  project={p}
-                  onOpenDetail={(id) => openProjectFromView(id, 'kanban')}
-                  onTriggerCta={(project, action) => setActiveAction({ project, action })}
-                />
-              ))}
+              <div className={styles.colBody}>
+                {items.map((p) => (
+                  <KanbanCard
+                    key={p.id}
+                    project={p}
+                    onOpenDetail={(id) => openProjectFromView(id, 'kanban')}
+                    onTriggerCta={(project, action) => setActiveAction({ project, action })}
+                  />
+                ))}
+              </div>
             </div>
           );
         })}

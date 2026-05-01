@@ -168,7 +168,21 @@
   border-radius: 8px;
   background: var(--panel);
   padding: 12px;
+  /* 看板列独立滚动：限高 + flex 列让 head 贴顶、body 内部滚动 */
+  max-height: calc(100vh - 230px);
+  display: flex;
+  flex-direction: column;
   min-height: 380px;
+}
+
+/* 看板列卡片容器：弹性高度 + 内部滚动；head 不动 */
+.colBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 /* 原 .col-head */
@@ -179,6 +193,7 @@
   margin-bottom: 12px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
 }
 
 /* 原 .col-name */
@@ -650,6 +665,26 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+}
+
+/* 全局隐藏滚动条但保留滚动功能（用户需求 #4）：
+   webkit 浏览器（Chrome/Safari/Tauri WKWebView）+ Firefox + 旧 IE/Edge */
+.modalBody::-webkit-scrollbar,
+.colBody::-webkit-scrollbar { display: none; width: 0; height: 0; }
+.modalBody,
+.colBody { scrollbar-width: none; -ms-overflow-style: none; }
+
+/* 表单两列网格：用户需求 #1 — 项目名 / 项目描述 全宽，其它字段两列 */
+.formGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.formRowFull {
+  grid-column: 1 / -1;
+}
+.formGrid .field {
+  margin-bottom: 0; /* gap 已替代 margin */
 }
 /* 原 .modal-body .transition（I5：重命名为 .modalTransition 避免与 CSS 属性名混淆） */
 .modalTransition {

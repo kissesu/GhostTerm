@@ -174,80 +174,85 @@ export function NewProjectDialog({ onClose, onSuccess }: NewProjectDialogProps):
         </div>
         <form onSubmit={submit}>
           <div className={styles.modalBody}>
-            <div className={styles.field}>
-              <label htmlFor="np-name">项目名 <span style={{ color: 'var(--red)' }}>*</span></label>
-              <input id="np-name" ref={firstRef} value={form.name} onChange={update('name')} disabled={submitting} />
-              {errors.name && <div className={styles.fieldError}>{errors.name}</div>}
-            </div>
-            <div className={styles.field}>
-              <label htmlFor="np-customer">客户标签 <span style={{ color: 'var(--red)' }}>*</span></label>
-              <input id="np-customer" value={form.customerLabel} onChange={update('customerLabel')} placeholder="如：张三@wechat" disabled={submitting} />
-              {errors.customerLabel && <div className={styles.fieldError}>{errors.customerLabel}</div>}
-            </div>
-            <div className={styles.field}>
-              <label htmlFor="np-desc">项目描述 <span style={{ color: 'var(--red)' }}>*</span></label>
-              <textarea id="np-desc" value={form.description} onChange={update('description')} disabled={submitting} />
-              {errors.description && <div className={styles.fieldError}>{errors.description}</div>}
-            </div>
-            <div className={styles.field}>
-              <label htmlFor="np-priority">优先级</label>
-              <select id="np-priority" value={form.priority} onChange={update('priority')} disabled={submitting}>
-                <option value="normal">普通</option>
-                <option value="urgent">紧急</option>
-              </select>
-            </div>
-            <div className={styles.field}>
-              <label htmlFor="np-level">论文级别</label>
-              <select id="np-level" value={form.thesisLevel} onChange={update('thesisLevel')} disabled={submitting}>
-                <option value="bachelor">本科</option>
-                <option value="master">硕士</option>
-                <option value="doctor">博士</option>
-              </select>
-            </div>
-            <div className={styles.field}>
-              <label htmlFor="np-subject">学科</label>
-              <input id="np-subject" value={form.subject} onChange={update('subject')} placeholder="可选" disabled={submitting} />
-            </div>
-            <div className={styles.field}>
-              <label htmlFor="np-deadline">截止日期 <span style={{ color: 'var(--red)' }}>*</span></label>
-              <input id="np-deadline" type="date" value={form.deadline} onChange={update('deadline')} disabled={submitting} />
-              {errors.deadline && <div className={styles.fieldError}>{errors.deadline}</div>}
-            </div>
-            <div className={styles.field}>
-              <label htmlFor="np-quote">报价（¥，可选）</label>
-              <input id="np-quote" type="number" min="0" step="0.01" value={form.originalQuote} onChange={update('originalQuote')} placeholder="如 5000.00" disabled={submitting} />
-            </div>
+            <div className={styles.formGrid}>
+              {/* 项目名 + 项目描述：全宽 */}
+              <div className={`${styles.field} ${styles.formRowFull}`}>
+                <label htmlFor="np-name">项目名 <span style={{ color: 'var(--red)' }}>*</span></label>
+                <input id="np-name" ref={firstRef} value={form.name} onChange={update('name')} disabled={submitting} />
+                {errors.name && <div className={styles.fieldError}>{errors.name}</div>}
+              </div>
+              <div className={`${styles.field} ${styles.formRowFull}`}>
+                <label htmlFor="np-desc">项目描述 <span style={{ color: 'var(--red)' }}>*</span></label>
+                <textarea id="np-desc" value={form.description} onChange={update('description')} disabled={submitting} />
+                {errors.description && <div className={styles.fieldError}>{errors.description}</div>}
+              </div>
 
-            {/* 资料文件上传：3 类分组 */}
-            <div className={styles.field}>
-              <label>资料文件（可选，提交时一并上传）</label>
-              <div className={styles.docUploadGrid}>
-                <div className={styles.docUploadCell}>
-                  <label htmlFor="np-opening">开题书</label>
-                  <input id="np-opening" type="file" accept=".pdf,.doc,.docx" onChange={onPickOpening} disabled={submitting} />
-                  {openingDoc && <div className={styles.docUploadFileName}>{openingDoc.name}</div>}
-                  <div className={styles.docUploadHint}>PDF / Word，单文件</div>
-                </div>
-                <div className={styles.docUploadCell}>
-                  <label htmlFor="np-assignment">任务书</label>
-                  <input id="np-assignment" type="file" accept=".pdf,.doc,.docx" onChange={onPickAssignment} disabled={submitting} />
-                  {assignmentDoc && <div className={styles.docUploadFileName}>{assignmentDoc.name}</div>}
-                  <div className={styles.docUploadHint}>PDF / Word，单文件</div>
-                </div>
-                <div className={`${styles.docUploadCell} ${styles.docUploadCellWide}`}>
-                  <label htmlFor="np-wechat">微信聊天记录截图</label>
-                  <input id="np-wechat" type="file" accept="image/*" multiple onChange={onPickWechat} disabled={submitting} />
-                  <div className={styles.docUploadHint}>支持多张图片，可分次添加</div>
-                  {wechatFiles.length > 0 && (
-                    <div className={styles.docUploadList}>
-                      {wechatFiles.map((f, idx) => (
-                        <span key={`${f.name}-${idx}`} className={styles.docUploadChip}>
-                          {f.name}
-                          <button type="button" onClick={() => removeWechat(idx)} aria-label={`移除 ${f.name}`} disabled={submitting}>×</button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
+              {/* 其它字段：两列 */}
+              <div className={styles.field}>
+                <label htmlFor="np-customer">客户标签 <span style={{ color: 'var(--red)' }}>*</span></label>
+                <input id="np-customer" value={form.customerLabel} onChange={update('customerLabel')} placeholder="如：张三@wechat" disabled={submitting} />
+                {errors.customerLabel && <div className={styles.fieldError}>{errors.customerLabel}</div>}
+              </div>
+              <div className={styles.field}>
+                <label htmlFor="np-subject">学科</label>
+                <input id="np-subject" value={form.subject} onChange={update('subject')} placeholder="可选" disabled={submitting} />
+              </div>
+              <div className={styles.field}>
+                <label htmlFor="np-priority">优先级</label>
+                <select id="np-priority" value={form.priority} onChange={update('priority')} disabled={submitting}>
+                  <option value="normal">普通</option>
+                  <option value="urgent">紧急</option>
+                </select>
+              </div>
+              <div className={styles.field}>
+                <label htmlFor="np-level">论文级别</label>
+                <select id="np-level" value={form.thesisLevel} onChange={update('thesisLevel')} disabled={submitting}>
+                  <option value="bachelor">本科</option>
+                  <option value="master">硕士</option>
+                  <option value="doctor">博士</option>
+                </select>
+              </div>
+              <div className={styles.field}>
+                <label htmlFor="np-deadline">截止日期 <span style={{ color: 'var(--red)' }}>*</span></label>
+                <input id="np-deadline" type="date" value={form.deadline} onChange={update('deadline')} disabled={submitting} />
+                {errors.deadline && <div className={styles.fieldError}>{errors.deadline}</div>}
+              </div>
+              <div className={styles.field}>
+                <label htmlFor="np-quote">报价（¥，可选）</label>
+                <input id="np-quote" type="number" min="0" step="0.01" value={form.originalQuote} onChange={update('originalQuote')} placeholder="如 5000.00" disabled={submitting} />
+              </div>
+
+              {/* 资料文件区：全宽 */}
+              <div className={`${styles.field} ${styles.formRowFull}`}>
+                <label>资料文件（可选，提交时一并上传）</label>
+                <div className={styles.docUploadGrid}>
+                  <div className={styles.docUploadCell}>
+                    <label htmlFor="np-opening">开题书</label>
+                    <input id="np-opening" type="file" accept=".pdf,.doc,.docx" onChange={onPickOpening} disabled={submitting} />
+                    {openingDoc && <div className={styles.docUploadFileName}>{openingDoc.name}</div>}
+                    <div className={styles.docUploadHint}>PDF / Word，单文件</div>
+                  </div>
+                  <div className={styles.docUploadCell}>
+                    <label htmlFor="np-assignment">任务书</label>
+                    <input id="np-assignment" type="file" accept=".pdf,.doc,.docx" onChange={onPickAssignment} disabled={submitting} />
+                    {assignmentDoc && <div className={styles.docUploadFileName}>{assignmentDoc.name}</div>}
+                    <div className={styles.docUploadHint}>PDF / Word，单文件</div>
+                  </div>
+                  <div className={`${styles.docUploadCell} ${styles.docUploadCellWide}`}>
+                    <label htmlFor="np-wechat">微信聊天记录截图</label>
+                    <input id="np-wechat" type="file" accept="image/*" multiple onChange={onPickWechat} disabled={submitting} />
+                    <div className={styles.docUploadHint}>支持多张图片，可分次添加</div>
+                    {wechatFiles.length > 0 && (
+                      <div className={styles.docUploadList}>
+                        {wechatFiles.map((f, idx) => (
+                          <span key={`${f.name}-${idx}`} className={styles.docUploadChip}>
+                            {f.name}
+                            <button type="button" onClick={() => removeWechat(idx)} aria-label={`移除 ${f.name}`} disabled={submitting}>×</button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
