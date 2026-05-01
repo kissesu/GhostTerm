@@ -86,24 +86,24 @@ func TestSanitizeFilename_InvalidUTF8(t *testing.T) {
 func TestDetectMIME_Allowed(t *testing.T) {
 	// PNG magic header
 	pngHeader := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
-	mime, err := detectAndValidateMIME(pngHeader)
+	mime, err := detectAndValidateMIME(pngHeader, "")
 	require.NoError(t, err)
 	assert.Equal(t, "image/png", mime)
 
 	// PDF magic %PDF-1.4
 	pdfHeader := []byte("%PDF-1.4\n")
-	mime, err = detectAndValidateMIME(pdfHeader)
+	mime, err = detectAndValidateMIME(pdfHeader, "")
 	require.NoError(t, err)
 	assert.Contains(t, mime, "application/pdf")
 
 	// JPEG magic
 	jpegHeader := []byte{0xFF, 0xD8, 0xFF, 0xE0}
-	mime, err = detectAndValidateMIME(jpegHeader)
+	mime, err = detectAndValidateMIME(jpegHeader, "")
 	require.NoError(t, err)
 	assert.Equal(t, "image/jpeg", mime)
 
 	// 纯文本
-	mime, err = detectAndValidateMIME([]byte("hello world\n"))
+	mime, err = detectAndValidateMIME([]byte("hello world\n"), "")
 	require.NoError(t, err)
 	assert.Contains(t, mime, "text/plain")
 }
@@ -111,12 +111,46 @@ func TestDetectMIME_Allowed(t *testing.T) {
 func TestDetectMIME_Rejected(t *testing.T) {
 	// PE 可执行文件（MZ 头）
 	peHeader := []byte{0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00}
-	_, err := detectAndValidateMIME(peHeader)
+	_, err := detectAndValidateMIME(peHeader, "")
 	assert.ErrorIs(t, err, ErrMIMENotAllowed)
 
 	// HTML（伪装成 image/png 但嗅探出 HTML）
 	htmlHeader := []byte("<!DOCTYPE html><html><body>")
-	_, err = detectAndValidateMIME(htmlHeader)
+	_, err = detectAndValidateMIME(htmlHeader, "")
+	assert.ErrorIs(t, err, ErrMIMENotAllowed)
+}
+
+// 兜底路径：sniff 返 octet-stream + 文件名扩展在白名单 → 放行 + 推断 MIME
+func TestDetectMIME_OctetStreamFallbackByExt(t *testing.T) {
+	// 不识别的二进制（HEIC magic 的简化模拟，sniff 会返 octet-stream）
+	bin := []byte{0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63}
+
+	// .heic 扩展应放行 + 返 image/heic
+	mime, err := detectAndValidateMIME(bin, "photo.heic")
+	require.NoError(t, err)
+	assert.Equal(t, "image/heic", mime)
+
+	// .avif 同理
+	mime, err = detectAndValidateMIME(bin, "screenshot.avif")
+	require.NoError(t, err)
+	assert.Equal(t, "image/avif", mime)
+
+	// .mov 视频：Go sniff 不识别 quicktime ftyp，靠扩展名兜底
+	mime, err = detectAndValidateMIME(bin, "clip.mov")
+	require.NoError(t, err)
+	assert.Equal(t, "video/quicktime", mime)
+
+	// .mp4 兜底：sniff 识别失败时按扩展名补救
+	mime, err = detectAndValidateMIME(bin, "clip.mp4")
+	require.NoError(t, err)
+	assert.Equal(t, "video/mp4", mime)
+
+	// 未知扩展仍拒绝（防恶意 .exe 改 .heic 后又改回 .exe）
+	_, err = detectAndValidateMIME(bin, "malware.exe")
+	assert.ErrorIs(t, err, ErrMIMENotAllowed)
+
+	// 无文件名也拒绝
+	_, err = detectAndValidateMIME(bin, "")
 	assert.ErrorIs(t, err, ErrMIMENotAllowed)
 }
 

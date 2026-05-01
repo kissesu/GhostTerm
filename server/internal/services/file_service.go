@@ -115,6 +115,8 @@ var allowedMIME = map[string]bool{
 	"application/x-7z-compressed":      true,
 	"application/x-tar":                true,
 	"application/x-gzip":               true,
+	// 视频（mp4 sniff 能识别；mov 共用 ftyp box 但 sniff 大概率落 octet-stream 由 ext 兜底）
+	"video/mp4": true,
 }
 
 // allowedTextPrefix 单独处理：http.DetectContentType 给文本的格式是 "text/plain; charset=utf-8"，
@@ -124,6 +126,42 @@ var allowedTextPrefix = []string{
 	"text/csv",
 	"text/markdown",
 	"application/json",
+}
+
+// extToInferredMIME：sniff 返 octet-stream 时按 client filename 扩展名兜底白名单
+// http.DetectContentType 不识别 HEIC/AVIF/SVG 等现代图片格式，但实际 GhostTerm 用户
+// 大量上传手机微信截图（iOS HEIC）/ 现代相机 / 加密 PDF 等；sniff 失败时按扩展名放行
+// 安全权衡：本服务不执行上传文件，仅存储 + 客户端下载；扩展名劫持风险小
+var extToInferredMIME = map[string]string{
+	// 现代图片格式（sniff 不识别但前端能预览）
+	".heic": "image/heic",
+	".heif": "image/heif",
+	".avif": "image/avif",
+	".svg":  "image/svg+xml",
+	".bmp":  "image/bmp",
+	".tiff": "image/tiff",
+	".tif":  "image/tiff",
+	// 旧格式 sniff 偶尔失效兜底
+	".png":  "image/png",
+	".jpg":  "image/jpeg",
+	".jpeg": "image/jpeg",
+	".gif":  "image/gif",
+	".webp": "image/webp",
+	// 文档格式（加密/损坏 sniff 失败兜底）
+	".pdf":  "application/pdf",
+	".doc":  "application/msword",
+	".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+	".xls":  "application/vnd.ms-excel",
+	".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+	".ppt":  "application/vnd.ms-powerpoint",
+	".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+	// 文本扩展（极少出 octet-stream 但兜底）
+	".txt": "text/plain",
+	".md":  "text/markdown",
+	".csv": "text/csv",
+	// 视频：仅 mp4 / mov（业务范围）；mov sniff 不识别由 ext 兜底
+	".mp4": "video/mp4",
+	".mov": "video/quicktime",
 }
 
 // ============================================================
@@ -286,12 +324,14 @@ func SanitizeFilename(name string) (string, error) {
 //  2. 剥离 "; charset=..." 后缀做精确比对
 //  3. 命中 allowedMIME → ok
 //  4. 命中 allowedTextPrefix（StartsWith）→ ok
-//  5. 否则 ErrMIMENotAllowed
+//  5. octet-stream + clientFilename 扩展名在 extToInferredMIME → ok（按扩展推断 MIME）
+//  6. 否则 ErrMIMENotAllowed
 //
 // 设计取舍：
 //   - 不在乎客户端 declaredMIME：声明与嗅探一致是常态，不一致时直接采信嗅探结果（更安全）
-//   - 嗅探到 application/octet-stream：典型为客户端自制二进制 / 加密文件 → 拒绝（安全保守）
-func detectAndValidateMIME(header []byte) (string, error) {
+//   - 嗅探到 application/octet-stream：HEIC/AVIF/SVG 等现代图片 sniff 不出，按扩展名兜底；
+//     扩展名可被恶意改但本服务不执行文件，仅存储 + 客户端下载，风险可控
+func detectAndValidateMIME(header []byte, clientFilename string) (string, error) {
 	sniffed := http.DetectContentType(header)
 	// 剥 charset
 	mainType := sniffed
@@ -306,6 +346,13 @@ func detectAndValidateMIME(header []byte) (string, error) {
 	for _, p := range allowedTextPrefix {
 		if strings.HasPrefix(mainType, p) {
 			return sniffed, nil
+		}
+	}
+	// 兜底：sniff 失败（典型 octet-stream）但客户端文件名扩展名在白名单 → 放行 + 用扩展推断 MIME
+	if mainType == "application/octet-stream" && clientFilename != "" {
+		ext := strings.ToLower(filepath.Ext(clientFilename))
+		if inferred, ok := extToInferredMIME[ext]; ok {
+			return inferred, nil
 		}
 	}
 	return sniffed, fmt.Errorf("%w: %s", ErrMIMENotAllowed, sniffed)
@@ -390,7 +437,7 @@ func (s *fileService) Upload(
 	if n == 0 {
 		return nil, ErrFileEmpty
 	}
-	sniffedMIME, err := detectAndValidateMIME(sniffBuf)
+	sniffedMIME, err := detectAndValidateMIME(sniffBuf, cleanName)
 	if err != nil {
 		return nil, err
 	}
