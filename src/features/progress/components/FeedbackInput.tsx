@@ -6,7 +6,7 @@
  * @author Atlas.oi
  * @date 2026-05-01
  */
-import { useState, type ReactElement, type FormEvent } from 'react';
+import { useState, type FormEvent, type ReactElement } from 'react';
 import styles from '../progress.module.css';
 import { useFeedbacksStore } from '../stores/feedbacksStore';
 import { useActivitiesStore } from '../stores/activitiesStore';
@@ -31,8 +31,9 @@ export function FeedbackInput({ projectId }: FeedbackInputProps): ReactElement {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const add = useFeedbacksStore((s) => s.add);
+  const invalidateActivities = useActivitiesStore((s) => s.invalidate);
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!content.trim()) return;
     setSubmitting(true);
@@ -41,7 +42,7 @@ export function FeedbackInput({ projectId }: FeedbackInputProps): ReactElement {
       await add(projectId, { content: content.trim(), source });
       setContent('');
       // 提交成功后让进度时间线重新拉取以包含新反馈
-      void useActivitiesStore.getState().invalidate(projectId);
+      void invalidateActivities(projectId);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
