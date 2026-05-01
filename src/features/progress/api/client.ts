@@ -98,8 +98,9 @@ interface ApiFetchOptions extends RequestInit {
  * @throws       ProgressApiError
  */
 // 单飞 refresh：多个 401 同时触发时只发一次 /api/auth/refresh，避免风暴
+// export 让 uploadFile 等不走 apiFetch 的旁路上传也能复用 401 自愈
 let inflightRefresh: Promise<boolean> | null = null;
-async function silentRefreshOnce(): Promise<boolean> {
+export async function silentRefreshOnce(): Promise<boolean> {
   if (inflightRefresh) return inflightRefresh;
   inflightRefresh = (async () => {
     try {

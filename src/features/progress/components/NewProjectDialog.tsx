@@ -35,6 +35,9 @@ export function NewProjectDialog({ onClose, onSuccess }: NewProjectDialogProps):
   const create = useProjectsStore((s) => s.create);
   const showToast = useToastStore((s) => s.show);
   const firstRef = useRef<HTMLInputElement | null>(null);
+  // 单文件 input ref：用户点 chip × 移除时同步清空 native input.value，让用户可重选同一文件
+  const openingInputRef = useRef<HTMLInputElement | null>(null);
+  const assignmentInputRef = useRef<HTMLInputElement | null>(null);
 
   const defaultDeadline = (() => {
     const d = new Date();
@@ -92,6 +95,14 @@ export function NewProjectDialog({ onClose, onSuccess }: NewProjectDialogProps):
   };
   const removeWechat = (idx: number) => {
     setWechatFiles((prev) => prev.filter((_, i) => i !== idx));
+  };
+  const removeOpening = () => {
+    setOpeningDoc(null);
+    if (openingInputRef.current) openingInputRef.current.value = '';
+  };
+  const removeAssignment = () => {
+    setAssignmentDoc(null);
+    if (assignmentInputRef.current) assignmentInputRef.current.value = '';
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -228,14 +239,42 @@ export function NewProjectDialog({ onClose, onSuccess }: NewProjectDialogProps):
                 <div className={styles.docUploadGrid}>
                   <div className={styles.docUploadCell}>
                     <label htmlFor="np-opening">开题书</label>
-                    <input id="np-opening" type="file" accept=".pdf,.doc,.docx" onChange={onPickOpening} disabled={submitting} />
-                    {openingDoc && <div className={styles.docUploadFileName}>{openingDoc.name}</div>}
+                    <input
+                      id="np-opening"
+                      type="file"
+                      accept=".pdf,.doc,.docx"
+                      onChange={onPickOpening}
+                      disabled={submitting}
+                      ref={openingInputRef}
+                    />
+                    {openingDoc && (
+                      <div className={styles.docUploadList}>
+                        <span className={styles.docUploadChip}>
+                          {openingDoc.name}
+                          <button type="button" onClick={removeOpening} aria-label={`移除 ${openingDoc.name}`} disabled={submitting}>×</button>
+                        </span>
+                      </div>
+                    )}
                     <div className={styles.docUploadHint}>PDF / Word，单文件</div>
                   </div>
                   <div className={styles.docUploadCell}>
                     <label htmlFor="np-assignment">任务书</label>
-                    <input id="np-assignment" type="file" accept=".pdf,.doc,.docx" onChange={onPickAssignment} disabled={submitting} />
-                    {assignmentDoc && <div className={styles.docUploadFileName}>{assignmentDoc.name}</div>}
+                    <input
+                      id="np-assignment"
+                      type="file"
+                      accept=".pdf,.doc,.docx"
+                      onChange={onPickAssignment}
+                      disabled={submitting}
+                      ref={assignmentInputRef}
+                    />
+                    {assignmentDoc && (
+                      <div className={styles.docUploadList}>
+                        <span className={styles.docUploadChip}>
+                          {assignmentDoc.name}
+                          <button type="button" onClick={removeAssignment} aria-label={`移除 ${assignmentDoc.name}`} disabled={submitting}>×</button>
+                        </span>
+                      </div>
+                    )}
                     <div className={styles.docUploadHint}>PDF / Word，单文件</div>
                   </div>
                   <div className={`${styles.docUploadCell} ${styles.docUploadCellWide}`}>

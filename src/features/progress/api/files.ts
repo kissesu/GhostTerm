@@ -21,6 +21,7 @@ import { z } from 'zod';
 
 import { apiFetch, getBaseUrl, ProgressApiError } from './client';
 import { getAccessToken } from '../../../shared/stores/globalAuthStore';
+import { silentRefreshOnce } from './client';
 
 // ============================================================
 // Schema：与 openapi.yaml components.schemas.* 对齐
@@ -90,17 +91,24 @@ export async function uploadFile(file: File): Promise<FileMetadata> {
   const fd = new FormData();
   fd.append('file', file);
 
-  const token = getAccessToken();
-  const headers: Record<string, string> = {};
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
+  // 内联函数：拿当前 token 发起单次 fetch（refresh 后用新 token 再发要用同一个函数）
+  const send = async (): Promise<Response> => {
+    const token = getAccessToken();
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    return fetch(`${getBaseUrl()}/api/files`, {
+      method: 'POST',
+      body: fd,
+      headers, // 不设置 Content-Type，浏览器自带 boundary
+    });
+  };
 
-  const res = await fetch(`${getBaseUrl()}/api/files`, {
-    method: 'POST',
-    body: fd,
-    headers, // 不设置 Content-Type，浏览器自带 boundary
-  });
+  // 第一次发；401 时复用 apiFetch 同款 silent refresh + retry 一次（避免直接 logout）
+  let res = await send();
+  if (res.status === 401) {
+    const refreshed = await silentRefreshOnce();
+    if (refreshed) res = await send();
+  }
 
   let body: unknown;
   try {

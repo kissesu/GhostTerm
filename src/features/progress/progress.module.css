@@ -711,8 +711,18 @@
   color: var(--text);
   font-family: inherit;
   font-size: 13px;
+  /* 修 #1：input/select/textarea 高度统一 - native select 默认 padding/box-sizing 与 input 不同，
+     强制 box-sizing:border-box + line-height 让三者像素级对齐 */
+  box-sizing: border-box;
+  line-height: 1.4;
 }
-.field textarea { resize: vertical; min-height: 80px; }
+/* 修 #4：textarea resize 区间限制 - 用户可拖高但不超过 200px，避免撑出 modalBody 让弹窗
+   "无法滚动"假象（实际 modalBody overflow:auto 工作，但 textarea 无上限会一直撑高 dialog） */
+.field textarea {
+  resize: vertical;
+  min-height: 80px;
+  max-height: 200px;
+}
 
 /* 原 .field-error（plan §1 补充，设计稿隐含的表单错误提示） */
 .fieldError { color: var(--red); font-size: 11px; margin-top: 4px; }
