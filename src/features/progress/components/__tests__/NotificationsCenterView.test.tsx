@@ -20,6 +20,7 @@ function makeNotification(id: number, projectId: number | null, isRead: boolean)
     body: `内容${id}`,
     isRead,
     createdAt: '2026-05-01T10:00:00Z',
+    readAt: null,
   };
 }
 
