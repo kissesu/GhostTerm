@@ -1,0 +1,667 @@
+/**
+ * @file GlobalLoginPage.module.css
+ * @description 全局登录页视觉契约 —— 1:1 复刻 designs/habitat-grid-login.html。
+ *
+ *              业务背景：
+ *              - 设计稿是受测试守护的 protected 静态合约
+ *              - 本文件把设计稿全部 design tokens 与 类名移植到 React 组件
+ *              - 所有规则限定在 .loginRoot 作用域内
+ *
+ *              Token 注：与 progress.module.css 同源（OKLCH 森青调），但登录页采用
+ *              设计稿原 #0d0d0c 暗岩苔基线（用户指令"按设计稿重构 UI" + 单页生效，
+ *              不污染其它模块）。
+ *
+ * @author Atlas.oi
+ * @date 2026-04-30
+ */
+
+.loginRoot {
+  --bg: #0d0d0c;
+  --bar: #141412;
+  --panel: #191916;
+  --panel-2: #20201c;
+  --panel-3: #25251f;
+  --line: rgba(233, 226, 204, 0.11);
+  --line-strong: rgba(233, 226, 204, 0.2);
+  --text: #f0eee4;
+  --muted: #b4ae9c;
+  --faint: #7e796c;
+  --accent: #b8ff6a;
+  --accent-ink: #10160a;
+  --cyan: #63d5ff;
+  --amber: #e7ba4a;
+  --red: #ef6862;
+  --green: #79d17c;
+  --shadow: 0 24px 70px rgba(0, 0, 0, 0.46);
+
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  position: relative;
+  overflow: auto;
+
+  background:
+    linear-gradient(180deg, rgba(184, 255, 106, 0.035), transparent 260px),
+    radial-gradient(circle at 80% 12%, rgba(99, 213, 255, 0.08), transparent 340px),
+    radial-gradient(circle at 14% 80%, rgba(184, 255, 106, 0.08), transparent 260px),
+    var(--bg);
+  color: var(--text);
+  font-family: 'Avenir Next', 'PingFang SC', 'Source Han Sans SC', 'Microsoft YaHei', sans-serif;
+}
+
+.loginRoot *,
+.loginRoot *::before,
+.loginRoot *::after {
+  box-sizing: border-box;
+}
+
+.loginRoot button,
+.loginRoot input {
+  font: inherit;
+}
+
+/* ===================================================================
+   Stage（容纳设计稿原 .app 1500x967）
+
+   用户需求：实际 Tauri 窗口宽度可变；max-width 1500 居中，
+   小屏（< 1100）折叠右侧装饰区只留 520 表单。
+   =================================================================== */
+.stage {
+  width: 100%;
+  max-width: 1500px;
+  min-height: 100%;
+  margin: 0 auto;
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    #0b0b0a;
+  background-size: 48px 48px;
+}
+
+.stage::before {
+  content: '';
+  position: absolute;
+  inset: 92px 82px 78px 82px;
+  /* 用户需求 2026-04-30：去掉 border（原 1px solid rgba(184,255,106,0.11) 在 stage 内部描出浅青色框）。
+     border-radius 已无视觉作用但保留 inset/伪类结构，避免误删影响其它依赖（如有）。 */
+  border-radius: 16px;
+  pointer-events: none;
+}
+
+.stage::after {
+  content: '';
+  position: absolute;
+  width: 620px;
+  height: 620px;
+  right: -190px;
+  top: 126px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(184, 255, 106, 0.12), transparent 68%);
+  filter: blur(14px);
+  pointer-events: none;
+}
+
+/* ===================================================================
+   Login shell（双栏布局）
+   =================================================================== */
+.loginShell {
+  /* 用户需求 2026-04-30：原 min-height: 933px 写死撑出大块空白；
+     改 viewport 自适应（减去 stage padding 上下 126px）让卡片占满可视区不留空白，
+     viewport 比表单内容低时表单仍按自然高度（min-height 是下限不是固定高度）。 */
+  min-height: calc(100vh - 126px);
+  padding: 68px 74px 58px;
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 520px 1fr;
+  gap: 34px;
+}
+
+@media (max-width: 1100px) {
+  .loginShell {
+    grid-template-columns: 1fr;
+    padding: 48px 40px;
+    min-height: calc(100vh - 96px); /* 窄屏 padding 96px */
+  }
+  .signalBoard {
+    display: none;
+  }
+}
+
+.identityDeck,
+.signalBoard {
+  border: 1px solid var(--line);
+  background: rgba(20, 20, 18, 0.9);
+  box-shadow: var(--shadow);
+}
+
+/* ===================================================================
+   左：Identity deck（品牌带 + 表单）
+   =================================================================== */
+.identityDeck {
+  border-radius: 14px;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+}
+
+.brandStrip {
+  height: 78px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background:
+    linear-gradient(90deg, rgba(184, 255, 106, 0.08), transparent),
+    #171713;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.brandMark {
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(184, 255, 106, 0.45);
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: #10160a;
+  color: var(--accent);
+}
+
+.brandMark svg {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.brand strong {
+  display: block;
+  font-size: 18px;
+  letter-spacing: 0.02em;
+}
+
+.brand span {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.capsule {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: #11110f;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.capsule::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 18px rgba(121, 209, 124, 0.7);
+}
+
+.loginPanel {
+  padding: 34px;
+}
+
+.eyebrow {
+  margin-bottom: 18px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.headline {
+  max-width: 410px;
+  margin: 0;
+  font-size: 42px;
+  line-height: 1.08;
+  letter-spacing: -0.05em;
+}
+
+.intro {
+  max-width: 420px;
+  margin: 16px 0 28px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.form {
+  display: grid;
+  gap: 14px;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.field label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.inputShell {
+  height: 46px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: 34px 1fr auto;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  background: #10100f;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.inputShell:focus-within {
+  border-color: rgba(184, 255, 106, 0.45);
+  background: #151711;
+  box-shadow: inset 0 0 0 1px rgba(184, 255, 106, 0.08);
+}
+
+.inputShell svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--faint);
+}
+
+.inputShell input {
+  width: 100%;
+  border: 0;
+  outline: none;
+  color: var(--text);
+  background: transparent;
+  font-size: 14px;
+}
+
+.inputShell input::placeholder {
+  color: var(--faint);
+}
+
+.domainTag {
+  padding: 5px 8px;
+  border-radius: 5px;
+  color: var(--faint);
+  background: rgba(233, 226, 204, 0.05);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.formTools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 2px 0 8px;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkBox {
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  display: inline-block;
+  background: transparent;
+  flex: 0 0 auto;
+}
+
+.checkBoxOn {
+  background: linear-gradient(135deg, var(--accent), #6ea93a);
+  box-shadow: inset 0 0 0 4px #151711;
+  border-color: transparent;
+}
+
+.textLink {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 900;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+.primary {
+  height: 42px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 900;
+  border: 0;
+  color: var(--accent-ink);
+  background: var(--accent);
+  cursor: pointer;
+  font-family: inherit;
+  transition: filter 120ms ease;
+}
+
+.primary:hover {
+  filter: brightness(1.05);
+}
+
+.primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.primary svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.errorBanner {
+  padding: 10px 12px;
+  border: 1px solid rgba(239, 104, 98, 0.4);
+  border-radius: 8px;
+  background: rgba(239, 104, 98, 0.1);
+  color: #ffd8d4;
+  font-size: 12px;
+}
+
+/* ===================================================================
+   右：Signal board（Pretext 文本场 + ghost 浮动动画）
+   =================================================================== */
+.signalBoard {
+  border-radius: 14px;
+  padding: 22px;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 18px;
+  overflow: hidden;
+}
+
+.boardHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.boardTitle strong {
+  display: block;
+  font-size: 21px;
+  letter-spacing: -0.02em;
+}
+
+.boardTitle span {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.timeChip {
+  min-width: 104px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  text-align: right;
+  background: #11110f;
+}
+
+.timeChip strong {
+  display: block;
+  font-size: 18px;
+}
+
+.timeChip span {
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.pretextStage {
+  min-height: 560px;
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 46%, rgba(184, 255, 106, 0.12), transparent 270px),
+    radial-gradient(circle at 18% 22%, rgba(99, 213, 255, 0.08), transparent 220px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    #10100f;
+  background-size: auto, auto, 34px 34px, 34px 34px;
+}
+
+.pretextStage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    180deg,
+    transparent 0 3px,
+    rgba(99, 213, 255, 0.035) 3px 4px
+  );
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
+.wakeHead {
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  top: 18px;
+  height: 72px;
+  border: 1px solid rgba(99, 213, 255, 0.36);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 18px;
+  align-items: center;
+  padding: 0 16px;
+  background: rgba(13, 13, 12, 0.74);
+  z-index: 3;
+}
+
+.wakeTitle {
+  font-size: 28px;
+  font-weight: 1000;
+  letter-spacing: -0.05em;
+}
+
+.wakeSub {
+  color: #9fdcff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.wakeMeter {
+  width: 190px;
+  height: 8px;
+  border: 1px solid rgba(184, 255, 106, 0.5);
+  background: rgba(184, 255, 106, 0.07);
+}
+
+.wakeMeter span {
+  display: block;
+  width: 64%;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--cyan));
+}
+
+.wakeField {
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  top: 108px;
+  bottom: 22px;
+  border: 1px solid rgba(99, 213, 255, 0.45);
+  background:
+    linear-gradient(90deg, rgba(99, 213, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(99, 213, 255, 0.04) 1px, transparent 1px),
+    rgba(10, 11, 10, 0.8);
+  background-size: 22px 22px;
+  overflow: hidden;
+}
+
+.wakeLines {
+  position: absolute;
+  inset: 24px;
+  z-index: 2;
+}
+
+.wakeLine {
+  position: absolute;
+  left: var(--line-x);
+  top: var(--line-y);
+  width: var(--line-width);
+  color: rgba(159, 220, 255, 0.42);
+  font-family: 'SFMono-Regular', 'Cascadia Code', 'Menlo', monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  text-shadow: 0 0 14px rgba(99, 213, 255, 0.12);
+  transition:
+    left 0.18s ease-out,
+    width 0.18s ease-out,
+    color 0.18s ease-out,
+    transform 0.18s ease-out;
+}
+
+.wakeLineActive {
+  color: rgba(184, 255, 106, 0.9);
+  transform: translateX(6px);
+}
+
+.wakeGhost {
+  position: absolute;
+  z-index: 4;
+  width: 96px;
+  height: 96px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  box-shadow: none;
+  will-change: transform;
+}
+
+.wakeGhost img {
+  width: 86px;
+  height: 86px;
+  object-fit: contain;
+  filter:
+    drop-shadow(0 18px 28px rgba(0, 0, 0, 0.5))
+    drop-shadow(0 0 18px rgba(184, 255, 106, 0.18));
+}
+
+.wakeChip {
+  position: absolute;
+  z-index: 5;
+  color: #f6d36a;
+  font-family: 'SFMono-Regular', 'Menlo', monospace;
+  font-size: 12px;
+  font-weight: 900;
+  text-shadow: 0 0 14px rgba(246, 211, 106, 0.5);
+  animation: wake-chip 0.9s ease-out forwards;
+  pointer-events: none;
+}
+
+.wakeFooter {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: 18px;
+  z-index: 6;
+  height: 32px;
+  border: 1px solid rgba(246, 211, 106, 0.38);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  color: #f6d36a;
+  background: rgba(13, 13, 12, 0.84);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+@keyframes wake-chip {
+  to {
+    opacity: 0;
+    transform: translateY(-34px);
+  }
+}
+
+/* ===================================================================
+   Footer
+   =================================================================== */
+.footer {
+  position: absolute;
+  left: 74px;
+  right: 74px;
+  bottom: 22px;
+  height: 30px;
+  border-top: 1px solid rgba(233, 226, 204, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted);
+  z-index: 2;
+}
+
+.footer strong {
+  color: var(--accent);
+}
+
+@media (max-width: 1100px) {
+  .footer {
+    position: static;
+    margin-top: 32px;
+  }
+}
