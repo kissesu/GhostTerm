@@ -56,6 +56,7 @@ type oasHandler struct {
 	payment      *handlers.PaymentHandler
 	earnings     *handlers.EarningsHandler
 	notification *handlers.NotificationHandler
+	activity     *handlers.ActivityHandler
 	oas.UnimplementedHandler
 }
 
@@ -165,6 +166,11 @@ func (h *oasHandler) ProjectsTriggerEvent(ctx context.Context, req *oas.EventTri
 // ProjectsStatusChanges 转发到 ProjectHandler 实现
 func (h *oasHandler) ProjectsStatusChanges(ctx context.Context, params oas.ProjectsStatusChangesParams) (oas.ProjectsStatusChangesRes, error) {
 	return h.project.ProjectsStatusChanges(ctx, params)
+}
+
+// ProjectsListActivities 转发到 ActivityHandler 实现（进度时间线聚合 7 类事件）
+func (h *oasHandler) ProjectsListActivities(ctx context.Context, params oas.ProjectsListActivitiesParams) (oas.ProjectsListActivitiesRes, error) {
+	return h.activity.ProjectsListActivities(ctx, params)
 }
 
 // ============================================================
@@ -421,6 +427,13 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	paymentHandler := handlers.NewPaymentHandler(deps.PaymentService)
 	earningsHandler := handlers.NewEarningsHandler(deps.PaymentService)
 	notificationHandler := handlers.NewNotificationHandler(deps.NotificationService)
+	// Phase 11 Task 8：activity handler（聚合时间线 GET /api/projects/{id}/activities）
+	// service 由 deps 装配；缺失即启动期 error，避免运行时 nil deref
+	activitySvc := services.NewActivityService(deps.Pool)
+	activityHandler, err := handlers.NewActivityHandler(activitySvc)
+	if err != nil {
+		return nil, err
+	}
 
 	secHandler := &oasSecurityHandler{svc: deps.AuthService}
 
@@ -436,6 +449,7 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 			payment:      paymentHandler,
 			earnings:     earningsHandler,
 			notification: notificationHandler,
+			activity:     activityHandler,
 		},
 		secHandler,
 		oas.WithErrorHandler(errorEnvelopeHandler),
