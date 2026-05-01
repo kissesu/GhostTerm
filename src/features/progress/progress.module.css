@@ -778,23 +778,33 @@
   color: var(--accent-ink);
 }
 
-/* 统一交互效果：所有 btn / btnPrimary 共享 hover + active + disabled */
+/* 统一交互：所有 btn / btnPrimary 共享 hover/active/disabled
+   关键约束：不改 background 避免白雾污染主色调；用 border + 轻微 shadow + 抬升反馈 */
 .btn:hover {
   border-color: var(--line-strong);
-  background: rgba(255,255,255,0.04);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.25);
 }
 .btnPrimary:hover {
+  /* primary 用 filter:brightness 让黄绿色更亮；主色不变 */
   border-color: transparent;
-  filter: brightness(1.08);        /* 跨浏览器兼容（vs oklch from L4 函数） */
+  filter: brightness(1.1);
   transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(184,255,106,0.25);  /* 用 accent 同色光晕 */
 }
 .btn:active,
-.btnPrimary:active { transform: translateY(0); }
+.btnPrimary:active {
+  transform: translateY(0);
+  box-shadow: none;
+  filter: none;
+}
 .btn:disabled,
 .btnPrimary:disabled {
   opacity: 0.55;
   cursor: not-allowed;
   transform: none;
+  box-shadow: none;
+  filter: none;
 }
 
 /* ============ Toast ============ (设计稿 line 498-517) */
