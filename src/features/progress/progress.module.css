@@ -8,8 +8,9 @@
  * @date 2026-05-01
  */
 
-/* ============ Design Token ============ */
-:root {
+/* ============ Shell Root（body 样式迁移到此，作为进度模块根容器类） ============ */
+/* Design Token 定义在 .shellRoot 内，避免全局污染宿主 App.css 同名 token */
+.shellRoot {
   --bg: #0d0d0c;
   --panel: #191916;
   --panel-2: #20201c;
@@ -25,12 +26,7 @@
   --red: #ef6862;
   --cyan: #63d5ff;
   --blue: #5b9fff;
-}
 
-* { box-sizing: border-box; }
-
-/* ============ Shell Root（body 样式迁移到此，作为进度模块根容器类） ============ */
-.shellRoot {
   background: var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif;
@@ -198,6 +194,8 @@
   font-weight: 900;
 }
 
+/* 修饰 class（I2）：必须与 .col 同时挂在同一元素；
+   单独使用时 base 样式（border/background/padding）不存在。 */
 /* 原 .col.highlight */
 .colHighlight { border-color: var(--accent); }
 .colHighlight .colName { color: var(--accent); }
@@ -250,7 +248,7 @@
   background: rgba(184,255,106,0.08);
   color: var(--accent);
   font-size: 11px;
-  font-weight: 850;
+  font-weight: 850; /* 设计稿原值 */
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -397,7 +395,7 @@
   background: var(--accent);
   color: var(--accent-ink);
   font-size: 14px;
-  font-weight: 850;
+  font-weight: 850; /* 设计稿原值 */
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -459,6 +457,8 @@
 /* 原 .nba-secondary .head .toggle */
 .nbaSecondaryToggle { color: var(--muted); transition: transform 0.2s; }
 
+/* 修饰 class（I1）：必须与 .nbaSecondary 同时挂在父容器元素；
+   单独使用会导致 .nbaSecondaryBody { display:none } 永远生效，内容不可见。 */
 /* 原 .nba-secondary.open .head .toggle */
 .nbaSecondaryOpen .nbaSecondaryToggle { transform: rotate(180deg); }
 
@@ -500,7 +500,7 @@
   padding: 4px 10px;
   border-radius: 999px;
   font-size: 11px;
-  font-weight: 850;
+  font-weight: 850; /* 设计稿原值 */
 }
 
 /* 原 .status-dot */
@@ -575,7 +575,8 @@
 
 /* 原 .modal-body */
 .modalBody { padding: 20px; }
-.modalBody .transition {
+/* 原 .modal-body .transition（I5：重命名为 .modalTransition 避免与 CSS 属性名混淆） */
+.modalTransition {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -619,7 +620,7 @@
   padding: 8px 16px;
   border-radius: 6px;
   font-size: 13px;
-  font-weight: 850;
+  font-weight: 850; /* 设计稿原值 */
   cursor: pointer;
   border: 1px solid var(--line);
   background: transparent;
