@@ -5,25 +5,42 @@
  *              main：DetailMainHead + DetailTabs + 当前 tab 内容
  *              右栏：NbaPanel（含 reasonContext 派生 daysSinceLastActivity）
  *
- *              tabs 接入状态：
- *              - 活动时间线：已接 DetailTimeline（feedbacksStore）
- *              - 反馈/论文版本/文件/收款：占位文案，Phase 7 接入
+ *              tabs 接入状态（Phase 7 完成）：
+ *              - 活动时间线：DetailTimeline（feedbacksStore）
+ *              - 反馈：FeedbackInput + FeedbackList
+ *              - 论文版本：FileUploadButton + ThesisVersionList
+ *              - 文件：附件列表 + FileUploadButton
+ *              - 收款：PaymentList + PaymentDialog + 调整报价按钮 + QuoteChangeDialog
  *
  *              注意：Project 字段按实际 API schema（name/customerLabel）
  *
  * @author Atlas.oi
  * @date 2026-05-01
  */
-import { useEffect, useMemo, useState, type ReactElement } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ReactElement,
+} from 'react';
 import styles from '../progress.module.css';
 import { useProjectsStore } from '../stores/projectsStore';
 import { useFeedbacksStore } from '../stores/feedbacksStore';
+import { usePaymentsStore } from '../stores/paymentsStore';
+import { useFilesStore } from '../stores/filesStore';
+import { createThesisVersion } from '../api/files';
 import { type ActionMeta } from '../config/nbaConfig';
 import { DetailMainHead } from './DetailMainHead';
 import { DetailTabs, type DetailTab } from './DetailTabs';
 import { DetailTimeline } from './DetailTimeline';
 import { NbaPanel } from './NbaPanel';
 import { EventTriggerDialog } from './EventTriggerDialog';
+import { FeedbackInput } from './FeedbackInput';
+import { FeedbackList } from './FeedbackList';
+import { FileUploadButton } from './FileUploadButton';
+import { ThesisVersionList } from './ThesisVersionList';
+import { PaymentDialog } from './PaymentDialog';
+import { QuoteChangeDialog } from './QuoteChangeDialog';
 
 interface ProjectDetailPageProps {
   projectId: number;
@@ -39,8 +56,20 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
   const loadFeedbacks = useFeedbacksStore((s) => s.loadByProject);
   const feedbacks = useMemo(() => feedbacksRaw ?? [], [feedbacksRaw]);
 
+  const paymentsRaw = usePaymentsStore((s) => s.byProject.get(projectId));
+  const loadPayments = usePaymentsStore((s) => s.loadByProject);
+  const payments = useMemo(() => paymentsRaw ?? [], [paymentsRaw]);
+
+  const filesRaw = useFilesStore((s) => s.byProject.get(projectId));
+  const loadFiles = useFilesStore((s) => s.loadByProject);
+  const files = useMemo(() => filesRaw ?? [], [filesRaw]);
+
   const [activeTab, setActiveTab] = useState<DetailTab>('timeline');
   const [activeAction, setActiveAction] = useState<ActionMeta | null>(null);
+  const [showPayment, setShowPayment] = useState(false);
+  const [showQuoteChange, setShowQuoteChange] = useState(false);
+  // 论文版本列表刷新计数器：上传成功后 bump，ThesisVersionList 重新拉取
+  const [thesisRefreshTick, setThesisRefreshTick] = useState(0);
 
   // 进入详情页拉取最新项目数据
   useEffect(() => {
@@ -56,6 +85,20 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
   useEffect(() => {
     clearTriggerError(projectId);
   }, [projectId, clearTriggerError]);
+
+  // 切换到收款 tab 时自动拉取 payments
+  useEffect(() => {
+    if (activeTab === 'payments') {
+      void loadPayments(projectId);
+    }
+  }, [activeTab, projectId, loadPayments]);
+
+  // 切换到文件 tab 时自动拉取附件列表
+  useEffect(() => {
+    if (activeTab === 'files') {
+      void loadFiles(projectId);
+    }
+  }, [activeTab, projectId, loadFiles]);
 
   // 派生 reasonContext：距最新活动的天数（供 NbaPanel deriveReason 使用）
   const reasonContext = useMemo(() => {
@@ -98,35 +141,139 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
     );
   }
 
+  // 论文上传成功回调：先创建 thesis version，再 bump refresh tick
+  const handleThesisUploadSuccess = async (fileId: number): Promise<void> => {
+    await createThesisVersion(projectId, fileId);
+    setThesisRefreshTick((n) => n + 1);
+  };
+
   return (
     <>
       <div className={styles.detailLayout}>
-        {/* 左侧 main 区：头部 + tabs + tab 内容 */}
+        {/* 左侧 main 区：头部 + 调整报价按钮 + tabs + tab 内容 */}
         <div className={styles.main}>
-          <DetailMainHead project={project} />
+          {/* 详情页顶部行：项目头 + 调整报价入口（plan §Task 32 决策预存） */}
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <DetailMainHead project={project} />
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowQuoteChange(true)}
+              className={styles.btn}
+              style={{ padding: '4px 10px', fontSize: 11, marginTop: 4, whiteSpace: 'nowrap' }}
+            >
+              调整报价
+            </button>
+          </div>
           <DetailTabs active={activeTab} onChange={setActiveTab} />
 
           {/* 活动时间线 tab */}
           {activeTab === 'timeline' && <DetailTimeline feedbacks={feedbacks} />}
 
-          {/* 反馈 tab（Phase 7 接入 FeedbackInput + FeedbackList） */}
+          {/* 反馈 tab */}
           {activeTab === 'feedback' && (
-            <div style={{ padding: 16, color: 'var(--muted)' }}>反馈 tab（Phase 7 接入）</div>
+            <div style={{ padding: '16px 0' }}>
+              <FeedbackInput projectId={projectId} />
+              <FeedbackList projectId={projectId} />
+            </div>
           )}
 
-          {/* 论文版本 tab（Phase 7 接入 FileUploadButton + ThesisVersionList） */}
+          {/* 论文版本 tab */}
           {activeTab === 'thesis' && (
-            <div style={{ padding: 16, color: 'var(--muted)' }}>论文版本 tab（Phase 7 接入）</div>
+            <div style={{ padding: '16px 0' }}>
+              <FileUploadButton
+                label="上传论文版本"
+                accept=".pdf,.doc,.docx"
+                onUploadSuccess={handleThesisUploadSuccess}
+              />
+              <ThesisVersionList
+                projectId={projectId}
+                refreshTick={thesisRefreshTick}
+              />
+            </div>
           )}
 
-          {/* 文件 tab（Phase 7 接入） */}
+          {/* 文件 tab */}
           {activeTab === 'files' && (
-            <div style={{ padding: 16, color: 'var(--muted)' }}>文件 tab（Phase 7 接入）</div>
+            <div style={{ padding: '16px 0' }}>
+              <FileUploadButton
+                label="上传附件"
+                onUploadSuccess={async () => {
+                  // 上传后刷新附件列表
+                  void loadFiles(projectId);
+                }}
+              />
+              {files.length === 0 ? (
+                <p style={{ color: 'var(--muted)', fontSize: 13 }}>暂无附件</p>
+              ) : (
+                <div>
+                  {files.map((f) => (
+                    <div
+                      key={f.id}
+                      style={{
+                        borderBottom: '1px solid var(--line)',
+                        padding: '10px 0',
+                        display: 'flex',
+                        gap: 12,
+                        alignItems: 'center',
+                        fontSize: 13,
+                      }}
+                    >
+                      <span style={{ flex: 1 }}>{f.file.filename}</span>
+                      <span style={{ color: 'var(--muted)', fontSize: 11 }}>
+                        {f.category}
+                      </span>
+                      <span style={{ color: 'var(--muted)', fontSize: 11 }}>
+                        {new Date(f.addedAt).toLocaleDateString('zh-CN')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
-          {/* 收款 tab（Phase 7 接入 PaymentDialog） */}
+          {/* 收款 tab */}
           {activeTab === 'payments' && (
-            <div style={{ padding: 16, color: 'var(--muted)' }}>收款 tab（Phase 7 接入）</div>
+            <div style={{ padding: '16px 0' }}>
+              <button
+                type="button"
+                className={`${styles.btn} ${styles.btnPrimary}`}
+                onClick={() => setShowPayment(true)}
+                style={{ padding: '6px 16px', fontSize: 13, marginBottom: 12 }}
+              >
+                + 新增收款
+              </button>
+              {/* 收款流水列表 */}
+              {payments.length === 0 ? (
+                <p style={{ color: 'var(--muted)', fontSize: 13 }}>暂无收款记录</p>
+              ) : (
+                <div>
+                  {payments.map((p) => (
+                    <div
+                      key={p.id}
+                      style={{
+                        borderBottom: '1px solid var(--line)',
+                        padding: '10px 0',
+                        display: 'flex',
+                        gap: 16,
+                        alignItems: 'center',
+                        fontSize: 13,
+                      }}
+                    >
+                      <span style={{ color: 'var(--accent)', fontWeight: 700 }}>
+                        ¥{p.amount}
+                      </span>
+                      <span style={{ flex: 1 }}>{p.remark}</span>
+                      <span style={{ color: 'var(--muted)', fontSize: 11 }}>
+                        {new Date(p.paidAt).toLocaleDateString('zh-CN')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
 
@@ -151,6 +298,30 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
             // 提交成功后刷新项目数据和反馈列表
             void loadOne(project.id).catch(() => {});
             void loadFeedbacks(project.id).catch(() => {});
+          }}
+        />
+      )}
+
+      {/* 新增收款弹窗 */}
+      {showPayment && (
+        <PaymentDialog
+          projectId={projectId}
+          onClose={() => setShowPayment(false)}
+          onSuccess={() => {
+            // 收款成功后刷新项目（totalReceived 更新）
+            void loadOne(projectId).catch(() => {});
+          }}
+        />
+      )}
+
+      {/* 调整报价弹窗 */}
+      {showQuoteChange && (
+        <QuoteChangeDialog
+          projectId={projectId}
+          onClose={() => setShowQuoteChange(false)}
+          onSuccess={() => {
+            // 报价调整成功后刷新项目（currentQuote 更新）
+            void loadOne(projectId).catch(() => {});
           }}
         />
       )}

@@ -30,6 +30,40 @@ vi.mock('../EventTriggerDialog', () => ({
   ),
 }));
 
+// mock PaymentDialog（避免 paymentsStore 等级联）
+vi.mock('../PaymentDialog', () => ({
+  PaymentDialog: ({ onClose }: { onClose: () => void }) => (
+    <div data-testid="payment-dialog">
+      <button type="button" onClick={onClose}>关闭收款</button>
+    </div>
+  ),
+}));
+
+// mock QuoteChangeDialog
+vi.mock('../QuoteChangeDialog', () => ({
+  QuoteChangeDialog: ({ onClose }: { onClose: () => void }) => (
+    <div data-testid="quote-change-dialog">
+      <button type="button" onClick={onClose}>关闭报价</button>
+    </div>
+  ),
+}));
+
+// mock FeedbackInput + FeedbackList（避免 feedbacksStore 再次被调用）
+vi.mock('../FeedbackInput', () => ({
+  FeedbackInput: () => <div data-testid="feedback-input">反馈录入</div>,
+}));
+vi.mock('../FeedbackList', () => ({
+  FeedbackList: () => <div data-testid="feedback-list">反馈列表</div>,
+}));
+
+// mock FileUploadButton + ThesisVersionList（避免 filesStore / listThesisVersions API）
+vi.mock('../FileUploadButton', () => ({
+  FileUploadButton: () => <div data-testid="file-upload-button">上传文件</div>,
+}));
+vi.mock('../ThesisVersionList', () => ({
+  ThesisVersionList: () => <div data-testid="thesis-version-list">论文版本</div>,
+}));
+
 const baseProject: Project = {
   id: 7,
   name: '详情测试项目',
@@ -52,6 +86,8 @@ const baseProject: Project = {
 const mockLoadOne = vi.fn();
 const mockClearTriggerError = vi.fn();
 const mockLoadFeedbacks = vi.fn();
+const mockLoadPayments = vi.fn();
+const mockLoadFiles = vi.fn();
 
 vi.mock('../../stores/projectsStore', () => ({
   useProjectsStore: (selector: (s: object) => unknown) =>
@@ -68,6 +104,22 @@ vi.mock('../../stores/feedbacksStore', () => ({
     selector({
       byProject: new Map(),
       loadByProject: mockLoadFeedbacks,
+    }),
+}));
+
+vi.mock('../../stores/paymentsStore', () => ({
+  usePaymentsStore: (selector: (s: object) => unknown) =>
+    selector({
+      byProject: new Map(),
+      loadByProject: mockLoadPayments,
+    }),
+}));
+
+vi.mock('../../stores/filesStore', () => ({
+  useFilesStore: (selector: (s: object) => unknown) =>
+    selector({
+      byProject: new Map(),
+      loadByProject: mockLoadFiles,
     }),
 }));
 
@@ -91,10 +143,37 @@ describe('ProjectDetailPage', () => {
     expect(screen.getByText('暂无活动')).toBeInTheDocument();
   });
 
-  it('点击 "反馈" tab → 切换到反馈占位', async () => {
+  it('点击 "反馈" tab → 渲染 FeedbackInput + FeedbackList', async () => {
     render(<ProjectDetailPage projectId={7} />);
     await userEvent.click(screen.getByRole('tab', { name: '反馈' }));
-    expect(screen.getByText(/反馈 tab/)).toBeInTheDocument();
+    expect(screen.getByTestId('feedback-input')).toBeInTheDocument();
+    expect(screen.getByTestId('feedback-list')).toBeInTheDocument();
+  });
+
+  it('点击 "论文版本" tab → 渲染 FileUploadButton + ThesisVersionList', async () => {
+    render(<ProjectDetailPage projectId={7} />);
+    await userEvent.click(screen.getByRole('tab', { name: '论文版本' }));
+    expect(screen.getByTestId('file-upload-button')).toBeInTheDocument();
+    expect(screen.getByTestId('thesis-version-list')).toBeInTheDocument();
+  });
+
+  it('点击 "收款" tab → 渲染"+ 新增收款"按钮', async () => {
+    render(<ProjectDetailPage projectId={7} />);
+    await userEvent.click(screen.getByRole('tab', { name: '收款' }));
+    expect(screen.getByRole('button', { name: '+ 新增收款' })).toBeInTheDocument();
+  });
+
+  it('点击"+ 新增收款"→ PaymentDialog 出现', async () => {
+    render(<ProjectDetailPage projectId={7} />);
+    await userEvent.click(screen.getByRole('tab', { name: '收款' }));
+    await userEvent.click(screen.getByRole('button', { name: '+ 新增收款' }));
+    expect(screen.getByTestId('payment-dialog')).toBeInTheDocument();
+  });
+
+  it('点击"调整报价"→ QuoteChangeDialog 出现', async () => {
+    render(<ProjectDetailPage projectId={7} />);
+    await userEvent.click(screen.getByRole('button', { name: '调整报价' }));
+    expect(screen.getByTestId('quote-change-dialog')).toBeInTheDocument();
   });
 
   it('点击 NBA CTA → 弹出 EventTriggerDialog', async () => {
