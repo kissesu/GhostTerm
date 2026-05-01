@@ -92,14 +92,16 @@ func TestFlow05_FileAndThesisVersion(t *testing.T) {
 	assert.Len(t, list.Data, 2)
 
 	// ============================================================
-	// 路径遍历兜底：filename "../etc/passwd" 必须被拒
+	// 路径遍历兜底：filename 含 ".." 子串必须被拒
 	//
-	// SanitizeFilename 规则：含 / 或 .. 直接返回 ErrFileNameInvalid
-	// router 把该 error 映射为 500 internal（FilesUpload res 没有 422 类型，
-	// 见 file.go 注释）；e2e 只断言"非 2xx"即可。
+	// 注意：Go mime/multipart 解码时会自动 strip filename 中的 / \
+	//       前缀（仅保留 basename），所以 "../etc/passwd" 实际到达 handler 时
+	//       已经是 "passwd"——sanitize 层面看不到路径遍历。
+	//       本测试用 "bad..name.pdf" 让 ".." 子串真正进入 SanitizeFilename，
+	//       验证 strings.Contains(name, "..") 拒绝逻辑生效。
 	// ============================================================
-	traversal := cs.uploadFile(t, "../etc/passwd", "application/pdf", minimalPDF)
+	traversal := cs.uploadFile(t, "bad..name.pdf", "application/pdf", minimalPDF)
 	assert.NotEqual(t, http.StatusCreated, traversal.statusCode,
-		"路径遍历文件名必须被拒，实际 status=%d body=%s",
+		"含 .. 子串的文件名必须被拒，实际 status=%d body=%s",
 		traversal.statusCode, traversal.bodyString())
 }

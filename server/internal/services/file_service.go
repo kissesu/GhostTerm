@@ -130,8 +130,14 @@ var allowedTextPrefix = []string{
 
 // extToInferredMIME：sniff 返 octet-stream 时按 client filename 扩展名兜底白名单
 // http.DetectContentType 不识别 HEIC/AVIF/SVG 等现代图片格式，但实际 GhostTerm 用户
-// 大量上传手机微信截图（iOS HEIC）/ 现代相机 / 加密 PDF 等；sniff 失败时按扩展名放行
-// 安全权衡：本服务不执行上传文件，仅存储 + 客户端下载；扩展名劫持风险小
+// 大量上传手机微信截图（iOS HEIC）/ 现代相机 / 视频；sniff 失败时按扩展名放行
+//
+// 安全权衡（重要）：
+//   - 仅图片 + 视频 ext 走兜底；文档类（pdf/doc/xlsx 等）不在此表
+//   - 原因：PE / Mach-O 等可执行文件改名 .pdf 上传，sniff 多数返 octet-stream，
+//     若 .pdf 在兜底表里就会被错误放行；spec §C5 明确把这种攻击列为必拒
+//   - 图片视频被改名劫持的风险仅限渲染崩溃，无 RCE 路径，可接受
+//   - 加密 PDF / 损坏 docx 等少数 sniff 失败的合法文档，请用户解密 / 修复后再传
 var extToInferredMIME = map[string]string{
 	// 现代图片格式（sniff 不识别但前端能预览）
 	".heic": "image/heic",
@@ -141,24 +147,12 @@ var extToInferredMIME = map[string]string{
 	".bmp":  "image/bmp",
 	".tiff": "image/tiff",
 	".tif":  "image/tiff",
-	// 旧格式 sniff 偶尔失效兜底
+	// 旧图片格式 sniff 偶尔失效兜底
 	".png":  "image/png",
 	".jpg":  "image/jpeg",
 	".jpeg": "image/jpeg",
 	".gif":  "image/gif",
 	".webp": "image/webp",
-	// 文档格式（加密/损坏 sniff 失败兜底）
-	".pdf":  "application/pdf",
-	".doc":  "application/msword",
-	".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-	".xls":  "application/vnd.ms-excel",
-	".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-	".ppt":  "application/vnd.ms-powerpoint",
-	".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-	// 文本扩展（极少出 octet-stream 但兜底）
-	".txt": "text/plain",
-	".md":  "text/markdown",
-	".csv": "text/csv",
 	// 视频：仅 mp4 / mov（业务范围）；mov sniff 不识别由 ext 兜底
 	".mp4": "video/mp4",
 	".mov": "video/quicktime",
