@@ -331,10 +331,12 @@ func (s *ProjectServiceImpl) Create(
 		// 文件本身已由前端先 POST /api/files 上传（拿到 file_id 入 in.WechatChatFileIDs）；
 		// 这里仅在事务内建立 project ↔ file 关联。任一失败 → 回滚保证 0 残留。
 		for _, fileID := range in.WechatChatFileIDs {
+			// added_by = creatorUserID：创建项目的用户即首批附件的添加者，
+			// 用于 project_activity_view 的 actor 归属（migration 0006 起 NOT NULL）
 			_, err = tx.Exec(ctx, `
-				INSERT INTO project_files (project_id, file_id, category)
-				VALUES ($1, $2, 'wechat_chat')
-			`, p.ID, fileID)
+				INSERT INTO project_files (project_id, file_id, category, added_by)
+				VALUES ($1, $2, 'wechat_chat', $3)
+			`, p.ID, fileID, creatorUserID)
 			if err != nil {
 				return fmt.Errorf("project_service.Create insert wechat_chat file %d: %w", fileID, err)
 			}

@@ -700,11 +700,13 @@ func (s *fileService) AttachToProject(
 		if err := progressdb.SetSessionContext(ctx, tx, ac.UserID, ac.RoleID); err != nil {
 			return err
 		}
+		// added_by = ac.UserID：执行 attach 操作的用户即附件添加者，
+		// 用于 project_activity_view 的 actor 归属（migration 0006 起 NOT NULL）
 		row := tx.QueryRow(ctx, `
-			INSERT INTO project_files (project_id, file_id, category)
-			VALUES ($1, $2, $3)
+			INSERT INTO project_files (project_id, file_id, category, added_by)
+			VALUES ($1, $2, $3, $4)
 			RETURNING id, project_id, file_id, category, added_at
-		`, projectID, fileID, category)
+		`, projectID, fileID, category, ac.UserID)
 		if err := row.Scan(&v.ID, &v.ProjectID, &v.FileID, &v.Category, &v.AddedAt); err != nil {
 			return err
 		}
