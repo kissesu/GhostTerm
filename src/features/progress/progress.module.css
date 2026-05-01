@@ -772,7 +772,14 @@
   border: 1px solid var(--line);
   background: transparent;
   color: var(--text);
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
+  /* 弹性 cubic-bezier 让 hover/active 更"有意思"：overshoot 微反弹 */
+  transition:
+    background 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+    border-color 0.18s ease,
+    transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.18s ease,
+    filter 0.18s ease,
+    opacity 0.18s ease;
   user-select: none;
 }
 
@@ -785,32 +792,36 @@
 }
 
 /* 统一交互：所有 btn / btnPrimary 共享 hover/active/disabled
-   关键约束：不改 background 避免白雾污染主色调；用 border + 轻微 shadow + 抬升反馈 */
+   关键约束：不改 background 避免白雾污染主色调；放大反馈 + 弹性曲线让交互"有意思" */
 .btn:hover {
   border-color: var(--line-strong);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.4), 0 0 0 1px var(--line-strong);
 }
 .btnPrimary:hover {
-  /* primary 用 filter:brightness 让黄绿色更亮；主色不变 */
+  /* primary：accent 同色双层光晕 + 微缩放 + 提亮 */
   border-color: transparent;
-  filter: brightness(1.1);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(184,255,106,0.25);  /* 用 accent 同色光晕 */
+  filter: brightness(1.12);
+  transform: translateY(-2px) scale(1.03);
+  box-shadow:
+    0 8px 24px rgba(184,255,106,0.45),
+    0 0 0 4px rgba(184,255,106,0.15);
 }
 .btn:active,
 .btnPrimary:active {
-  transform: translateY(0);
-  box-shadow: none;
-  filter: none;
+  /* 按下：快速回弹到比原位低 1px，暗示"实在按下" */
+  transform: translateY(1px) scale(0.97);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  filter: brightness(0.95);
+  transition-duration: 0.08s;  /* active 用快速 transition，反馈即时 */
 }
 .btn:disabled,
 .btnPrimary:disabled {
-  opacity: 0.55;
+  opacity: 0.45;
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
-  filter: none;
+  filter: grayscale(0.4);  /* 灰度让 disabled 状态更清晰 */
 }
 
 /* ============ Toast ============ (设计稿 line 498-517) */

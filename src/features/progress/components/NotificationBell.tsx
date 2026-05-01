@@ -58,17 +58,21 @@ export function NotificationBell(): ReactElement {
             position: 'absolute',
             top: 0,
             right: 0,
-            minWidth: 14,
-            height: 14,
+            minWidth: 16,
+            height: 16,
             padding: '0 4px',
-            borderRadius: 7,
-            background: 'var(--red)',
+            borderRadius: 8,
+            /* 用 hex 而非 var(--red)：NotificationBell 在 AppLayout 渲染不在 .shellRoot 内，
+               progress.module.css 的 token 不能解析；hex 写死保证红色稳定 */
+            background: '#ef4444',
             color: '#fff',
             fontSize: 10,
             fontWeight: 800,
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
+            border: '1.5px solid #0d0d0c',  /* 与背景 dark 形成 cutout 视觉，badge 更突出 */
+            boxShadow: '0 0 0 1px rgba(239,68,68,0.4)',  /* 红光晕 */
           }}
         >
           {unread > 99 ? '99+' : unread}
