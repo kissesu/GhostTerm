@@ -740,18 +740,51 @@
 }
 
 .btn {
-  padding: 8px 16px;
+  /* 统一按钮基线：所有 .btn 和 .btnPrimary 高度/圆角/字号/动画完全一致 */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;             /* 显式 height 让 btn / btnPrimary 像素级对齐 */
+  padding: 0 16px;          /* height 已固定，padding 改横向 */
   border-radius: 6px;
   font-size: 13px;
   font-weight: 850; /* 设计稿原值 */
+  line-height: 1;
   cursor: pointer;
   border: 1px solid var(--line);
   background: transparent;
   color: var(--text);
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
+  user-select: none;
 }
 
-/* 原 .btn-primary */
-.btnPrimary { border: none; background: var(--accent); color: var(--accent-ink); }
+/* 原 .btn-primary - 用 transparent border 保 height 与 .btn 像素一致；
+   配色覆盖 .btn 默认；hover/active 保持同一交互语言 */
+.btnPrimary {
+  border: 1px solid transparent;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* 统一交互效果：所有 btn / btnPrimary 共享 hover + active + disabled */
+.btn:hover {
+  border-color: var(--line-strong);
+  background: rgba(255,255,255,0.04);
+}
+.btnPrimary:hover {
+  border-color: transparent;
+  filter: brightness(1.08);        /* 跨浏览器兼容（vs oklch from L4 函数） */
+  transform: translateY(-1px);
+}
+.btn:active,
+.btnPrimary:active { transform: translateY(0); }
+.btn:disabled,
+.btnPrimary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
 
 /* ============ Toast ============ (设计稿 line 498-517) */
 .toast {
