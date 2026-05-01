@@ -30,4 +30,24 @@ describe('progressPermissionStore', () => {
     expect(useProgressPermissionStore.getState().has('event:E1')).toBe(false);
     expect(useProgressPermissionStore.getState().has('event:E2')).toBe(true);
   });
+
+  it('全局通配 "*:*" 命中任意 perm（super_admin 场景）', () => {
+    useProgressPermissionStore.getState().set(['*:*'] as any);
+    expect(useProgressPermissionStore.getState().has('event:E1')).toBe(true);
+    expect(useProgressPermissionStore.getState().has('feedback:create')).toBe(true);
+    expect(useProgressPermissionStore.getState().has('any:perm')).toBe(true);
+  });
+
+  it('namespace 通配 "<ns>:*" 命中同 ns perm', () => {
+    useProgressPermissionStore.getState().set(['event:*'] as any);
+    expect(useProgressPermissionStore.getState().has('event:E1')).toBe(true);
+    expect(useProgressPermissionStore.getState().has('event:E_AS3')).toBe(true);
+    expect(useProgressPermissionStore.getState().has('feedback:create')).toBe(false);
+  });
+
+  it('精确匹配 + 全局通配同时存在不冲突', () => {
+    useProgressPermissionStore.getState().set(['*:*', 'event:E1'] as any);
+    expect(useProgressPermissionStore.getState().has('event:E1')).toBe(true);
+    expect(useProgressPermissionStore.getState().has('event:E12')).toBe(true);
+  });
 });

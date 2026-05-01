@@ -21,8 +21,24 @@ export const useProgressPermissionStore = create<ProgressPermissionState>((set, 
 
   set: (perms) => set({ permissions: new Set(perms as Permission[]) }),
 
-  /** O(1) lookup；perm 不存在或未登录时返回 false */
-  has: (perm) => get().permissions.has(perm as Permission),
+  /**
+   * 权限查询：支持三档匹配
+   * 1. 精确匹配 perm 本身
+   * 2. 全局通配 "*:*"（super_admin 后端返回的标识）
+   * 3. namespace 通配 "<ns>:*"（如 "event:*" 覆盖 "event:E1"）
+   * 任意一档命中即返回 true；perm 含 ":" 时才尝试 ns 通配
+   */
+  has: (perm) => {
+    const perms = get().permissions;
+    if (perms.has(perm as Permission)) return true;
+    if (perms.has('*:*' as Permission)) return true;
+    const colon = perm.indexOf(':');
+    if (colon > 0) {
+      const ns = perm.slice(0, colon);
+      if (perms.has(`${ns}:*` as Permission)) return true;
+    }
+    return false;
+  },
 
   clear: () => set({ permissions: new Set() }),
 }));
