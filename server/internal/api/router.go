@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -303,9 +304,13 @@ var _ oas.Handler = (*oasHandler)(nil)
 //  1. ogen 在调 op handler 前，先把 Authorization 头里的 Bearer token 传给本 struct
 //  2. 调 svc.VerifyAccessToken 完成签名 + token_version + is_active 三层校验
 //  3. 把 AuthContext 注入 ctx，op handler 通过 middleware.AuthContextFrom 取出
-//  4. 校验失败返回 error，ogen 框架透传到 ErrorHandler，写为 401 ErrorEnvelope
+//  4. Task 8：同步调 EffectivePermissionsService.Compute，把 perms 列表也写入 ctx；
+//     handler 里 RequirePermission / matchPermission 直接读 ctx 不再打 DB
+//  5. 校验失败返回 error，ogen 框架透传到 ErrorHandler，写为 401 ErrorEnvelope
 type oasSecurityHandler struct {
 	svc services.AuthService
+	// eff 用于在鉴权同时加载有效权限码到 ctx；nil 表示不预加载（兼容旧调用方）
+	eff services.EffectivePermissionsService
 }
 
 // HandleBearerAuth 是 ogen SecurityHandler 接口方法。
@@ -313,6 +318,13 @@ type oasSecurityHandler struct {
 // 修正：缺失/无效 token 一律返回 services.ErrInvalidAccessToken，
 // 让 errorEnvelopeHandler 映射为 401 unauthorized；
 // 之前用裸 errors.New("unauthorized") 会落到 500 internal 兜底。
+//
+// Task 8：鉴权成功后立刻调 eff.Compute(userID)，把结果缓存到 ctx；
+// 任何 handler 通过 middleware.EffectivePermsFrom(ctx) 拿到 3 段权限码列表，
+// 同请求内多次校验不再重复打 DB（plan §"don't add caching beyond per-request"）。
+//
+// eff 计算失败 → 透传 error 让 errorEnvelopeHandler 兜底（503/500），
+// 拒绝 fail-open 放行无权限信息的请求。
 func (h *oasSecurityHandler) HandleBearerAuth(ctx context.Context, _ oas.OperationName, t oas.BearerAuth) (context.Context, error) {
 	if t.Token == "" {
 		return ctx, services.ErrInvalidAccessToken
@@ -325,7 +337,18 @@ func (h *oasSecurityHandler) HandleBearerAuth(ctx context.Context, _ oas.Operati
 	if !ok {
 		return ctx, services.ErrInvalidAccessToken
 	}
-	return apimw.WithAuthContext(ctx, ac), nil
+	ctx = apimw.WithAuthContext(ctx, ac)
+
+	if h.eff != nil {
+		perms, err := h.eff.Compute(ctx, ac.UserID)
+		if err != nil {
+			// 不放行：权限信息缺失 = 后续 RequirePermission 全部 deny；
+			// 直接 bubble 让 errorEnvelopeHandler 给前端清晰错误码
+			return ctx, fmt.Errorf("rbac: load effective permissions for user %d: %w", ac.UserID, err)
+		}
+		ctx = apimw.WithEffectivePermissions(ctx, perms)
+	}
+	return ctx, nil
 }
 
 // 编译时校验
@@ -473,7 +496,9 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	effSvc := services.NewEffectivePermissionsService(deps.Pool)
 	permissionsHandler := handlers.NewPermissionsHandler(deps.Pool, permsSvc, effSvc)
 
-	secHandler := &oasSecurityHandler{svc: deps.AuthService}
+	// Task 8：security handler 同时承担"鉴权"+"加载有效权限码到 ctx"职责。
+	// 这样 handler 内 RequirePermission / matchPermission 直接读 ctx，0 次 DB 查询。
+	secHandler := &oasSecurityHandler{svc: deps.AuthService, eff: effSvc}
 
 	oasServer, err := oas.NewServer(
 		&oasHandler{

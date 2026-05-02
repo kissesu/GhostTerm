@@ -73,6 +73,9 @@ func newPermissionsHandler(t *testing.T) (
 	ctx := context.Background()
 	ac := fixtures.SeedAdminAuthContext(t, ctx, tdb.Pool)
 	ctxWithAuth := middleware.WithAuthContext(ctx, ac)
+	// Task 8：handler 现在通过 EffectivePermsFrom + MatchPermission 校验权限；
+	// admin 等价于 *:* 哨兵（与生产 oasSecurityHandler 行为一致）
+	ctxWithAuth = middleware.WithEffectivePermissions(ctxWithAuth, []string{"*:*"})
 	return h, tdb, ac, ctxWithAuth
 }
 

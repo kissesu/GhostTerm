@@ -161,6 +161,9 @@ func (h *RBACHandler) RolesCreate(ctx context.Context, req *oas.RoleCreateReques
 // ============================================================
 
 // RolesGetPermissions 返回某 roleID 已绑定的权限列表。
+//
+// Task 8 留待：当前 OAS 不声明 403；若需把"仅 permissions:role:manage 可读"加上，
+// 需先在 openapi.yaml 加 403 + regen，再添加 perms 校验（参考 RolesUpdatePermissions）。
 func (h *RBACHandler) RolesGetPermissions(ctx context.Context, params oas.RolesGetPermissionsParams) (oas.RolesGetPermissionsRes, error) {
 	if _, ok := middleware.AuthContextFrom(ctx); !ok {
 		return rolesGetPermsUnauthorized("未登录"), nil

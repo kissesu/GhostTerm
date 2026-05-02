@@ -43,6 +43,23 @@ import (
 	"github.com/ghostterm/progress-server/internal/services"
 )
 
+// checkPerm 是 Task 8 引入的权限校验便捷函数：从 ctx 拉 effective perms 后做四档匹配。
+//
+// 业务背景：本 handler 大量重复 ac.RoleID == SuperAdminRoleID 硬编码（Task 7 临时实现），
+// Task 8 用 EffectivePermsFrom + MatchPermission 替换：
+//   - super_admin 通过 *:* 哨兵自动放行
+//   - 普通角色需在 role_permissions 显式 grant 对应 code
+//   - 用户级 grant/deny 也参与最终判定（由 EffectivePermissionsService 计算）
+//
+// 返回 false 表示无权（包含"ctx 未挂中间件"的防御场景）；调用方应回 403。
+func checkPerm(ctx context.Context, code string) bool {
+	perms, ok := middleware.EffectivePermsFrom(ctx)
+	if !ok {
+		return false
+	}
+	return middleware.MatchPermission(perms, code)
+}
+
 // PermissionsHandler 装配 catalog 查询 + role/user 写入 + effective 计算所需的依赖。
 //
 // 设计取舍：
@@ -79,6 +96,9 @@ func NewPermissionsHandler(
 //
 // 注意：这里 *不* 复用 RBACService.ListPermissions —— 它走 RBAC service 的内部缓存
 // 链路（与 role 绑定相关）。Task 7 catalog 查询是无状态字典查询，直接 pool 查更直白。
+//
+// Task 8 留待：当前 OAS 不声明 403，仍按 Task 7 的"仅登录可访问"行为；
+// 后续若需要 permissions:role:manage 才能查 catalog，需先在 openapi.yaml 加 403 + regen。
 func (h *PermissionsHandler) PermissionsList(ctx context.Context) (oas.PermissionsListRes, error) {
 	if _, ok := middleware.AuthContextFrom(ctx); !ok {
 		return unauthorizedErrorEnvelope("未登录"), nil
@@ -173,9 +193,10 @@ func (h *PermissionsHandler) RolesUpdatePermissions(
 	if !ok {
 		return rolesUpdatePermsUnauthorized("未登录"), nil
 	}
-	// 仅 super_admin 可写；其它角色一律拒
-	if ac.RoleID != services.SuperAdminRoleID {
-		return rolesUpdatePermsForbidden("仅超管可修改角色权限"), nil
+	// Task 8：用 EffectivePermsFrom + matchPermission 替换原 ac.RoleID==1 硬编码；
+	// super_admin 通过 *:* 哨兵自动放行，其它角色需显式 grant permissions:role:manage
+	if !checkPerm(ctx, "permissions:role:manage") {
+		return rolesUpdatePermsForbidden("无权修改角色权限"), nil
 	}
 
 	permIDs := []int64{}
@@ -207,12 +228,11 @@ func (h *PermissionsHandler) UsersGetPermissionOverrides(
 	ctx context.Context,
 	params oas.UsersGetPermissionOverridesParams,
 ) (oas.UsersGetPermissionOverridesRes, error) {
-	ac, ok := middleware.AuthContextFrom(ctx)
-	if !ok {
+	if _, ok := middleware.AuthContextFrom(ctx); !ok {
 		return usersGetOverridesUnauthorized("未登录"), nil
 	}
-	if ac.RoleID != services.SuperAdminRoleID {
-		return usersGetOverridesForbidden("仅超管可查询用户权限覆写"), nil
+	if !checkPerm(ctx, "permissions:user_override:manage") {
+		return usersGetOverridesForbidden("无权查询用户权限覆写"), nil
 	}
 
 	overrides, err := h.perms.ListUserOverrides(ctx, params.ID)
@@ -255,8 +275,8 @@ func (h *PermissionsHandler) UsersUpdatePermissionOverrides(
 	if !ok {
 		return usersUpdateOverridesUnauthorized("未登录"), nil
 	}
-	if ac.RoleID != services.SuperAdminRoleID {
-		return usersUpdateOverridesForbidden("仅超管可修改用户权限覆写"), nil
+	if !checkPerm(ctx, "permissions:user_override:manage") {
+		return usersUpdateOverridesForbidden("无权修改用户权限覆写"), nil
 	}
 
 	overrides := make([]services.UserOverride, 0)
