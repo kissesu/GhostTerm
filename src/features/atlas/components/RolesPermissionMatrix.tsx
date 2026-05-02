@@ -196,8 +196,11 @@ export function RolesPermissionMatrix() {
                             checked={set.has(p.id)}
                             onChange={() => togglePermission(role.id, p.id)}
                             data-testid={`atlas-perm-${role.id}-${p.id}`}
-                            // 系统超管角色（id=1）一般使用 *:* 通配权限；矩阵编辑允许，但需谨慎
-                            // 不禁用以保持纯粹的"矩阵 = 真实绑定"语义
+                            // Task 7 review Important #1（race condition 修复）：
+                            // 保存进行中禁止编辑该 row 的所有勾选；否则 PUT 提交后 GET 重拉
+                            // 会用服务端结果覆盖本地刚改的格子，造成"用户的修改静默丢失"。
+                            // 仅 disable 当前正在保存的 role 行；其它角色行可继续编辑。
+                            disabled={savingRoleId === role.id}
                           />
                         </td>
                       )),
@@ -216,7 +219,8 @@ export function RolesPermissionMatrix() {
                         <button
                           type="button"
                           className={styles.btnGhost}
-                          disabled={!dirty}
+                          // race fix：保存中禁止重置（重置 + 保存竞态会导致数据态不可预期）
+                          disabled={!dirty || savingRoleId === role.id}
                           onClick={() => resetRoleEdits(role.id)}
                           data-testid={`atlas-reset-role-${role.id}`}
                         >
