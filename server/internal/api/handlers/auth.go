@@ -91,7 +91,7 @@ func (h *AuthHandler) AuthLogin(ctx context.Context, req *oas.AuthLoginRequest) 
 //   - ErrInvalidRefreshToken → 401 unauthorized
 //   - 其它                   → 500 internal
 func (h *AuthHandler) AuthRefresh(ctx context.Context, req *oas.AuthRefreshRequest) (oas.AuthRefreshRes, error) {
-	access, err := h.Svc.Refresh(ctx, req.RefreshToken)
+	access, newRefresh, err := h.Svc.Refresh(ctx, req.RefreshToken)
 	if err != nil {
 		if errors.Is(err, services.ErrInvalidRefreshToken) {
 			return unauthorizedErrorEnvelope("refresh token 无效或已过期"), nil
@@ -99,7 +99,10 @@ func (h *AuthHandler) AuthRefresh(ctx context.Context, req *oas.AuthRefreshReque
 		return nil, err
 	}
 	return &oas.AuthRefreshEnvelope{
-		Data: oas.AuthRefreshResponse{AccessToken: access},
+		Data: oas.AuthRefreshResponse{
+			AccessToken:  access,
+			RefreshToken: newRefresh,
+		},
 	}, nil
 }
 

@@ -65,6 +65,15 @@ function writeRefresh(token: string | null): void {
 }
 
 // ============================================
+// refresh 单飞守卫（module 级）—— 关键：refresh_tokens 表是 single-use rotation
+// （migration 0002 rotate_refresh_token NC2），同一 token 第二次消费返 401。
+// React StrictMode 双 mount 让 AppLayout verify() 并发调 refresh 两次时，
+// 第二个请求会被后端误判重放 → 401 → 清掉刚成功的 user，让超管刷新页面后
+// 看到 NoPermissionFallback。所有 refresh 路径共享此 inflight。
+// ============================================
+let refreshInflight: Promise<void> | null = null;
+
+// ============================================
 // store state + actions
 // ============================================
 
@@ -147,25 +156,37 @@ export const useGlobalAuthStore = create<GlobalAuthState>((set, get) => ({
   // refresh: POST /api/auth/refresh → { accessToken }
   // ----------------------------------------------------------
   async refresh() {
-    const current = get().refreshToken;
-    if (!current) {
-      throw new ProgressApiError(401, 'unauthorized', 'no refresh token');
-    }
-    const data = await apiFetch(
-      '/api/auth/refresh',
-      {
-        method: 'POST',
-        anonymous: true, // refresh 不依赖 access token
-        body: JSON.stringify({ refreshToken: current }),
-      },
-      RefreshResponseSchema,
-    ).catch((err) => {
-      // refresh 失败 = refresh token 失效；清空本地 state 避免后续重复尝试
-      writeRefresh(null);
-      set({ accessToken: null, refreshToken: null, user: null });
-      throw err;
-    });
-    set({ accessToken: data.accessToken });
+    // 单飞复用：StrictMode 双 mount / 多旁路并发 401 时只发一次 /api/auth/refresh
+    if (refreshInflight) return refreshInflight;
+    refreshInflight = (async () => {
+      try {
+        const current = get().refreshToken;
+        if (!current) {
+          throw new ProgressApiError(401, 'unauthorized', 'no refresh token');
+        }
+        const data = await apiFetch(
+          '/api/auth/refresh',
+          {
+            method: 'POST',
+            anonymous: true, // refresh 不依赖 access token
+            body: JSON.stringify({ refreshToken: current }),
+          },
+          RefreshResponseSchema,
+        ).catch((err) => {
+          // refresh 失败 = refresh token 失效；清空本地 state 避免后续重复尝试
+          writeRefresh(null);
+          set({ accessToken: null, refreshToken: null, user: null });
+          throw err;
+        });
+        // 后端 rotate 后的新 refreshToken 必须写回 localStorage + state
+        // （rotate_refresh_token 单次消费，下次 refresh 必须用新 token）
+        writeRefresh(data.refreshToken);
+        set({ accessToken: data.accessToken, refreshToken: data.refreshToken });
+      } finally {
+        refreshInflight = null;
+      }
+    })();
+    return refreshInflight;
   },
 
   // ----------------------------------------------------------

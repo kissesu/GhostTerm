@@ -67,6 +67,9 @@ export type LoginResponsePayload = z.infer<typeof LoginResponseSchema>;
  */
 export const RefreshResponseSchema = z.object({
   accessToken: z.string().min(1),
+  // rotate 后的新 refresh token，client 必须写回 localStorage 替换旧值
+  // （后端 rotate_refresh_token 单次消费旧 token，不写回会让二次 refresh 必 401）
+  refreshToken: z.string().min(1),
 });
 
 export type RefreshResponsePayload = z.infer<typeof RefreshResponseSchema>;

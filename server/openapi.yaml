@@ -598,9 +598,10 @@ components:
 
     AuthRefreshResponse:
       type: object
-      required: [accessToken]
+      required: [accessToken, refreshToken]
       properties:
-        accessToken: { type: string }
+        accessToken: { type: string, description: "新签发的 access token" }
+        refreshToken: { type: string, description: "rotate 后的新 refresh token，client 必须写回 localStorage 替换旧值（旧值已在 DB revoked）" }
 
     # ===== WebSocket ticket =====
     WSTicket:

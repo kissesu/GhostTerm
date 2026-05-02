@@ -206,23 +206,21 @@ func (s *authService) Login(ctx context.Context, username, password string) (str
 // Refresh
 // ============================================================
 
-// Refresh 用旧 refresh token 换新 access。
+// Refresh 用旧 refresh token 换新 access + 新 refresh。
 //
-// 注意：interfaces.go 当前签名只返回 newAccess 一个 string —— 不返回新的 refresh。
-// 本文件遵守接口契约（不擅自改 interface）：
-//   - 仍调 rotate_refresh_token 函数（数据层强制原子轮转 + 重放检测）
-//   - 但仅签发新 access 返回；新 refresh 也存入 DB（rotate 函数已 INSERT），
-//     客户端继续使用 *旧* refresh token 直到过期 —— 这是 v1 的简化，避免引入第二条 cookie/header
+// 完整 refresh token rotation 语义：
+//   - 调 rotate_refresh_token 函数（数据层原子轮转 + 重放检测）
+//   - 旧 refresh 立刻 revoked；签发新 refresh 入库
+//   - **返回新 refresh 给 client**，client 必须写回 localStorage 替换旧值
+//   - 同 token 第二次 refresh → DB rotate 返 NULL → 401（重放检测）
 //
-// 设计取舍：
-//   - 这与"refresh token rotation"完整方案略有差异：完整方案应每次 rotate 都返回新 refresh，
-//     旧 refresh 立刻作废。当前 interface 版本只返回 access；后续 phase 接 refresh rotation
-//     完整版时再扩展接口。
-//   - 单次 rotate_refresh_token 函数仍可让"两个并发 refresh 请求"中一个 NULL，达到重放检测目的
-func (s *authService) Refresh(ctx context.Context, refreshToken string) (string, error) {
+// 此前 v1 版本只返 access 不返 refresh，导致 client 二次 refresh 必失败
+// （root cause: 浏览器刷新 + StrictMode 双 mount 让 verify() 并发调 refresh 二次，
+//  第二次用已 revoked 的旧 token → 401 → 用户被误展 NoPermissionFallback）
+func (s *authService) Refresh(ctx context.Context, refreshToken string) (string, string, error) {
 	claims, err := auth.VerifyRefreshToken(refreshToken, s.refreshSec)
 	if err != nil {
-		return "", ErrInvalidRefreshToken
+		return "", "", ErrInvalidRefreshToken
 	}
 
 	oldHash := auth.HashRefreshToken(refreshToken)
@@ -230,38 +228,37 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (string,
 	// 生成新 refresh（rotate_refresh_token 函数会把它存入 DB）
 	newRefresh, newHash, err := auth.IssueRefreshToken(claims.UserID, s.refreshSec, s.refreshTTL)
 	if err != nil {
-		return "", fmt.Errorf("auth_service: issue new refresh: %w", err)
+		return "", "", fmt.Errorf("auth_service: issue new refresh: %w", err)
 	}
-	_ = newRefresh // 当前接口不返回它，但仍要 INSERT 入库以保持函数副作用一致
 
 	// rotate_refresh_token(p_old_hash, p_new_hash, p_ttl) 返回 user_id 或 NULL
 	var rotatedUserID *int64
 	row := s.pool.QueryRow(ctx, `SELECT rotate_refresh_token($1, $2, $3)`,
 		oldHash, newHash, s.refreshTTL)
 	if err := row.Scan(&rotatedUserID); err != nil {
-		return "", fmt.Errorf("auth_service: rotate refresh: %w", err)
+		return "", "", fmt.Errorf("auth_service: rotate refresh: %w", err)
 	}
 	if rotatedUserID == nil {
 		// 旧 hash 已被 rotate / revoke / 不存在 → 重放或非法
-		return "", ErrInvalidRefreshToken
+		return "", "", ErrInvalidRefreshToken
 	}
 	if *rotatedUserID != claims.UserID {
 		// 客户端 token 与 DB 记录的 user_id 不一致（不该发生，但保险起见拒绝）
-		return "", ErrInvalidRefreshToken
+		return "", "", ErrInvalidRefreshToken
 	}
 
 	// 读取最新 role_id / token_version，避免用旧 access 中的过期值
 	var roleID, tokenVer int64
 	if err := s.pool.QueryRow(ctx, `SELECT role_id, token_version FROM users WHERE id = $1`,
 		claims.UserID).Scan(&roleID, &tokenVer); err != nil {
-		return "", fmt.Errorf("auth_service: re-read user: %w", err)
+		return "", "", fmt.Errorf("auth_service: re-read user: %w", err)
 	}
 
 	access, err := auth.IssueAccessToken(claims.UserID, roleID, tokenVer, s.accessSec, s.accessTTL)
 	if err != nil {
-		return "", fmt.Errorf("auth_service: issue access: %w", err)
+		return "", "", fmt.Errorf("auth_service: issue access: %w", err)
 	}
-	return access, nil
+	return access, newRefresh, nil
 }
 
 // ============================================================

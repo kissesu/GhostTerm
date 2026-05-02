@@ -62,8 +62,9 @@ type AuthService interface {
 	// Login username+密码换 access/refresh token
 	Login(ctx context.Context, username, password string) (accessToken, refreshToken string, user any, err error)
 
-	// Refresh 用 refresh token 换新 access token，校验 token_version 匹配
-	Refresh(ctx context.Context, refreshToken string) (accessToken string, err error)
+	// Refresh 用 refresh token 换新 access token + rotate 后的新 refresh token；
+	// 同 token 单次消费（rotate_refresh_token 函数原子轮转 + 重放检测）
+	Refresh(ctx context.Context, refreshToken string) (accessToken, newRefreshToken string, err error)
 
 	// Logout 递增当前用户 token_version，使所有已签发 token 失效
 	Logout(ctx context.Context, sc SessionContext) error

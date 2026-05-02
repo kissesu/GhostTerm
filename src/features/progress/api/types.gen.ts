@@ -1009,7 +1009,10 @@ export interface components {
             refreshToken: string;
         };
         AuthRefreshResponse: {
+            /** @description 新签发的 access token */
             accessToken: string;
+            /** @description rotate 后的新 refresh token，client 必须写回 localStorage 替换旧值（旧值已在 DB revoked） */
+            refreshToken: string;
         };
         WSTicket: {
             /** @description 短期 WS 票据，用于建立 /ws/notifications 连接 */

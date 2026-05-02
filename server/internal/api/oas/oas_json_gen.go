@@ -1589,10 +1589,15 @@ func (s *AuthRefreshResponse) encodeFields(e *jx.Encoder) {
 		e.FieldStart("accessToken")
 		e.Str(s.AccessToken)
 	}
+	{
+		e.FieldStart("refreshToken")
+		e.Str(s.RefreshToken)
+	}
 }
 
-var jsonFieldsNameOfAuthRefreshResponse = [1]string{
+var jsonFieldsNameOfAuthRefreshResponse = [2]string{
 	0: "accessToken",
+	1: "refreshToken",
 }
 
 // Decode decodes AuthRefreshResponse from json.
@@ -1616,6 +1621,18 @@ func (s *AuthRefreshResponse) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"accessToken\"")
 			}
+		case "refreshToken":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				v, err := d.Str()
+				s.RefreshToken = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"refreshToken\"")
+			}
 		default:
 			return d.Skip()
 		}
@@ -1626,7 +1643,7 @@ func (s *AuthRefreshResponse) Decode(d *jx.Decoder) error {
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [1]uint8{
-		0b00000001,
+		0b00000011,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.

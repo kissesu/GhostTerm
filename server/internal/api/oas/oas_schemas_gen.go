@@ -559,7 +559,11 @@ func (s *AuthRefreshRequest) SetRefreshToken(val string) {
 
 // Ref: #/components/schemas/AuthRefreshResponse
 type AuthRefreshResponse struct {
+	// 新签发的 access token.
 	AccessToken string `json:"accessToken"`
+	// Rotate 后的新 refresh token，client 必须写回 localStorage 替换旧值（旧值已在 DB
+	// revoked）.
+	RefreshToken string `json:"refreshToken"`
 }
 
 // GetAccessToken returns the value of AccessToken.
@@ -567,9 +571,19 @@ func (s *AuthRefreshResponse) GetAccessToken() string {
 	return s.AccessToken
 }
 
+// GetRefreshToken returns the value of RefreshToken.
+func (s *AuthRefreshResponse) GetRefreshToken() string {
+	return s.RefreshToken
+}
+
 // SetAccessToken sets the value of AccessToken.
 func (s *AuthRefreshResponse) SetAccessToken(val string) {
 	s.AccessToken = val
+}
+
+// SetRefreshToken sets the value of RefreshToken.
+func (s *AuthRefreshResponse) SetRefreshToken(val string) {
+	s.RefreshToken = val
 }
 
 type BearerAuth struct {
