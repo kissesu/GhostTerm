@@ -255,8 +255,46 @@ export default function AppLayout() {
   }, []);
 
   // ============================================
-  // 全局登录门：未登录或 session 验证未完成直接返回登录页
+  // 全局登录门：分三态避免"刷新闪现登录页"（用户原话 2026-05-02）
+  //   1) verify 进行中 + localStorage 有 refresh token → splash（假设登录中，不展 LoginPage）
+  //   2) verify 进行中 + 无 refresh token → 直接 LoginPage（无 token 不需等异步）
+  //   3) verify 完成 + 无 user → LoginPage（确认未登录）
+  //   4) verify 完成 + 有 user → 主 UI
+  // refreshToken 来自 globalAuthStore 初始 state，已经从 localStorage 读出，同步可见
   // ============================================
+  if (!sessionVerified && refreshToken) {
+    // 已登录用户刷新页面：异步 verify 期间显示 splash，不闪 LoginPage
+    return (
+      <div
+        style={{
+          width: '100%',
+          height: '100%',
+          background: 'var(--c-bg)',
+          color: 'var(--c-fg)',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
+        <WindowTitleBar showBrand />
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--c-fg-muted)',
+            fontSize: 13,
+          }}
+          aria-busy="true"
+        >
+          正在恢复会话…
+        </div>
+      </div>
+    );
+  }
+
   if (!sessionVerified || !user) {
     return (
       <div
