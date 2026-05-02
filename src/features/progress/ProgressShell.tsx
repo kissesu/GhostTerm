@@ -13,6 +13,7 @@ import styles from './progress.module.css';
 import { useProjectsStore } from './stores/projectsStore';
 import { useNotificationsStore } from './stores/notificationsStore';
 import { useProgressUiStore } from './stores/progressUiStore';
+import { useActivitiesStore } from './stores/activitiesStore';
 import { PipelineStepper } from './components/PipelineStepper';
 import { ViewBar } from './components/ViewBar';
 import { Toast } from './components/Toast';
@@ -60,6 +61,24 @@ export default function ProgressShell(): ReactElement {
   // 详情页时 Pipeline 高亮当前 status
   const pipelineCurrentStatus = selectedProject?.status;
 
+  // 详情页时从 activitiesStore 派生该项目"首次进入每个 stage 的时间"
+  // 用户需求 2026-05-02：进度条显示当前项目各阶段创建时间（洽谈/报价/开发中... 的初始时间）
+  const projectActivities = useActivitiesStore((s) =>
+    selectedProjectId !== null ? s.byProject.get(selectedProjectId)?.items : undefined,
+  );
+  const projectStages = useMemo(() => {
+    if (selectedProjectId === null || !projectActivities) return undefined;
+    const map: Record<string, string | null> = {};
+    // activities 已按 occurredAt DESC 排好序；遍历时后赋值会覆盖前者，最终保留**最早**的进入时间
+    for (const a of projectActivities) {
+      if (a.kind === 'status_change') {
+        // 同 stage 多次进入（如售后回流）取**最早**那次：DESC 数组中后遍历的是更早的
+        map[a.payload.toStatus] = a.occurredAt;
+      }
+    }
+    return map;
+  }, [selectedProjectId, projectActivities]);
+
   // ============================================
   // 第四步：渲染主区 — 详情页覆盖 view bar；其余 view 按 currentView 路由
   // ============================================
@@ -88,7 +107,11 @@ export default function ProgressShell(): ReactElement {
 
   return (
     <div className={styles.shellRoot} style={{ padding: '24px 28px 60px', minHeight: '100%' }}>
-      <PipelineStepper projects={projectList} currentStatus={pipelineCurrentStatus} />
+      <PipelineStepper
+        projects={projectList}
+        currentStatus={pipelineCurrentStatus}
+        projectStages={selectedProject ? projectStages : undefined}
+      />
       <ViewBar
         // 用户原话 2026-05-02 "点开通知中心后无法返回看板"：
         // notifications/earnings 是非 kanban 子视图，复用 detail 模式的"看板/标题 + 返回"

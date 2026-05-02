@@ -15,11 +15,35 @@ import { PIPELINE_STAGES, STATUS_LABEL } from '../config/nbaConfig';
 interface PipelineStepperProps {
   projects: Project[];
   currentStatus?: ProjectStatus;
+  /**
+   * 详情页模式：传入"该项目首次进入每个 stage 的时间"映射；非空时 stepMeta
+   * 替换为 YYYY-MM-DD HH:mm 时间戳替代默认的"X 单 / ¥pending"全局统计。
+   * key 为 stage code（dealing/quoting/...），value 为 ISO 时间或 null（未进入）。
+   * 用户需求 2026-05-02：进度条应显示当前项目进度的创建时间。
+   */
+  projectStages?: Record<string, string | null>;
 }
 
 type StepState = 'done' | 'current' | 'future' | 'dim' | 'default';
 
-export function PipelineStepper({ projects, currentStatus }: PipelineStepperProps): ReactElement {
+/** 把 ISO 时间格式化成 YYYY-MM-DD HH:mm（与 timeline 列表统一） */
+function formatStageTime(iso: string | null | undefined): string {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  const yyyy = d.getFullYear();
+  const mo = (d.getMonth() + 1).toString().padStart(2, '0');
+  const dd = d.getDate().toString().padStart(2, '0');
+  const hh = d.getHours().toString().padStart(2, '0');
+  const mm = d.getMinutes().toString().padStart(2, '0');
+  return `${yyyy}-${mo}-${dd} ${hh}:${mm}`;
+}
+
+export function PipelineStepper({
+  projects,
+  currentStatus,
+  projectStages,
+}: PipelineStepperProps): ReactElement {
+  const detailMode = projectStages !== undefined;
   // 按 PIPELINE_STAGES 7 个阶段统计项目数量 + 待收金额
   const stats = PIPELINE_STAGES.map((stage) => {
     const items = projects.filter((p) => p.status === stage);
@@ -63,6 +87,8 @@ export function PipelineStepper({ projects, currentStatus }: PipelineStepperProp
         const state = stateOf(idx, count);
         // dealing 阶段显示"—"（无待收概念）；count=0 也显示"—"
         const sumText = stage === 'dealing' || count === 0 ? '—' : '¥' + pending.toLocaleString();
+        // 详情页模式：替换 stepMeta 内容为该项目进入该 stage 的时间戳
+        const stageTime = detailMode ? formatStageTime(projectStages?.[stage]) : null;
         return (
           <div
             key={stage}
@@ -71,12 +97,22 @@ export function PipelineStepper({ projects, currentStatus }: PipelineStepperProp
             data-stage={stage}
             className={classOf(state)}
             role="listitem"
-            aria-label={STATUS_LABEL[stage] + ' ' + count + ' 单'}
+            aria-label={
+              detailMode
+                ? `${STATUS_LABEL[stage]} ${stageTime}`
+                : `${STATUS_LABEL[stage]} ${count} 单`
+            }
           >
             <div className={styles.stepName}>{STATUS_LABEL[stage]}</div>
             <div className={styles.stepMeta}>
-              <span>{count} 单</span>
-              <span>{sumText}</span>
+              {detailMode ? (
+                <span style={{ whiteSpace: 'nowrap', fontSize: 11 }}>{stageTime}</span>
+              ) : (
+                <>
+                  <span>{count} 单</span>
+                  <span>{sumText}</span>
+                </>
+              )}
             </div>
             {/* chevron 箭头 - 最末段由 CSS `.step:last-child .stepArrow { display: none }` 隐藏 */}
             <div className={styles.stepArrow} aria-hidden="true">

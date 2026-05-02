@@ -12,9 +12,11 @@
  * @author Atlas.oi
  * @date 2026-05-01
  */
-import { useCallback, useEffect, useRef, type ReactElement } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 import { useActivitiesStore } from '../stores/activitiesStore';
 import { ActivityItem } from './ActivityItem';
+import { ActivityDetailDialog } from './ActivityDetailDialog';
+import type { Activity } from '../api/activities';
 import styles from '../progress.module.css';
 
 interface Props {
@@ -25,6 +27,8 @@ export function DetailTimeline({ projectId }: Props): ReactElement {
   const state = useActivitiesStore((s) => s.byProject.get(projectId));
   const loadActivities = useActivitiesStore((s) => s.loadActivities);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  // 用户需求 2026-05-02：每条时间线点击弹 modal 显示完整详情
+  const [activeDetail, setActiveDetail] = useState<Activity | null>(null);
 
   // 第一步：首次进入页面（无 state）→ 拉首页
   useEffect(() => {
@@ -81,9 +85,27 @@ export function DetailTimeline({ projectId }: Props): ReactElement {
   return (
     <div className={styles.timelineList}>
       {state.items.map((a) => (
-        <ActivityItem key={a.id} activity={a} />
+        <button
+          key={a.id}
+          type="button"
+          onClick={() => setActiveDetail(a)}
+          aria-label="查看详情"
+          // 重置 native button 默认样式，让外层 button 视觉与原 div 一致 + 整行 hover 可点击
+          style={{
+            all: 'unset',
+            display: 'block',
+            width: '100%',
+            cursor: 'pointer',
+          }}
+          data-testid={`timeline-item-${a.id}`}
+        >
+          <ActivityItem activity={a} />
+        </button>
       ))}
       {state.nextCursor ? <div ref={sentinelRef} className={styles.timelineSentinel} /> : null}
+      {activeDetail && (
+        <ActivityDetailDialog activity={activeDetail} onClose={() => setActiveDetail(null)} />
+      )}
     </div>
   );
 }

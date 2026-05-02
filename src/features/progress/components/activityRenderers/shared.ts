@@ -54,30 +54,20 @@ export const PROJECT_FILE_CATEGORY_LABEL: Record<string, string> = {
 };
 
 /**
- * 把 ISO 时间字符串格式化为可读相对时间。
- *
- * 业务逻辑说明：
- * 1. 与 now 同一日 → "今天 HH:MM"
- * 2. 与 now 前一日 → "昨天 HH:MM"
- * 3. 其它 → "MM/DD HH:MM"（不显示年份，时间线是当年活动为主）
+ * 把 ISO 时间字符串格式化为 `YYYY-MM-DD HH:mm`（用户需求 2026-05-02：
+ * "每条时间线的时间应该显示为 YYYY-MM-DD HH:mm"，统一格式不再"今天/昨天"相对时间，
+ * 让审计 / 排查更直观）。
  *
  * @param iso ISO 8601 时间字符串
  */
 export function formatWhen(iso: string): string {
   const d = new Date(iso);
-  const now = new Date();
-  const hh = d.getHours().toString().padStart(2, '0');
-  const mm = d.getMinutes().toString().padStart(2, '0');
-
-  if (d.toDateString() === now.toDateString()) return `今天 ${hh}:${mm}`;
-
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-  if (d.toDateString() === yesterday.toDateString()) return `昨天 ${hh}:${mm}`;
-
+  const yyyy = d.getFullYear().toString();
   const mo = (d.getMonth() + 1).toString().padStart(2, '0');
   const dd = d.getDate().toString().padStart(2, '0');
-  return `${mo}/${dd} ${hh}:${mm}`;
+  const hh = d.getHours().toString().padStart(2, '0');
+  const mm = d.getMinutes().toString().padStart(2, '0');
+  return `${yyyy}-${mo}-${dd} ${hh}:${mm}`;
 }
 
 /**
