@@ -44,6 +44,7 @@ import {
 } from '../api/permissions';
 import { useAtlasUsersStore } from '../stores/atlasUsersStore';
 import { useAtlasRolesStore } from '../stores/atlasRolesStore';
+import { formatPermissionLabel } from '../utils/permissionLabels';
 import styles from '../atlas.module.css';
 
 /** super_admin role ID 与后端 services.SuperAdminRoleID = 1 对齐 */
@@ -57,49 +58,6 @@ interface UserPermissionOverridePanelProps {
   userId: number;
   /** 关闭面板回调（父容器决定是否显示，例如返回用户列表） */
   onClose?: () => void;
-}
-
-/**
- * 中文资源/动作名表（与 RolePermissionMatrix 同源）。
- *
- * 业务背景：本组件不再做 group 折叠（用户级 override 通常零星调整，整张表
- * 一屏可见反而高效）。但仍需要中文标签让非技术管理员能识别 perm 含义。
- */
-const RESOURCE_CN: Record<string, string> = {
-  '*': '全部资源',
-  project: '项目',
-  feedback: '反馈',
-  payment: '收款',
-  file: '文件',
-  event: '事件',
-  user: '用户',
-  role: '角色',
-  permissions: '权限管理',
-  nav: '导航 Tab',
-  progress: '进度模块',
-  users: '用户管理',
-};
-
-const ACTION_CN: Record<string, string> = {
-  '*': '全部',
-  read: '查看',
-  create: '创建',
-  update: '编辑',
-  delete: '删除',
-  upload: '上传',
-  manage: '管理',
-  access: '访问',
-};
-
-function formatActionLabel(resource: string, action: string): string {
-  if (resource === 'event' && /^E\d+$/.test(action)) {
-    return `事件 ${action}`;
-  }
-  return ACTION_CN[action] ?? action;
-}
-
-function formatResourceLabel(resource: string): string {
-  return RESOURCE_CN[resource] ?? resource;
 }
 
 /** Map clone 工具：本地 state diff 用 */
@@ -348,7 +306,7 @@ export function UserPermissionOverridePanel({
               disabled={saving || !dirty}
               data-testid="user-perm-save"
             >
-              {saving ? '保存中…' : '保存 override'}
+              {saving ? '保存中…' : '保存细分'}
             </button>
           </div>
         </div>
@@ -370,7 +328,7 @@ export function UserPermissionOverridePanel({
       >
         <span>权限</span>
         <span style={{ textAlign: 'center' }}>角色基线</span>
-        <span style={{ textAlign: 'center' }}>我的 override</span>
+        <span style={{ textAlign: 'center' }}>我的细分</span>
       </div>
 
       {/* 数据行容器（包一层 panel 让外圈圆角连续） */}
@@ -391,12 +349,11 @@ export function UserPermissionOverridePanel({
               className={styles.permOverrideRow}
               data-testid={`user-perm-row-${p.id}`}
             >
-              {/* 列 1：中文标签 + code */}
+              {/* 列 1：完整中文权限标签（资源·动作·作用域） */}
               <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                 <span style={{ color: 'var(--text)' }}>
-                  {formatResourceLabel(p.resource)} · {formatActionLabel(p.resource, p.action)}
+                  {formatPermissionLabel(p.resource, p.action, p.scope)}
                 </span>
-                <span className={styles.permRowCode}>{p.code}</span>
               </span>
 
               {/* 列 2：role 基线（只读） */}
@@ -437,7 +394,7 @@ export function UserPermissionOverridePanel({
                   disabled={isSuperAdmin || saving}
                   data-testid={`user-perm-chip-grant-${p.id}`}
                 >
-                  + grant
+                  + 授权
                 </button>
                 <button
                   type="button"
@@ -450,7 +407,7 @@ export function UserPermissionOverridePanel({
                   disabled={isSuperAdmin || saving}
                   data-testid={`user-perm-chip-deny-${p.id}`}
                 >
-                  - deny
+                  - 拒绝
                 </button>
               </span>
             </div>

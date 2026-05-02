@@ -92,7 +92,7 @@ export function PermissionsManagementPage() {
         <div>
           <h2 className={styles.pageTitle}>权限管理</h2>
           <p className={styles.pageSubtitle}>
-            按角色批量分配，或为单个用户做 override 微调
+            按角色批量分配，或为单个用户做细分微调
           </p>
         </div>
       </div>
@@ -122,7 +122,7 @@ export function PermissionsManagementPage() {
           onClick={() => setTab('users')}
           data-testid="perm-page-tab-users"
         >
-          用户 override
+          用户细分
         </button>
       </div>
 

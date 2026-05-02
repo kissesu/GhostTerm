@@ -20,6 +20,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { useAtlasRolesStore } from '../stores/atlasRolesStore';
+import { formatPermissionLabel as formatPermissionLabelFull } from '../utils/permissionLabels';
 import styles from '../atlas.module.css';
 
 /**
@@ -153,7 +154,10 @@ export function RolesPermissionMatrix() {
                 <th>角色</th>
                 {groupedPermissions.map((g) =>
                   g.items.map((p) => (
-                    <th key={p.id} title={`${p.resource}:${p.action}（${p.scope}）`}>
+                    <th
+                      key={p.id}
+                      title={formatPermissionLabelFull(p.resource, p.action, p.scope)}
+                    >
                       {/* 用户需求 2026-04-30：列头改中文展示，原始 code 保留在 title hover */}
                       <span style={{ color: 'var(--text)', fontWeight: 700 }}>
                         {formatPermissionLabel(p.resource, p.action)}

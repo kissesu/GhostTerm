@@ -35,6 +35,11 @@ import {
   updateRolePermissions,
   type PermissionDTO,
 } from '../api/permissions';
+import {
+  formatActionLabel,
+  formatResourceLabel,
+  formatScopeLabel,
+} from '../utils/permissionLabels';
 import styles from '../atlas.module.css';
 
 /** super_admin 角色 ID 与后端 services.SuperAdminRoleID = 1 对齐 */
@@ -47,52 +52,6 @@ interface RolePermissionMatrixProps {
   roleName?: string;
   /** 保存成功回调，父组件可借此触发 toast / 自身刷新 */
   onSaved?: () => void;
-}
-
-/**
- * 资源分组中文名表（业务语义优先，code 仅作 fallback）。
- *
- * 业务背景：与 RolesPermissionMatrix 的 RESOURCE_CN 同源；这里独立维护一份是因为
- * 本组件对资源组做了"分组折叠"语义，覆盖范围比矩阵列头更广，需要包含 Task 6 之后
- * 新增的 nav / users / permissions 等"管理类"资源。
- */
-const RESOURCE_CN: Record<string, string> = {
-  '*': '全部资源',
-  project: '项目',
-  feedback: '反馈',
-  payment: '收款',
-  file: '文件',
-  event: '事件',
-  user: '用户',
-  role: '角色',
-  permissions: '权限管理',
-  nav: '导航 Tab',
-  progress: '进度模块',
-  users: '用户管理',
-};
-
-const ACTION_CN: Record<string, string> = {
-  '*': '全部',
-  read: '查看',
-  create: '创建',
-  update: '编辑',
-  delete: '删除',
-  upload: '上传',
-  manage: '管理',
-  access: '访问',
-};
-
-/** 把 (resource, action) 映射成中文展示文本；找不到时回落英文 code */
-function formatActionLabel(resource: string, action: string): string {
-  // event:E1 / E2... 单独路径（业务事件编号保留）
-  if (resource === 'event' && /^E\d+$/.test(action)) {
-    return `事件 ${action}`;
-  }
-  return ACTION_CN[action] ?? action;
-}
-
-function formatResourceLabel(resource: string): string {
-  return RESOURCE_CN[resource] ?? resource;
 }
 
 /** 设置工具：克隆 + 相等比较 */
@@ -337,13 +296,12 @@ export function RolePermissionMatrix({ roleId, roleName, onSaved }: RolePermissi
                     />
                     <span className={styles.permRowLabel}>
                       {formatActionLabel(p.resource, p.action)}
-                      {p.scope !== 'all' && (
+                      {p.scope !== 'all' && p.scope !== '*' && (
                         <span style={{ color: 'var(--faint)', fontSize: 10, marginLeft: 6 }}>
-                          ({p.scope})
+                          · {formatScopeLabel(p.scope)}
                         </span>
                       )}
                     </span>
-                    <span className={styles.permRowCode}>{p.code}</span>
                   </label>
                 );
               })}
