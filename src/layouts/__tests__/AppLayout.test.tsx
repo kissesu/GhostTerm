@@ -13,6 +13,7 @@ import { useSidebarStore } from '../../features/sidebar';
 import { useFileTreeStore } from '../../features/sidebar';
 import { useProjectStore } from '../../features/sidebar';
 import { useGlobalAuthStore } from '../../shared/stores/globalAuthStore';
+import { useGlobalPermissionStore } from '../../shared/stores/globalPermissionStore';
 
 const mockInvoke = vi.mocked(invoke);
 
@@ -52,6 +53,15 @@ beforeEach(() => {
     user: TEST_USER,
     loading: false,
     error: null,
+  });
+  // Task 9：AppLayout nav tabs 由 globalPermissionStore.has() 门控；
+  // hydrate 三个 nav perms 让布局/快捷键/窗口宽度等行为按预期渲染
+  useGlobalPermissionStore.setState({
+    permissions: new Set(['nav:view:work', 'nav:view:progress', 'nav:view:atlas']),
+    isSuperAdmin: false,
+    loading: false,
+    error: null,
+    initialized: true,
   });
   // 启动恢复 effect 会调用 list_recent_projects_cmd，返回空数组跳过自动打开
   mockInvoke.mockResolvedValue([]);
