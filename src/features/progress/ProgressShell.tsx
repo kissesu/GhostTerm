@@ -90,11 +90,27 @@ export default function ProgressShell(): ReactElement {
     <div className={styles.shellRoot} style={{ padding: '24px 28px 60px', minHeight: '100%' }}>
       <PipelineStepper projects={projectList} currentStatus={pipelineCurrentStatus} />
       <ViewBar
-        mode={selectedProject ? 'detail' : 'kanban'}
+        // 用户原话 2026-05-02 "点开通知中心后无法返回看板"：
+        // notifications/earnings 是非 kanban 子视图，复用 detail 模式的"看板/标题 + 返回"
+        // 既能让 ViewBar 显示"返回看板"按钮，又能给非项目类子页一个面包屑
+        mode={selectedProject || currentView === 'notifications' || currentView === 'earnings' ? 'detail' : 'kanban'}
         activeProjectCount={activeProjectCount}
-        projectTitle={selectedProject?.name}
-        onBack={selectedProject ? closeProject : undefined}
-        actions={!selectedProject ? (
+        projectTitle={
+          selectedProject?.name
+            ?? (currentView === 'notifications'
+              ? '通知中心'
+              : currentView === 'earnings'
+                ? '收益概览'
+                : undefined)
+        }
+        onBack={
+          selectedProject
+            ? closeProject
+            : (currentView === 'notifications' || currentView === 'earnings')
+              ? () => useProgressUiStore.getState().setCurrentView('kanban')
+              : undefined
+        }
+        actions={!selectedProject && currentView !== 'notifications' && currentView !== 'earnings' ? (
           <button
             type="button"
             className={`${styles.btn} ${styles.btnPrimary}`}

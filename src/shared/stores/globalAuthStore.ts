@@ -213,6 +213,10 @@ export const useGlobalAuthStore = create<GlobalAuthState>((set, get) => ({
     const data = await apiFetch('/api/auth/me', { method: 'GET' }, UserSchema);
     set({ user: data });
     useGlobalPermissionStore.getState().hydrateFromMe(data);
+    // 与 login 路径 L142 对称：必须 hydrate progressPermissionStore，
+    // 否则刷新走 verify→loadMe 路径时 progress PermissionGate 永远隐藏所有按钮
+    // （super_admin 也受影响 - 后端返 ['*:*'] 但 store 不 set 就 has() 都 false）
+    useProgressPermissionStore.getState().set(data.permissions);
   },
 
   // ----------------------------------------------------------
