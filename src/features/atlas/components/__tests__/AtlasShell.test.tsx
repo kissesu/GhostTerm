@@ -13,6 +13,7 @@ import AtlasShell from '../../AtlasShell';
 import { useAtlasUsersStore } from '../../stores/atlasUsersStore';
 import { useAtlasRolesStore } from '../../stores/atlasRolesStore';
 import { useGlobalAuthStore } from '../../../../shared/stores/globalAuthStore';
+import { useGlobalPermissionStore } from '../../../../shared/stores/globalPermissionStore';
 
 const TEST_USER = {
   id: 1,
@@ -47,6 +48,9 @@ beforeEach(() => {
     loading: false,
     error: null,
   });
+  // Task 12：默认重置 permissionStore 为空（无 permissions:role:manage）
+  // 避免上一个 case 残留污染下一个 case
+  useGlobalPermissionStore.getState().reset();
 });
 
 describe('AtlasShell', () => {
@@ -69,5 +73,23 @@ describe('AtlasShell', () => {
     const user = userEvent.setup();
     await user.click(screen.getByTestId('atlas-nav-config'));
     expect(screen.getByTestId('atlas-system-config')).toBeInTheDocument();
+  });
+
+  it('Task 12：无 permissions:role:manage 权限时「权限管理」菜单项隐藏', () => {
+    // permission store 已在 beforeEach reset 为空
+    render(<AtlasShell />);
+    expect(screen.queryByTestId('atlas-nav-permissions')).not.toBeInTheDocument();
+  });
+
+  it('Task 12：拥有 permissions:role:manage 时「权限管理」菜单项可见', () => {
+    useGlobalPermissionStore.getState().hydrate(['permissions:role:manage']);
+    render(<AtlasShell />);
+    expect(screen.getByTestId('atlas-nav-permissions')).toBeInTheDocument();
+  });
+
+  it('Task 12：super_admin 通过 *:* 通配符自动获得「权限管理」菜单', () => {
+    useGlobalPermissionStore.setState({ isSuperAdmin: true });
+    render(<AtlasShell />);
+    expect(screen.getByTestId('atlas-nav-permissions')).toBeInTheDocument();
   });
 });

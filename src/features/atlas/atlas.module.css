@@ -695,3 +695,93 @@
   color: var(--red);
 }
 
+/* ===================================================================
+   PermissionsManagementPage —— 子 tab + 选择器（Task 12）
+   =================================================================== */
+
+/* 子 tab 切换条：与左侧导航视觉解耦，专属页面顶部 */
+.permPageTabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.permPageTab {
+  padding: 6px 14px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.permPageTab:hover {
+  color: var(--text);
+}
+
+.permPageTabActive {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 800;
+}
+
+.permPageTabActive:hover {
+  /* 激活态 hover 不退化（避免按下后又变灰的反向 affordance） */
+  color: var(--accent-ink);
+}
+
+/* 选择器栏：dropdown + 标签的容器 */
+.permPickerBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.permPickerLabel {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--faint);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* 原生 select：与 btnGhost 视觉对齐 */
+.permPickerSelect {
+  height: 30px;
+  min-width: 220px;
+  padding: 0 10px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  /* 与 input 高度对齐：UA shadow DOM 默认 content-box 会差 2px，强制 border-box */
+  box-sizing: border-box;
+  line-height: 1.4;
+}
+
+.permPickerSelect:hover {
+  border-color: var(--line-strong);
+}
+
+.permPickerSelect:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.permPickerSelect option:disabled {
+  color: var(--faint);
+}
+
