@@ -62,6 +62,12 @@ type Handler interface {
 	//
 	// GET /api/me/earnings
 	MeEarnings(ctx context.Context) (*EarningsSummaryResponse, error)
+	// MeGetEffectivePermissions implements meGetEffectivePermissions operation.
+	//
+	// 当前登录用户的有效权限码列表（已合并 role grants + user grant - user deny）.
+	//
+	// GET /api/me/effective-permissions
+	MeGetEffectivePermissions(ctx context.Context) (MeGetEffectivePermissionsRes, error)
 	// NotificationsList implements notificationsList operation.
 	//
 	// 当前用户通知.
@@ -190,9 +196,9 @@ type Handler interface {
 	RolesList(ctx context.Context) (RolesListRes, error)
 	// RolesUpdatePermissions implements rolesUpdatePermissions operation.
 	//
-	// 替换某角色的权限绑定（仅超管，按 permissionIds 全量覆盖）.
+	// 全量替换角色的权限绑定（仅超管；super_admin role 由中间件 422 拦截）.
 	//
-	// PATCH /api/roles/{id}/permissions
+	// PUT /api/roles/{id}/permissions
 	RolesUpdatePermissions(ctx context.Context, req *RolePermissionUpdateRequest, params RolesUpdatePermissionsParams) (RolesUpdatePermissionsRes, error)
 	// UsersCreate implements usersCreate operation.
 	//
@@ -206,6 +212,12 @@ type Handler interface {
 	//
 	// DELETE /api/users/{id}
 	UsersDelete(ctx context.Context, params UsersDeleteParams) (UsersDeleteRes, error)
+	// UsersGetPermissionOverrides implements usersGetPermissionOverrides operation.
+	//
+	// 查询某用户当前的权限覆写（grant/deny）；仅超管可调.
+	//
+	// GET /api/users/{id}/permission-overrides
+	UsersGetPermissionOverrides(ctx context.Context, params UsersGetPermissionOverridesParams) (UsersGetPermissionOverridesRes, error)
 	// UsersList implements usersList operation.
 	//
 	// 列出所有用户（仅超管）.
@@ -218,6 +230,12 @@ type Handler interface {
 	//
 	// PATCH /api/users/{id}
 	UsersUpdate(ctx context.Context, req *UserUpdateRequest, params UsersUpdateParams) (UsersUpdateRes, error)
+	// UsersUpdatePermissionOverrides implements usersUpdatePermissionOverrides operation.
+	//
+	// 全量替换某用户的权限覆写；超管目标由中间件 422 拦截.
+	//
+	// PUT /api/users/{id}/permission-overrides
+	UsersUpdatePermissionOverrides(ctx context.Context, req *UpdateUserPermissionOverridesRequest, params UsersUpdatePermissionOverridesParams) (UsersUpdatePermissionOverridesRes, error)
 	// WsNotificationsConnect implements wsNotificationsConnect operation.
 	//
 	// WebSocket 升级端点（非 HTTP REST，仅 OpenAPI 描述）。

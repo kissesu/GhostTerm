@@ -45,6 +45,11 @@ components:
                 - ticket_invalid
                 - not_implemented
                 - internal
+                - super_admin_immutable
+                - request_body_too_large
+                - service_unavailable
+                - invalid_effect
+                - permission_not_found
             message: { type: string }
             details:
               type: object
@@ -124,12 +129,52 @@ components:
 
     Permission:
       type: object
-      required: [id, resource, action, scope]
+      required: [id, resource, action, scope, code]
       properties:
         id: { type: integer, format: int64 }
-        resource: { type: string, description: "资源类型，如 project / feedback / payment / file" }
-        action: { type: string, description: "动作，如 read / create / update / delete" }
-        scope: { type: string, description: "范围，如 all / created_by_self / created_by_role:<id>" }
+        resource: { type: string, description: "资源命名空间，如 nav / progress / users / permissions" }
+        action: { type: string, description: "动作，如 view / list / create / edit / delete / role / user_override" }
+        scope: { type: string, description: "范围，如 work / progress / atlas / all / manage" }
+        code: { type: string, description: "三段式权限码 resource:action:scope（前端 PermissionGate 直接消费）" }
+
+    UserPermissionOverride:
+      type: object
+      description: "user 级权限覆写：grant 强行追加；deny 强行扣除（超管不允许任何 override）"
+      required: [permissionId, effect]
+      properties:
+        permissionId: { type: integer, format: int64 }
+        effect:
+          type: string
+          enum: [grant, deny]
+
+    UserPermissionOverridesResponse:
+      type: object
+      required: [userId, overrides]
+      properties:
+        userId: { type: integer, format: int64 }
+        overrides:
+          type: array
+          items: { $ref: '#/components/schemas/UserPermissionOverride' }
+
+    UpdateUserPermissionOverridesRequest:
+      type: object
+      required: [overrides]
+      properties:
+        overrides:
+          type: array
+          items: { $ref: '#/components/schemas/UserPermissionOverride' }
+
+    EffectivePermissionsResponse:
+      type: object
+      required: [permissions, superAdmin]
+      properties:
+        permissions:
+          type: array
+          description: "已计算合并的权限码列表（resource:action:scope）；超管时为单元素 ['*:*']"
+          items: { type: string }
+        superAdmin:
+          type: boolean
+          description: "true 表示当前用户是 super_admin；前端可据此跳过任何权限门控"
 
     # ===== 客户字段说明 =====
     # 用户需求修正 2026-04-30：客户从独立资源降级为 projects.customer_label TEXT 字段。
@@ -1133,9 +1178,9 @@ paths:
               schema: { $ref: '#/components/schemas/PermissionListResponse' }
         '401': { $ref: '#/components/responses/UnauthorizedError' }
         '404': { $ref: '#/components/responses/NotFoundError' }
-    patch:
+    put:
       operationId: rolesUpdatePermissions
-      summary: 替换某角色的权限绑定（仅超管，按 permissionIds 全量覆盖）
+      summary: 全量替换角色的权限绑定（仅超管；super_admin role 由中间件 422 拦截）
       tags: [rbac]
       requestBody:
         required: true
@@ -1143,11 +1188,8 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/RolePermissionUpdateRequest' }
       responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/PermissionListResponse' }
+        '204':
+          description: 已替换
         '401': { $ref: '#/components/responses/UnauthorizedError' }
         '403': { $ref: '#/components/responses/PermissionDeniedError' }
         '404': { $ref: '#/components/responses/NotFoundError' }
@@ -1165,6 +1207,55 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/PermissionListResponse' }
         '401': { $ref: '#/components/responses/UnauthorizedError' }
+
+  /api/me/effective-permissions:
+    get:
+      operationId: meGetEffectivePermissions
+      summary: 当前登录用户的有效权限码列表（已合并 role grants + user grant - user deny）
+      tags: [rbac]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EffectivePermissionsResponse' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+
+  /api/users/{id}/permission-overrides:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    get:
+      operationId: usersGetPermissionOverrides
+      summary: 查询某用户当前的权限覆写（grant/deny）；仅超管可调
+      tags: [rbac]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserPermissionOverridesResponse' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/PermissionDeniedError' }
+        '404': { $ref: '#/components/responses/NotFoundError' }
+    put:
+      operationId: usersUpdatePermissionOverrides
+      summary: 全量替换某用户的权限覆写；超管目标由中间件 422 拦截
+      tags: [rbac]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateUserPermissionOverridesRequest' }
+      responses:
+        '204':
+          description: 已替换
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/PermissionDeniedError' }
+        '404': { $ref: '#/components/responses/NotFoundError' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   # ===== Customers =====
   # 用户需求修正 2026-04-30：客户从独立资源降级为 projects.customer_label 字段。

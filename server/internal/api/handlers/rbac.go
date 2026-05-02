@@ -5,7 +5,9 @@
              - RolesList           GET    /api/roles
              - RolesCreate         POST   /api/roles                       (admin only)
              - RolesGetPermissions GET    /api/roles/{id}/permissions
-             - RolesUpdatePermissions PATCH /api/roles/{id}/permissions    (admin only)
+
+             写入路径 PUT /api/roles/{id}/permissions 已迁至 PermissionsHandler
+             （Task 7：复用 PermissionsService 自带 token_version bump + super_admin 校验）。
 
              admin 校验：roleID == 1 兜底放行；其它角色调 RBACService.HasPermission 检查。
              所有 endpoint 出错统一映射为 ErrorEnvelope。
@@ -214,85 +216,15 @@ func (h *RBACHandler) RolesGetPermissions(ctx context.Context, params oas.RolesG
 }
 
 // ============================================================
-// RolesUpdatePermissions — PATCH /api/roles/{id}/permissions (admin only)
-// ============================================================
-
-// RolesUpdatePermissions 用 permissionIds 全量替换某 roleID 的权限绑定。
-//
-// 业务流程：
-//  1. admin 校验
-//  2. 事务内 DELETE FROM role_permissions WHERE role_id=$1
-//     INSERT INTO role_permissions(...) UNNEST($2)
-//  3. 失效该 roleID 的内存缓存（如果 svc 实现暴露 InvalidateRole 方法）
-//  4. 返回新权限列表
-func (h *RBACHandler) RolesUpdatePermissions(ctx context.Context, req *oas.RolePermissionUpdateRequest, params oas.RolesUpdatePermissionsParams) (oas.RolesUpdatePermissionsRes, error) {
-	ac, ok := middleware.AuthContextFrom(ctx)
-	if !ok {
-		return rolesUpdatePermsUnauthorized("未登录"), nil
-	}
-	if ac.RoleID != 1 {
-		return rolesUpdatePermsForbidden("仅超管可修改角色权限"), nil
-	}
-
-	tx, err := h.pool.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("rbac handler: begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	// 校验 role 存在
-	var roleExists bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM roles WHERE id = $1)`, params.ID).Scan(&roleExists); err != nil {
-		return nil, fmt.Errorf("rbac handler: check role exists: %w", err)
-	}
-	if !roleExists {
-		return rolesUpdatePermsNotFound(fmt.Sprintf("角色 %d 不存在", params.ID)), nil
-	}
-
-	if _, err := tx.Exec(ctx, `DELETE FROM role_permissions WHERE role_id = $1`, params.ID); err != nil {
-		return nil, fmt.Errorf("rbac handler: delete role permissions: %w", err)
-	}
-	permIDs := []int64{}
-	if req != nil {
-		permIDs = req.PermissionIds
-	}
-	if len(permIDs) > 0 {
-		if _, err := tx.Exec(ctx, `
-			INSERT INTO role_permissions (role_id, permission_id)
-			SELECT $1, UNNEST($2::BIGINT[])
-		`, params.ID, permIDs); err != nil {
-			return nil, fmt.Errorf("rbac handler: insert role permissions: %w", err)
-		}
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("rbac handler: commit: %w", err)
-	}
-
-	// 失效缓存（接口未暴露 InvalidateRole，需要做类型断言）
-	type roleInvalidator interface {
-		InvalidateRole(roleID int64)
-	}
-	if inv, ok := h.Svc.(roleInvalidator); ok {
-		inv.InvalidateRole(params.ID)
-	}
-
-	// 回查最新权限列表
-	res, err := h.RolesGetPermissions(ctx, oas.RolesGetPermissionsParams{ID: params.ID})
-	if err != nil {
-		return nil, err
-	}
-	if list, ok := res.(*oas.PermissionListResponse); ok {
-		return list, nil
-	}
-	return nil, errors.New("rbac handler: failed to retrieve updated permissions")
-}
-
-// ============================================================
 // 辅助：service 层 → oas 层模型转换
 // ============================================================
 
 // toOASPermissions 把 []services.Permission 转为 []oas.Permission。
+//
+// 业务背景：services.Permission.Code() 历史上返回 2 段 "resource:action"（被
+// rbac_service_test.go 锁死，不能改）；OAS 契约（Task 7）要求 3 段
+// "resource:action:scope"，因此这里在转换时显式拼出 Code 字段，避免破坏
+// 既有 service 测试。
 func toOASPermissions(perms []services.Permission) []oas.Permission {
 	out := make([]oas.Permission, 0, len(perms))
 	for _, p := range perms {
@@ -301,6 +233,7 @@ func toOASPermissions(perms []services.Permission) []oas.Permission {
 			Resource: p.Resource,
 			Action:   p.Action,
 			Scope:    p.Scope,
+			Code:     p.Resource + ":" + p.Action + ":" + p.Scope,
 		})
 	}
 	return out
@@ -374,20 +307,3 @@ func rolesGetPermsNotFound(msg string) *oas.RolesGetPermissionsNotFound {
 	return &res
 }
 
-func rolesUpdatePermsUnauthorized(msg string) *oas.RolesUpdatePermissionsUnauthorized {
-	e := newErrorEnvelope(oas.ErrorEnvelopeErrorCodeUnauthorized, msg)
-	res := oas.RolesUpdatePermissionsUnauthorized(e)
-	return &res
-}
-
-func rolesUpdatePermsForbidden(msg string) *oas.RolesUpdatePermissionsForbidden {
-	e := newErrorEnvelope(oas.ErrorEnvelopeErrorCodePermissionDenied, msg)
-	res := oas.RolesUpdatePermissionsForbidden(e)
-	return &res
-}
-
-func rolesUpdatePermsNotFound(msg string) *oas.RolesUpdatePermissionsNotFound {
-	e := newErrorEnvelope(oas.ErrorEnvelopeErrorCodeNotFound, msg)
-	res := oas.RolesUpdatePermissionsNotFound(e)
-	return &res
-}

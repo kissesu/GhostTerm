@@ -94,6 +94,15 @@ func (UnimplementedHandler) MeEarnings(ctx context.Context) (r *EarningsSummaryR
 	return r, ht.ErrNotImplemented
 }
 
+// MeGetEffectivePermissions implements meGetEffectivePermissions operation.
+//
+// 当前登录用户的有效权限码列表（已合并 role grants + user grant - user deny）.
+//
+// GET /api/me/effective-permissions
+func (UnimplementedHandler) MeGetEffectivePermissions(ctx context.Context) (r MeGetEffectivePermissionsRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // NotificationsList implements notificationsList operation.
 //
 // 当前用户通知.
@@ -291,9 +300,9 @@ func (UnimplementedHandler) RolesList(ctx context.Context) (r RolesListRes, _ er
 
 // RolesUpdatePermissions implements rolesUpdatePermissions operation.
 //
-// 替换某角色的权限绑定（仅超管，按 permissionIds 全量覆盖）.
+// 全量替换角色的权限绑定（仅超管；super_admin role 由中间件 422 拦截）.
 //
-// PATCH /api/roles/{id}/permissions
+// PUT /api/roles/{id}/permissions
 func (UnimplementedHandler) RolesUpdatePermissions(ctx context.Context, req *RolePermissionUpdateRequest, params RolesUpdatePermissionsParams) (r RolesUpdatePermissionsRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
@@ -316,6 +325,15 @@ func (UnimplementedHandler) UsersDelete(ctx context.Context, params UsersDeleteP
 	return r, ht.ErrNotImplemented
 }
 
+// UsersGetPermissionOverrides implements usersGetPermissionOverrides operation.
+//
+// 查询某用户当前的权限覆写（grant/deny）；仅超管可调.
+//
+// GET /api/users/{id}/permission-overrides
+func (UnimplementedHandler) UsersGetPermissionOverrides(ctx context.Context, params UsersGetPermissionOverridesParams) (r UsersGetPermissionOverridesRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // UsersList implements usersList operation.
 //
 // 列出所有用户（仅超管）.
@@ -331,6 +349,15 @@ func (UnimplementedHandler) UsersList(ctx context.Context) (r UsersListRes, _ er
 //
 // PATCH /api/users/{id}
 func (UnimplementedHandler) UsersUpdate(ctx context.Context, req *UserUpdateRequest, params UsersUpdateParams) (r UsersUpdateRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UsersUpdatePermissionOverrides implements usersUpdatePermissionOverrides operation.
+//
+// 全量替换某用户的权限覆写；超管目标由中间件 422 拦截.
+//
+// PUT /api/users/{id}/permission-overrides
+func (UnimplementedHandler) UsersUpdatePermissionOverrides(ctx context.Context, req *UpdateUserPermissionOverridesRequest, params UsersUpdatePermissionOverridesParams) (r UsersUpdatePermissionOverridesRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

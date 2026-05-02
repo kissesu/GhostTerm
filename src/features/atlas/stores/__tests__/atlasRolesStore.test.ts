@@ -34,8 +34,9 @@ const mockedUpdate = vi.mocked(updateRolePermissions);
 
 const ROLE_A = { id: 2, name: 'developer', isSystem: true, createdAt: '2026-04-29T00:00:00Z' };
 const ROLE_B = { id: 3, name: 'pm', isSystem: false, createdAt: '2026-04-29T00:00:00Z' };
-const PERM_1 = { id: 10, resource: 'project', action: 'read', scope: 'all' };
-const PERM_2 = { id: 11, resource: 'project', action: 'create', scope: 'all' };
+// Task 7：Permission 增加 code 字段（resource:action:scope 拼装）
+const PERM_1 = { id: 10, resource: 'project', action: 'read', scope: 'all', code: 'project:read:all' };
+const PERM_2 = { id: 11, resource: 'project', action: 'create', scope: 'all', code: 'project:create:all' };
 
 beforeEach(() => {
   useAtlasRolesStore.setState({
@@ -95,12 +96,14 @@ describe('atlasRolesStore.togglePermission + isDirty', () => {
 });
 
 describe('atlasRolesStore.saveRolePermissions', () => {
-  it('保存后用服务端返回值同步两份快照', async () => {
+  it('保存后用服务端 GET 拉回值同步两份快照', async () => {
     useAtlasRolesStore.setState({
       rolePermissions: new Map([[2, new Set([10, 11])]]),
       rolePermissionsServer: new Map([[2, new Set([10])]]),
     });
-    mockedUpdate.mockResolvedValueOnce([PERM_1, PERM_2]);
+    // Task 7：updateRolePermissions 现在返回 void；store 写完会再 GET 一次拉最新
+    mockedUpdate.mockResolvedValueOnce(undefined);
+    mockedGetRolePerms.mockResolvedValueOnce([PERM_1, PERM_2]);
 
     await useAtlasRolesStore.getState().saveRolePermissions(2);
 

@@ -1658,6 +1658,71 @@ func decodeUsersDeleteParams(args [1]string, argsEscaped bool, r *http.Request) 
 	return params, nil
 }
 
+// UsersGetPermissionOverridesParams is parameters of usersGetPermissionOverrides operation.
+type UsersGetPermissionOverridesParams struct {
+	ID int64
+}
+
+func unpackUsersGetPermissionOverridesParams(packed middleware.Parameters) (params UsersGetPermissionOverridesParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "id",
+			In:   "path",
+		}
+		params.ID = packed[key].(int64)
+	}
+	return params
+}
+
+func decodeUsersGetPermissionOverridesParams(args [1]string, argsEscaped bool, r *http.Request) (params UsersGetPermissionOverridesParams, _ error) {
+	// Decode path: id.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "id",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToInt64(val)
+				if err != nil {
+					return err
+				}
+
+				params.ID = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "id",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // UsersUpdateParams is parameters of usersUpdate operation.
 type UsersUpdateParams struct {
 	ID int64
@@ -1675,6 +1740,71 @@ func unpackUsersUpdateParams(packed middleware.Parameters) (params UsersUpdatePa
 }
 
 func decodeUsersUpdateParams(args [1]string, argsEscaped bool, r *http.Request) (params UsersUpdateParams, _ error) {
+	// Decode path: id.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "id",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToInt64(val)
+				if err != nil {
+					return err
+				}
+
+				params.ID = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "id",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// UsersUpdatePermissionOverridesParams is parameters of usersUpdatePermissionOverrides operation.
+type UsersUpdatePermissionOverridesParams struct {
+	ID int64
+}
+
+func unpackUsersUpdatePermissionOverridesParams(packed middleware.Parameters) (params UsersUpdatePermissionOverridesParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "id",
+			In:   "path",
+		}
+		params.ID = packed[key].(int64)
+	}
+	return params
+}
+
+func decodeUsersUpdatePermissionOverridesParams(args [1]string, argsEscaped bool, r *http.Request) (params UsersUpdatePermissionOverridesParams, _ error) {
 	// Decode path: id.
 	if err := func() error {
 		param := args[0]

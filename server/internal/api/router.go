@@ -57,6 +57,9 @@ type oasHandler struct {
 	earnings     *handlers.EarningsHandler
 	notification *handlers.NotificationHandler
 	activity     *handlers.ActivityHandler
+	// Task 7：权限管理 handler，覆盖 6 个 OAS 端点（/api/permissions、
+	// /api/me/effective-permissions、role/user permissions 读写）
+	permissions *handlers.PermissionsHandler
 	oas.UnimplementedHandler
 }
 
@@ -85,9 +88,9 @@ func (h *oasHandler) WsTicketIssue(ctx context.Context) (*oas.WSTicketResponse, 
 	return h.auth.WsTicketIssue(ctx)
 }
 
-// PermissionsList 转发到 RBACHandler 实现
+// PermissionsList 转发到 PermissionsHandler 实现（Task 7：3 段 code 字段需在 handler 拼）
 func (h *oasHandler) PermissionsList(ctx context.Context) (oas.PermissionsListRes, error) {
-	return h.rbac.PermissionsList(ctx)
+	return h.permissions.PermissionsList(ctx)
 }
 
 // RolesList 转发到 RBACHandler 实现
@@ -105,9 +108,25 @@ func (h *oasHandler) RolesGetPermissions(ctx context.Context, params oas.RolesGe
 	return h.rbac.RolesGetPermissions(ctx, params)
 }
 
-// RolesUpdatePermissions 转发到 RBACHandler 实现
+// RolesUpdatePermissions 转发到 PermissionsHandler 实现（Task 7：复用 PermissionsService
+// 自带的 token_version bump + super_admin 拦截）
 func (h *oasHandler) RolesUpdatePermissions(ctx context.Context, req *oas.RolePermissionUpdateRequest, params oas.RolesUpdatePermissionsParams) (oas.RolesUpdatePermissionsRes, error) {
-	return h.rbac.RolesUpdatePermissions(ctx, req, params)
+	return h.permissions.RolesUpdatePermissions(ctx, req, params)
+}
+
+// MeGetEffectivePermissions 转发到 PermissionsHandler 实现（Task 7）
+func (h *oasHandler) MeGetEffectivePermissions(ctx context.Context) (oas.MeGetEffectivePermissionsRes, error) {
+	return h.permissions.MeGetEffectivePermissions(ctx)
+}
+
+// UsersGetPermissionOverrides 转发到 PermissionsHandler 实现（Task 7）
+func (h *oasHandler) UsersGetPermissionOverrides(ctx context.Context, params oas.UsersGetPermissionOverridesParams) (oas.UsersGetPermissionOverridesRes, error) {
+	return h.permissions.UsersGetPermissionOverrides(ctx, params)
+}
+
+// UsersUpdatePermissionOverrides 转发到 PermissionsHandler 实现（Task 7）
+func (h *oasHandler) UsersUpdatePermissionOverrides(ctx context.Context, req *oas.UpdateUserPermissionOverridesRequest, params oas.UsersUpdatePermissionOverridesParams) (oas.UsersUpdatePermissionOverridesRes, error) {
+	return h.permissions.UsersUpdatePermissionOverrides(ctx, req, params)
 }
 
 // ============================================================
@@ -406,6 +425,18 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	// 必须在 ogen mount 之前注册，否则 ResponseWriter 已被 ogen encoder 接管无法回改 header
 	r.Use(handlers.NewDownloadHeaderMiddleware())
 
+	// Task 7：超管不可改约束的"L3 友好 422 中间件"。
+	//
+	// 必须挂在 ogen mount 之前；中间件按 r.URL.Path + r.Method 自行解析，
+	// 不依赖 chi.URLParam，所以与 ogen 路由无耦合。
+	// 拦截范围（详见 super_admin_invariants.go）：
+	//   POST /api/users (body.roleId==1)
+	//   PATCH/PUT /api/users/{id} (body.roleId==1)
+	//   PATCH/PUT /api/roles/{id}/permissions (path id==1)
+	//   DELETE /api/roles/{id} (path id==1)
+	//   PATCH/PUT /api/users/{id}/permission-overrides (target user.role_id==1)
+	r.Use(apimw.NewSuperAdminInvariants(deps.Pool).Handler)
+
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
@@ -435,6 +466,13 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 		return nil, err
 	}
 
+	// Task 7：权限管理 handler 装配 PermissionsService + EffectivePermissionsService
+	// 不放进 RouterDeps：两个 service 都是 pool-backed 无状态，直接 in-place 构造避免
+	// 让 main.go 关心额外的 wiring；与 activitySvc 的处理一致。
+	permsSvc := services.NewPermissionsService(deps.Pool)
+	effSvc := services.NewEffectivePermissionsService(deps.Pool)
+	permissionsHandler := handlers.NewPermissionsHandler(deps.Pool, permsSvc, effSvc)
+
 	secHandler := &oasSecurityHandler{svc: deps.AuthService}
 
 	oasServer, err := oas.NewServer(
@@ -450,6 +488,7 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 			earnings:     earningsHandler,
 			notification: notificationHandler,
 			activity:     activityHandler,
+			permissions:  permissionsHandler,
 		},
 		secHandler,
 		oas.WithErrorHandler(errorEnvelopeHandler),
@@ -506,6 +545,24 @@ func errorEnvelopeHandler(_ context.Context, w http.ResponseWriter, r *http.Requ
 		status = http.StatusUnauthorized
 		code = string(oas.ErrorEnvelopeErrorCodeTicketInvalid)
 		msg = "WS ticket 无效或已过期"
+	// Task 7：权限管理 sentinel 兜底（permissions handler 已先翻译为对应 OAS Res，
+	// 不应走到这里；保留是防 handler 漏 case 时仍有合理 HTTP code）
+	case errors.Is(err, services.ErrSuperAdminImmutable):
+		status = http.StatusUnprocessableEntity
+		code = string(oas.ErrorEnvelopeErrorCodeSuperAdminImmutable)
+		msg = "禁止修改 super_admin"
+	case errors.Is(err, services.ErrInvalidEffect):
+		status = http.StatusUnprocessableEntity
+		code = string(oas.ErrorEnvelopeErrorCodeInvalidEffect)
+		msg = "effect 必须是 grant 或 deny"
+	case errors.Is(err, services.ErrRoleNotFound):
+		status = http.StatusNotFound
+		code = string(oas.ErrorEnvelopeErrorCodeNotFound)
+		msg = "角色不存在"
+	case errors.Is(err, services.ErrUserNotFound):
+		status = http.StatusNotFound
+		code = string(oas.ErrorEnvelopeErrorCodeNotFound)
+		msg = "用户不存在"
 	case errors.Is(err, ErrNotImplementedYet):
 		status = http.StatusNotImplemented
 		code = string(oas.ErrorEnvelopeErrorCodeNotImplemented)
