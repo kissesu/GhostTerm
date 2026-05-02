@@ -94,8 +94,26 @@ export default function AppLayout() {
   // 顶层工作区切换：work（终端+编辑器） / progress（进度模块） / atlas（超管）
   // 切换通过 display:none 而非卸载，保留 xterm scrollback / Editor 状态
   // 子模块按需首次挂载（mounted 标记 true 后保持）
+  // 持久化：用户原话 2026-05-02 "页面刷新后会显示第一个 tab 而不是激活的 tab"——
+  //         用 localStorage 记住上次 tab，刷新后恢复
   // ============================================
-  const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceTab>('work');
+  const [activeWorkspace, setActiveWorkspaceState] = useState<WorkspaceTab>(() => {
+    try {
+      const v = globalThis.localStorage?.getItem('ghostterm:active-workspace');
+      if (v === 'work' || v === 'progress' || v === 'atlas') return v;
+    } catch {
+      // 隐身模式 / 测试 jsdom 关闭 localStorage
+    }
+    return 'work';
+  });
+  const setActiveWorkspace = useCallback((tab: WorkspaceTab) => {
+    setActiveWorkspaceState(tab);
+    try {
+      globalThis.localStorage?.setItem('ghostterm:active-workspace', tab);
+    } catch {
+      // 隐身模式静默忽略
+    }
+  }, []);
   const [progressMounted, setProgressMounted] = useState(false);
   const [atlasMounted, setAtlasMounted] = useState(false);
   if (activeWorkspace === 'progress' && !progressMounted) {
