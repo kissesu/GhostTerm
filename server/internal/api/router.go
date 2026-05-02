@@ -478,7 +478,11 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	// ============================================================
 	// 装配 worker A-F 的 handler
 	// ============================================================
-	authHandler := handlers.NewAuthHandler(deps.AuthService, deps.RBACService)
+	// Task 7/8 effSvc 提前构造，让 AuthHandler 也能注入（替代旧 RBAC.LoadUserPermissions）
+	permsSvc := services.NewPermissionsService(deps.Pool)
+	effSvc := services.NewEffectivePermissionsService(deps.Pool)
+
+	authHandler := handlers.NewAuthHandler(deps.AuthService, deps.RBACService, effSvc)
 	rbacHandler := handlers.NewRBACHandler(deps.RBACService, deps.Pool)
 	usersHandler := handlers.NewUsersHandler(deps.UserService)
 	projectHandler := handlers.NewProjectHandler(deps.ProjectService)
@@ -499,11 +503,6 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 		return nil, err
 	}
 
-	// Task 7：权限管理 handler 装配 PermissionsService + EffectivePermissionsService
-	// 不放进 RouterDeps：两个 service 都是 pool-backed 无状态，直接 in-place 构造避免
-	// 让 main.go 关心额外的 wiring；与 activitySvc 的处理一致。
-	permsSvc := services.NewPermissionsService(deps.Pool)
-	effSvc := services.NewEffectivePermissionsService(deps.Pool)
 	permissionsHandler := handlers.NewPermissionsHandler(deps.Pool, permsSvc, effSvc)
 
 	// Task 8：security handler 同时承担"鉴权"+"加载有效权限码到 ctx"职责。

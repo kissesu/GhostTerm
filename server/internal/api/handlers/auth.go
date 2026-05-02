@@ -37,12 +37,21 @@ import (
 type AuthHandler struct {
 	Svc  services.AuthService
 	RBAC services.RBACService
+	// EffectivePerms：Task 8 加入；优先用它替代 RBAC.LoadUserPermissions，
+	// 才能让 super_admin（role_id=1）正确拿到 ['*:*'] 通配权限码。
+	// 旧 RBAC.LoadUserPermissions 走 role_permissions 表 JOIN，但 0007 trigger
+	// 拒写 role_id=1 的行 → super_admin 永远返空 → 前端 PermissionGate 全失效。
+	EffectivePerms services.EffectivePermissionsService
 }
 
-// NewAuthHandler 构造 AuthHandler；rbac 允许 nil（Phase 2 时未注入），
-// 缺失时 AuthGetMe 不附带 permissions 字段（仍合法，为空数组）。
-func NewAuthHandler(svc services.AuthService, rbac services.RBACService) *AuthHandler {
-	return &AuthHandler{Svc: svc, RBAC: rbac}
+// NewAuthHandler 构造 AuthHandler；rbac/effectivePerms 允许 nil（Phase 2 兼容），
+// 都缺失时 AuthGetMe 不附带 permissions 字段（仍合法，为空数组）。
+func NewAuthHandler(
+	svc services.AuthService,
+	rbac services.RBACService,
+	effectivePerms services.EffectivePermissionsService,
+) *AuthHandler {
+	return &AuthHandler{Svc: svc, RBAC: rbac, EffectivePerms: effectivePerms}
 }
 
 // ============================================================
@@ -155,7 +164,15 @@ func (h *AuthHandler) AuthGetMe(ctx context.Context) (oas.AuthGetMeRes, error) {
 	oasUser := toOASUser(user)
 
 	// 第二步：附加权限码列表（仅在 me 接口；登录/创建响应不带）
-	if h.RBAC != nil {
+	// Task 8 之后：优先 EffectivePermissionsService（含 super_admin '*:*' 短路 +
+	// user_permissions override）；fallback 旧 RBAC（兼容 Phase 2 测试场景）。
+	if h.EffectivePerms != nil {
+		codes, err := h.EffectivePerms.Compute(ctx, user.ID)
+		if err == nil {
+			oasUser.Permissions = codes
+		}
+		// 错误路径：留空数组，不让 me 失败（PermissionGate fail-closed）
+	} else if h.RBAC != nil {
 		permsMap, err := h.RBAC.LoadUserPermissions(ctx, user.RoleID)
 		if err == nil {
 			codes := make([]string, 0, len(permsMap))
@@ -164,7 +181,6 @@ func (h *AuthHandler) AuthGetMe(ctx context.Context) (oas.AuthGetMeRes, error) {
 			}
 			oasUser.Permissions = codes
 		}
-		// 错误路径：留空数组（前端 PermissionGate 全部 fail-closed），不让 me 失败
 	}
 
 	return &oas.UserResponse{Data: oasUser}, nil
