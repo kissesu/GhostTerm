@@ -20,7 +20,11 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { useAtlasRolesStore } from '../stores/atlasRolesStore';
-import { formatPermissionLabel as formatPermissionLabelFull } from '../utils/permissionLabels';
+import {
+  formatPermissionLabel as formatPermissionLabelFull,
+  formatResourceLabel,
+  formatShortPermLabel,
+} from '../utils/permissionLabels';
 import styles from '../atlas.module.css';
 
 /**
@@ -87,22 +91,35 @@ export function RolesPermissionMatrix() {
         <div className={styles.matrixWrap}>
           <table className={styles.matrix}>
             <thead>
+              {/* 用户需求 2026-05-02：两层表头 —— 第一行 resource 分组（跨列），
+                   第二行每 perm 短中文（不重复 resource 前缀），减少列宽冗余 */}
               <tr>
-                <th>角色</th>
+                <th rowSpan={2}>角色</th>
+                {groupedPermissions.map((g) => (
+                  <th
+                    key={`group-${g.resource}`}
+                    colSpan={g.items.length}
+                    style={{ textAlign: 'center', borderBottom: '1px solid var(--line)' }}
+                    title={g.resource}
+                  >
+                    {formatResourceLabel(g.resource)}
+                  </th>
+                ))}
+                <th rowSpan={2}>操作</th>
+              </tr>
+              <tr>
                 {groupedPermissions.map((g) =>
                   g.items.map((p) => (
                     <th
                       key={p.id}
-                      title={`${p.resource}:${p.action}:${p.scope}`}
+                      title={`${p.resource}:${p.action}:${p.scope}（完整：${formatPermissionLabelFull(p.resource, p.action, p.scope)}）`}
                     >
-                      {/* 用户需求 2026-05-02：列头完整 3 段中文（含 scope）；原始英文 code 留在 title hover 供调试 */}
-                      <span style={{ color: 'var(--text)', fontWeight: 700 }}>
-                        {formatPermissionLabelFull(p.resource, p.action, p.scope)}
+                      <span style={{ color: 'var(--text)', fontWeight: 600, fontSize: 12 }}>
+                        {formatShortPermLabel(p.resource, p.action, p.scope)}
                       </span>
                     </th>
                   )),
                 )}
-                <th>操作</th>
               </tr>
             </thead>
             <tbody>

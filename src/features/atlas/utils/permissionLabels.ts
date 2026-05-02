@@ -133,3 +133,32 @@ export function formatPermissionLabel(resource: string, action: string, scope: s
   }
   return `${r} · ${a} · ${formatScopeLabel(scope)}`;
 }
+
+/**
+ * 短中文权限文本：在「按 resource 分组的两层 thead 矩阵」里使用。
+ * 第一行 thead 已显示 resource（如"进度模块"），第二行只需显示动作+作用域，
+ * 避免每列重复"进度模块·xxx·yyy"造成视觉冗余（用户需求 2026-05-02）。
+ *
+ * 业务规则：
+ *   - nav 资源（action 固定为 view）：直接返 SCOPE_CN[scope]，如 "工作区/进度/控制台"
+ *   - 其他资源 + scope='all' / '*'：只返 action 中文，如 users:list:all → "查看"
+ *   - 其他：返 action + scope 拼接，如 progress:project:list → "项目查看"
+ *
+ * 例：
+ *   - (nav, view, work)         → "工作区"
+ *   - (nav, view, atlas)        → "控制台"
+ *   - (progress, project, list) → "项目查看"
+ *   - (progress, feedback, create) → "反馈创建"
+ *   - (users, list, all)        → "查看"
+ *   - (permissions, role, manage) → "角色管理"
+ */
+export function formatShortPermLabel(resource: string, action: string, scope: string): string {
+  if (resource === 'nav') {
+    return formatScopeLabel(scope);
+  }
+  const a = formatActionLabel(resource, action);
+  if (scope === 'all' || scope === '*') {
+    return a;
+  }
+  return `${a}${formatScopeLabel(scope)}`;
+}
