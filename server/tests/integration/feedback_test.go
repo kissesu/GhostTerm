@@ -62,12 +62,12 @@ func setupFeedbackEnv(t *testing.T) *feedbackTestEnv {
 	ctx := context.Background()
 
 	// 1. 用户：admin(1) / cs(3) / dev(2) / non-member-dev(2)
+	// 注：0007 migration 引入 users_super_admin_unique 部分唯一索引，全表至多一行 role_id=1。
+	// 0001 migration 已 INSERT 'admin'，这里直接 SELECT 复用而非 INSERT 新 admin。
 	var adminID, csID, devID, nonMemberID int64
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
-		VALUES ('admin-fb', $1, 'Admin', 1, TRUE)
-		RETURNING id
-	`, hash).Scan(&adminID))
+		SELECT id FROM users WHERE role_id = 1 LIMIT 1
+	`).Scan(&adminID))
 	require.NoError(t, pool.QueryRow(ctx, `
 		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
 		VALUES ('cs-fb', $1, 'CS', 3, TRUE)

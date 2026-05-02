@@ -61,12 +61,11 @@ func setupRBACEnv(t *testing.T) *rbacTestEnv {
 	ctx := context.Background()
 
 	// 1. 用户：admin / dev / other_dev / customer
+	// 0007 migration 引入 users_super_admin_unique；复用 0001 已 INSERT 的 admin
 	var adminID, devID, otherDevID, customerID int64
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
-		VALUES ('admin-rbac', $1, 'Admin', 1, TRUE)
-		RETURNING id
-	`, hash).Scan(&adminID))
+		SELECT id FROM users WHERE role_id = 1 LIMIT 1
+	`).Scan(&adminID))
 	require.NoError(t, pool.QueryRow(ctx, `
 		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
 		VALUES ('dev-rbac', $1, 'Dev', 2, TRUE)
@@ -102,6 +101,22 @@ func setupRBACEnv(t *testing.T) *rbacTestEnv {
 	`, projectID, devID)
 	require.NoError(t, err)
 
+	// 5. RBAC 测试 fixture：补回旧权限码集合
+	//
+	// 业务背景：
+	//   - 0007 migration 已 TRUNCATE permissions + role_permissions 并按新模型
+	//     (nav/progress/users/permissions) 重新种子；
+	//   - 但本测试断言的是 RBAC service 的"旧 v1 权限码语义"（project:read /
+	//     project:update / file:upload / file:read / project:create 等），
+	//     这些码在新 catalog 下不存在。Task 8 (RBAC middleware 改造) 会让 service
+	//     直接接 EffectivePermissionsService，届时这些断言会被新断言替换。
+	//   - 当下为让"测试链路完整"，本 fixture 在测试容器里再 INSERT 一遍旧权限码：
+	//       * 通配 ('*','*','all') 给 role_id=1（trigger 阻断超管 INSERT，需先 DISABLE）
+	//       * 旧 dev 权限给 role_id=2
+	//       * 旧 cs  权限给 role_id=3
+	//   - 这是测试隔离的 fixture，不影响生产 schema 或迁移产物。
+	seedLegacyRBACPerms(t, ctx, pool)
+
 	return &rbacTestEnv{
 		pool:       pool,
 		cleanup:    cleanup,
@@ -111,6 +126,76 @@ func setupRBACEnv(t *testing.T) *rbacTestEnv {
 		otherDevID: otherDevID,
 		projectID:  projectID,
 	}
+}
+
+// seedLegacyRBACPerms 为旧 v1 权限码补回 catalog + role 绑定。
+//
+// 业务流程：
+//  1. INSERT 旧 permissions 行（ON CONFLICT DO NOTHING 防止与新 catalog 撞）
+//  2. 给 role 2/3 绑定它们对应的旧权限码
+//  3. 给 role 1 绑定 ('*','*','all') 通配；trigger prevent_super_admin_role_permission_write
+//     会拒绝该 INSERT，需先 DISABLE TRIGGER（仅在测试容器内）
+//
+// 设计取舍：
+//   - 不动 migration —— 0007 是产线契约，本 fixture 仅修补测试假设差异
+//   - DISABLE TRIGGER 后必须 ENABLE 回去，否则后续测试场景验不到 trigger 守护行为
+//   - 用 ON CONFLICT 而非 TRUNCATE：保留 0007 reseed 的新 catalog 行让其它路径仍有效
+func seedLegacyRBACPerms(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+
+	// 1. 旧 permissions 行（含通配）
+	_, err := pool.Exec(ctx, `
+		INSERT INTO permissions (resource, action, scope) VALUES
+			('project',  'read',   'member'),
+			('project',  'update', 'member'),
+			('project',  'create', 'all'),
+			('file',     'read',   'member'),
+			('file',     'upload', 'all'),
+			('event',    'E10',    'all'),
+			('*',        '*',      'all')
+		ON CONFLICT (resource, action, scope) DO NOTHING
+	`)
+	require.NoError(t, err)
+
+	// 2. role 2 (dev) 绑定旧 dev 权限（注意不绑 project:create / 通配）
+	_, err = pool.Exec(ctx, `
+		INSERT INTO role_permissions (role_id, permission_id)
+			SELECT 2, id FROM permissions
+			WHERE (resource, action, scope) IN (
+				('project', 'read',   'member'),
+				('project', 'update', 'member'),
+				('file',    'read',   'member'),
+				('file',    'upload', 'all')
+			)
+		ON CONFLICT DO NOTHING
+	`)
+	require.NoError(t, err)
+
+	// 3. role 3 (cs) 绑定旧 cs 权限（含 project:create）
+	_, err = pool.Exec(ctx, `
+		INSERT INTO role_permissions (role_id, permission_id)
+			SELECT 3, id FROM permissions
+			WHERE (resource, action, scope) IN (
+				('project', 'read',   'member'),
+				('project', 'create', 'all'),
+				('file',    'upload', 'all')
+			)
+		ON CONFLICT DO NOTHING
+	`)
+	require.NoError(t, err)
+
+	// 4. role 1 (super_admin) 绑定通配；trigger 阻断 → 临时 DISABLE 后再 ENABLE
+	_, err = pool.Exec(ctx, `ALTER TABLE role_permissions DISABLE TRIGGER prevent_super_admin_role_permission_write`)
+	require.NoError(t, err)
+	defer func() {
+		_, _ = pool.Exec(ctx, `ALTER TABLE role_permissions ENABLE TRIGGER prevent_super_admin_role_permission_write`)
+	}()
+	_, err = pool.Exec(ctx, `
+		INSERT INTO role_permissions (role_id, permission_id)
+			SELECT 1, id FROM permissions WHERE (resource, action, scope) = ('*', '*', 'all')
+		ON CONFLICT DO NOTHING
+	`)
+	require.NoError(t, err)
 }
 
 // ============================================================
@@ -315,15 +400,21 @@ func TestRBAC_CanTriggerEvent(t *testing.T) {
 	assert.False(t, ok, "dev 没 event:E10 权限 → CanTriggerEvent 返回 false")
 
 	// 加上 event:E10 perm + bind 给 role 2，再次试：dev 应能在自己 member 的项目触发
+	// 注：seedLegacyRBACPerms 已 INSERT ('event','E10','all') permission row，
+	// 这里改用 SELECT id + ON CONFLICT DO NOTHING 确保兼容
 	ctx := context.Background()
 	var permID int64
-	err = env.pool.QueryRow(ctx, `
+	_, err = env.pool.Exec(ctx, `
 		INSERT INTO permissions (resource, action, scope) VALUES ('event', 'E10', 'all')
-		RETURNING id
-	`).Scan(&permID)
+		ON CONFLICT (resource, action, scope) DO NOTHING
+	`)
 	require.NoError(t, err)
+	require.NoError(t, env.pool.QueryRow(ctx, `
+		SELECT id FROM permissions WHERE (resource, action, scope) = ('event', 'E10', 'all')
+	`).Scan(&permID))
 	_, err = env.pool.Exec(ctx, `
 		INSERT INTO role_permissions (role_id, permission_id) VALUES (2, $1)
+		ON CONFLICT DO NOTHING
 	`, permID)
 	require.NoError(t, err)
 

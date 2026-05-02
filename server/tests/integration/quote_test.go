@@ -60,10 +60,10 @@ func setupQuoteEnv(t *testing.T) *quoteEnv {
 
 	ctx := context.Background()
 	var adminID, csID, devID, otherDev int64
+	// 0007 migration 引入 users_super_admin_unique；复用 0001 已 INSERT 的 admin
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
-		VALUES ('admin-quote', $1, 'Admin', 1, TRUE) RETURNING id
-	`, hash).Scan(&adminID))
+		SELECT id FROM users WHERE role_id = 1 LIMIT 1
+	`).Scan(&adminID))
 	require.NoError(t, pool.QueryRow(ctx, `
 		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
 		VALUES ('cs-quote', $1, 'CS', 3, TRUE) RETURNING id

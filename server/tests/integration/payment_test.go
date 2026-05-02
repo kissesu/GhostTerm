@@ -62,11 +62,11 @@ func setupPaymentEnv(t *testing.T) *paymentTestEnv {
 	ctx := context.Background()
 
 	// 1. 用户：admin / dev1 / dev2 / cs（结算给 dev1+dev2 用，cs 录入项目）
+	// 0007 migration 引入 users_super_admin_unique；复用 0001 已 INSERT 的 admin
 	var adminID, dev1ID, dev2ID, csID int64
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
-		VALUES ('admin-pay', $1, 'Admin', 1, TRUE) RETURNING id
-	`, hash).Scan(&adminID))
+		SELECT id FROM users WHERE role_id = 1 LIMIT 1
+	`).Scan(&adminID))
 	require.NoError(t, pool.QueryRow(ctx, `
 		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
 		VALUES ('dev1-pay', $1, 'Dev1', 2, TRUE) RETURNING id
