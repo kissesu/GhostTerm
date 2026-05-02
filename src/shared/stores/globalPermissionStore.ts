@@ -163,9 +163,14 @@ export const useGlobalPermissionStore = create<GlobalPermissionState>((set, get)
         initialized: true,
       });
     } catch (err) {
-      // 失败暴露为 error 字段；不抛（让 UI 走 fallback / 重试），与 globalAuthStore 风格一致
+      // 失败暴露为 error 字段；不抛（让 UI 上层重试或显示 splash）。
+      // 关键：**不**设 initialized=true。
+      // initialized=true 表示"已成功拉到权限快照"，AppLayout 用它判断是否可以渲染
+      // NoPermissionFallback。若失败也 set true，超管/任何用户在刷新瞬间 fetch 401 +
+      // silent refresh 也失败时会被误展"无任何模块访问权限"全屏页。让 initialized
+      // 保持 false 表示"权限态未知"，AppLayout 上层渲染 splash 等待下次成功 fetch。
       const msg = err instanceof ProgressApiError ? err.message : String(err);
-      set({ loading: false, error: msg, initialized: true });
+      set({ loading: false, error: msg });
     }
   },
 

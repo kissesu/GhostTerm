@@ -109,7 +109,9 @@ describe('globalPermissionStore.fetch', () => {
     expect(useGlobalPermissionStore.getState().error).toBeNull();
   });
 
-  it('500 错误响应设 error 字段而不抛（initialized=true 让 UI 走 fallback）', async () => {
+  it('500 错误响应设 error 字段而不抛（initialized 保持 false 防止误展 fallback）', async () => {
+    // 关键回归：fetch 失败不应让 initialized 翻 true，否则超管刷新瞬间 401+silent
+    // refresh 也失败时会被误展"无任何模块访问权限"全屏页（已修 commit XXX）
     vi.mocked(globalThis.fetch).mockResolvedValueOnce(
       jsonResponse(500, { error: { code: 'internal', message: 'boom' } }),
     );
@@ -119,11 +121,12 @@ describe('globalPermissionStore.fetch', () => {
     const s = useGlobalPermissionStore.getState();
     expect(s.loading).toBe(false);
     expect(s.error).toContain('internal');
-    expect(s.initialized).toBe(true);
+    expect(s.initialized).toBe(false);
+    expect(s.isSuperAdmin).toBe(false);
     expect(s.permissions.size).toBe(0);
   });
 
-  it('schema 不匹配时设 schema_drift error', async () => {
+  it('schema 不匹配时设 schema_drift error（initialized 仍保持 false）', async () => {
     vi.mocked(globalThis.fetch).mockResolvedValueOnce(
       jsonResponse(200, { wrong: 'shape' }),
     );
@@ -132,7 +135,7 @@ describe('globalPermissionStore.fetch', () => {
 
     // ProgressApiError.message 来自构造函数的 message 参数；code 字段未编入字符串
     expect(useGlobalPermissionStore.getState().error).toContain('schema mismatch');
-    expect(useGlobalPermissionStore.getState().initialized).toBe(true);
+    expect(useGlobalPermissionStore.getState().initialized).toBe(false);
   });
 });
 
