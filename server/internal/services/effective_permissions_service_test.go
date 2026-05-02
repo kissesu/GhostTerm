@@ -31,6 +31,7 @@ package services_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -433,4 +434,33 @@ func TestEffectivePermissions_AllUserDeniesEmptyResult(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, got, "全部 deny 时应返 [] 而非 nil")
 	assert.Empty(t, got, "全部 role grants 被 deny 后结果必须为空")
+}
+
+// ============================================================
+// 用例 13：DB 故障 → ErrEffectivePermissionsUnavailable 哨兵
+// ============================================================
+//
+// 业务背景（review §C1）：HandleBearerAuth 调 Compute 失败时，路由层必须能区分
+//   - "用户被删"（ErrUserNotFound → 401 触发前端登出）
+//   - "DB down"（ErrEffectivePermissionsUnavailable → 503 让前端退避）
+// 否则 DB 故障被映射为 401，前端 silent refresh 死循环。
+//
+// 实现方式：先 Close 掉 pool，再调 Compute，必拿 DB 错误；errors.Is 必须命中本哨兵。
+
+func TestEffectivePermissions_DBErrorReturnsUnavailableSentinel(t *testing.T) {
+	ctx := context.Background()
+	tdb := fixtures.NewTestDB(t)
+	// 故意提前 Close pool 模拟 DB 不可用
+	tdb.Pool.Close()
+	defer tdb.Close() // 二次 Close 是 no-op，安全
+
+	svc := services.NewEffectivePermissionsService(tdb.Pool)
+	got, err := svc.Compute(ctx, 1) // userID 任取，pool 已 closed 必失败
+	require.Error(t, err, "pool closed 必须返回错误")
+	require.Nil(t, got, "失败必须返回 nil")
+	require.ErrorIs(t, err, services.ErrEffectivePermissionsUnavailable,
+		"DB 错误必须包成 ErrEffectivePermissionsUnavailable 哨兵；实际 err: %v", err)
+	// 必须 NOT 误判为 ErrUserNotFound（那会让 router 返回 404 误导前端）
+	require.False(t, errors.Is(err, services.ErrUserNotFound),
+		"DB 故障不应被误判为 user not found")
 }

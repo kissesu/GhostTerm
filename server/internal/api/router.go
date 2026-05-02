@@ -323,8 +323,15 @@ type oasSecurityHandler struct {
 // 任何 handler 通过 middleware.EffectivePermsFrom(ctx) 拿到 3 段权限码列表，
 // 同请求内多次校验不再重复打 DB（plan §"don't add caching beyond per-request"）。
 //
-// eff 计算失败 → 透传 error 让 errorEnvelopeHandler 兜底（503/500），
-// 拒绝 fail-open 放行无权限信息的请求。
+// 错误分流（修复 review C1/C2）：
+//  1. eff.Compute 返回 ErrUserNotFound（token 校验通过到现在之间用户被删的竞态）
+//     → 翻译为 ErrInvalidAccessToken，让前端走"会话失效→logout"流程；
+//     不能让 errorEnvelopeHandler 把 ErrUserNotFound 映射为 404，因为 404
+//     在前端语义是"业务资源不存在"不会触发登出。
+//  2. eff.Compute 返回 ErrEffectivePermissionsUnavailable（DB 故障）
+//     → 透传，让 errorEnvelopeHandler 映射 503；不能让前端误判为 401 触发
+//     silent refresh → 死循环（DB 不可用时 refresh 也会失败 → 无限重试）。
+//  3. 其它意外错误：用 ErrEffectivePermissionsUnavailable 兜底（fail-closed）。
 func (h *oasSecurityHandler) HandleBearerAuth(ctx context.Context, _ oas.OperationName, t oas.BearerAuth) (context.Context, error) {
 	if t.Token == "" {
 		return ctx, services.ErrInvalidAccessToken
@@ -342,8 +349,11 @@ func (h *oasSecurityHandler) HandleBearerAuth(ctx context.Context, _ oas.Operati
 	if h.eff != nil {
 		perms, err := h.eff.Compute(ctx, ac.UserID)
 		if err != nil {
-			// 不放行：权限信息缺失 = 后续 RequirePermission 全部 deny；
-			// 直接 bubble 让 errorEnvelopeHandler 给前端清晰错误码
+			// C2：用户在 token 有效期内被删 → 当作"无效 token"处理 → 401 触发前端登出
+			if errors.Is(err, services.ErrUserNotFound) {
+				return ctx, fmt.Errorf("token user removed (id=%d): %w", ac.UserID, services.ErrInvalidAccessToken)
+			}
+			// C1：DB 故障 → 503，让前端正确退避而非陷入 silent refresh 循环
 			return ctx, fmt.Errorf("rbac: load effective permissions for user %d: %w", ac.UserID, err)
 		}
 		ctx = apimw.WithEffectivePermissions(ctx, perms)
@@ -559,6 +569,14 @@ func errorEnvelopeHandler(_ context.Context, w http.ResponseWriter, r *http.Requ
 	}
 
 	switch {
+	// 注：必须放在 ErrInvalidAccessToken 之前与 ErrUserNotFound 之前；本错误是
+	// HandleBearerAuth eff.Compute 失败的兜底，调用方需要 503（让前端退避而非
+	// silent refresh 死循环）。即使 ogen 把它包成 SecurityError 把 status 预设
+	// 为 401，本 case 也会覆盖。
+	case errors.Is(err, services.ErrEffectivePermissionsUnavailable):
+		status = http.StatusServiceUnavailable
+		code = string(oas.ErrorEnvelopeErrorCodeServiceUnavailable)
+		msg = "权限校验服务暂时不可用，请稍后重试"
 	case errors.Is(err, services.ErrInvalidAccessToken),
 		errors.Is(err, services.ErrInvalidRefreshToken),
 		errors.Is(err, services.ErrInvalidCredentials),

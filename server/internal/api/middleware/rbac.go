@@ -1,12 +1,11 @@
 /*
 @file rbac.go
-@description chi 兼容 RBAC 中间件，分两层职责：
+@description chi 兼容 RBAC 权限工具集 —— 仅暴露"context 读写 + 匹配"3 个原子函数：
 
-  L1 LoadEffectivePermissions —— 每请求一次拉取 EffectivePermissionsService.Compute
-                                  结果（3 段 code 列表），缓存到 request context；
-                                  避免同一请求内多次权限检查重复打 DB。
-  L2 RequirePermission(code)  —— chi middleware factory，从 ctx 取 perms 列表，
-                                  按"四档匹配"判定 code 是否被授予；失败 403。
+  EffectivePermsFrom(ctx)           —— 取出已注入的 perms 列表
+  WithEffectivePermissions(ctx, ps) —— 写入 perms 列表到 ctx（生产由 oasSecurityHandler
+                                       调用、测试也可直接调）
+  MatchPermission(perms, want)      —— 四档优先级匹配 *:* > exact > a:b:* > a:*:*
 
 四档匹配（命中即放行）：
   1. *:*                        super_admin 哨兵
@@ -15,21 +14,15 @@
   4. exact <resource>:<action>:<scope>
 
 设计取舍：
+  - 历史 LoadEffectivePermissions / RequirePermission chi middleware factory 已删除：
+    所有路由走 ogen，由 oasSecurityHandler 在鉴权同时调 EffectivePermissionsService.Compute
+    并 WithEffectivePermissions 注入 ctx；handler 内通过 EffectivePermsFrom +
+    MatchPermission 自行判权。chi middleware 永无机会拦截 ogen 路由 → 死代码删之。
+    （review §I1：架构上单一 source of truth；2026-05-02 移除）
   - 与旧 RequirePerm（基于 RBACService.HasPermission，2 段 code）并存：旧函数仍被
-    feedback handler 等调用，本次 Task 8 只在新 perm 管理路由用 RequirePermission。
-    handler 层逐步迁移由后续 task 完成。
-  - 不在中间件内做 TTL 缓存：plan §"don't add caching beyond per-request context (TTL
-    cache is YAGNI)"。每请求 1 次 DB 查询，p99 影响可忽略。
-  - DB 错误返回 503 而非放行（fail-closed）：与 SuperAdminInvariants 的策略一致，
-    任何不能验证权限的场景都拒绝服务，不允许"权限校验跳过"导致越权。
-  - LoadEffectivePermissions 在没有 AuthContext 时静默放行：未鉴权请求由 RequireAuth
-    （或 ogen SecurityHandler）拦截；本中间件不重复返 401。
+    feedback handler 等调用，逐步迁移由后续 task 完成。
   - MatchPermission 接受非 3 段的 code 也按 false 返回（防御性）；调用方应保证
     code 形如 "resource:action:scope"。
-
-调用链（router 层期望顺序）：
-  ogen SecurityHandler → AuthContext 注入 → LoadEffectivePermissions → SuperAdminInvariants
-  → RequirePermission(code) → 业务 handler
 
 @author Atlas.oi
 @date 2026-05-02
@@ -40,7 +33,6 @@ package middleware
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"net/http"
 	"strings"
 
@@ -50,38 +42,7 @@ import (
 // effectivePermsCtxKey 私有类型作为 ctx key，避免外部包覆写。
 type effectivePermsCtxKey struct{}
 
-// LoadEffectivePermissions 返回 chi 中间件：每请求一次计算 effective perms 并写入 ctx。
-//
-// 业务流程：
-//  1. 取 AuthContextFrom(r.Context())；缺失则放行（未鉴权场景由其它中间件兜）
-//  2. 调 eff.Compute(ctx, ac.UserID)；DB 错误 → 503 + log
-//  3. 把 perms []string 写入 ctx（key=effectivePermsCtxKey），下游 RequirePermission 取用
-//
-// 缓存策略：仅 request scope（context 生命周期 = 单次 HTTP 请求），不做跨请求 TTL。
-func LoadEffectivePermissions(eff services.EffectivePermissionsService) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ac, ok := AuthContextFrom(r.Context())
-			if !ok {
-				// 未鉴权（如 /api/auth/login 走到这里）：放行，让 ogen SecurityHandler
-				// 或 RequireAuth 决定是否拦截
-				next.ServeHTTP(w, r)
-				return
-			}
-			perms, err := eff.Compute(r.Context(), ac.UserID)
-			if err != nil {
-				// 服务层失败：明确暴露而非放行（first-principles：不允许 fallback 隐藏问题）
-				log.Printf("rbac: load effective permissions failed for user %d: %v", ac.UserID, err)
-				writeServiceUnavailable(w, "权限信息加载失败，请稍后重试")
-				return
-			}
-			ctx := context.WithValue(r.Context(), effectivePermsCtxKey{}, perms)
-			next.ServeHTTP(w, r.WithContext(ctx))
-		})
-	}
-}
-
-// EffectivePermsFrom 从 ctx 取出 LoadEffectivePermissions 缓存的 perms 列表。
+// EffectivePermsFrom 从 ctx 取出 oasSecurityHandler（生产）或测试代码注入的 perms 列表。
 //
 // 第二返回值 false 表示 ctx 中没有该值（未挂中间件 / 未鉴权请求）。
 func EffectivePermsFrom(ctx context.Context) ([]string, bool) {
@@ -93,39 +54,14 @@ func EffectivePermsFrom(ctx context.Context) ([]string, bool) {
 	return perms, ok
 }
 
-// WithEffectivePermissions 仅供测试使用：把 perms 列表写入 ctx，绕过中间件。
+// WithEffectivePermissions 把 perms 列表写入 ctx。
 //
-// 业务背景：单测 RequirePermission 时不想拉真实 DB 计算 effective perms，
-// 直接构造 ctx → request 即可。
+// 调用方：
+//  - 生产：oasSecurityHandler 在 HandleBearerAuth 校验 token 后调 eff.Compute，把结果
+//    写入 ctx；下游 handler 通过 EffectivePermsFrom 读取，0 次 DB 查询完成判权。
+//  - 测试：单测 handler 时不想拉真实 DB 计算 effective perms，直接构造 ctx → request 即可。
 func WithEffectivePermissions(ctx context.Context, perms []string) context.Context {
 	return context.WithValue(ctx, effectivePermsCtxKey{}, perms)
-}
-
-// RequirePermission 返回 chi 中间件 factory：校验 ctx 中 perms 是否覆盖 code。
-//
-// 必须在 LoadEffectivePermissions 之后挂载；否则 ctx 没有 perms → 403。
-//
-// 业务流程：
-//  1. EffectivePermsFrom 取 perms；缺失 → 403（防御：避免"未挂载即放行"的隐式越权）
-//  2. MatchPermission(perms, code) → 命中放行；不命中 → 403
-//
-// 注：本函数不调 AuthContextFrom；perms 列表本身已蕴含"已鉴权 + 已计算"语义。
-func RequirePermission(code string) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			perms, ok := EffectivePermsFrom(r.Context())
-			if !ok {
-				// 缺失说明 LoadEffectivePermissions 没跑到（未鉴权 / 配置错误）
-				writePermissionDenied(w, "缺少权限信息")
-				return
-			}
-			if !MatchPermission(perms, code) {
-				writePermissionDenied(w, "无权访问该资源："+code)
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
-	}
 }
 
 // MatchPermission 按四档优先级判定 perms 是否授予 want。导出供 handler / 测试复用。

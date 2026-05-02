@@ -38,6 +38,18 @@ import (
 // SuperAdminRoleID 是超管角色的固定 id（0001 migration 预置 + 0007 部分唯一索引兜底）。
 const SuperAdminRoleID int64 = 1
 
+// ErrEffectivePermissionsUnavailable 表示"权限计算服务暂时不可用"（DB 故障 / 网络中断等
+// 非业务原因）。区别于 ErrUserNotFound（业务上明确"找不到用户"）。
+//
+// 业务背景：HandleBearerAuth 在 token 校验通过后会调 Compute 加载 effective perms；
+// 如果该步骤失败，路由层应返回 503 Service Unavailable 而非 401，因为：
+//  1. token 本身合法，401 会触发前端 silent refresh → DB 仍 down → 死循环
+//  2. 503 让前端正确退避（指数 backoff 或人工处理），不重试到 token expired
+//
+// errorEnvelopeHandler 检测到 errors.Is(err, ErrEffectivePermissionsUnavailable)
+// 即映射为 503 + service_unavailable code。
+var ErrEffectivePermissionsUnavailable = errors.New("effective_permissions_unavailable")
+
 // EffectivePermissionsService 计算单个用户的有效权限码集合。
 //
 // "有效"定义见 plan §6 / spec：
@@ -74,7 +86,9 @@ func (s *effectivePermissionsService) Compute(ctx context.Context, userID int64)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("effective_permissions: user %d: %w", userID, ErrUserNotFound)
 		}
-		return nil, fmt.Errorf("effective_permissions: query role: %w", err)
+		// DB 故障：包成 ErrEffectivePermissionsUnavailable 让上层映射 503 而非 500/401。
+		// 原始 err 仍通过 %v 保留在 message 里供 log 排错。
+		return nil, fmt.Errorf("effective_permissions: query role (%v): %w", err, ErrEffectivePermissionsUnavailable)
 	}
 
 	// 2. 超管短路：直接返哨兵，不再读任何权限表（决策 #0.5 / 0007 trigger 也保证两表无超管行）
@@ -116,6 +130,8 @@ func (s *effectivePermissionsService) Compute(ctx context.Context, userID int64)
 }
 
 // queryRolePermissions 读取 role_id 绑定的全部权限码（resource:action:scope）。
+//
+// 任何 DB 失败都包成 ErrEffectivePermissionsUnavailable，让 router 映射 503。
 func (s *effectivePermissionsService) queryRolePermissions(ctx context.Context, roleID int64) ([]string, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT p.resource || ':' || p.action || ':' || p.scope
@@ -124,7 +140,7 @@ func (s *effectivePermissionsService) queryRolePermissions(ctx context.Context, 
 		WHERE rp.role_id = $1
 	`, roleID)
 	if err != nil {
-		return nil, fmt.Errorf("effective_permissions: query role permissions: %w", err)
+		return nil, fmt.Errorf("effective_permissions: query role permissions (%v): %w", err, ErrEffectivePermissionsUnavailable)
 	}
 	defer rows.Close()
 
@@ -132,12 +148,12 @@ func (s *effectivePermissionsService) queryRolePermissions(ctx context.Context, 
 	for rows.Next() {
 		var code string
 		if err := rows.Scan(&code); err != nil {
-			return nil, fmt.Errorf("effective_permissions: scan role permission: %w", err)
+			return nil, fmt.Errorf("effective_permissions: scan role permission (%v): %w", err, ErrEffectivePermissionsUnavailable)
 		}
 		out = append(out, code)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("effective_permissions: iterate role permissions: %w", err)
+		return nil, fmt.Errorf("effective_permissions: iterate role permissions (%v): %w", err, ErrEffectivePermissionsUnavailable)
 	}
 	return out, nil
 }
@@ -146,6 +162,9 @@ func (s *effectivePermissionsService) queryRolePermissions(ctx context.Context, 
 //
 // 业务背景：user_permissions PRIMARY KEY (user_id, permission_id) 保证同 (user, perm)
 // 至多一行；所以一行只会落到 grants 或 denies 中之一。
+//
+// DB 失败均包成 ErrEffectivePermissionsUnavailable；schema 漂移（unknown effect）属逻辑错
+// 不算 unavailable，单独保留 fmt.Errorf 让 errorEnvelopeHandler 兜底 500。
 func (s *effectivePermissionsService) queryUserOverrides(ctx context.Context, userID int64) (grants, denies []string, err error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT p.resource || ':' || p.action || ':' || p.scope, up.effect
@@ -154,7 +173,7 @@ func (s *effectivePermissionsService) queryUserOverrides(ctx context.Context, us
 		WHERE up.user_id = $1
 	`, userID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("effective_permissions: query user overrides: %w", err)
+		return nil, nil, fmt.Errorf("effective_permissions: query user overrides (%v): %w", err, ErrEffectivePermissionsUnavailable)
 	}
 	defer rows.Close()
 
@@ -164,7 +183,7 @@ func (s *effectivePermissionsService) queryUserOverrides(ctx context.Context, us
 			effect string
 		)
 		if err := rows.Scan(&code, &effect); err != nil {
-			return nil, nil, fmt.Errorf("effective_permissions: scan user override: %w", err)
+			return nil, nil, fmt.Errorf("effective_permissions: scan user override (%v): %w", err, ErrEffectivePermissionsUnavailable)
 		}
 		switch effect {
 		case "grant":
@@ -177,7 +196,7 @@ func (s *effectivePermissionsService) queryUserOverrides(ctx context.Context, us
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, nil, fmt.Errorf("effective_permissions: iterate user overrides: %w", err)
+		return nil, nil, fmt.Errorf("effective_permissions: iterate user overrides (%v): %w", err, ErrEffectivePermissionsUnavailable)
 	}
 	return grants, denies, nil
 }
