@@ -33,6 +33,10 @@ type FilesUploadRes interface {
 	filesUploadRes()
 }
 
+type MeGetEffectivePermissionsRes interface {
+	meGetEffectivePermissionsRes()
+}
+
 type NotificationsMarkReadRes interface {
 	notificationsMarkReadRes()
 }
@@ -109,8 +113,16 @@ type UsersDeleteRes interface {
 	usersDeleteRes()
 }
 
+type UsersGetPermissionOverridesRes interface {
+	usersGetPermissionOverridesRes()
+}
+
 type UsersListRes interface {
 	usersListRes()
+}
+
+type UsersUpdatePermissionOverridesRes interface {
+	usersUpdatePermissionOverridesRes()
 }
 
 type UsersUpdateRes interface {

@@ -71,11 +71,10 @@ func setupFileEnv(t *testing.T) *fileTestEnv {
 	ctx := context.Background()
 
 	var adminID, devID, csID int64
+	// 0007 migration 引入 users_super_admin_unique；复用 0001 已 INSERT 的 admin
 	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
-		VALUES ('admin-file', $1, 'Admin', 1, TRUE)
-		RETURNING id
-	`, hash).Scan(&adminID))
+		SELECT id FROM users WHERE role_id = 1 LIMIT 1
+	`).Scan(&adminID))
 	require.NoError(t, pool.QueryRow(ctx, `
 		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
 		VALUES ('dev-file', $1, 'Dev', 2, TRUE)

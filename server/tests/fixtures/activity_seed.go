@@ -75,24 +75,23 @@ func NewTestDB(t *testing.T) *TestDB {
 // 用户 / 项目 / 文件 helper
 // ============================================================
 
-// SeedAdminAuthContext 插一个 super_admin 用户（role_id=1）并返回 AuthContext。
+// SeedAdminAuthContext 复用 0001 migration 已 INSERT 的 super_admin 用户（username='admin', role_id=1）。
 //
-// 业务背景：admin 在 RLS 视角是"所有项目可见"，省掉手动 project_members 关联；
-// 多数 service test 只关心"路径走通"，不关心 RLS 拒绝路径，admin 是默认选择。
-func SeedAdminAuthContext(t *testing.T, ctx context.Context, pool *pgxpool.Pool) services.AuthContext {
+// 业务背景：
+//   - 0007 migration 引入 `users_super_admin_unique` 部分唯一索引，
+//     全表至多一行 role_id=1；任何"再插一个 super_admin"的 fixture 都会被拒绝。
+//   - admin 在 RLS 视角是"所有项目可见"，省掉手动 project_members 关联；
+//     多数 service test 只关心"路径走通"，不关心 RLS 拒绝路径，admin 是默认选择。
+//   - 0001 migration 已 INSERT 'admin' 用户，本 helper 直接 SELECT 复用，
+//     避免与 0007 的硬约束冲突；hash/auth 包 import 保留，其它 helper 仍需要。
+func SeedAdminAuthContext(t *testing.T, _ context.Context, pool *pgxpool.Pool) services.AuthContext {
 	t.Helper()
-	hash, err := auth.HashPassword("password", bcrypt.MinCost)
-	require.NoError(t, err)
-
-	uname := fmt.Sprintf("admin-fixture-%d", nextUniq())
 	var id int64
-	err = pool.QueryRow(ctx, `
-		INSERT INTO users (username, password_hash, display_name, role_id, is_active)
-		VALUES ($1, $2, 'Fixture Admin', 1, TRUE)
-		RETURNING id
-	`, uname, hash).Scan(&id)
-	require.NoError(t, err)
-
+	// 0001 migration 预置 'admin' (role_id=1)；这里直接 SELECT 拿 id
+	err := pool.QueryRow(context.Background(), `
+		SELECT id FROM users WHERE role_id = 1 LIMIT 1
+	`).Scan(&id)
+	require.NoError(t, err, "0001 migration 应已 INSERT super_admin (role_id=1)")
 	return services.AuthContext{UserID: id, RoleID: 1}
 }
 

@@ -2,8 +2,15 @@
  * @file AppLayout - 应用主布局
  * @description GhostTerm 应用外壳：标题栏 + ProjectWorkspace。
  *              负责启动恢复逻辑、窗口宽度自动折叠侧边栏、键盘快捷键注册。
+ *
+ *              Task 9 (2026-05-02) 引入 nav 级权限门控：
+ *              - 登录后 useGlobalPermissionStore.fetch() 拉 effective permissions
+ *              - 三个 tab（work/progress/atlas）按 nav:view:<tab> 权限分别渲染
+ *              - 当前 tab 失权时自动切到首个有权 tab
+ *              - 三 tab 全无权时全屏渲染 NoPermissionFallback
+ *
  * @author Atlas.oi
- * @date 2026-04-17
+ * @date 2026-05-02
  */
 
 import { useEffect, useRef, useState, useCallback, lazy, Suspense } from 'react';
@@ -13,9 +20,25 @@ import { useKeyboardShortcuts } from '../shared/hooks/useKeyboardShortcuts';
 import WindowTitleBar from '../shared/components/WindowTitleBar';
 import { useSettingsStore } from '../shared/stores/settingsStore';
 import { useGlobalAuthStore } from '../shared/stores/globalAuthStore';
+import { useGlobalPermissionStore } from '../shared/stores/globalPermissionStore';
 import GlobalLoginPage from '../shared/components/GlobalLoginPage';
+import NoPermissionFallback from '../shared/components/NoPermissionFallback';
 import { NotificationBell } from '../features/progress/components/NotificationBell';
 import { ProjectWorkspace } from './ProjectWorkspace';
+
+// ============================================
+// nav 级权限码（与后端 EffectivePermissionsService 返回的码一致）
+// 从 permissions 表扫描：resource='nav', action='view', scope=tab 名
+// ============================================
+const NAV_PERM_WORK = 'nav:view:work';
+const NAV_PERM_PROGRESS = 'nav:view:progress';
+const NAV_PERM_ATLAS = 'nav:view:atlas';
+type WorkspaceTab = 'work' | 'progress' | 'atlas';
+const NAV_PERM_BY_TAB: Record<WorkspaceTab, string> = {
+  work: NAV_PERM_WORK,
+  progress: NAV_PERM_PROGRESS,
+  atlas: NAV_PERM_ATLAS,
+};
 
 // 进度模块按需懒加载：首次切换到「进度」Tab 时才下载 chunk，
 // 之后保持挂载（display:none），保留模块内部状态
@@ -47,6 +70,23 @@ export default function AppLayout() {
   const loadMe = useGlobalAuthStore((s) => s.loadMe);
   const logout = useGlobalAuthStore((s) => s.logout);
 
+  // ============================================
+  // 全局权限缓存（Task 9）：从 GET /api/me/effective-permissions 拉取
+  // 用 selector 而非 getState() 让 hook 真正订阅 store 变化（避免 LSP unused-locals 误判）
+  // ============================================
+  const permsInitialized = useGlobalPermissionStore((s) => s.initialized);
+  const permsHas = useGlobalPermissionStore((s) => s.has);
+  const fetchPerms = useGlobalPermissionStore((s) => s.fetch);
+  // permissions / isSuperAdmin 仅用于让 hook 在变更时重渲染（has 闭包结果同步刷新）
+  // selector 返回原引用，store 写入新 Set / bool 时重渲；触发 auto-switch effect
+  useGlobalPermissionStore((s) => s.permissions);
+  useGlobalPermissionStore((s) => s.isSuperAdmin);
+
+  const canSeeWork = permsHas(NAV_PERM_WORK);
+  const canSeeProgress = permsHas(NAV_PERM_PROGRESS);
+  const canSeeAtlas = permsHas(NAV_PERM_ATLAS);
+  const hasAnyNav = canSeeWork || canSeeProgress || canSeeAtlas;
+
   const [activePanel, setActivePanel] = useState<'editor' | 'terminal'>('editor');
   const userCollapsedRef = useRef(false);
 
@@ -55,7 +95,7 @@ export default function AppLayout() {
   // 切换通过 display:none 而非卸载，保留 xterm scrollback / Editor 状态
   // 子模块按需首次挂载（mounted 标记 true 后保持）
   // ============================================
-  const [activeWorkspace, setActiveWorkspace] = useState<'work' | 'progress' | 'atlas'>('work');
+  const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceTab>('work');
   const [progressMounted, setProgressMounted] = useState(false);
   const [atlasMounted, setAtlasMounted] = useState(false);
   if (activeWorkspace === 'progress' && !progressMounted) {
@@ -64,12 +104,6 @@ export default function AppLayout() {
   }
   if (activeWorkspace === 'atlas' && !atlasMounted) {
     setAtlasMounted(true);
-  }
-
-  // 非 admin 切回 work（防止 roleId 被踢下线后仍停留在 atlas）
-  const isAdmin = user?.roleId === 1;
-  if (activeWorkspace === 'atlas' && !isAdmin) {
-    setActiveWorkspace('work');
   }
 
   const handleFocusToggle = useCallback((panel: 'editor' | 'terminal') => {
@@ -117,6 +151,41 @@ export default function AppLayout() {
     // 仅在 mount 时跑一次；user 后续变化由其他 effect 管
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ============================================
+  // Task 9：登录后拉取最新 effective permissions（nav 级 tab 门控数据源）
+  // 仅在 sessionVerified + user 都就绪后跑一次；切账号 / 登出走 globalAuthStore.clear
+  // ============================================
+  useEffect(() => {
+    if (!sessionVerified || !user) return;
+    void fetchPerms();
+    // 仅在 user 变化时重拉（切账号场景）；fetchPerms 是稳定 selector 引用
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionVerified, user]);
+
+  // ============================================
+  // Task 9：activeWorkspace 失去对应 nav 权限时自动切到首个可见 tab
+  // 例：管理员撤销当前用户的 nav:view:atlas 后，停留在 atlas tab 的用户被弹回 work
+  // hasAnyNav=false 时不动（让上层 NoPermissionFallback 接管全屏）
+  // ============================================
+  useEffect(() => {
+    if (!permsInitialized || !hasAnyNav) return;
+    const currentPerm = NAV_PERM_BY_TAB[activeWorkspace];
+    if (permsHas(currentPerm)) return;
+    // 当前 tab 无权 → 找首个有权 tab
+    const fallback: WorkspaceTab | null = canSeeWork
+      ? 'work'
+      : canSeeProgress
+        ? 'progress'
+        : canSeeAtlas
+          ? 'atlas'
+          : null;
+    if (fallback && fallback !== activeWorkspace) {
+      setActiveWorkspace(fallback);
+    }
+    // permsHas 是 selector 返回的函数引用；permissions/isSuperAdmin 变化通过订阅触发重渲
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [permsInitialized, hasAnyNav, activeWorkspace, canSeeWork, canSeeProgress, canSeeAtlas]);
 
   // ============================================
   // 启动时恢复上次打开的项目（仅在已登录后才有意义）
@@ -209,7 +278,9 @@ export default function AppLayout() {
           <WorkspaceTabs
             active={activeWorkspace}
             onChange={setActiveWorkspace}
-            isAdmin={isAdmin}
+            canSeeWork={canSeeWork}
+            canSeeProgress={canSeeProgress}
+            canSeeAtlas={canSeeAtlas}
           />
         }
         right={
@@ -220,92 +291,110 @@ export default function AppLayout() {
           />
         }
       />
-      {/* 工作区主机：display:none 切换两个工作区，
-          ProjectWorkspace 始终挂载（保护 xterm scrollback / Editor session）；
-          ProgressShell 按需首次挂载，挂载后同样靠 display:none 保留状态 */}
-      <div
-        style={{
-          flex: 1,
-          minHeight: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-      >
+      {/* Task 9：权限拉取完成后若任一 nav 都无权限 → 全屏兜底页
+          （permsInitialized=true 表示已尝试 fetch；error 路径也算 initialized） */}
+      {permsInitialized && !hasAnyNav ? (
         <div
-          data-testid="project-workspace-host"
           style={{
-            display: activeWorkspace === 'work' ? 'flex' : 'none',
             flex: 1,
             minHeight: 0,
-            flexDirection: 'column',
+            position: 'relative',
+            overflow: 'hidden',
           }}
         >
-          <ProjectWorkspace sidebarVisible={sidebarVisible} />
+          <NoPermissionFallback />
         </div>
-        {progressMounted && (
-          <div
-            data-testid="progress-shell-host"
-            style={{
-              display: activeWorkspace === 'progress' ? 'flex' : 'none',
-              flex: 1,
-              minHeight: 0,
-              flexDirection: 'column',
-            }}
-          >
-            <Suspense
-              fallback={
-                <div
-                  data-testid="progress-shell-loading"
-                  style={{
-                    flex: 1,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'var(--c-fg-muted)',
-                    fontSize: 13,
-                  }}
-                >
-                  加载进度模块...
-                </div>
-              }
+      ) : (
+        // 工作区主机：display:none 切换工作区，
+        // ProjectWorkspace 始终挂载（保护 xterm scrollback / Editor session）；
+        // ProgressShell / AtlasShell 按需首次挂载，挂载后同样靠 display:none 保留状态
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+        >
+          {/* 无 work 权限时不渲染（避免 PTY/Editor 启动）；有权限则始终挂载 */}
+          {canSeeWork && (
+            <div
+              data-testid="project-workspace-host"
+              style={{
+                display: activeWorkspace === 'work' ? 'flex' : 'none',
+                flex: 1,
+                minHeight: 0,
+                flexDirection: 'column',
+              }}
             >
-              <ProgressShell />
-            </Suspense>
-          </div>
-        )}
-        {atlasMounted && isAdmin && (
-          <div
-            data-testid="atlas-shell-host"
-            style={{
-              display: activeWorkspace === 'atlas' ? 'flex' : 'none',
-              flex: 1,
-              minHeight: 0,
-              flexDirection: 'column',
-            }}
-          >
-            <Suspense
-              fallback={
-                <div
-                  data-testid="atlas-shell-loading"
-                  style={{
-                    flex: 1,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'var(--c-fg-muted)',
-                    fontSize: 13,
-                  }}
-                >
-                  加载 Atlas 模块...
-                </div>
-              }
+              <ProjectWorkspace sidebarVisible={sidebarVisible} />
+            </div>
+          )}
+          {canSeeProgress && progressMounted && (
+            <div
+              data-testid="progress-shell-host"
+              style={{
+                display: activeWorkspace === 'progress' ? 'flex' : 'none',
+                flex: 1,
+                minHeight: 0,
+                flexDirection: 'column',
+              }}
             >
-              <AtlasShell />
-            </Suspense>
-          </div>
-        )}
-      </div>
+              <Suspense
+                fallback={
+                  <div
+                    data-testid="progress-shell-loading"
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'var(--c-fg-muted)',
+                      fontSize: 13,
+                    }}
+                  >
+                    加载进度模块...
+                  </div>
+                }
+              >
+                <ProgressShell />
+              </Suspense>
+            </div>
+          )}
+          {canSeeAtlas && atlasMounted && (
+            <div
+              data-testid="atlas-shell-host"
+              style={{
+                display: activeWorkspace === 'atlas' ? 'flex' : 'none',
+                flex: 1,
+                minHeight: 0,
+                flexDirection: 'column',
+              }}
+            >
+              <Suspense
+                fallback={
+                  <div
+                    data-testid="atlas-shell-loading"
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'var(--c-fg-muted)',
+                      fontSize: 13,
+                    }}
+                  >
+                    加载 Atlas 模块...
+                  </div>
+                }
+              >
+                <AtlasShell />
+              </Suspense>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -313,15 +402,23 @@ export default function AppLayout() {
 // ============================================
 // 顶部 Workspace Tabs（紧贴品牌右侧）
 // 极简实现：不引入 clsx；样式贴合现有标题栏文字尺寸 12-13px
-// 角色过滤：所有用户看 work + progress；admin（roleId==1）额外看 atlas
+// Task 9：tab 按 nav:view:* 权限分别门控；canSee* false 时整个 button 不渲染
 // ============================================
 interface WorkspaceTabsProps {
-  active: 'work' | 'progress' | 'atlas';
-  onChange: (v: 'work' | 'progress' | 'atlas') => void;
-  isAdmin: boolean;
+  active: WorkspaceTab;
+  onChange: (v: WorkspaceTab) => void;
+  canSeeWork: boolean;
+  canSeeProgress: boolean;
+  canSeeAtlas: boolean;
 }
 
-function WorkspaceTabs({ active, onChange, isAdmin }: WorkspaceTabsProps) {
+function WorkspaceTabs({
+  active,
+  onChange,
+  canSeeWork,
+  canSeeProgress,
+  canSeeAtlas,
+}: WorkspaceTabsProps) {
   // 用户需求 2026-04-30：激活态对齐 progress 模块"看板/列表/Gantt"风格 = OKLCH 森青 accent 实底 + 暗文 + 加粗
   const tabBase: React.CSSProperties = {
     border: 'none',
@@ -343,27 +440,31 @@ function WorkspaceTabs({ active, onChange, isAdmin }: WorkspaceTabsProps) {
 
   return (
     <div role="tablist" data-testid="workspace-tabs" style={{ display: 'flex', gap: 2 }}>
-      <button
-        type="button"
-        role="tab"
-        aria-selected={active === 'work'}
-        data-testid="workspace-tab-work"
-        onClick={() => onChange('work')}
-        style={{ ...tabBase, ...(active === 'work' ? activeStyle : {}) }}
-      >
-        工作区
-      </button>
-      <button
-        type="button"
-        role="tab"
-        aria-selected={active === 'progress'}
-        data-testid="workspace-tab-progress"
-        onClick={() => onChange('progress')}
-        style={{ ...tabBase, ...(active === 'progress' ? activeStyle : {}) }}
-      >
-        进度
-      </button>
-      {isAdmin && (
+      {canSeeWork && (
+        <button
+          type="button"
+          role="tab"
+          aria-selected={active === 'work'}
+          data-testid="workspace-tab-work"
+          onClick={() => onChange('work')}
+          style={{ ...tabBase, ...(active === 'work' ? activeStyle : {}) }}
+        >
+          工作区
+        </button>
+      )}
+      {canSeeProgress && (
+        <button
+          type="button"
+          role="tab"
+          aria-selected={active === 'progress'}
+          data-testid="workspace-tab-progress"
+          onClick={() => onChange('progress')}
+          style={{ ...tabBase, ...(active === 'progress' ? activeStyle : {}) }}
+        >
+          进度
+        </button>
+      )}
+      {canSeeAtlas && (
         <button
           type="button"
           role="tab"

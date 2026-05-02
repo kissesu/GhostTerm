@@ -729,6 +729,36 @@ func (s *EarningsSummaryResponse) SetData(val EarningsSummary) {
 	s.Data = val
 }
 
+// Ref: #/components/schemas/EffectivePermissionsResponse
+type EffectivePermissionsResponse struct {
+	// 已计算合并的权限码列表（resource:action:scope）；超管时为单元素 ['*:*'].
+	Permissions []string `json:"permissions"`
+	// True 表示当前用户是 super_admin；前端可据此跳过任何权限门控.
+	SuperAdmin bool `json:"superAdmin"`
+}
+
+// GetPermissions returns the value of Permissions.
+func (s *EffectivePermissionsResponse) GetPermissions() []string {
+	return s.Permissions
+}
+
+// GetSuperAdmin returns the value of SuperAdmin.
+func (s *EffectivePermissionsResponse) GetSuperAdmin() bool {
+	return s.SuperAdmin
+}
+
+// SetPermissions sets the value of Permissions.
+func (s *EffectivePermissionsResponse) SetPermissions(val []string) {
+	s.Permissions = val
+}
+
+// SetSuperAdmin sets the value of SuperAdmin.
+func (s *EffectivePermissionsResponse) SetSuperAdmin(val bool) {
+	s.SuperAdmin = val
+}
+
+func (*EffectivePermissionsResponse) meGetEffectivePermissionsRes() {}
+
 // Ref: #/components/schemas/ErrorEnvelope
 type ErrorEnvelope struct {
 	Error ErrorEnvelopeError `json:"error"`
@@ -750,6 +780,7 @@ func (*ErrorEnvelope) authRefreshRes()                 {}
 func (*ErrorEnvelope) dashboardGetRisksRes()           {}
 func (*ErrorEnvelope) feedbacksUpdateRes()             {}
 func (*ErrorEnvelope) filesDownloadRes()               {}
+func (*ErrorEnvelope) meGetEffectivePermissionsRes()   {}
 func (*ErrorEnvelope) notificationsMarkReadRes()       {}
 func (*ErrorEnvelope) permissionsListRes()             {}
 func (*ErrorEnvelope) projectsCreateFeedbackRes()      {}
@@ -811,6 +842,11 @@ const (
 	ErrorEnvelopeErrorCodeTicketInvalid                 ErrorEnvelopeErrorCode = "ticket_invalid"
 	ErrorEnvelopeErrorCodeNotImplemented                ErrorEnvelopeErrorCode = "not_implemented"
 	ErrorEnvelopeErrorCodeInternal                      ErrorEnvelopeErrorCode = "internal"
+	ErrorEnvelopeErrorCodeSuperAdminImmutable           ErrorEnvelopeErrorCode = "super_admin_immutable"
+	ErrorEnvelopeErrorCodeRequestBodyTooLarge           ErrorEnvelopeErrorCode = "request_body_too_large"
+	ErrorEnvelopeErrorCodeServiceUnavailable            ErrorEnvelopeErrorCode = "service_unavailable"
+	ErrorEnvelopeErrorCodeInvalidEffect                 ErrorEnvelopeErrorCode = "invalid_effect"
+	ErrorEnvelopeErrorCodePermissionNotFound            ErrorEnvelopeErrorCode = "permission_not_found"
 )
 
 // AllValues returns all ErrorEnvelopeErrorCode values.
@@ -826,6 +862,11 @@ func (ErrorEnvelopeErrorCode) AllValues() []ErrorEnvelopeErrorCode {
 		ErrorEnvelopeErrorCodeTicketInvalid,
 		ErrorEnvelopeErrorCodeNotImplemented,
 		ErrorEnvelopeErrorCodeInternal,
+		ErrorEnvelopeErrorCodeSuperAdminImmutable,
+		ErrorEnvelopeErrorCodeRequestBodyTooLarge,
+		ErrorEnvelopeErrorCodeServiceUnavailable,
+		ErrorEnvelopeErrorCodeInvalidEffect,
+		ErrorEnvelopeErrorCodePermissionNotFound,
 	}
 }
 
@@ -851,6 +892,16 @@ func (s ErrorEnvelopeErrorCode) MarshalText() ([]byte, error) {
 	case ErrorEnvelopeErrorCodeNotImplemented:
 		return []byte(s), nil
 	case ErrorEnvelopeErrorCodeInternal:
+		return []byte(s), nil
+	case ErrorEnvelopeErrorCodeSuperAdminImmutable:
+		return []byte(s), nil
+	case ErrorEnvelopeErrorCodeRequestBodyTooLarge:
+		return []byte(s), nil
+	case ErrorEnvelopeErrorCodeServiceUnavailable:
+		return []byte(s), nil
+	case ErrorEnvelopeErrorCodeInvalidEffect:
+		return []byte(s), nil
+	case ErrorEnvelopeErrorCodePermissionNotFound:
 		return []byte(s), nil
 	default:
 		return nil, errors.Errorf("invalid value: %q", s)
@@ -889,6 +940,21 @@ func (s *ErrorEnvelopeErrorCode) UnmarshalText(data []byte) error {
 		return nil
 	case ErrorEnvelopeErrorCodeInternal:
 		*s = ErrorEnvelopeErrorCodeInternal
+		return nil
+	case ErrorEnvelopeErrorCodeSuperAdminImmutable:
+		*s = ErrorEnvelopeErrorCodeSuperAdminImmutable
+		return nil
+	case ErrorEnvelopeErrorCodeRequestBodyTooLarge:
+		*s = ErrorEnvelopeErrorCodeRequestBodyTooLarge
+		return nil
+	case ErrorEnvelopeErrorCodeServiceUnavailable:
+		*s = ErrorEnvelopeErrorCodeServiceUnavailable
+		return nil
+	case ErrorEnvelopeErrorCodeInvalidEffect:
+		*s = ErrorEnvelopeErrorCodeInvalidEffect
+		return nil
+	case ErrorEnvelopeErrorCodePermissionNotFound:
+		*s = ErrorEnvelopeErrorCodePermissionNotFound
 		return nil
 	default:
 		return errors.Errorf("invalid value: %q", data)
@@ -3002,12 +3068,14 @@ func (*PaymentResponse) projectsCreatePaymentRes() {}
 // Ref: #/components/schemas/Permission
 type Permission struct {
 	ID int64 `json:"id"`
-	// 资源类型，如 project / feedback / payment / file.
+	// 资源命名空间，如 nav / progress / users / permissions.
 	Resource string `json:"resource"`
-	// 动作，如 read / create / update / delete.
+	// 动作，如 view / list / create / edit / delete / role / user_override.
 	Action string `json:"action"`
-	// 范围，如 all / created_by_self / created_by_role:<id>.
+	// 范围，如 work / progress / atlas / all / manage.
 	Scope string `json:"scope"`
+	// 三段式权限码 resource:action:scope（前端 PermissionGate 直接消费）.
+	Code string `json:"code"`
 }
 
 // GetID returns the value of ID.
@@ -3030,6 +3098,11 @@ func (s *Permission) GetScope() string {
 	return s.Scope
 }
 
+// GetCode returns the value of Code.
+func (s *Permission) GetCode() string {
+	return s.Code
+}
+
 // SetID sets the value of ID.
 func (s *Permission) SetID(val int64) {
 	s.ID = val
@@ -3050,6 +3123,11 @@ func (s *Permission) SetScope(val string) {
 	s.Scope = val
 }
 
+// SetCode sets the value of Code.
+func (s *Permission) SetCode(val string) {
+	s.Code = val
+}
+
 // Ref: #/components/schemas/PermissionListResponse
 type PermissionListResponse struct {
 	Data []Permission `json:"data"`
@@ -3065,9 +3143,8 @@ func (s *PermissionListResponse) SetData(val []Permission) {
 	s.Data = val
 }
 
-func (*PermissionListResponse) permissionsListRes()        {}
-func (*PermissionListResponse) rolesGetPermissionsRes()    {}
-func (*PermissionListResponse) rolesUpdatePermissionsRes() {}
+func (*PermissionListResponse) permissionsListRes()     {}
+func (*PermissionListResponse) rolesGetPermissionsRes() {}
 
 // Ref: #/components/schemas/Project
 type Project struct {
@@ -4782,6 +4859,11 @@ type RolesUpdatePermissionsForbidden ErrorEnvelope
 
 func (*RolesUpdatePermissionsForbidden) rolesUpdatePermissionsRes() {}
 
+// RolesUpdatePermissionsNoContent is response for RolesUpdatePermissions operation.
+type RolesUpdatePermissionsNoContent struct{}
+
+func (*RolesUpdatePermissionsNoContent) rolesUpdatePermissionsRes() {}
+
 type RolesUpdatePermissionsNotFound ErrorEnvelope
 
 func (*RolesUpdatePermissionsNotFound) rolesUpdatePermissionsRes() {}
@@ -5275,6 +5357,21 @@ func (s *ThesisVersionResponse) SetData(val ThesisVersion) {
 
 func (*ThesisVersionResponse) projectsCreateThesisVersionRes() {}
 
+// Ref: #/components/schemas/UpdateUserPermissionOverridesRequest
+type UpdateUserPermissionOverridesRequest struct {
+	Overrides []UserPermissionOverride `json:"overrides"`
+}
+
+// GetOverrides returns the value of Overrides.
+func (s *UpdateUserPermissionOverridesRequest) GetOverrides() []UserPermissionOverride {
+	return s.Overrides
+}
+
+// SetOverrides sets the value of Overrides.
+func (s *UpdateUserPermissionOverridesRequest) SetOverrides(val []UserPermissionOverride) {
+	s.Overrides = val
+}
+
 // Ref: #/components/schemas/User
 type User struct {
 	ID int64 `json:"id"`
@@ -5427,6 +5524,102 @@ func (s *UserListResponse) SetData(val []User) {
 
 func (*UserListResponse) usersListRes() {}
 
+// User 级权限覆写：grant 强行追加；deny 强行扣除（超管不允许任何 override）.
+// Ref: #/components/schemas/UserPermissionOverride
+type UserPermissionOverride struct {
+	PermissionId int64                        `json:"permissionId"`
+	Effect       UserPermissionOverrideEffect `json:"effect"`
+}
+
+// GetPermissionId returns the value of PermissionId.
+func (s *UserPermissionOverride) GetPermissionId() int64 {
+	return s.PermissionId
+}
+
+// GetEffect returns the value of Effect.
+func (s *UserPermissionOverride) GetEffect() UserPermissionOverrideEffect {
+	return s.Effect
+}
+
+// SetPermissionId sets the value of PermissionId.
+func (s *UserPermissionOverride) SetPermissionId(val int64) {
+	s.PermissionId = val
+}
+
+// SetEffect sets the value of Effect.
+func (s *UserPermissionOverride) SetEffect(val UserPermissionOverrideEffect) {
+	s.Effect = val
+}
+
+type UserPermissionOverrideEffect string
+
+const (
+	UserPermissionOverrideEffectGrant UserPermissionOverrideEffect = "grant"
+	UserPermissionOverrideEffectDeny  UserPermissionOverrideEffect = "deny"
+)
+
+// AllValues returns all UserPermissionOverrideEffect values.
+func (UserPermissionOverrideEffect) AllValues() []UserPermissionOverrideEffect {
+	return []UserPermissionOverrideEffect{
+		UserPermissionOverrideEffectGrant,
+		UserPermissionOverrideEffectDeny,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s UserPermissionOverrideEffect) MarshalText() ([]byte, error) {
+	switch s {
+	case UserPermissionOverrideEffectGrant:
+		return []byte(s), nil
+	case UserPermissionOverrideEffectDeny:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *UserPermissionOverrideEffect) UnmarshalText(data []byte) error {
+	switch UserPermissionOverrideEffect(data) {
+	case UserPermissionOverrideEffectGrant:
+		*s = UserPermissionOverrideEffectGrant
+		return nil
+	case UserPermissionOverrideEffectDeny:
+		*s = UserPermissionOverrideEffectDeny
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/UserPermissionOverridesResponse
+type UserPermissionOverridesResponse struct {
+	UserId    int64                    `json:"userId"`
+	Overrides []UserPermissionOverride `json:"overrides"`
+}
+
+// GetUserId returns the value of UserId.
+func (s *UserPermissionOverridesResponse) GetUserId() int64 {
+	return s.UserId
+}
+
+// GetOverrides returns the value of Overrides.
+func (s *UserPermissionOverridesResponse) GetOverrides() []UserPermissionOverride {
+	return s.Overrides
+}
+
+// SetUserId sets the value of UserId.
+func (s *UserPermissionOverridesResponse) SetUserId(val int64) {
+	s.UserId = val
+}
+
+// SetOverrides sets the value of Overrides.
+func (s *UserPermissionOverridesResponse) SetOverrides(val []UserPermissionOverride) {
+	s.Overrides = val
+}
+
+func (*UserPermissionOverridesResponse) usersGetPermissionOverridesRes() {}
+
 // Ref: #/components/schemas/UserResponse
 type UserResponse struct {
 	Data User `json:"data"`
@@ -5535,6 +5728,18 @@ type UsersDeleteUnauthorized ErrorEnvelope
 
 func (*UsersDeleteUnauthorized) usersDeleteRes() {}
 
+type UsersGetPermissionOverridesForbidden ErrorEnvelope
+
+func (*UsersGetPermissionOverridesForbidden) usersGetPermissionOverridesRes() {}
+
+type UsersGetPermissionOverridesNotFound ErrorEnvelope
+
+func (*UsersGetPermissionOverridesNotFound) usersGetPermissionOverridesRes() {}
+
+type UsersGetPermissionOverridesUnauthorized ErrorEnvelope
+
+func (*UsersGetPermissionOverridesUnauthorized) usersGetPermissionOverridesRes() {}
+
 type UsersListForbidden ErrorEnvelope
 
 func (*UsersListForbidden) usersListRes() {}
@@ -5550,6 +5755,27 @@ func (*UsersUpdateForbidden) usersUpdateRes() {}
 type UsersUpdateNotFound ErrorEnvelope
 
 func (*UsersUpdateNotFound) usersUpdateRes() {}
+
+type UsersUpdatePermissionOverridesForbidden ErrorEnvelope
+
+func (*UsersUpdatePermissionOverridesForbidden) usersUpdatePermissionOverridesRes() {}
+
+// UsersUpdatePermissionOverridesNoContent is response for UsersUpdatePermissionOverrides operation.
+type UsersUpdatePermissionOverridesNoContent struct{}
+
+func (*UsersUpdatePermissionOverridesNoContent) usersUpdatePermissionOverridesRes() {}
+
+type UsersUpdatePermissionOverridesNotFound ErrorEnvelope
+
+func (*UsersUpdatePermissionOverridesNotFound) usersUpdatePermissionOverridesRes() {}
+
+type UsersUpdatePermissionOverridesUnauthorized ErrorEnvelope
+
+func (*UsersUpdatePermissionOverridesUnauthorized) usersUpdatePermissionOverridesRes() {}
+
+type UsersUpdatePermissionOverridesUnprocessableEntity ErrorEnvelope
+
+func (*UsersUpdatePermissionOverridesUnprocessableEntity) usersUpdatePermissionOverridesRes() {}
 
 type UsersUpdateUnauthorized ErrorEnvelope
 

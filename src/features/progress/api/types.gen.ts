@@ -139,13 +139,13 @@ export interface paths {
         };
         /** 查询某角色绑定的权限列表 */
         get: operations["rolesGetPermissions"];
-        put?: never;
+        /** 全量替换角色的权限绑定（仅超管；super_admin role 由中间件 422 拦截） */
+        put: operations["rolesUpdatePermissions"];
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** 替换某角色的权限绑定（仅超管，按 permissionIds 全量覆盖） */
-        patch: operations["rolesUpdatePermissions"];
+        patch?: never;
         trace?: never;
     };
     "/api/permissions": {
@@ -158,6 +158,43 @@ export interface paths {
         /** 列出所有权限 */
         get: operations["permissionsList"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/effective-permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 当前登录用户的有效权限码列表（已合并 role grants + user grant - user deny） */
+        get: operations["meGetEffectivePermissions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{id}/permission-overrides": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        /** 查询某用户当前的权限覆写（grant/deny）；仅超管可调 */
+        get: operations["usersGetPermissionOverrides"];
+        /** 全量替换某用户的权限覆写；超管目标由中间件 422 拦截 */
+        put: operations["usersUpdatePermissionOverrides"];
         post?: never;
         delete?: never;
         options?: never;
@@ -541,7 +578,7 @@ export interface components {
         ErrorEnvelope: {
             error: {
                 /** @enum {string} */
-                code: "unauthorized" | "permission_denied" | "not_found" | "validation_failed" | "state_machine_invalid_transition" | "mime_not_allowed" | "file_too_large" | "ticket_invalid" | "not_implemented" | "internal";
+                code: "unauthorized" | "permission_denied" | "not_found" | "validation_failed" | "state_machine_invalid_transition" | "mime_not_allowed" | "file_too_large" | "ticket_invalid" | "not_implemented" | "internal" | "super_admin_immutable" | "request_body_too_large" | "service_unavailable" | "invalid_effect" | "permission_not_found";
                 message: string;
                 details?: {
                     [key: string]: unknown;
@@ -605,12 +642,35 @@ export interface components {
         Permission: {
             /** Format: int64 */
             id: number;
-            /** @description 资源类型，如 project / feedback / payment / file */
+            /** @description 资源命名空间，如 nav / progress / users / permissions */
             resource: string;
-            /** @description 动作，如 read / create / update / delete */
+            /** @description 动作，如 view / list / create / edit / delete / role / user_override */
             action: string;
-            /** @description 范围，如 all / created_by_self / created_by_role:<id> */
+            /** @description 范围，如 work / progress / atlas / all / manage */
             scope: string;
+            /** @description 三段式权限码 resource:action:scope（前端 PermissionGate 直接消费） */
+            code: string;
+        };
+        /** @description user 级权限覆写：grant 强行追加；deny 强行扣除（超管不允许任何 override） */
+        UserPermissionOverride: {
+            /** Format: int64 */
+            permissionId: number;
+            /** @enum {string} */
+            effect: "grant" | "deny";
+        };
+        UserPermissionOverridesResponse: {
+            /** Format: int64 */
+            userId: number;
+            overrides: components["schemas"]["UserPermissionOverride"][];
+        };
+        UpdateUserPermissionOverridesRequest: {
+            overrides: components["schemas"]["UserPermissionOverride"][];
+        };
+        EffectivePermissionsResponse: {
+            /** @description 已计算合并的权限码列表（resource:action:scope）；超管时为单元素 ['*:*'] */
+            permissions: string[];
+            /** @description true 表示当前用户是 super_admin；前端可据此跳过任何权限门控 */
+            superAdmin: boolean;
         };
         /** @enum {string} */
         ProjectStatus: "dealing" | "quoting" | "developing" | "confirming" | "delivered" | "paid" | "archived" | "after_sales" | "cancelled";
@@ -1448,14 +1508,12 @@ export interface operations {
             };
         };
         responses: {
-            /** @description OK */
-            200: {
+            /** @description 已替换 */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["PermissionListResponse"];
-                };
+                content?: never;
             };
             401: components["responses"]["UnauthorizedError"];
             403: components["responses"]["PermissionDeniedError"];
@@ -1482,6 +1540,80 @@ export interface operations {
                 };
             };
             401: components["responses"]["UnauthorizedError"];
+        };
+    };
+    meGetEffectivePermissions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EffectivePermissionsResponse"];
+                };
+            };
+            401: components["responses"]["UnauthorizedError"];
+        };
+    };
+    usersGetPermissionOverrides: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPermissionOverridesResponse"];
+                };
+            };
+            401: components["responses"]["UnauthorizedError"];
+            403: components["responses"]["PermissionDeniedError"];
+            404: components["responses"]["NotFoundError"];
+        };
+    };
+    usersUpdatePermissionOverrides: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateUserPermissionOverridesRequest"];
+            };
+        };
+        responses: {
+            /** @description 已替换 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["UnauthorizedError"];
+            403: components["responses"]["PermissionDeniedError"];
+            404: components["responses"]["NotFoundError"];
+            422: components["responses"]["ValidationError"];
         };
     };
     projectsList: {

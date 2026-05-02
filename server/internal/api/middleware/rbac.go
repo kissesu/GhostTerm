@@ -1,29 +1,113 @@
 /*
 @file rbac.go
-@description chi 兼容的 RequirePerm 中间件：检查 ctx 中已注入的 AuthContext 对应角色
-             是否拥有指定权限码 perm。失败返回 403 + permission_denied envelope。
+@description chi 兼容 RBAC 权限工具集 —— 仅暴露"context 读写 + 匹配"3 个原子函数：
 
-             调用链路：
-               RequireAuth (Phase 2) → 注入 AuthContext
-                                     → RequirePerm("project:create") 校验
-                                     → 业务 handler
+  EffectivePermsFrom(ctx)           —— 取出已注入的 perms 列表
+  WithEffectivePermissions(ctx, ps) —— 写入 perms 列表到 ctx（生产由 oasSecurityHandler
+                                       调用、测试也可直接调）
+  MatchPermission(perms, want)      —— 四档优先级匹配 *:* > exact > a:b:* > a:*:*
 
-             v2 part1 §C2 设计：
-             - 数据行可见性由 RLS 处理（RequireAuth 后 handler 在事务内 SetSessionContext 即可）
-             - 端点级权限由本中间件处理（"能不能调这个 endpoint"）
-             - 两者正交：能调 endpoint 不代表能看到所有行，能看到行不代表能调操作 endpoint
+四档匹配（命中即放行）：
+  1. *:*                        super_admin 哨兵
+  2. <resource>:*:*             资源全开通
+  3. <resource>:<action>:*      action 全 scope
+  4. exact <resource>:<action>:<scope>
+
+设计取舍：
+  - 历史 LoadEffectivePermissions / RequirePermission chi middleware factory 已删除：
+    所有路由走 ogen，由 oasSecurityHandler 在鉴权同时调 EffectivePermissionsService.Compute
+    并 WithEffectivePermissions 注入 ctx；handler 内通过 EffectivePermsFrom +
+    MatchPermission 自行判权。chi middleware 永无机会拦截 ogen 路由 → 死代码删之。
+    （review §I1：架构上单一 source of truth；2026-05-02 移除）
+  - 与旧 RequirePerm（基于 RBACService.HasPermission，2 段 code）并存：旧函数仍被
+    feedback handler 等调用，逐步迁移由后续 task 完成。
+  - MatchPermission 接受非 3 段的 code 也按 false 返回（防御性）；调用方应保证
+    code 形如 "resource:action:scope"。
+
 @author Atlas.oi
-@date 2026-04-29
+@date 2026-05-02
 */
 
 package middleware
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/ghostterm/progress-server/internal/services"
 )
+
+// effectivePermsCtxKey 私有类型作为 ctx key，避免外部包覆写。
+type effectivePermsCtxKey struct{}
+
+// EffectivePermsFrom 从 ctx 取出 oasSecurityHandler（生产）或测试代码注入的 perms 列表。
+//
+// 第二返回值 false 表示 ctx 中没有该值（未挂中间件 / 未鉴权请求）。
+func EffectivePermsFrom(ctx context.Context) ([]string, bool) {
+	v := ctx.Value(effectivePermsCtxKey{})
+	if v == nil {
+		return nil, false
+	}
+	perms, ok := v.([]string)
+	return perms, ok
+}
+
+// WithEffectivePermissions 把 perms 列表写入 ctx。
+//
+// 调用方：
+//  - 生产：oasSecurityHandler 在 HandleBearerAuth 校验 token 后调 eff.Compute，把结果
+//    写入 ctx；下游 handler 通过 EffectivePermsFrom 读取，0 次 DB 查询完成判权。
+//  - 测试：单测 handler 时不想拉真实 DB 计算 effective perms，直接构造 ctx → request 即可。
+func WithEffectivePermissions(ctx context.Context, perms []string) context.Context {
+	return context.WithValue(ctx, effectivePermsCtxKey{}, perms)
+}
+
+// MatchPermission 按四档优先级判定 perms 是否授予 want。导出供 handler / 测试复用。
+//
+// 输入约束：want 必须形如 "resource:action:scope"；非法格式直接返 false。
+// 性能：单次构 set 后 4 次 O(1) 查找；O(N+4) 与 N=len(perms) 线性。
+func MatchPermission(perms []string, want string) bool {
+	parts := strings.Split(want, ":")
+	if len(parts) != 3 {
+		return false
+	}
+	if parts[0] == "" || parts[1] == "" || parts[2] == "" {
+		return false
+	}
+
+	set := make(map[string]struct{}, len(perms))
+	for _, p := range perms {
+		set[p] = struct{}{}
+	}
+
+	// 1. super_admin 哨兵优先（最频繁场景，提前返回）
+	if _, ok := set["*:*"]; ok {
+		return true
+	}
+	// 2. exact match
+	if _, ok := set[want]; ok {
+		return true
+	}
+	// 3. resource:action:* （action 全 scope 通配）
+	if _, ok := set[parts[0]+":"+parts[1]+":*"]; ok {
+		return true
+	}
+	// 4. resource:*:* （资源全开通）
+	if _, ok := set[parts[0]+":*:*"]; ok {
+		return true
+	}
+	return false
+}
+
+// ============================================================
+// Legacy RequirePerm（基于 RBACService.HasPermission，2 段 code）
+//
+// 业务背景：feedback handler 等仍在内部调 RBACService.HasPermission；
+// 该 middleware 暂时保留以避免一刀切重构。Task 8 只把新 perm 管理 6 路由
+// 切到 LoadEffectivePermissions+RequirePermission 链路；其它 handler 后续迁移。
+// ============================================================
 
 // RequirePerm 返回 chi middleware，校验当前 session 是否拥有 perm 权限。
 //

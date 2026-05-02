@@ -125,9 +125,12 @@ export const useAtlasRolesStore = create<AtlasRolesState>((set, get) => ({
       throw new Error(`atlas roles: role ${roleId} not found`);
     }
     const ids = Array.from(local);
-    const updated = await updateRolePermissions(roleId, ids);
-    // 用服务端返回的最新权限集合刷新 server 快照（也覆盖本地编辑态）
-    const newSet = new Set(updated.map((p) => p.id));
+    // Task 7：写入返回 204，本地无法直接拿到新权限列表；
+    // 用 GET /api/roles/{id}/permissions 拉一次最新值刷快照（业务上等价于回写本地集合，
+    // 但显式重拉能在并发场景下捕获其它管理员的中间写入）
+    await updateRolePermissions(roleId, ids);
+    const fresh = await getRolePermissions(roleId);
+    const newSet = new Set<number>(fresh.map((p) => p.id));
     const localMap = new Map(get().rolePermissions);
     const serverMap = new Map(get().rolePermissionsServer);
     localMap.set(roleId, cloneSet(newSet));

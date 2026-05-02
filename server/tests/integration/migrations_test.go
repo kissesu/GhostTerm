@@ -1,8 +1,10 @@
 /*
 @file migrations_test.go
-@description 迁移产物结构性校验 —— 跑完 0001+0002 后应有 7 个用户自定义函数：
-             4 个 RLS 辅助（current_user_id / current_role_id / is_admin / is_member）
-             + 3 个 SECURITY DEFINER（insert_notification_secure / consume_ws_ticket / rotate_refresh_token）。
+@description 迁移产物结构性校验 —— 跑完 0001..0007 后应有 10 个用户自定义函数：
+             - 4 个 RLS 辅助（current_user_id / current_role_id / is_admin / is_member）
+             - 3 个 SECURITY DEFINER（insert_notification_secure / consume_ws_ticket / rotate_refresh_token）
+             - 3 个 0007 trigger 函数（reject_super_admin_user_permissions /
+               reject_super_admin_role_permissions / reject_promote_user_with_overrides）
              也顺带验证 3 条 system role（admin/manager/staff）已 INSERT。
 @author Atlas.oi
 @date 2026-04-29
@@ -34,7 +36,8 @@ func TestMigrations_FunctionsCount(t *testing.T) {
 		WHERE routine_schema = 'public' AND routine_type = 'FUNCTION'
 	`).Scan(&count)
 	require.NoError(t, err)
-	assert.Equal(t, 7, count, "应有 4 个 RLS 辅助 + 3 个 SECURITY DEFINER 函数")
+	assert.Equal(t, 10, count,
+		"应有 4 个 RLS 辅助 + 3 个 SECURITY DEFINER + 3 个 0007 super_admin trigger 函数")
 }
 
 func TestMigrations_SystemRolesSeeded(t *testing.T) {

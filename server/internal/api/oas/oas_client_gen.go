@@ -82,6 +82,12 @@ type Invoker interface {
 	//
 	// GET /api/me/earnings
 	MeEarnings(ctx context.Context) (*EarningsSummaryResponse, error)
+	// MeGetEffectivePermissions invokes meGetEffectivePermissions operation.
+	//
+	// 当前登录用户的有效权限码列表（已合并 role grants + user grant - user deny）.
+	//
+	// GET /api/me/effective-permissions
+	MeGetEffectivePermissions(ctx context.Context) (MeGetEffectivePermissionsRes, error)
 	// NotificationsList invokes notificationsList operation.
 	//
 	// 当前用户通知.
@@ -210,9 +216,9 @@ type Invoker interface {
 	RolesList(ctx context.Context) (RolesListRes, error)
 	// RolesUpdatePermissions invokes rolesUpdatePermissions operation.
 	//
-	// 替换某角色的权限绑定（仅超管，按 permissionIds 全量覆盖）.
+	// 全量替换角色的权限绑定（仅超管；super_admin role 由中间件 422 拦截）.
 	//
-	// PATCH /api/roles/{id}/permissions
+	// PUT /api/roles/{id}/permissions
 	RolesUpdatePermissions(ctx context.Context, request *RolePermissionUpdateRequest, params RolesUpdatePermissionsParams) (RolesUpdatePermissionsRes, error)
 	// UsersCreate invokes usersCreate operation.
 	//
@@ -226,6 +232,12 @@ type Invoker interface {
 	//
 	// DELETE /api/users/{id}
 	UsersDelete(ctx context.Context, params UsersDeleteParams) (UsersDeleteRes, error)
+	// UsersGetPermissionOverrides invokes usersGetPermissionOverrides operation.
+	//
+	// 查询某用户当前的权限覆写（grant/deny）；仅超管可调.
+	//
+	// GET /api/users/{id}/permission-overrides
+	UsersGetPermissionOverrides(ctx context.Context, params UsersGetPermissionOverridesParams) (UsersGetPermissionOverridesRes, error)
 	// UsersList invokes usersList operation.
 	//
 	// 列出所有用户（仅超管）.
@@ -238,6 +250,12 @@ type Invoker interface {
 	//
 	// PATCH /api/users/{id}
 	UsersUpdate(ctx context.Context, request *UserUpdateRequest, params UsersUpdateParams) (UsersUpdateRes, error)
+	// UsersUpdatePermissionOverrides invokes usersUpdatePermissionOverrides operation.
+	//
+	// 全量替换某用户的权限覆写；超管目标由中间件 422 拦截.
+	//
+	// PUT /api/users/{id}/permission-overrides
+	UsersUpdatePermissionOverrides(ctx context.Context, request *UpdateUserPermissionOverridesRequest, params UsersUpdatePermissionOverridesParams) (UsersUpdatePermissionOverridesRes, error)
 	// WsNotificationsConnect invokes wsNotificationsConnect operation.
 	//
 	// WebSocket 升级端点（非 HTTP REST，仅 OpenAPI 描述）。
@@ -1234,6 +1252,113 @@ func (c *Client) sendMeEarnings(ctx context.Context) (res *EarningsSummaryRespon
 
 	stage = "DecodeResponse"
 	result, err := decodeMeEarningsResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
+// MeGetEffectivePermissions invokes meGetEffectivePermissions operation.
+//
+// 当前登录用户的有效权限码列表（已合并 role grants + user grant - user deny）.
+//
+// GET /api/me/effective-permissions
+func (c *Client) MeGetEffectivePermissions(ctx context.Context) (MeGetEffectivePermissionsRes, error) {
+	res, err := c.sendMeGetEffectivePermissions(ctx)
+	return res, err
+}
+
+func (c *Client) sendMeGetEffectivePermissions(ctx context.Context) (res MeGetEffectivePermissionsRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("meGetEffectivePermissions"),
+		semconv.HTTPRequestMethodKey.String("GET"),
+		semconv.URLTemplateKey.String("/api/me/effective-permissions"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, MeGetEffectivePermissionsOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [1]string
+	pathParts[0] = "/api/me/effective-permissions"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "GET", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+
+	{
+		type bitset = [1]uint8
+		var satisfied bitset
+		{
+			stage = "Security:BearerAuth"
+			switch err := c.securityBearerAuth(ctx, MeGetEffectivePermissionsOperation, r); {
+			case err == nil: // if NO error
+				satisfied[0] |= 1 << 0
+			case errors.Is(err, ogenerrors.ErrSkipClientSecurity):
+				// Skip this security.
+			default:
+				return res, errors.Wrap(err, "security \"BearerAuth\"")
+			}
+		}
+
+		if ok := func() bool {
+		nextRequirement:
+			for _, requirement := range []bitset{
+				{0b00000001},
+			} {
+				for i, mask := range requirement {
+					if satisfied[i]&mask != mask {
+						continue nextRequirement
+					}
+				}
+				return true
+			}
+			return false
+		}(); !ok {
+			return res, ogenerrors.ErrSecurityRequirementIsNotSatisfied
+		}
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer body.Close()
+
+	stage = "DecodeResponse"
+	result, err := decodeMeGetEffectivePermissionsResponse(resp)
 	if err != nil {
 		return res, errors.Wrap(err, "decode response")
 	}
@@ -4119,9 +4244,9 @@ func (c *Client) sendRolesList(ctx context.Context) (res RolesListRes, err error
 
 // RolesUpdatePermissions invokes rolesUpdatePermissions operation.
 //
-// 替换某角色的权限绑定（仅超管，按 permissionIds 全量覆盖）.
+// 全量替换角色的权限绑定（仅超管；super_admin role 由中间件 422 拦截）.
 //
-// PATCH /api/roles/{id}/permissions
+// PUT /api/roles/{id}/permissions
 func (c *Client) RolesUpdatePermissions(ctx context.Context, request *RolePermissionUpdateRequest, params RolesUpdatePermissionsParams) (RolesUpdatePermissionsRes, error) {
 	res, err := c.sendRolesUpdatePermissions(ctx, request, params)
 	return res, err
@@ -4130,7 +4255,7 @@ func (c *Client) RolesUpdatePermissions(ctx context.Context, request *RolePermis
 func (c *Client) sendRolesUpdatePermissions(ctx context.Context, request *RolePermissionUpdateRequest, params RolesUpdatePermissionsParams) (res RolesUpdatePermissionsRes, err error) {
 	otelAttrs := []attribute.KeyValue{
 		otelogen.OperationID("rolesUpdatePermissions"),
-		semconv.HTTPRequestMethodKey.String("PATCH"),
+		semconv.HTTPRequestMethodKey.String("PUT"),
 		semconv.URLTemplateKey.String("/api/roles/{id}/permissions"),
 	}
 	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
@@ -4188,7 +4313,7 @@ func (c *Client) sendRolesUpdatePermissions(ctx context.Context, request *RolePe
 	uri.AddPathParts(u, pathParts[:]...)
 
 	stage = "EncodeRequest"
-	r, err := ht.NewRequest(ctx, "PATCH", u)
+	r, err := ht.NewRequest(ctx, "PUT", u)
 	if err != nil {
 		return res, errors.Wrap(err, "create request")
 	}
@@ -4481,6 +4606,132 @@ func (c *Client) sendUsersDelete(ctx context.Context, params UsersDeleteParams) 
 	return result, nil
 }
 
+// UsersGetPermissionOverrides invokes usersGetPermissionOverrides operation.
+//
+// 查询某用户当前的权限覆写（grant/deny）；仅超管可调.
+//
+// GET /api/users/{id}/permission-overrides
+func (c *Client) UsersGetPermissionOverrides(ctx context.Context, params UsersGetPermissionOverridesParams) (UsersGetPermissionOverridesRes, error) {
+	res, err := c.sendUsersGetPermissionOverrides(ctx, params)
+	return res, err
+}
+
+func (c *Client) sendUsersGetPermissionOverrides(ctx context.Context, params UsersGetPermissionOverridesParams) (res UsersGetPermissionOverridesRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("usersGetPermissionOverrides"),
+		semconv.HTTPRequestMethodKey.String("GET"),
+		semconv.URLTemplateKey.String("/api/users/{id}/permission-overrides"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, UsersGetPermissionOverridesOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [3]string
+	pathParts[0] = "/api/users/"
+	{
+		// Encode "id" parameter.
+		e := uri.NewPathEncoder(uri.PathEncoderConfig{
+			Param:   "id",
+			Style:   uri.PathStyleSimple,
+			Explode: false,
+		})
+		if err := func() error {
+			return e.EncodeValue(conv.Int64ToString(params.ID))
+		}(); err != nil {
+			return res, errors.Wrap(err, "encode path")
+		}
+		encoded, err := e.Result()
+		if err != nil {
+			return res, errors.Wrap(err, "encode path")
+		}
+		pathParts[1] = encoded
+	}
+	pathParts[2] = "/permission-overrides"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "GET", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+
+	{
+		type bitset = [1]uint8
+		var satisfied bitset
+		{
+			stage = "Security:BearerAuth"
+			switch err := c.securityBearerAuth(ctx, UsersGetPermissionOverridesOperation, r); {
+			case err == nil: // if NO error
+				satisfied[0] |= 1 << 0
+			case errors.Is(err, ogenerrors.ErrSkipClientSecurity):
+				// Skip this security.
+			default:
+				return res, errors.Wrap(err, "security \"BearerAuth\"")
+			}
+		}
+
+		if ok := func() bool {
+		nextRequirement:
+			for _, requirement := range []bitset{
+				{0b00000001},
+			} {
+				for i, mask := range requirement {
+					if satisfied[i]&mask != mask {
+						continue nextRequirement
+					}
+				}
+				return true
+			}
+			return false
+		}(); !ok {
+			return res, ogenerrors.ErrSecurityRequirementIsNotSatisfied
+		}
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer body.Close()
+
+	stage = "DecodeResponse"
+	result, err := decodeUsersGetPermissionOverridesResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
 // UsersList invokes usersList operation.
 //
 // 列出所有用户（仅超管）.
@@ -4709,6 +4960,135 @@ func (c *Client) sendUsersUpdate(ctx context.Context, request *UserUpdateRequest
 
 	stage = "DecodeResponse"
 	result, err := decodeUsersUpdateResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
+// UsersUpdatePermissionOverrides invokes usersUpdatePermissionOverrides operation.
+//
+// 全量替换某用户的权限覆写；超管目标由中间件 422 拦截.
+//
+// PUT /api/users/{id}/permission-overrides
+func (c *Client) UsersUpdatePermissionOverrides(ctx context.Context, request *UpdateUserPermissionOverridesRequest, params UsersUpdatePermissionOverridesParams) (UsersUpdatePermissionOverridesRes, error) {
+	res, err := c.sendUsersUpdatePermissionOverrides(ctx, request, params)
+	return res, err
+}
+
+func (c *Client) sendUsersUpdatePermissionOverrides(ctx context.Context, request *UpdateUserPermissionOverridesRequest, params UsersUpdatePermissionOverridesParams) (res UsersUpdatePermissionOverridesRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("usersUpdatePermissionOverrides"),
+		semconv.HTTPRequestMethodKey.String("PUT"),
+		semconv.URLTemplateKey.String("/api/users/{id}/permission-overrides"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, UsersUpdatePermissionOverridesOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [3]string
+	pathParts[0] = "/api/users/"
+	{
+		// Encode "id" parameter.
+		e := uri.NewPathEncoder(uri.PathEncoderConfig{
+			Param:   "id",
+			Style:   uri.PathStyleSimple,
+			Explode: false,
+		})
+		if err := func() error {
+			return e.EncodeValue(conv.Int64ToString(params.ID))
+		}(); err != nil {
+			return res, errors.Wrap(err, "encode path")
+		}
+		encoded, err := e.Result()
+		if err != nil {
+			return res, errors.Wrap(err, "encode path")
+		}
+		pathParts[1] = encoded
+	}
+	pathParts[2] = "/permission-overrides"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "PUT", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+	if err := encodeUsersUpdatePermissionOverridesRequest(request, r); err != nil {
+		return res, errors.Wrap(err, "encode request")
+	}
+
+	{
+		type bitset = [1]uint8
+		var satisfied bitset
+		{
+			stage = "Security:BearerAuth"
+			switch err := c.securityBearerAuth(ctx, UsersUpdatePermissionOverridesOperation, r); {
+			case err == nil: // if NO error
+				satisfied[0] |= 1 << 0
+			case errors.Is(err, ogenerrors.ErrSkipClientSecurity):
+				// Skip this security.
+			default:
+				return res, errors.Wrap(err, "security \"BearerAuth\"")
+			}
+		}
+
+		if ok := func() bool {
+		nextRequirement:
+			for _, requirement := range []bitset{
+				{0b00000001},
+			} {
+				for i, mask := range requirement {
+					if satisfied[i]&mask != mask {
+						continue nextRequirement
+					}
+				}
+				return true
+			}
+			return false
+		}(); !ok {
+			return res, ogenerrors.ErrSecurityRequirementIsNotSatisfied
+		}
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer body.Close()
+
+	stage = "DecodeResponse"
+	result, err := decodeUsersUpdatePermissionOverridesResponse(resp)
 	if err != nil {
 		return res, errors.Wrap(err, "decode response")
 	}

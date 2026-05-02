@@ -458,3 +458,330 @@
   font-family: 'JetBrains Mono', 'Geist Mono', monospace;
   word-break: break-all;
 }
+
+/* ===================================================================
+   单角色权限矩阵（Task 10：聚焦视图）
+   =================================================================== */
+
+/* 顶部条：role 选择 + 操作 */
+.permRoleHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.permRoleHeaderLabel {
+  font-size: 11px;
+  color: var(--faint);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.permLockBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(231, 186, 74, 0.12);
+  color: var(--amber);
+  border: 1px solid rgba(231, 186, 74, 0.3);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+/* sticky 未保存修改条 */
+.permDirtyBar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 14px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  background: rgba(231, 186, 74, 0.13);
+  color: var(--text);
+  border: 1px solid rgba(231, 186, 74, 0.4);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.permDirtyBarActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 资源分组 + 权限行 */
+.permResourceGroup {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.permResourceHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+
+.permResourceHeader:hover {
+  background: rgba(184, 255, 106, 0.06);
+}
+
+.permResourceCount {
+  font-size: 10px;
+  color: var(--faint);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.permRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+
+.permRow:last-child {
+  border-bottom: none;
+}
+
+.permRow:hover {
+  background: rgba(184, 255, 106, 0.04);
+}
+
+.permRowLabel {
+  flex: 1;
+  min-width: 0;
+  color: var(--text);
+}
+
+.permRowCode {
+  font-family: 'JetBrains Mono', 'Geist Mono', monospace;
+  font-size: 10px;
+  color: var(--faint);
+  margin-left: 8px;
+}
+
+/* ===================================================================
+   用户级权限覆写 三态 chip 组（Task 11）
+   - inherit / grant / deny 三个 chip 互斥单选
+   - 行布局：code | role 基线列 | chip 组（grant + deny + inherit）
+   - 角色基线只读：仅展示 role 是否原本授予该 perm
+   =================================================================== */
+
+/* 顶部 user 头：与 permRoleHeader 同结构，复用 padding/border 节省 token */
+.permUserHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+/* 单行 override 布局：左 label/code，右 role 基线 + chip 组 */
+.permOverrideRow {
+  display: grid;
+  grid-template-columns: 1fr 70px 220px;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+
+.permOverrideRow:last-child {
+  border-bottom: none;
+}
+
+.permOverrideRow:hover {
+  background: rgba(184, 255, 106, 0.04);
+}
+
+/* 角色基线列：勾或破折号；只读视觉用 muted */
+.permRoleBaseCell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.permRoleBaseCellGranted {
+  color: var(--accent);
+}
+
+/* chip 组容器：3 个 chip 并列，连接处取消 border-radius */
+.permChipGroup {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--panel);
+}
+
+.permChip {
+  flex: 1;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--line);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.permChip:last-child {
+  border-right: none;
+}
+
+.permChip:hover:not(:disabled) {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.permChip:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* 三态激活样式：inherit 用 muted 灰、grant 用绿、deny 用红 */
+.permChipActiveInherit {
+  background: rgba(180, 174, 156, 0.18);
+  color: var(--text);
+}
+
+.permChipActiveGrant {
+  background: rgba(121, 209, 124, 0.22);
+  color: var(--green);
+}
+
+.permChipActiveDeny {
+  background: rgba(239, 104, 98, 0.22);
+  color: var(--red);
+}
+
+/* ===================================================================
+   PermissionsManagementPage —— 子 tab + 选择器（Task 12）
+   =================================================================== */
+
+/* 子 tab 切换条：与左侧导航视觉解耦，专属页面顶部 */
+.permPageTabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.permPageTab {
+  padding: 6px 14px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.permPageTab:hover {
+  color: var(--text);
+}
+
+.permPageTabActive {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 800;
+}
+
+.permPageTabActive:hover {
+  /* 激活态 hover 不退化（避免按下后又变灰的反向 affordance） */
+  color: var(--accent-ink);
+}
+
+/* 选择器栏：dropdown + 标签的容器 */
+.permPickerBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.permPickerLabel {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--faint);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* 原生 select：与 btnGhost 视觉对齐 */
+.permPickerSelect {
+  height: 30px;
+  min-width: 220px;
+  padding: 0 10px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  /* 与 input 高度对齐：UA shadow DOM 默认 content-box 会差 2px，强制 border-box */
+  box-sizing: border-box;
+  line-height: 1.4;
+}
+
+.permPickerSelect:hover {
+  border-color: var(--line-strong);
+}
+
+.permPickerSelect:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.permPickerSelect option:disabled {
+  color: var(--faint);
+}
+

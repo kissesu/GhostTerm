@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -57,6 +58,9 @@ type oasHandler struct {
 	earnings     *handlers.EarningsHandler
 	notification *handlers.NotificationHandler
 	activity     *handlers.ActivityHandler
+	// Task 7：权限管理 handler，覆盖 6 个 OAS 端点（/api/permissions、
+	// /api/me/effective-permissions、role/user permissions 读写）
+	permissions *handlers.PermissionsHandler
 	oas.UnimplementedHandler
 }
 
@@ -85,9 +89,9 @@ func (h *oasHandler) WsTicketIssue(ctx context.Context) (*oas.WSTicketResponse, 
 	return h.auth.WsTicketIssue(ctx)
 }
 
-// PermissionsList 转发到 RBACHandler 实现
+// PermissionsList 转发到 PermissionsHandler 实现（Task 7：3 段 code 字段需在 handler 拼）
 func (h *oasHandler) PermissionsList(ctx context.Context) (oas.PermissionsListRes, error) {
-	return h.rbac.PermissionsList(ctx)
+	return h.permissions.PermissionsList(ctx)
 }
 
 // RolesList 转发到 RBACHandler 实现
@@ -105,9 +109,25 @@ func (h *oasHandler) RolesGetPermissions(ctx context.Context, params oas.RolesGe
 	return h.rbac.RolesGetPermissions(ctx, params)
 }
 
-// RolesUpdatePermissions 转发到 RBACHandler 实现
+// RolesUpdatePermissions 转发到 PermissionsHandler 实现（Task 7：复用 PermissionsService
+// 自带的 token_version bump + super_admin 拦截）
 func (h *oasHandler) RolesUpdatePermissions(ctx context.Context, req *oas.RolePermissionUpdateRequest, params oas.RolesUpdatePermissionsParams) (oas.RolesUpdatePermissionsRes, error) {
-	return h.rbac.RolesUpdatePermissions(ctx, req, params)
+	return h.permissions.RolesUpdatePermissions(ctx, req, params)
+}
+
+// MeGetEffectivePermissions 转发到 PermissionsHandler 实现（Task 7）
+func (h *oasHandler) MeGetEffectivePermissions(ctx context.Context) (oas.MeGetEffectivePermissionsRes, error) {
+	return h.permissions.MeGetEffectivePermissions(ctx)
+}
+
+// UsersGetPermissionOverrides 转发到 PermissionsHandler 实现（Task 7）
+func (h *oasHandler) UsersGetPermissionOverrides(ctx context.Context, params oas.UsersGetPermissionOverridesParams) (oas.UsersGetPermissionOverridesRes, error) {
+	return h.permissions.UsersGetPermissionOverrides(ctx, params)
+}
+
+// UsersUpdatePermissionOverrides 转发到 PermissionsHandler 实现（Task 7）
+func (h *oasHandler) UsersUpdatePermissionOverrides(ctx context.Context, req *oas.UpdateUserPermissionOverridesRequest, params oas.UsersUpdatePermissionOverridesParams) (oas.UsersUpdatePermissionOverridesRes, error) {
+	return h.permissions.UsersUpdatePermissionOverrides(ctx, req, params)
 }
 
 // ============================================================
@@ -284,9 +304,13 @@ var _ oas.Handler = (*oasHandler)(nil)
 //  1. ogen 在调 op handler 前，先把 Authorization 头里的 Bearer token 传给本 struct
 //  2. 调 svc.VerifyAccessToken 完成签名 + token_version + is_active 三层校验
 //  3. 把 AuthContext 注入 ctx，op handler 通过 middleware.AuthContextFrom 取出
-//  4. 校验失败返回 error，ogen 框架透传到 ErrorHandler，写为 401 ErrorEnvelope
+//  4. Task 8：同步调 EffectivePermissionsService.Compute，把 perms 列表也写入 ctx；
+//     handler 里 RequirePermission / matchPermission 直接读 ctx 不再打 DB
+//  5. 校验失败返回 error，ogen 框架透传到 ErrorHandler，写为 401 ErrorEnvelope
 type oasSecurityHandler struct {
 	svc services.AuthService
+	// eff 用于在鉴权同时加载有效权限码到 ctx；nil 表示不预加载（兼容旧调用方）
+	eff services.EffectivePermissionsService
 }
 
 // HandleBearerAuth 是 ogen SecurityHandler 接口方法。
@@ -294,6 +318,20 @@ type oasSecurityHandler struct {
 // 修正：缺失/无效 token 一律返回 services.ErrInvalidAccessToken，
 // 让 errorEnvelopeHandler 映射为 401 unauthorized；
 // 之前用裸 errors.New("unauthorized") 会落到 500 internal 兜底。
+//
+// Task 8：鉴权成功后立刻调 eff.Compute(userID)，把结果缓存到 ctx；
+// 任何 handler 通过 middleware.EffectivePermsFrom(ctx) 拿到 3 段权限码列表，
+// 同请求内多次校验不再重复打 DB（plan §"don't add caching beyond per-request"）。
+//
+// 错误分流（修复 review C1/C2）：
+//  1. eff.Compute 返回 ErrUserNotFound（token 校验通过到现在之间用户被删的竞态）
+//     → 翻译为 ErrInvalidAccessToken，让前端走"会话失效→logout"流程；
+//     不能让 errorEnvelopeHandler 把 ErrUserNotFound 映射为 404，因为 404
+//     在前端语义是"业务资源不存在"不会触发登出。
+//  2. eff.Compute 返回 ErrEffectivePermissionsUnavailable（DB 故障）
+//     → 透传，让 errorEnvelopeHandler 映射 503；不能让前端误判为 401 触发
+//     silent refresh → 死循环（DB 不可用时 refresh 也会失败 → 无限重试）。
+//  3. 其它意外错误：用 ErrEffectivePermissionsUnavailable 兜底（fail-closed）。
 func (h *oasSecurityHandler) HandleBearerAuth(ctx context.Context, _ oas.OperationName, t oas.BearerAuth) (context.Context, error) {
 	if t.Token == "" {
 		return ctx, services.ErrInvalidAccessToken
@@ -306,7 +344,21 @@ func (h *oasSecurityHandler) HandleBearerAuth(ctx context.Context, _ oas.Operati
 	if !ok {
 		return ctx, services.ErrInvalidAccessToken
 	}
-	return apimw.WithAuthContext(ctx, ac), nil
+	ctx = apimw.WithAuthContext(ctx, ac)
+
+	if h.eff != nil {
+		perms, err := h.eff.Compute(ctx, ac.UserID)
+		if err != nil {
+			// C2：用户在 token 有效期内被删 → 当作"无效 token"处理 → 401 触发前端登出
+			if errors.Is(err, services.ErrUserNotFound) {
+				return ctx, fmt.Errorf("token user removed (id=%d): %w", ac.UserID, services.ErrInvalidAccessToken)
+			}
+			// C1：DB 故障 → 503，让前端正确退避而非陷入 silent refresh 循环
+			return ctx, fmt.Errorf("rbac: load effective permissions for user %d: %w", ac.UserID, err)
+		}
+		ctx = apimw.WithEffectivePermissions(ctx, perms)
+	}
+	return ctx, nil
 }
 
 // 编译时校验
@@ -406,6 +458,18 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	// 必须在 ogen mount 之前注册，否则 ResponseWriter 已被 ogen encoder 接管无法回改 header
 	r.Use(handlers.NewDownloadHeaderMiddleware())
 
+	// Task 7：超管不可改约束的"L3 友好 422 中间件"。
+	//
+	// 必须挂在 ogen mount 之前；中间件按 r.URL.Path + r.Method 自行解析，
+	// 不依赖 chi.URLParam，所以与 ogen 路由无耦合。
+	// 拦截范围（详见 super_admin_invariants.go）：
+	//   POST /api/users (body.roleId==1)
+	//   PATCH/PUT /api/users/{id} (body.roleId==1)
+	//   PATCH/PUT /api/roles/{id}/permissions (path id==1)
+	//   DELETE /api/roles/{id} (path id==1)
+	//   PATCH/PUT /api/users/{id}/permission-overrides (target user.role_id==1)
+	r.Use(apimw.NewSuperAdminInvariants(deps.Pool).Handler)
+
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
@@ -435,7 +499,16 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 		return nil, err
 	}
 
-	secHandler := &oasSecurityHandler{svc: deps.AuthService}
+	// Task 7：权限管理 handler 装配 PermissionsService + EffectivePermissionsService
+	// 不放进 RouterDeps：两个 service 都是 pool-backed 无状态，直接 in-place 构造避免
+	// 让 main.go 关心额外的 wiring；与 activitySvc 的处理一致。
+	permsSvc := services.NewPermissionsService(deps.Pool)
+	effSvc := services.NewEffectivePermissionsService(deps.Pool)
+	permissionsHandler := handlers.NewPermissionsHandler(deps.Pool, permsSvc, effSvc)
+
+	// Task 8：security handler 同时承担"鉴权"+"加载有效权限码到 ctx"职责。
+	// 这样 handler 内 RequirePermission / matchPermission 直接读 ctx，0 次 DB 查询。
+	secHandler := &oasSecurityHandler{svc: deps.AuthService, eff: effSvc}
 
 	oasServer, err := oas.NewServer(
 		&oasHandler{
@@ -450,6 +523,7 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 			earnings:     earningsHandler,
 			notification: notificationHandler,
 			activity:     activityHandler,
+			permissions:  permissionsHandler,
 		},
 		secHandler,
 		oas.WithErrorHandler(errorEnvelopeHandler),
@@ -495,6 +569,14 @@ func errorEnvelopeHandler(_ context.Context, w http.ResponseWriter, r *http.Requ
 	}
 
 	switch {
+	// 注：必须放在 ErrInvalidAccessToken 之前与 ErrUserNotFound 之前；本错误是
+	// HandleBearerAuth eff.Compute 失败的兜底，调用方需要 503（让前端退避而非
+	// silent refresh 死循环）。即使 ogen 把它包成 SecurityError 把 status 预设
+	// 为 401，本 case 也会覆盖。
+	case errors.Is(err, services.ErrEffectivePermissionsUnavailable):
+		status = http.StatusServiceUnavailable
+		code = string(oas.ErrorEnvelopeErrorCodeServiceUnavailable)
+		msg = "权限校验服务暂时不可用，请稍后重试"
 	case errors.Is(err, services.ErrInvalidAccessToken),
 		errors.Is(err, services.ErrInvalidRefreshToken),
 		errors.Is(err, services.ErrInvalidCredentials),
@@ -506,6 +588,24 @@ func errorEnvelopeHandler(_ context.Context, w http.ResponseWriter, r *http.Requ
 		status = http.StatusUnauthorized
 		code = string(oas.ErrorEnvelopeErrorCodeTicketInvalid)
 		msg = "WS ticket 无效或已过期"
+	// Task 7：权限管理 sentinel 兜底（permissions handler 已先翻译为对应 OAS Res，
+	// 不应走到这里；保留是防 handler 漏 case 时仍有合理 HTTP code）
+	case errors.Is(err, services.ErrSuperAdminImmutable):
+		status = http.StatusUnprocessableEntity
+		code = string(oas.ErrorEnvelopeErrorCodeSuperAdminImmutable)
+		msg = "禁止修改 super_admin"
+	case errors.Is(err, services.ErrInvalidEffect):
+		status = http.StatusUnprocessableEntity
+		code = string(oas.ErrorEnvelopeErrorCodeInvalidEffect)
+		msg = "effect 必须是 grant 或 deny"
+	case errors.Is(err, services.ErrRoleNotFound):
+		status = http.StatusNotFound
+		code = string(oas.ErrorEnvelopeErrorCodeNotFound)
+		msg = "角色不存在"
+	case errors.Is(err, services.ErrUserNotFound):
+		status = http.StatusNotFound
+		code = string(oas.ErrorEnvelopeErrorCodeNotFound)
+		msg = "用户不存在"
 	case errors.Is(err, ErrNotImplementedYet):
 		status = http.StatusNotImplemented
 		code = string(oas.ErrorEnvelopeErrorCodeNotImplemented)

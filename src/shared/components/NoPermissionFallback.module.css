@@ -1,0 +1,74 @@
+/**
+ * @file NoPermissionFallback.module.css
+ * @description 全屏无权限兜底页样式 — 沿用 GhostTerm 全局 OKLCH token（--c-*）。
+ *              CSS Module 局部哈希避免泄露；尺寸与 GlobalLoginPage 视觉密度对齐。
+ *
+ * @author Atlas.oi
+ * @date 2026-05-02
+ */
+
+.root {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--c-bg);
+  z-index: 50;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 36px 48px;
+  background: var(--c-panel);
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  min-width: 320px;
+  max-width: 480px;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+}
+
+.icon {
+  color: var(--c-fg-muted);
+  margin-bottom: 4px;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--c-fg);
+  margin: 0;
+}
+
+.subtitle {
+  font-size: 13px;
+  color: var(--c-fg-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.logoutBtn {
+  margin-top: 8px;
+  padding: 8px 18px;
+  background: var(--c-accent);
+  color: var(--c-accent-text);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: filter 0.12s;
+}
+
+.logoutBtn:hover {
+  filter: brightness(1.08);
+}
+
+.logoutBtn:active {
+  filter: brightness(0.96);
+}

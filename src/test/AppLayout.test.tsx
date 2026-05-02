@@ -17,6 +17,7 @@ import { useFileTreeStore } from '../features/sidebar';
 import { useProjectStore } from '../features/sidebar';
 import { DEFAULT_TERMINAL_SETTINGS, useSettingsStore } from '../shared/stores/settingsStore';
 import { useGlobalAuthStore } from '../shared/stores/globalAuthStore';
+import { useGlobalPermissionStore } from '../shared/stores/globalPermissionStore';
 import { useTerminalStore } from '../features/terminal';
 
 // AppLayout 顶层有"全局登录门"：未登录时直接返回 GlobalLoginPage。
@@ -63,6 +64,16 @@ beforeEach(() => {
     user: TEST_USER,
     loading: false,
     error: null,
+  });
+  // Task 9：AppLayout nav tabs 由 globalPermissionStore.has() 门控；
+  // 测试场景需手动 hydrate 三个 nav perms 让布局/工作区按预期渲染。
+  // 同步置 initialized=true 跳过 fetch effect 等待
+  useGlobalPermissionStore.setState({
+    permissions: new Set(['nav:view:work', 'nav:view:progress', 'nav:view:atlas']),
+    isSuperAdmin: false,
+    loading: false,
+    error: null,
+    initialized: true,
   });
   // 启动恢复 effect 会调用 list_recent_projects_cmd
   vi.mocked(invoke).mockResolvedValue([]);
