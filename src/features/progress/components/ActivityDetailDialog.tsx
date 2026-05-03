@@ -1,7 +1,6 @@
 /**
  * @file ActivityDetailDialog.tsx
- * @description 时间线条目点击后弹出的详情 modal（用户需求 2026-05-02：
- *              "进度时间线的每条时间线应该都可以点击查看详情"）。
+ * @description 时间线条目点击后弹出的详情 modal。
  *
  *              业务流程：
  *              1. DetailTimeline 维护 activeDetail state，点击 ActivityItem 时设置
@@ -9,19 +8,16 @@
  *              3. 文件类（thesis_version / project_file_added）渲染下载链接
  *              4. ESC 或点击遮罩关闭
  *
- *              字段映射（按 kind）：
- *              - feedback：actor / source / content / occurredAt
- *              - payment：amount / direction / remark / paidAt
- *              - status_change：from→to / remark
- *              - quote_change：changeType / delta / reason / actor
- *              - thesis_version：version / fileUrl(下载) / actor
- *              - project_file_added：fileName / category / fileUrl(下载) / actor
- *              - project_created：actor / initialQuote
+ *              视觉契约（用户反馈 2026-05-03）：
+ *              - 复用 progress.module.css 的 .modalOverlay/.modal/.modalHead/.modalBody
+ *                与新建项目 / 状态切换弹窗保持完全一致的边框/圆角/阴影/留白
+ *              - 详情行用 .detailRow grid（label 88px / value 1fr），逐行下划线
+ *              - 时间统一用 formatWhen（按浏览器本地时区渲染 YYYY-MM-DD HH:mm）
  *
  * @author Atlas.oi
- * @date 2026-05-02
+ * @date 2026-05-03
  */
-import { useEffect, type ReactElement } from 'react';
+import { useEffect, type ReactElement, type ReactNode } from 'react';
 import type { Activity } from '../api/activities';
 import {
   FEEDBACK_SOURCE_LABEL,
@@ -32,6 +28,7 @@ import {
   formatActor,
   formatMoney,
   formatWhen,
+  formatDwellMs,
 } from './activityRenderers/shared';
 import styles from '../progress.module.css';
 
@@ -41,11 +38,11 @@ interface Props {
 }
 
 /** 单行 key-value 渲染 */
-function Row({ label, children }: { label: string; children: React.ReactNode }): ReactElement {
+function Row({ label, children }: { label: string; children: ReactNode }): ReactElement {
   return (
-    <div style={{ display: 'flex', gap: 12, padding: '6px 0', fontSize: 13 }}>
-      <span style={{ minWidth: 88, color: 'var(--c-fg-muted, #888)' }}>{label}</span>
-      <span style={{ flex: 1, color: 'var(--c-fg, #ddd)', wordBreak: 'break-all' }}>{children}</span>
+    <div className={styles.detailRow}>
+      <span className={styles.detailLabel}>{label}</span>
+      <span className={styles.detailValue}>{children}</span>
     </div>
   );
 }
@@ -53,39 +50,58 @@ function Row({ label, children }: { label: string; children: React.ReactNode }):
 /** 文件下载链接 */
 function FileLink({ url, name }: { url: string; name?: string }): ReactElement {
   return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      style={{ color: 'var(--c-accent, #79d17c)', textDecoration: 'underline' }}
-    >
+    <a href={url} target="_blank" rel="noopener noreferrer" className={styles.detailLink}>
       {name ?? '打开文件'}
     </a>
   );
 }
 
+/** 审计 metadata 行：IP / 设备；老数据 null 时跳过不渲染避免空行 */
+function AuditRows({
+  clientIp,
+  userAgent,
+}: {
+  clientIp?: string | null;
+  userAgent?: string | null;
+}): ReactElement | null {
+  if (!clientIp && !userAgent) return null;
+  return (
+    <>
+      {clientIp && <Row label="IP">{clientIp}</Row>}
+      {userAgent && <Row label="设备">{userAgent}</Row>}
+    </>
+  );
+}
+
 function renderBody(activity: Activity): ReactElement {
-  const actor = formatActor(activity);
+  // 操作人 = displayName（角色） @username；账号 username 让审计追溯精确
+  const baseActor = formatActor(activity);
+  const actor = activity.actorUsername
+    ? `${baseActor} @${activity.actorUsername}`
+    : baseActor;
   const when = formatWhen(activity.occurredAt);
 
   switch (activity.kind) {
     case 'feedback':
       return (
-        <>
+        <div className={styles.detailRows}>
           <Row label="时间">{when}</Row>
           <Row label="操作人">{actor}</Row>
           <Row label="来源">
             {FEEDBACK_SOURCE_LABEL[activity.payload.source] ?? activity.payload.source}
           </Row>
+          {activity.payload.attachmentCount > 0 && (
+            <Row label="附件数量">{activity.payload.attachmentCount}</Row>
+          )}
           <Row label="反馈内容">
-            <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{activity.payload.content}</div>
+            <div style={{ whiteSpace: 'pre-wrap' }}>{activity.payload.content}</div>
           </Row>
-        </>
+        </div>
       );
 
     case 'payment':
       return (
-        <>
+        <div className={styles.detailRows}>
           <Row label="时间">{when}</Row>
           <Row label="操作人">{actor}</Row>
           <Row label="方向">
@@ -93,29 +109,35 @@ function renderBody(activity: Activity): ReactElement {
           </Row>
           <Row label="金额">{formatMoney(activity.payload.amount)}</Row>
           {activity.payload.remark && <Row label="备注">{activity.payload.remark}</Row>}
-        </>
+        </div>
       );
 
-    case 'status_change':
+    case 'status_change': {
+      const dwell = formatDwellMs(activity.payload.dwellMs);
+      const fromLabel = activity.payload.fromStatus
+        ? (PROJECT_STATUS_LABEL[activity.payload.fromStatus] ?? activity.payload.fromStatus)
+        : '初始';
       return (
-        <>
+        <div className={styles.detailRows}>
           <Row label="时间">{when}</Row>
           <Row label="操作人">{actor}</Row>
           <Row label="状态">
-            {activity.payload.fromStatus
-              ? (PROJECT_STATUS_LABEL[activity.payload.fromStatus] ?? activity.payload.fromStatus)
-              : '初始'}
+            {fromLabel}
             {' → '}
             {PROJECT_STATUS_LABEL[activity.payload.toStatus] ?? activity.payload.toStatus}
           </Row>
           <Row label="事件">{activity.payload.eventName}（{activity.payload.eventCode}）</Row>
+          {dwell && activity.payload.fromStatus && (
+            <Row label="停留时长">在「{fromLabel}」停留 {dwell}</Row>
+          )}
           {activity.payload.remark && <Row label="备注">{activity.payload.remark}</Row>}
-        </>
+        </div>
       );
+    }
 
     case 'quote_change':
       return (
-        <>
+        <div className={styles.detailRows}>
           <Row label="时间">{when}</Row>
           <Row label="操作人">{actor}</Row>
           <Row label="类型">
@@ -126,12 +148,12 @@ function renderBody(activity: Activity): ReactElement {
           </Row>
           <Row label="差额">{formatMoney(activity.payload.delta)}</Row>
           {activity.payload.reason && <Row label="原因">{activity.payload.reason}</Row>}
-        </>
+        </div>
       );
 
     case 'thesis_version':
       return (
-        <>
+        <div className={styles.detailRows}>
           <Row label="时间">{when}</Row>
           <Row label="操作人">{actor}</Row>
           <Row label="版本号">v{activity.payload.versionNo}</Row>
@@ -139,12 +161,12 @@ function renderBody(activity: Activity): ReactElement {
             <FileLink url={`/api/files/${activity.payload.fileId}/download`} name="下载论文版本" />
           </Row>
           {activity.payload.remark && <Row label="备注">{activity.payload.remark}</Row>}
-        </>
+        </div>
       );
 
     case 'project_file_added':
       return (
-        <>
+        <div className={styles.detailRows}>
           <Row label="时间">{when}</Row>
           <Row label="操作人">{actor}</Row>
           <Row label="类别">
@@ -153,19 +175,19 @@ function renderBody(activity: Activity): ReactElement {
           <Row label="文件">
             <FileLink url={`/api/files/${activity.payload.fileId}/download`} name="下载文件" />
           </Row>
-        </>
+        </div>
       );
 
     case 'project_created':
       return (
-        <>
+        <div className={styles.detailRows}>
           <Row label="时间">{when}</Row>
           <Row label="操作人">{actor}</Row>
           <Row label="项目名">{activity.payload.name}</Row>
           <Row label="初始报价">{formatMoney(activity.payload.originalQuote)}</Row>
           <Row label="优先级">{activity.payload.priority}</Row>
           <Row label="截止时间">{activity.payload.deadline}</Row>
-        </>
+        </div>
       );
   }
 }
@@ -196,62 +218,29 @@ export function ActivityDetailDialog({ activity, onClose }: Props): ReactElement
       aria-modal="true"
       aria-label={KIND_TITLE[activity.kind]}
       onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,0.55)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-      }}
+      className={`${styles.modalOverlay} ${styles.modalOverlayOpen}`}
       data-testid="activity-detail-dialog"
     >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          background: 'var(--c-panel, #1a1a18)',
-          color: 'var(--c-fg, #ddd)',
-          border: '1px solid var(--c-line, #2a2a28)',
-          borderRadius: 8,
-          padding: 20,
-          maxWidth: 540,
-          width: 'calc(100% - 32px)',
-          maxHeight: 'calc(100vh - 64px)',
-          overflowY: 'auto',
-          boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
-        }}
-        className={styles.timelineDetailDialog}
-      >
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 12,
-            paddingBottom: 12,
-            borderBottom: '1px solid var(--c-line, #2a2a28)',
-          }}
-        >
-          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{KIND_TITLE[activity.kind]}</h3>
+      <div onClick={(e) => e.stopPropagation()} className={styles.modal}>
+        <div className={styles.modalHead}>
+          <h3>{KIND_TITLE[activity.kind]}</h3>
           <button
             type="button"
             onClick={onClose}
             aria-label="关闭"
-            style={{
-              background: 'transparent',
-              border: 'none',
-              cursor: 'pointer',
-              color: 'var(--c-fg-muted, #888)',
-              fontSize: 18,
-              lineHeight: 1,
-              padding: 4,
-            }}
+            className={styles.modalClose}
           >
             ×
           </button>
         </div>
-        {renderBody(activity)}
+        <div className={styles.modalBody}>
+          {renderBody(activity)}
+          {(activity.clientIp || activity.userAgent) && (
+            <div className={styles.detailRows} style={{ marginTop: 12 }}>
+              <AuditRows clientIp={activity.clientIp} userAgent={activity.userAgent} />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
