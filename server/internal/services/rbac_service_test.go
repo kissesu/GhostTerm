@@ -128,6 +128,24 @@ func TestHasPermission_HalfWildcard(t *testing.T) {
 	}
 }
 
+// 0007 后超管在 role_permissions 表里 0 行（trigger 永禁写入），
+// HasPermission 必须用 roleID==SuperAdminRoleID(1) 直接短路放行；
+// 否则 super_admin 调用任何 write endpoint（feedback:create / payment:create / file:upload …）全部 forbid。
+func TestHasPermission_SuperAdminShortCircuitWithEmptyPerms(t *testing.T) {
+	// 故意构造空 perms map，模拟 0007 之后 super_admin 在 role_permissions 表的真实状态
+	svc := makeStubService(t, 1, map[string]bool{})
+
+	for _, perm := range []string{"feedback:create", "payment:create", "file:upload", "event:E10"} {
+		ok, err := svc.HasPermission(nil, 999, 1, perm)
+		if err != nil {
+			t.Fatalf("HasPermission(%q): %v", perm, err)
+		}
+		if !ok {
+			t.Errorf("super_admin (roleID=1) 必须短路放行 %q，即使 perms map 为空", perm)
+		}
+	}
+}
+
 func TestHasPermission_EmptyPerm(t *testing.T) {
 	svc := makeStubService(t, 1, map[string]bool{"*:*": true})
 	_, err := svc.HasPermission(nil, 1, 1, "")

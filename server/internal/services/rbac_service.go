@@ -157,7 +157,12 @@ func (s *rbacService) getOrLoadPerms(ctx context.Context, roleID int64) (map[str
 // HasPermission 判断 roleID 对 perm 是否有权。
 //
 // 匹配规则（按优先级，命中即返回 true）：
-//  1. perms 含通配 "*:*" → true（超管）
+//  0. roleID == SuperAdminRoleID(1) → true（超管短路）
+//     —— 0007 migration 把 super_admin 的 role_permissions 行清空 + trigger 永禁写入，
+//     设计要求"应用层用 wildcard 处理"。EffectivePermissionsService.Compute 已这样做；
+//     本函数若不同步特判，则 super_admin 调用 HasPermission 永远 false，
+//     所有 write 路径（feedback:create / payment:create / file:upload 等）对超管全部 forbid。
+//  1. perms 含通配 "*:*" → true（保留：未来若有非 super_admin 角色被授予 *:* 仍生效）
 //  2. perms 含 perm 字面量 → true
 //  3. perm = "<resource>:<action>"，perms 含 "*:<action>" 或 "<resource>:*" → true
 //
@@ -169,6 +174,10 @@ func (s *rbacService) getOrLoadPerms(ctx context.Context, roleID int64) (map[str
 func (s *rbacService) HasPermission(ctx context.Context, userID, roleID int64, perm string) (bool, error) {
 	if perm == "" {
 		return false, errors.New("rbac: empty perm code")
+	}
+	// 0. 超管短路：与 EffectivePermissionsService.Compute / CanTriggerEvent 一致
+	if roleID == SuperAdminRoleID {
+		return true, nil
 	}
 	perms, err := s.getOrLoadPerms(ctx, roleID)
 	if err != nil {
