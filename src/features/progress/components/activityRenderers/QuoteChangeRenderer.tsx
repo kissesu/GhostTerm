@@ -9,6 +9,7 @@ import { Calculator } from 'lucide-react';
 import type { Activity } from '../../api/activities';
 import styles from '../../progress.module.css';
 import { QUOTE_CHANGE_TYPE_LABEL, formatActor, formatMoney, formatWhen } from './shared';
+import { ActorChip } from './ActorChip';
 
 interface Props {
   activity: Extract<Activity, { kind: 'quote_change' }>;
@@ -28,6 +29,7 @@ export function QuoteChangeRenderer({ activity }: Props): ReactElement {
       <div className={styles.timelineBody}>
         <div className={styles.timelineHeader}>
           <span className={`${styles.chip} ${styles.chipWarning}`}>报价</span>
+          <ActorChip actorName={activity.actorName} actorUsername={activity.actorUsername} />
           <span className={styles.when}>{formatWhen(activity.occurredAt)}</span>
         </div>
         <p className={styles.what}>{`${actor} 调整了报价`}</p>

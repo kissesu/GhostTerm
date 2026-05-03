@@ -56,6 +56,7 @@ describe('FeedbackRenderer', () => {
         content: '客户问进度',
         source: 'wechat',
         status: 'pending',
+        attachmentCount: 0,
       },
     };
     render(<FeedbackRenderer activity={activity} />);

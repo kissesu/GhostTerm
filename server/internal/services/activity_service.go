@@ -51,7 +51,10 @@ type ActivityView struct {
 	OccurredAt    time.Time
 	ActorID       int64
 	ActorName     *string // users.display_name；JOIN 缺行时 NULL（actor 用户被删）
+	ActorUsername *string // users.username（登录账号）；用户原话"需要在右侧显示提交时间线的用户账号"
 	ActorRoleName *string // roles.name；同上
+	ClientIP      *string // 客户端 IP（INET → TEXT 转换）；migration 0008 加列，老行 NULL
+	UserAgent     *string // User-Agent 头原值；migration 0008，老行 NULL
 	Payload       json.RawMessage
 }
 
@@ -142,8 +145,9 @@ func (s *activityService) List(
 			`
 		}
 
-		// VIEW 不携带 actor 名/角色，应用层 LEFT JOIN users + roles
-		// 注：users 表字段是 display_name，不是 name；migration 0001 §75
+		// VIEW 不携带 actor 名/角色/账号，应用层 LEFT JOIN users + roles
+		// 注：users 表字段是 display_name + username；migration 0001 §74-77
+		// VIEW 携带 client_ip(INET)/user_agent，INET → TEXT 转换便于 pgx Scan 到 *string
 		sqlStr := `
 			SELECT
 				(av.kind || ':' || av.source_id::text) AS id,
@@ -153,7 +157,10 @@ func (s *activityService) List(
 				av.occurred_at,
 				av.actor_id,
 				u.display_name AS actor_name,
+				u.username AS actor_username,
 				r.name AS actor_role_name,
+				av.client_ip::TEXT AS client_ip,
+				av.user_agent,
 				av.payload
 			FROM project_activity_view av
 			LEFT JOIN users u ON u.id = av.actor_id
@@ -174,7 +181,10 @@ func (s *activityService) List(
 			var a ActivityView
 			if err := rows.Scan(
 				&a.ID, &a.SourceID, &a.ProjectID, &a.Kind,
-				&a.OccurredAt, &a.ActorID, &a.ActorName, &a.ActorRoleName, &a.Payload,
+				&a.OccurredAt, &a.ActorID,
+				&a.ActorName, &a.ActorUsername, &a.ActorRoleName,
+				&a.ClientIP, &a.UserAgent,
+				&a.Payload,
 			); err != nil {
 				return fmt.Errorf("activity_service: scan: %w", err)
 			}

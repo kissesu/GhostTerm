@@ -127,8 +127,17 @@ func mapActivityToOAS(v services.ActivityView) (oas.Activity, error) {
 	if v.ActorName != nil {
 		out.ActorName = oas.NewOptNilString(*v.ActorName)
 	}
+	if v.ActorUsername != nil {
+		out.ActorUsername = oas.NewOptNilString(*v.ActorUsername)
+	}
 	if v.ActorRoleName != nil {
 		out.ActorRoleName = oas.NewOptNilString(*v.ActorRoleName)
+	}
+	if v.ClientIP != nil {
+		out.ClientIp = oas.NewOptNilString(*v.ClientIP)
+	}
+	if v.UserAgent != nil {
+		out.UserAgent = oas.NewOptNilString(*v.UserAgent)
 	}
 
 	switch v.Kind {

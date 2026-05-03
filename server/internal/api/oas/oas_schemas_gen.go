@@ -15,15 +15,23 @@ import (
 // Ref: #/components/schemas/Activity
 type Activity struct {
 	// 稳定展示 id（kind:sourceId）.
-	ID            string          `json:"id"`
-	SourceId      int64           `json:"sourceId"`
-	ProjectId     int64           `json:"projectId"`
-	Kind          ActivityKind    `json:"kind"`
-	OccurredAt    time.Time       `json:"occurredAt"`
-	ActorId       int64           `json:"actorId"`
-	ActorName     OptNilString    `json:"actorName"`
-	ActorRoleName OptNilString    `json:"actorRoleName"`
-	Payload       ActivityPayload `json:"payload"`
+	ID         string       `json:"id"`
+	SourceId   int64        `json:"sourceId"`
+	ProjectId  int64        `json:"projectId"`
+	Kind       ActivityKind `json:"kind"`
+	OccurredAt time.Time    `json:"occurredAt"`
+	ActorId    int64        `json:"actorId"`
+	ActorName  OptNilString `json:"actorName"`
+	// 操作人登录账号（users.username）；与 actorName(displayName)
+	// 配合显示，便于审计追溯.
+	ActorUsername OptNilString `json:"actorUsername"`
+	ActorRoleName OptNilString `json:"actorRoleName"`
+	// 操作时客户端 IP（INET）；migration 0008 加列，老活动数据为 NULL.
+	ClientIp OptNilString `json:"clientIp"`
+	// 操作时 User-Agent 头原值；含 OS/版本信息便于审计区分（如 Tauri WKWebView vs
+	// Chrome）.
+	UserAgent OptNilString    `json:"userAgent"`
+	Payload   ActivityPayload `json:"payload"`
 }
 
 // GetID returns the value of ID.
@@ -61,9 +69,24 @@ func (s *Activity) GetActorName() OptNilString {
 	return s.ActorName
 }
 
+// GetActorUsername returns the value of ActorUsername.
+func (s *Activity) GetActorUsername() OptNilString {
+	return s.ActorUsername
+}
+
 // GetActorRoleName returns the value of ActorRoleName.
 func (s *Activity) GetActorRoleName() OptNilString {
 	return s.ActorRoleName
+}
+
+// GetClientIp returns the value of ClientIp.
+func (s *Activity) GetClientIp() OptNilString {
+	return s.ClientIp
+}
+
+// GetUserAgent returns the value of UserAgent.
+func (s *Activity) GetUserAgent() OptNilString {
+	return s.UserAgent
 }
 
 // GetPayload returns the value of Payload.
@@ -106,9 +129,24 @@ func (s *Activity) SetActorName(val OptNilString) {
 	s.ActorName = val
 }
 
+// SetActorUsername sets the value of ActorUsername.
+func (s *Activity) SetActorUsername(val OptNilString) {
+	s.ActorUsername = val
+}
+
 // SetActorRoleName sets the value of ActorRoleName.
 func (s *Activity) SetActorRoleName(val OptNilString) {
 	s.ActorRoleName = val
+}
+
+// SetClientIp sets the value of ClientIp.
+func (s *Activity) SetClientIp(val OptNilString) {
+	s.ClientIp = val
+}
+
+// SetUserAgent sets the value of UserAgent.
+func (s *Activity) SetUserAgent(val OptNilString) {
+	s.UserAgent = val
 }
 
 // SetPayload sets the value of Payload.
@@ -1263,6 +1301,9 @@ type FeedbackActivityPayload struct {
 	Content string         `json:"content"`
 	Source  FeedbackSource `json:"source"`
 	Status  FeedbackStatus `json:"status"`
+	// 反馈附带的附件数量（migration 0010 view 内 LEFT JOIN feedback_attachments + COUNT
+	// 聚合，无附件为 0）.
+	AttachmentCount int32 `json:"attachmentCount"`
 }
 
 // GetContent returns the value of Content.
@@ -1280,6 +1321,11 @@ func (s *FeedbackActivityPayload) GetStatus() FeedbackStatus {
 	return s.Status
 }
 
+// GetAttachmentCount returns the value of AttachmentCount.
+func (s *FeedbackActivityPayload) GetAttachmentCount() int32 {
+	return s.AttachmentCount
+}
+
 // SetContent sets the value of Content.
 func (s *FeedbackActivityPayload) SetContent(val string) {
 	s.Content = val
@@ -1293,6 +1339,11 @@ func (s *FeedbackActivityPayload) SetSource(val FeedbackSource) {
 // SetStatus sets the value of Status.
 func (s *FeedbackActivityPayload) SetStatus(val FeedbackStatus) {
 	s.Status = val
+}
+
+// SetAttachmentCount sets the value of AttachmentCount.
+func (s *FeedbackActivityPayload) SetAttachmentCount(val int32) {
+	s.AttachmentCount = val
 }
 
 // Ref: #/components/schemas/FeedbackCreateRequest
@@ -2261,6 +2312,69 @@ func (o OptNilErrorEnvelopeErrorDetails) Get() (v ErrorEnvelopeErrorDetails, ok 
 
 // Or returns value if set, or given parameter if does not.
 func (o OptNilErrorEnvelopeErrorDetails) Or(d ErrorEnvelopeErrorDetails) ErrorEnvelopeErrorDetails {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptNilFloat64 returns new OptNilFloat64 with value set to v.
+func NewOptNilFloat64(v float64) OptNilFloat64 {
+	return OptNilFloat64{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptNilFloat64 is optional nullable float64.
+type OptNilFloat64 struct {
+	Value float64
+	Set   bool
+	Null  bool
+}
+
+// IsSet returns true if OptNilFloat64 was set.
+func (o OptNilFloat64) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptNilFloat64) Reset() {
+	var v float64
+	o.Value = v
+	o.Set = false
+	o.Null = false
+}
+
+// SetTo sets value to v.
+func (o *OptNilFloat64) SetTo(v float64) {
+	o.Set = true
+	o.Null = false
+	o.Value = v
+}
+
+// IsNull returns true if value is Null.
+func (o OptNilFloat64) IsNull() bool { return o.Null }
+
+// SetToNull sets value to null.
+func (o *OptNilFloat64) SetToNull() {
+	o.Set = true
+	o.Null = true
+	var v float64
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptNilFloat64) Get() (v float64, ok bool) {
+	if o.Null {
+		return v, false
+	}
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptNilFloat64) Or(d float64) float64 {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -4901,6 +5015,9 @@ type StatusChangeActivityPayload struct {
 	FromHolderUserId OptNilInt64         `json:"fromHolderUserId"`
 	ToHolderUserId   OptNilInt64         `json:"toHolderUserId"`
 	Remark           string              `json:"remark"`
+	// 进入前一状态后停留的毫秒数（migration 0009 LAG
+	// 计算）；项目首条状态记录无前一行 → null.
+	DwellMs OptNilFloat64 `json:"dwellMs"`
 }
 
 // GetEventCode returns the value of EventCode.
@@ -4948,6 +5065,11 @@ func (s *StatusChangeActivityPayload) GetRemark() string {
 	return s.Remark
 }
 
+// GetDwellMs returns the value of DwellMs.
+func (s *StatusChangeActivityPayload) GetDwellMs() OptNilFloat64 {
+	return s.DwellMs
+}
+
 // SetEventCode sets the value of EventCode.
 func (s *StatusChangeActivityPayload) SetEventCode(val string) {
 	s.EventCode = val
@@ -4991,6 +5113,11 @@ func (s *StatusChangeActivityPayload) SetToHolderUserId(val OptNilInt64) {
 // SetRemark sets the value of Remark.
 func (s *StatusChangeActivityPayload) SetRemark(val string) {
 	s.Remark = val
+}
+
+// SetDwellMs sets the value of DwellMs.
+func (s *StatusChangeActivityPayload) SetDwellMs(val OptNilFloat64) {
+	s.DwellMs = val
 }
 
 // Ref: #/components/schemas/StatusChangeLog

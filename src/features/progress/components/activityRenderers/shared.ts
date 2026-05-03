@@ -87,6 +87,26 @@ export function formatActor(a: {
 }
 
 /**
+ * 格式化 actor 账号串：`{display_name} @{username}` 用于 chip 行右侧紧凑显示。
+ *
+ * 业务背景（用户原话 2026-05-03）："需要在反馈、状态、创建 tag 右侧显示提交当前
+ * 时间线的用户账号的功能, 这样时间线信息才完整。"
+ *
+ * 业务逻辑说明：
+ * - displayName 缺失（actor 用户被删）→ 用 "未知" 占位，不显示 @username
+ * - username 缺失（同上 / 老数据）→ 仅显示 displayName 不带 @
+ * - 二者都有 → "超级管理员 @admin" 形式（GitHub/Slack/Linear 标准排版）
+ */
+export function formatActorWithAccount(a: {
+  actorName?: string | null;
+  actorUsername?: string | null;
+}): string {
+  const name = a.actorName ?? '未知';
+  if (a.actorUsername) return `${name} @${a.actorUsername}`;
+  return name;
+}
+
+/**
  * 格式化金额字符串为 ¥X.XX 显示。
  *
  * 后端 Money 字段统一为 decimal(N,2) 字符串；前端必须 toFixed(2) 以
@@ -96,4 +116,29 @@ export function formatMoney(s: string): string {
   const n = Number(s);
   if (Number.isNaN(n)) return s;
   return `¥${n.toFixed(2)}`;
+}
+
+/**
+ * 把毫秒时长格式化为人类可读："2 天 3 小时" / "5 小时" / "12 分钟" / "30 秒"。
+ *
+ * 业务背景（Task 3 / migration 0009 dwellMs）：项目状态时间线显示"在「洽谈」停留 X"。
+ * 上限 2 段（天+小时 / 小时+分），避免 "3 天 5 小时 12 分 9 秒" 噪音。
+ *
+ * @param ms 毫秒数；null/0/负数返回空串（调用方据此决定是否渲染）
+ */
+export function formatDwellMs(ms: number | null | undefined): string {
+  if (ms == null || ms <= 0) return '';
+  const sec = Math.floor(ms / 1000);
+  const day = Math.floor(sec / 86400);
+  const hour = Math.floor((sec % 86400) / 3600);
+  const min = Math.floor((sec % 3600) / 60);
+
+  if (day > 0) {
+    return hour > 0 ? `${day} 天 ${hour} 小时` : `${day} 天`;
+  }
+  if (hour > 0) {
+    return min > 0 ? `${hour} 小时 ${min} 分钟` : `${hour} 小时`;
+  }
+  if (min > 0) return `${min} 分钟`;
+  return `${sec} 秒`;
 }

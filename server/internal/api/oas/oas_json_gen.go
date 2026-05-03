@@ -53,9 +53,27 @@ func (s *Activity) encodeFields(e *jx.Encoder) {
 		}
 	}
 	{
+		if s.ActorUsername.Set {
+			e.FieldStart("actorUsername")
+			s.ActorUsername.Encode(e)
+		}
+	}
+	{
 		if s.ActorRoleName.Set {
 			e.FieldStart("actorRoleName")
 			s.ActorRoleName.Encode(e)
+		}
+	}
+	{
+		if s.ClientIp.Set {
+			e.FieldStart("clientIp")
+			s.ClientIp.Encode(e)
+		}
+	}
+	{
+		if s.UserAgent.Set {
+			e.FieldStart("userAgent")
+			s.UserAgent.Encode(e)
 		}
 	}
 	{
@@ -64,16 +82,19 @@ func (s *Activity) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfActivity = [9]string{
-	0: "id",
-	1: "sourceId",
-	2: "projectId",
-	3: "kind",
-	4: "occurredAt",
-	5: "actorId",
-	6: "actorName",
-	7: "actorRoleName",
-	8: "payload",
+var jsonFieldsNameOfActivity = [12]string{
+	0:  "id",
+	1:  "sourceId",
+	2:  "projectId",
+	3:  "kind",
+	4:  "occurredAt",
+	5:  "actorId",
+	6:  "actorName",
+	7:  "actorUsername",
+	8:  "actorRoleName",
+	9:  "clientIp",
+	10: "userAgent",
+	11: "payload",
 }
 
 // Decode decodes Activity from json.
@@ -165,6 +186,16 @@ func (s *Activity) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"actorName\"")
 			}
+		case "actorUsername":
+			if err := func() error {
+				s.ActorUsername.Reset()
+				if err := s.ActorUsername.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"actorUsername\"")
+			}
 		case "actorRoleName":
 			if err := func() error {
 				s.ActorRoleName.Reset()
@@ -175,8 +206,28 @@ func (s *Activity) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"actorRoleName\"")
 			}
+		case "clientIp":
+			if err := func() error {
+				s.ClientIp.Reset()
+				if err := s.ClientIp.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"clientIp\"")
+			}
+		case "userAgent":
+			if err := func() error {
+				s.UserAgent.Reset()
+				if err := s.UserAgent.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"userAgent\"")
+			}
 		case "payload":
-			requiredBitSet[1] |= 1 << 0
+			requiredBitSet[1] |= 1 << 3
 			if err := func() error {
 				if err := s.Payload.Decode(d); err != nil {
 					return err
@@ -196,7 +247,7 @@ func (s *Activity) Decode(d *jx.Decoder) error {
 	var failures []validate.FieldError
 	for i, mask := range [2]uint8{
 		0b00111111,
-		0b00000001,
+		0b00001000,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -481,6 +532,19 @@ func (s *ActivityPayload) Decode(d *jx.Decoder) error {
 				}
 				found = true
 				s.Type = match
+			case "attachmentCount":
+				// Type-based discrimination: check if field has expected JSON type
+				if typ := d.Next(); typ != jx.Number {
+					// Field exists but has wrong type, not a match for this variant
+					return d.Skip()
+				}
+				match := FeedbackActivityPayloadActivityPayload
+				if found && s.Type != match {
+					s.Type = ""
+					return errors.Errorf("multiple oneOf matches: (%v, %v)", s.Type, match)
+				}
+				found = true
+				s.Type = match
 			case "category":
 				// Type-based discrimination: check if field has expected JSON type
 				if typ := d.Next(); typ != jx.String {
@@ -548,6 +612,20 @@ func (s *ActivityPayload) Decode(d *jx.Decoder) error {
 					return d.Skip()
 				}
 				match := PaymentActivityPayloadActivityPayload
+				if found && s.Type != match {
+					s.Type = ""
+					return errors.Errorf("multiple oneOf matches: (%v, %v)", s.Type, match)
+				}
+				found = true
+				s.Type = match
+			case "dwellMs":
+				// Type-based discrimination: check if field has expected JSON type (nullable)
+				typ := d.Next()
+				if typ != jx.Number && typ != jx.Null {
+					// Field exists but has wrong type, not a match for this variant
+					return d.Skip()
+				}
+				match := StatusChangeActivityPayloadActivityPayload
 				if found && s.Type != match {
 					s.Type = ""
 					return errors.Errorf("multiple oneOf matches: (%v, %v)", s.Type, match)
@@ -3029,12 +3107,17 @@ func (s *FeedbackActivityPayload) encodeFields(e *jx.Encoder) {
 		e.FieldStart("status")
 		s.Status.Encode(e)
 	}
+	{
+		e.FieldStart("attachmentCount")
+		e.Int32(s.AttachmentCount)
+	}
 }
 
-var jsonFieldsNameOfFeedbackActivityPayload = [3]string{
+var jsonFieldsNameOfFeedbackActivityPayload = [4]string{
 	0: "content",
 	1: "source",
 	2: "status",
+	3: "attachmentCount",
 }
 
 // Decode decodes FeedbackActivityPayload from json.
@@ -3078,6 +3161,18 @@ func (s *FeedbackActivityPayload) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"status\"")
 			}
+		case "attachmentCount":
+			requiredBitSet[0] |= 1 << 3
+			if err := func() error {
+				v, err := d.Int32()
+				s.AttachmentCount = int32(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"attachmentCount\"")
+			}
 		default:
 			return d.Skip()
 		}
@@ -3088,7 +3183,7 @@ func (s *FeedbackActivityPayload) Decode(d *jx.Decoder) error {
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [1]uint8{
-		0b00000111,
+		0b00001111,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -4720,6 +4815,57 @@ func (s OptNilErrorEnvelopeErrorDetails) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *OptNilErrorEnvelopeErrorDetails) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes float64 as json.
+func (o OptNilFloat64) Encode(e *jx.Encoder) {
+	if !o.Set {
+		return
+	}
+	if o.Null {
+		e.Null()
+		return
+	}
+	e.Float64(float64(o.Value))
+}
+
+// Decode decodes float64 from json.
+func (o *OptNilFloat64) Decode(d *jx.Decoder) error {
+	if o == nil {
+		return errors.New("invalid: unable to decode OptNilFloat64 to nil")
+	}
+	if d.Next() == jx.Null {
+		if err := d.Null(); err != nil {
+			return err
+		}
+
+		var v float64
+		o.Value = v
+		o.Set = true
+		o.Null = true
+		return nil
+	}
+	o.Set = true
+	o.Null = false
+	v, err := d.Float64()
+	if err != nil {
+		return err
+	}
+	o.Value = float64(v)
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s OptNilFloat64) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *OptNilFloat64) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -10626,9 +10772,15 @@ func (s *StatusChangeActivityPayload) encodeFields(e *jx.Encoder) {
 		e.FieldStart("remark")
 		e.Str(s.Remark)
 	}
+	{
+		if s.DwellMs.Set {
+			e.FieldStart("dwellMs")
+			s.DwellMs.Encode(e)
+		}
+	}
 }
 
-var jsonFieldsNameOfStatusChangeActivityPayload = [9]string{
+var jsonFieldsNameOfStatusChangeActivityPayload = [10]string{
 	0: "eventCode",
 	1: "eventName",
 	2: "fromStatus",
@@ -10638,6 +10790,7 @@ var jsonFieldsNameOfStatusChangeActivityPayload = [9]string{
 	6: "fromHolderUserId",
 	7: "toHolderUserId",
 	8: "remark",
+	9: "dwellMs",
 }
 
 // Decode decodes StatusChangeActivityPayload from json.
@@ -10744,6 +10897,16 @@ func (s *StatusChangeActivityPayload) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"remark\"")
+			}
+		case "dwellMs":
+			if err := func() error {
+				s.DwellMs.Reset()
+				if err := s.DwellMs.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"dwellMs\"")
 			}
 		default:
 			return d.Skip()

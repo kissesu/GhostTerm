@@ -8,18 +8,23 @@ import type { ReactElement } from 'react';
 import { ArrowRightCircle } from 'lucide-react';
 import type { Activity } from '../../api/activities';
 import styles from '../../progress.module.css';
-import { PROJECT_STATUS_LABEL, formatWhen } from './shared';
+import { PROJECT_STATUS_LABEL, formatWhen, formatDwellMs } from './shared';
+import { ActorChip } from './ActorChip';
 
 interface Props {
   activity: Extract<Activity, { kind: 'status_change' }>;
 }
 
 export function StatusChangeRenderer({ activity }: Props): ReactElement {
-  const { fromStatus, toStatus, eventName, remark } = activity.payload;
+  const { fromStatus, toStatus, eventName, remark, dwellMs } = activity.payload;
   // fromStatus 可能为 null（项目首次进入状态机）→ 用 "初始" 兜底
   const fromLabel = fromStatus ? (PROJECT_STATUS_LABEL[fromStatus] ?? fromStatus) : '初始';
   const toLabel = PROJECT_STATUS_LABEL[toStatus] ?? toStatus;
-  const meta = remark ? `${eventName} · ${remark}` : eventName;
+  // dwellMs：在「fromStatus」停留时长；首条状态记录无前一行时为 null/0
+  const dwellLabel = formatDwellMs(dwellMs);
+  const dwellSuffix = dwellLabel && fromStatus ? ` · 在「${fromLabel}」停留 ${dwellLabel}` : '';
+  const baseMeta = remark ? `${eventName} · ${remark}` : eventName;
+  const meta = baseMeta + dwellSuffix;
 
   return (
     <div className={styles.timelineItem}>
@@ -29,6 +34,7 @@ export function StatusChangeRenderer({ activity }: Props): ReactElement {
       <div className={styles.timelineBody}>
         <div className={styles.timelineHeader}>
           <span className={`${styles.chip} ${styles.chipWarning}`}>状态</span>
+          <ActorChip actorName={activity.actorName} actorUsername={activity.actorUsername} />
           <span className={styles.when}>{formatWhen(activity.occurredAt)}</span>
         </div>
         <p className={styles.what}>{`项目从「${fromLabel}」进入「${toLabel}」`}</p>

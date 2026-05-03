@@ -23,7 +23,7 @@ function mockFeedback(id: string): Activity {
     kind: 'feedback',
     occurredAt: '2026-05-01T00:00:00Z',
     actorId: 1,
-    payload: { content: 'x', source: 'wechat', status: 'pending' },
+    payload: { content: 'x', source: 'wechat', status: 'pending', attachmentCount: 0 },
   };
 }
 

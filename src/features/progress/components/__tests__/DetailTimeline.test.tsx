@@ -57,6 +57,7 @@ describe('DetailTimeline', () => {
         content: '客户已确认',
         source: 'wechat',
         status: 'pending',
+        attachmentCount: 0,
       },
     };
     setStoreState({

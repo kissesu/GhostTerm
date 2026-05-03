@@ -43,6 +43,8 @@ const FeedbackActivityPayloadSchema = z.object({
   content: z.string(),
   source: z.enum(['phone', 'wechat', 'email', 'meeting', 'other']),
   status: z.enum(['pending', 'done']),
+  // migration 0010：聚合 feedback_attachments COUNT，无附件为 0
+  attachmentCount: z.number().int().default(0),
 });
 
 const StatusChangeActivityPayloadSchema = z.object({
@@ -55,6 +57,8 @@ const StatusChangeActivityPayloadSchema = z.object({
   fromHolderUserId: z.number().int().nullable().optional(),
   toHolderUserId: z.number().int().nullable().optional(),
   remark: z.string(),
+  // migration 0009：前一状态停留毫秒；项目首条 status_change 无前一行时为 null
+  dwellMs: z.number().nullable().optional(),
 });
 
 const QuoteChangeActivityPayloadSchema = z.object({
@@ -98,7 +102,11 @@ const baseActivityFields = {
   occurredAt: z.string(),
   actorId: z.number().int(),
   actorName: z.string().nullable().optional(),
+  actorUsername: z.string().nullable().optional(),
   actorRoleName: z.string().nullable().optional(),
+  // 审计字段 migration 0008：老活动数据为 null
+  clientIp: z.string().nullable().optional(),
+  userAgent: z.string().nullable().optional(),
 };
 
 /**

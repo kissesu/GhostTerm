@@ -9,6 +9,7 @@ import { FolderPlus } from 'lucide-react';
 import type { Activity } from '../../api/activities';
 import styles from '../../progress.module.css';
 import { formatActor, formatMoney, formatWhen } from './shared';
+import { ActorChip } from './ActorChip';
 
 interface Props {
   activity: Extract<Activity, { kind: 'project_created' }>;
@@ -26,6 +27,7 @@ export function ProjectCreatedRenderer({ activity }: Props): ReactElement {
       <div className={styles.timelineBody}>
         <div className={styles.timelineHeader}>
           <span className={`${styles.chip} ${styles.chipAccent}`}>创建</span>
+          <ActorChip actorName={activity.actorName} actorUsername={activity.actorUsername} />
           <span className={styles.when}>{formatWhen(activity.occurredAt)}</span>
         </div>
         <p className={styles.what}>{`${actor} 创建了项目`}</p>

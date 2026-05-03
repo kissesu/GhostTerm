@@ -817,9 +817,21 @@ components:
         actorName:
           type: string
           nullable: true
+        actorUsername:
+          type: string
+          nullable: true
+          description: 操作人登录账号（users.username）；与 actorName(displayName) 配合显示，便于审计追溯
         actorRoleName:
           type: string
           nullable: true
+        clientIp:
+          type: string
+          nullable: true
+          description: 操作时客户端 IP（INET）；migration 0008 加列，老活动数据为 NULL
+        userAgent:
+          type: string
+          nullable: true
+          description: 操作时 User-Agent 头原值；含 OS/版本信息便于审计区分（如 Tauri WKWebView vs Chrome）
         payload:
           oneOf:
             - $ref: '#/components/schemas/ProjectCreatedPayload'
@@ -860,7 +872,7 @@ components:
 
     FeedbackActivityPayload:
       type: object
-      required: [content, source, status]
+      required: [content, source, status, attachmentCount]
       properties:
         content:
           type: string
@@ -868,6 +880,10 @@ components:
           $ref: '#/components/schemas/FeedbackSource'
         status:
           $ref: '#/components/schemas/FeedbackStatus'
+        attachmentCount:
+          type: integer
+          format: int32
+          description: 反馈附带的附件数量（migration 0010 view 内 LEFT JOIN feedback_attachments + COUNT 聚合，无附件为 0）
 
     StatusChangeActivityPayload:
       type: object
@@ -901,6 +917,11 @@ components:
           nullable: true
         remark:
           type: string
+        dwellMs:
+          type: number
+          format: double
+          nullable: true
+          description: 进入前一状态后停留的毫秒数（migration 0009 LAG 计算）；项目首条状态记录无前一行 → null
 
     QuoteChangeActivityPayload:
       type: object

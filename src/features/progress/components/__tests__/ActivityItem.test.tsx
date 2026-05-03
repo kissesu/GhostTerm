@@ -24,7 +24,7 @@ describe('ActivityItem', () => {
       ...base,
       id: 'feedback:1',
       kind: 'feedback',
-      payload: { content: '随手记一笔', source: 'phone', status: 'pending' },
+      payload: { content: '随手记一笔', source: 'phone', status: 'pending', attachmentCount: 0 },
     };
     render(<ActivityItem activity={activity} />);
     expect(screen.getByText('反馈')).toBeInTheDocument();
