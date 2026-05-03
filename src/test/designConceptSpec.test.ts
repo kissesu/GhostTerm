@@ -3,6 +3,7 @@ import html from '../../designs/ghostterm-ui-concepts.html?raw';
 import workspaceHtml from '../../designs/habitat-grid-workspace.html?raw';
 import toolsHtml from '../../designs/habitat-grid-tools.html?raw';
 import progressHtml from '../../designs/habitat-grid-progress.html?raw';
+import progressInteractionsHtml from '../../designs/habitat-grid-progress-interactions.html?raw';
 
 describe('GhostTerm 设计稿交付物', () => {
   it('应存在包含三套高保真方案的静态设计页', () => {
@@ -38,5 +39,17 @@ describe('GhostTerm 设计稿交付物', () => {
     expect(progressHtml).toContain('已交付');
     expect(progressHtml).toContain('已收款');
     expect(progressHtml).not.toContain('state-mark');
+    expect(progressInteractionsHtml).toContain('Habitat Grid / Progress Interactions');
+    expect(progressInteractionsHtml).toContain('项目详情页 / ProjectDetailPage');
+    expect(progressInteractionsHtml).toContain('新建项目 / 事件流转 / 报价变更 / 收款登记');
+    expect(progressInteractionsHtml).toContain('通知中心 / NotificationsCenterView');
+    expect(progressInteractionsHtml).toContain('收益结算页 / EarningsView');
+    expect(progressInteractionsHtml).toContain('反馈、论文版本与文件区');
+    expect(progressInteractionsHtml).toContain('ProjectCreateDialog');
+    expect(progressInteractionsHtml).toContain('EventTriggerDialog');
+    expect(progressInteractionsHtml).toContain('QuoteChangeDialog');
+    expect(progressInteractionsHtml).toContain('PaymentDialog');
+    expect(progressInteractionsHtml).toContain('内部面板独立滚动');
+    expect(progressInteractionsHtml).toContain('同 habitat-grid-progress.html 视觉系统');
   });
 });

@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Habitat Grid / Progress Interactions</title>
+    <style>
+      :root {
+        --bg: #0d0d0c;
+        --bar: #141412;
+        --panel: #191916;
+        --panel-2: #20201c;
+        --panel-3: #25251f;
+        --card: #22231f;
+        --line: rgba(233, 226, 204, 0.11);
+        --line-strong: rgba(233, 226, 204, 0.2);
+        --text: #f0eee4;
+        --muted: #b4ae9c;
+        --faint: #7e796c;
+        --accent: #b8ff6a;
+        --accent-ink: #10160a;
+        --cyan: #63d5ff;
+        --amber: #e7ba4a;
+        --red: #ef6862;
+        --green: #79d17c;
+        --shadow: 0 24px 70px rgba(0, 0, 0, 0.46);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+      }
+
+      body {
+        background:
+          linear-gradient(180deg, rgba(184, 255, 106, 0.035), transparent 260px),
+          radial-gradient(circle at 75% 0%, rgba(99, 213, 255, 0.08), transparent 300px),
+          var(--bg);
+        color: var(--text);
+        font-family: "Avenir Next", "PingFang SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif;
+      }
+
+      button,
+      input,
+      textarea {
+        font: inherit;
+      }
+
+      .app {
+        width: 1500px;
+        min-height: 967px;
+        margin: 0 auto;
+        border: 1px solid rgba(233, 226, 204, 0.08);
+        background: #0b0b0a;
+        box-shadow: var(--shadow);
+      }
+
+      .titlebar {
+        height: 34px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 10px;
+        border-bottom: 1px solid rgba(233, 226, 204, 0.08);
+        background: #10100f;
+      }
+
+      .title {
+        color: #c9c3b1;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .window-tools {
+        display: flex;
+        gap: 7px;
+      }
+
+      .window-tools span {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #575247;
+      }
+
+      .toolbar {
+        height: 50px;
+        display: grid;
+        grid-template-columns: auto auto 1fr auto;
+        gap: 14px;
+        align-items: center;
+        padding: 0 16px;
+        border-bottom: 1px solid var(--line);
+        background: var(--bar);
+      }
+
+      .segmented,
+      .filters,
+      .right-actions,
+      .tabs,
+      .button-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .segmented {
+        padding: 4px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: #10100f;
+      }
+
+      .segmented button,
+      .filter,
+      .search,
+      .primary,
+      .secondary,
+      .icon-button {
+        height: 30px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        color: var(--muted);
+        background: #11110f;
+      }
+
+      .segmented button {
+        min-width: 54px;
+        padding: 0 12px;
+        border-color: transparent;
+        background: transparent;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .segmented .active,
+      .primary {
+        color: var(--accent-ink);
+        background: var(--accent);
+      }
+
+      .filter {
+        min-width: 122px;
+        padding: 0 12px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 12px;
+      }
+
+      .search {
+        width: 226px;
+        padding: 0 12px;
+        display: inline-flex;
+        align-items: center;
+        color: var(--faint);
+        font-size: 12px;
+      }
+
+      .primary,
+      .secondary {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 0 14px;
+        border-color: transparent;
+        font-size: 12px;
+        font-weight: 850;
+      }
+
+      .secondary {
+        color: var(--muted);
+        border-color: var(--line);
+        background: #11110f;
+      }
+
+      .summary {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 10px;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--line);
+        background: #0f0f0e;
+      }
+
+      .summary-card {
+        min-height: 58px;
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: linear-gradient(180deg, #1b1b18, #141412);
+      }
+
+      .summary-card span {
+        display: block;
+        color: var(--faint);
+        font-size: 11px;
+      }
+
+      .summary-card strong {
+        display: block;
+        margin-top: 4px;
+        color: var(--text);
+        font-size: 20px;
+      }
+
+      .view-stack {
+        display: grid;
+        gap: 18px;
+        padding: 14px 16px 18px;
+      }
+
+      .view-panel {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        overflow: hidden;
+      }
+
+      .view-head,
+      .pane-head,
+      .modal-head,
+      .drawer-head {
+        min-height: 42px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 12px;
+        border-bottom: 1px solid var(--line);
+        background: #151513;
+      }
+
+      .view-title,
+      .pane-title,
+      .modal-title,
+      .drawer-title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--text);
+        font-size: 13px;
+        font-weight: 850;
+      }
+
+      .view-title code {
+        padding: 4px 7px;
+        border-radius: 5px;
+        color: var(--accent-ink);
+        background: var(--accent);
+        font-family: inherit;
+        font-size: 11px;
+        font-weight: 900;
+      }
+
+      .view-meta {
+        color: var(--faint);
+        font-size: 11px;
+      }
+
+      .detail-grid {
+        display: grid;
+        grid-template-columns: 280px 1fr 320px;
+        gap: 16px;
+        min-height: 620px;
+        padding: 16px;
+      }
+
+      .pane,
+      .modal,
+      .drawer,
+      .notification-list,
+      .earnings-grid,
+      .dialog-stage {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #181815;
+        overflow: hidden;
+      }
+
+      .pane-body,
+      .modal-body,
+      .drawer-body {
+        display: grid;
+        gap: 12px;
+        padding: 12px;
+      }
+
+      .project-card,
+      .task-card,
+      .timeline-item,
+      .notification-item,
+      .file-row,
+      .form-row,
+      .metric-card {
+        padding: 10px;
+        border: 1px solid rgba(233, 226, 204, 0.08);
+        border-radius: 7px;
+        background: #20201c;
+      }
+
+      .project-card {
+        padding: 14px;
+        background: linear-gradient(180deg, #23231f, #1b1b18);
+      }
+
+      .project-card h2,
+      .task-card h2 {
+        margin: 0 0 8px;
+        color: var(--text);
+        font-size: 15px;
+        line-height: 1.45;
+      }
+
+      .meta {
+        display: grid;
+        gap: 5px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .stage-code,
+      .tag,
+      .deadline,
+      .status-chip {
+        min-height: 22px;
+        padding: 3px 7px;
+        border-radius: 5px;
+        display: inline-flex;
+        align-items: center;
+        width: max-content;
+        color: #e4ddcb;
+        background: rgba(255, 255, 255, 0.05);
+        font-size: 11px;
+        font-weight: 850;
+      }
+
+      .stage-code {
+        min-width: 28px;
+        justify-content: center;
+        border: 1px solid var(--line-strong);
+        background: #24231f;
+        font-size: 10px;
+        font-weight: 900;
+      }
+
+      .deadline {
+        color: #221a08;
+        background: var(--amber);
+      }
+
+      .deadline.safe {
+        color: #081d0b;
+        background: var(--green);
+      }
+
+      .deadline.late {
+        color: #fff1ef;
+        background: var(--red);
+      }
+
+      .tabs {
+        padding: 10px 12px 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .tabs button {
+        height: 30px;
+        padding: 0 12px;
+        border: 1px solid transparent;
+        border-bottom: none;
+        border-radius: 6px 6px 0 0;
+        color: var(--muted);
+        background: transparent;
+        font-size: 12px;
+        font-weight: 850;
+      }
+
+      .tabs .active {
+        color: var(--accent-ink);
+        background: var(--accent);
+      }
+
+      .timeline {
+        display: grid;
+        gap: 10px;
+      }
+
+      .timeline-item {
+        display: grid;
+        grid-template-columns: 86px 1fr auto;
+        gap: 10px;
+        align-items: start;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .timeline-item strong,
+      .notification-item strong,
+      .file-row strong,
+      .metric-card strong {
+        color: var(--text);
+      }
+
+      .kv {
+        display: grid;
+        grid-template-columns: 72px 1fr;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .kv strong {
+        color: var(--text);
+      }
+
+      .dialog-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+        padding: 16px;
+      }
+
+      .dialog-stage {
+        min-height: 450px;
+        position: relative;
+        padding: 24px;
+        background:
+          radial-gradient(circle at 50% 10%, rgba(184, 255, 106, 0.08), transparent 260px),
+          #11110f;
+      }
+
+      .modal {
+        width: 100%;
+        max-width: 420px;
+        margin: 0 auto;
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+      }
+
+      .modal.large {
+        max-width: 560px;
+      }
+
+      .form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .form-row {
+        display: grid;
+        gap: 7px;
+      }
+
+      .form-row.full {
+        grid-column: 1 / -1;
+      }
+
+      label {
+        color: var(--faint);
+        font-size: 11px;
+        font-weight: 850;
+      }
+
+      .input,
+      .textarea {
+        width: 100%;
+        min-height: 34px;
+        padding: 8px 10px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        color: var(--text);
+        background: #11110f;
+        font-size: 12px;
+      }
+
+      .textarea {
+        min-height: 78px;
+        resize: none;
+      }
+
+      .event-ladder {
+        display: grid;
+        gap: 8px;
+      }
+
+      .event-step {
+        display: grid;
+        grid-template-columns: 42px 1fr auto;
+        gap: 10px;
+        align-items: center;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: #20201c;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .event-step.active {
+        border-color: rgba(184, 255, 106, 0.38);
+        background: linear-gradient(180deg, rgba(184, 255, 106, 0.1), #20201c);
+      }
+
+      .notification-list {
+        display: grid;
+      }
+
+      .notification-item {
+        display: grid;
+        grid-template-columns: 10px 1fr auto;
+        gap: 12px;
+        align-items: start;
+        border-radius: 0;
+        border-width: 0 0 1px;
+        background: transparent;
+        color: var(--muted);
+      }
+
+      .notification-item.unread {
+        background: rgba(184, 255, 106, 0.04);
+      }
+
+      .dot {
+        width: 8px;
+        height: 8px;
+        margin-top: 5px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+
+      .earnings-grid {
+        display: grid;
+        grid-template-columns: 1fr 360px;
+        min-height: 470px;
+      }
+
+      .chart {
+        padding: 18px;
+        border-right: 1px solid var(--line);
+      }
+
+      .bars {
+        height: 300px;
+        display: grid;
+        grid-template-columns: repeat(8, 1fr);
+        gap: 12px;
+        align-items: end;
+        padding: 18px 8px 0;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background:
+          linear-gradient(rgba(233, 226, 204, 0.06) 1px, transparent 1px) 0 0 / 100% 60px,
+          #121210;
+      }
+
+      .bars span {
+        min-height: 36px;
+        border-radius: 6px 6px 0 0;
+        background: linear-gradient(180deg, var(--accent), rgba(184, 255, 106, 0.2));
+      }
+
+      .metric-stack {
+        display: grid;
+        gap: 10px;
+        padding: 12px;
+      }
+
+      .file-grid {
+        display: grid;
+        grid-template-columns: 1fr 320px;
+        gap: 16px;
+        padding: 16px;
+      }
+
+      .file-row {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        gap: 10px;
+        align-items: center;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .footer {
+        height: 38px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 16px;
+        border-top: 1px solid var(--line);
+        background: #0d0d0c;
+        color: var(--faint);
+        font-size: 11px;
+      }
+
+      .footer strong {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <header class="titlebar">
+        <div class="title">GhostTerm · 进度模块 · 交互页面设计稿</div>
+        <div class="window-tools"><span></span><span></span><span></span></div>
+      </header>
+
+      <section class="toolbar">
+        <div class="segmented" aria-label="交互页面切换">
+          <button class="active">详情</button>
+          <button>弹窗</button>
+          <button>通知</button>
+          <button>收益</button>
+          <button>文件</button>
+        </div>
+        <div class="filters">
+          <div class="filter">所有项目 <span>⌄</span></div>
+          <div class="filter">所有事件 <span>⌄</span></div>
+          <div class="filter">所有权限 <span>⌄</span></div>
+        </div>
+        <div></div>
+        <div class="right-actions">
+          <div class="search">搜索项目 / 客户 / 反馈</div>
+          <button class="primary">新建项目</button>
+        </div>
+      </section>
+
+      <section class="summary">
+        <div class="summary-card"><span>交互页面</span><strong>08</strong></div>
+        <div class="summary-card"><span>详情 tabs</span><strong>05</strong></div>
+        <div class="summary-card"><span>事件按钮</span><strong>06</strong></div>
+        <div class="summary-card"><span>弹窗类型</span><strong>04</strong></div>
+        <div class="summary-card"><span>通知入口</span><strong>02</strong></div>
+        <div class="summary-card"><span>结算面板</span><strong>01</strong></div>
+      </section>
+
+      <section class="view-stack">
+        <section class="view-panel">
+          <header class="view-head">
+            <div class="view-title"><code>01</code>项目详情页 / ProjectDetailPage</div>
+            <div class="view-meta">详情页隐藏主 toolbar + summary，三栏内部面板独立滚动</div>
+          </header>
+          <div class="detail-grid">
+            <aside class="pane">
+              <header class="pane-head"><div class="pane-title">项目核心信息</div><span class="stage-code">S3</span></header>
+              <div class="pane-body">
+                <button class="secondary">返回列表</button>
+                <article class="project-card">
+                  <h2>张三 · 本科毕业论文</h2>
+                  <div class="meta">
+                    <span>状态：开发中</span>
+                    <span>流转在：@张开发</span>
+                    <span>报价：¥8,000 · 已收：¥3,000</span>
+                  </div>
+                </article>
+                <section class="project-card">
+                  <h2>可触发事件</h2>
+                  <div class="event-ladder">
+                    <div class="event-step active"><span class="stage-code">E3</span><strong>提交初稿</strong><span class="deadline">需备注</span></div>
+                    <div class="event-step"><span class="stage-code">E4</span><strong>客户反馈</strong><span class="tag">可选</span></div>
+                    <div class="event-step"><span class="stage-code">E5</span><strong>申请验收</strong><span class="deadline safe">下一步</span></div>
+                  </div>
+                </section>
+              </div>
+            </aside>
+
+            <section class="pane">
+              <header class="pane-head"><div class="pane-title">项目工作台</div><span class="status-chip">feedback active</span></header>
+              <div class="tabs">
+                <button class="active">反馈</button>
+                <button>论文版本</button>
+                <button>文件</button>
+                <button>费用变更</button>
+                <button>收款</button>
+              </div>
+              <div class="pane-body">
+                <div class="form-row full">
+                  <label>新增反馈</label>
+                  <textarea class="textarea">客户要求补充数据来源，并把第三章图表统一为三线表。</textarea>
+                </div>
+                <div class="button-row"><button class="primary">提交反馈</button><button class="secondary">保存草稿</button></div>
+                <div class="timeline">
+                  <div class="timeline-item"><span>13:20</span><strong>客户反馈</strong><span class="deadline late">超期 1d</span></div>
+                  <div class="timeline-item"><span>昨天</span><strong>上传 v3 初稿</strong><span class="tag">docx</span></div>
+                  <div class="timeline-item"><span>04/28</span><strong>报价变更为 ¥8,000</strong><span class="tag">quote</span></div>
+                </div>
+              </div>
+            </section>
+
+            <aside class="pane">
+              <header class="pane-head"><div class="pane-title">客户与风险</div><span class="deadline">5d</span></header>
+              <div class="pane-body">
+                <div class="kv"><span>客户</span><strong>李同学 @wechat</strong></div>
+                <div class="kv"><span>论文级别</span><strong>本科 · 计算机</strong></div>
+                <div class="kv"><span>截止时间</span><strong>2026-05-05</strong></div>
+                <div class="kv"><span>权限</span><strong>客服 / 开发 / 财务</strong></div>
+                <article class="project-card">
+                  <h2>风险提示</h2>
+                  <div class="meta">
+                    <span>客户反馈 2 条未处理</span>
+                    <span>验收前需补齐引用截图</span>
+                  </div>
+                </article>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="view-panel">
+          <header class="view-head">
+            <div class="view-title"><code>02</code>新建项目 / 事件流转 / 报价变更 / 收款登记</div>
+            <div class="view-meta">覆盖 ProjectCreateDialog、EventTriggerDialog、QuoteChangeDialog、PaymentDialog</div>
+          </header>
+          <div class="dialog-grid">
+            <section class="dialog-stage">
+              <div class="modal large">
+                <header class="modal-head"><div class="modal-title">新建项目</div><span class="stage-code">CREATE</span></header>
+                <div class="modal-body">
+                  <div class="form-grid">
+                    <div class="form-row"><label>项目名称</label><div class="input">王五 · 硕士毕业论文</div></div>
+                    <div class="form-row"><label>客户渠道</label><div class="input">wechat / 王同学</div></div>
+                    <div class="form-row"><label>论文级别</label><div class="input">硕士</div></div>
+                    <div class="form-row"><label>学科</label><div class="input">管理学</div></div>
+                    <div class="form-row"><label>报价金额</label><div class="input">¥8,000</div></div>
+                    <div class="form-row"><label>截止日期</label><div class="input">2026-05-12</div></div>
+                    <div class="form-row full"><label>备注</label><div class="textarea">创建后进入报价中，自动分配给客服。</div></div>
+                  </div>
+                  <div class="button-row"><button class="secondary">取消</button><button class="primary">创建项目</button></div>
+                </div>
+              </div>
+            </section>
+
+            <section class="dialog-stage">
+              <div class="modal">
+                <header class="modal-head"><div class="modal-title">触发事件</div><span class="stage-code">EVENT</span></header>
+                <div class="modal-body">
+                  <div class="event-ladder">
+                    <div class="event-step"><span class="stage-code">FROM</span><strong>开发中</strong><span>S3</span></div>
+                    <div class="event-step active"><span class="stage-code">E5</span><strong>申请验收</strong><span class="deadline safe">to S4</span></div>
+                  </div>
+                  <div class="form-row full"><label>事件备注</label><div class="textarea">初稿已上传，等待客户确认。</div></div>
+                  <div class="button-row"><button class="secondary">关闭</button><button class="primary">确认流转</button></div>
+                </div>
+              </div>
+
+              <div class="modal" style="margin-top: 18px">
+                <header class="modal-head"><div class="modal-title">报价变更</div><span class="stage-code">QUOTE</span></header>
+                <div class="modal-body">
+                  <div class="form-grid">
+                    <div class="form-row"><label>原报价</label><div class="input">¥6,500</div></div>
+                    <div class="form-row"><label>新报价</label><div class="input">¥8,000</div></div>
+                    <div class="form-row full"><label>变更原因</label><div class="textarea">增加数据分析与格式修复范围。</div></div>
+                  </div>
+                  <div class="button-row"><button class="secondary">取消</button><button class="primary">保存变更</button></div>
+                </div>
+              </div>
+            </section>
+
+            <section class="dialog-stage">
+              <div class="modal">
+                <header class="modal-head"><div class="modal-title">收款登记</div><span class="stage-code">PAY</span></header>
+                <div class="modal-body">
+                  <div class="form-grid">
+                    <div class="form-row"><label>收款类型</label><div class="input">customer_in</div></div>
+                    <div class="form-row"><label>金额</label><div class="input">¥3,500.00</div></div>
+                    <div class="form-row"><label>支付方式</label><div class="input">微信转账</div></div>
+                    <div class="form-row"><label>收款时间</label><div class="input">2026-04-30 14:20</div></div>
+                    <div class="form-row full"><label>备注</label><div class="textarea">尾款，客户验收后支付。</div></div>
+                  </div>
+                  <div class="button-row"><button class="secondary">取消</button><button class="primary">登记收款</button></div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view-panel">
+          <header class="view-head">
+            <div class="view-title"><code>03</code>通知中心 / NotificationsCenterView</div>
+            <div class="view-meta">从铃铛进入，点击通知可回到项目详情，再返回通知中心</div>
+          </header>
+          <div class="notification-list">
+            <div class="notification-item unread"><span class="dot"></span><div><strong>客户反馈待处理</strong><div class="meta"><span>张三 · 本科毕业论文新增 2 条反馈，当前流转在 @张开发。</span></div></div><span class="deadline late">刚刚</span></div>
+            <div class="notification-item unread"><span class="dot"></span><div><strong>项目今日到期</strong><div class="meta"><span>钱七 · 博士毕业论文进入超期风险，建议优先处理。</span></div></div><span class="deadline">18m</span></div>
+            <div class="notification-item"><span class="dot" style="background: var(--faint)"></span><div><strong>收款已登记</strong><div class="meta"><span>林十五 · 本科毕业论文已登记 ¥3,500。</span></div></div><span class="tag">已读</span></div>
+          </div>
+        </section>
+
+        <section class="view-panel">
+          <header class="view-head">
+            <div class="view-title"><code>04</code>收益结算页 / EarningsView</div>
+            <div class="view-meta">开发结算、项目拆分、收款对账在同一视觉密度内完成</div>
+          </header>
+          <div class="earnings-grid">
+            <section class="chart">
+              <div class="bars">
+                <span style="height: 38%"></span>
+                <span style="height: 61%"></span>
+                <span style="height: 44%"></span>
+                <span style="height: 78%"></span>
+                <span style="height: 56%"></span>
+                <span style="height: 88%"></span>
+                <span style="height: 42%"></span>
+                <span style="height: 70%"></span>
+              </div>
+            </section>
+            <aside class="metric-stack">
+              <article class="metric-card"><span class="tag">本月收益</span><strong style="display:block;margin-top:8px;font-size:24px">¥18,600</strong></article>
+              <article class="metric-card"><span class="tag">待结算</span><strong style="display:block;margin-top:8px;font-size:24px">¥4,200</strong></article>
+              <article class="metric-card"><span class="tag">项目拆分</span><div class="meta" style="margin-top:8px"><span>论文检测系统 · ¥8,000</span><span>校园问答系统 · ¥6,500</span><span>旅游平台 · ¥4,100</span></div></article>
+            </aside>
+          </div>
+        </section>
+
+        <section class="view-panel">
+          <header class="view-head">
+            <div class="view-title"><code>05</code>反馈、论文版本与文件区</div>
+            <div class="view-meta">覆盖 FeedbackInput、FeedbackList、ThesisVersionList、FileUploadButton</div>
+          </header>
+          <div class="file-grid">
+            <section class="pane">
+              <header class="pane-head"><div class="pane-title">论文版本</div><button class="primary">上传文件</button></header>
+              <div class="pane-body">
+                <div class="file-row"><strong>v4-final.docx</strong><span>2.4 MB</span><span class="deadline safe">已验收</span></div>
+                <div class="file-row"><strong>v3-review.docx</strong><span>2.2 MB</span><span class="tag">客户反馈</span></div>
+                <div class="file-row"><strong>查重报告.pdf</strong><span>1.1 MB</span><span class="deadline">待确认</span></div>
+                <div class="form-row full"><label>反馈输入</label><div class="textarea">补充参考文献，统一图表编号，检查目录页码。</div></div>
+              </div>
+            </section>
+            <aside class="drawer">
+              <header class="drawer-head"><div class="drawer-title">文件上传抽屉</div><span class="stage-code">UPLOAD</span></header>
+              <div class="drawer-body">
+                <div class="task-card">
+                  <h2>拖入文件或选择本地文件</h2>
+                  <div class="meta"><span>支持 docx / pdf / zip</span><span>上传后自动挂到当前项目。</span></div>
+                </div>
+                <div class="button-row"><button class="secondary">取消</button><button class="primary">开始上传</button></div>
+              </div>
+            </aside>
+          </div>
+        </section>
+      </section>
+
+      <footer class="footer">
+        <span><strong>Habitat Grid / Progress Interactions</strong> · 详情页、通知中心、收益页、弹窗与文件反馈交互</span>
+        <span>同 habitat-grid-progress.html 视觉系统：暗色岩苔、酸绿主行动、细边框、密集卡片</span>
+      </footer>
+    </main>
+  </body>
+</html>

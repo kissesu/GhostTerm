@@ -170,8 +170,7 @@ export function ProjectDetailPage({ projectId }: ProjectDetailPageProps): ReactE
             <button
               type="button"
               onClick={() => setShowQuoteChange(true)}
-              className={styles.btn}
-              style={{ padding: '4px 10px', fontSize: 11, marginTop: 4, whiteSpace: 'nowrap' }}
+              className={`${styles.btn} ${styles.quoteAdjustBtn}`}
             >
               调整报价
             </button>
