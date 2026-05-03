@@ -432,6 +432,9 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	r.Use(chimw.RealIP)
 	r.Use(chimw.Logger)
 	r.Use(chimw.Recoverer)
+	// 注入 client IP / User-Agent 到 ctx，供 7 个 service Create 路径写入
+	// 8 张领域表的 client_ip/user_agent 列（migration 0008，用户审计需求 2026-05-03）
+	r.Use(apimw.InjectRequestMetadata)
 	// CORS：开发环境前端在 Tauri WKWebView (tauri://localhost) 或 vite (http://localhost:1420)
 	// 跨 origin 调用本服务 :8080 必经 preflight；生产部署应改为白名单具体 origin
 	r.Use(func(next http.Handler) http.Handler {

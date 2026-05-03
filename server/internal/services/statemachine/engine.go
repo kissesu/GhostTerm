@@ -141,12 +141,17 @@ func CanFire(project ProjectSnapshot, event EventCode, userRole int64) error {
 //
 // 业务背景：参数较多，单独 struct 让 caller 站点更清楚；同时方便 future 加字段不破坏 API。
 type ExecuteParams struct {
-	Project          ProjectSnapshot // 当前项目快照（事务内 SELECT FOR UPDATE 后传入）
-	Event            EventCode       // 事件码
-	Remark           string          // 状态变更日志备注（spec §6.2 大多必填）
-	TriggeredByUser  int64           // 触发者 user_id（写入 status_change_logs.triggered_by）
-	TriggeredByRole  int64           // 触发者 role_id（用于 CanFire 复检）
-	NewHolderUserID  *int64          // 新持球者 user_id（事件需要切换持球者时；如 E2/E4/E7 等）
+	Project         ProjectSnapshot // 当前项目快照（事务内 SELECT FOR UPDATE 后传入）
+	Event           EventCode       // 事件码
+	Remark          string          // 状态变更日志备注（spec §6.2 大多必填）
+	TriggeredByUser int64           // 触发者 user_id（写入 status_change_logs.triggered_by）
+	TriggeredByRole int64           // 触发者 role_id（用于 CanFire 复检）
+	NewHolderUserID *int64          // 新持球者 user_id（事件需要切换持球者时；如 E2/E4/E7 等）
+	// 审计字段（migration 0008 / Task 2 2026-05-03）：
+	// caller（service 层）从 ctx 取 services.RequestMetadata 后填入此处；
+	// statemachine 不直接 import services 避免循环依赖
+	ClientIP  any    // 已经过 services.NullableIP 处理：string 或 nil
+	UserAgent string // 直接传 RequestMetadata.UserAgent（空串入库 OK）
 }
 
 // ExecuteResult 是 Execute 的返回。
@@ -275,19 +280,22 @@ func Execute(ctx context.Context, tx pgx.Tx, params ExecuteParams) (ExecuteResul
 		   from_status, to_status,
 		   from_holder_role_id, to_holder_role_id,
 		   from_holder_user_id, to_holder_user_id,
-		   remark, triggered_by)
+		   remark, triggered_by,
+		   client_ip, user_agent)
 		VALUES
 		  ($1, $2, $3,
 		   $4, $5,
 		   $6, $7,
 		   $8, $9,
-		   $10, $11)
+		   $10, $11,
+		   $12, $13)
 	`,
 		params.Project.ID, string(params.Event), desc,
 		fromStatusVal, string(newStatus),
 		params.Project.HolderRoleID, newHolderRoleID,
 		params.Project.HolderUserID, newHolderUserID,
 		params.Remark, params.TriggeredByUser,
+		params.ClientIP, params.UserAgent,
 	)
 	if err != nil {
 		return ExecuteResult{}, fmt.Errorf("statemachine: insert status_change_log: %w", err)

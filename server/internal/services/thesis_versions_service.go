@@ -83,11 +83,14 @@ func createThesisVersionImpl(
 				remarkArg = remark
 			}
 
+			md, _ := RequestMetadataFrom(ctx)
 			row := tx.QueryRow(ctx, `
-				INSERT INTO thesis_versions (project_id, file_id, version_no, remark, uploaded_by)
-				VALUES ($1, $2, $3, $4, $5)
+				INSERT INTO thesis_versions (project_id, file_id, version_no, remark, uploaded_by,
+				                             client_ip, user_agent)
+				VALUES ($1, $2, $3, $4, $5, $6, $7)
 				RETURNING id, project_id, file_id, version_no, remark, uploaded_by, uploaded_at
-			`, projectID, fileID, nextV, remarkArg, ac.UserID)
+			`, projectID, fileID, nextV, remarkArg, ac.UserID,
+				NullableIP(md.ClientIP), md.UserAgent)
 			var dbRemark *string
 			if err := row.Scan(
 				&view.ID, &view.ProjectID, &view.FileID, &view.VersionNo,

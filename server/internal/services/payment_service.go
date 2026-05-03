@@ -320,17 +320,20 @@ func (s *paymentService) Create(ctx context.Context, sc SessionContext, projectI
 			relatedUserID *int64
 			screenshotID  *int64
 		)
+		md, _ := RequestMetadataFrom(ctx)
 		err := tx.QueryRow(ctx, `
 			INSERT INTO payments (
 				project_id, direction, amount, paid_at,
-				related_user_id, screenshot_id, remark, recorded_by
+				related_user_id, screenshot_id, remark, recorded_by,
+				client_ip, user_agent
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 			RETURNING id, project_id, direction, amount, paid_at,
 			          related_user_id, screenshot_id, remark, recorded_by, recorded_at
 		`,
 			projectID, string(input.Direction), input.Amount, input.PaidAt,
 			input.RelatedUserID, input.ScreenshotID, input.Remark, recordedBy,
+			NullableIP(md.ClientIP), md.UserAgent,
 		).Scan(
 			&out.ID, &out.ProjectID, &directionRaw, &out.Amount, &out.PaidAt,
 			&relatedUserID, &screenshotID, &out.Remark, &out.RecordedBy, &out.RecordedAt,

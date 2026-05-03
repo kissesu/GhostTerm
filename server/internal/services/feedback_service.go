@@ -268,19 +268,21 @@ func (s *feedbackService) Create(ctx context.Context, sc SessionContext, project
 		}
 
 		// INSERT feedbacks：source 空字符串 → 走 DB DEFAULT；非空显式赋值
+		// + 审计字段 client_ip/user_agent（migration 0008）
+		md, _ := RequestMetadataFrom(ctx)
 		var row pgx.Row
 		if in.Source == "" {
 			row = tx.QueryRow(ctx, `
-				INSERT INTO feedbacks (project_id, content, recorded_by)
-				VALUES ($1, $2, $3)
+				INSERT INTO feedbacks (project_id, content, recorded_by, client_ip, user_agent)
+				VALUES ($1, $2, $3, $4, $5)
 				RETURNING id, project_id, content, source::TEXT, status::TEXT, recorded_by, recorded_at
-			`, projectID, content, ac.UserID)
+			`, projectID, content, ac.UserID, NullableIP(md.ClientIP), md.UserAgent)
 		} else {
 			row = tx.QueryRow(ctx, `
-				INSERT INTO feedbacks (project_id, content, source, recorded_by)
-				VALUES ($1, $2, $3::feedback_source, $4)
+				INSERT INTO feedbacks (project_id, content, source, recorded_by, client_ip, user_agent)
+				VALUES ($1, $2, $3::feedback_source, $4, $5, $6)
 				RETURNING id, project_id, content, source::TEXT, status::TEXT, recorded_by, recorded_at
-			`, projectID, content, in.Source, ac.UserID)
+			`, projectID, content, in.Source, ac.UserID, NullableIP(md.ClientIP), md.UserAgent)
 		}
 		if err := row.Scan(
 			&f.ID, &f.ProjectID, &f.Content, &f.Source, &f.Status,

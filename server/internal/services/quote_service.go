@@ -268,14 +268,17 @@ func (s *QuoteService) CreateChange(ctx context.Context, sc AuthContext, in Quot
 		// 第六步：INSERT quote_change_logs 写入快照
 		// RETURNING 拿回 id + changed_at（DB DEFAULT NOW()）
 		// ============================================
+		md, _ := RequestMetadataFrom(ctx)
 		err = tx.QueryRow(ctx, `
 			INSERT INTO quote_change_logs
-			    (project_id, change_type, delta, old_quote, new_quote, reason, phase, changed_by)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			    (project_id, change_type, delta, old_quote, new_quote, reason, phase, changed_by,
+			     client_ip, user_agent)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 			RETURNING id, project_id, change_type, delta, old_quote, new_quote,
 			          reason, phase, changed_by, changed_at
 		`, in.ProjectID, string(in.ChangeType), delta, oldQuote, newQuote,
-			in.Reason, status, in.ChangedBy).Scan(
+			in.Reason, status, in.ChangedBy,
+			NullableIP(md.ClientIP), md.UserAgent).Scan(
 			&result.ID, &result.ProjectID, &result.ChangeType,
 			&result.Delta, &result.OldQuote, &result.NewQuote,
 			&result.Reason, &result.Phase, &result.ChangedBy, &result.ChangedAt,

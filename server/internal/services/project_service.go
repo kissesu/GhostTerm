@@ -228,6 +228,7 @@ func (s *ProjectServiceImpl) Create(
 			assignmentDocID = *in.AssignmentDocID
 		}
 
+		md, _ := RequestMetadataFrom(ctx)
 		var p ProjectModel
 		err := tx.QueryRow(ctx, `
 			INSERT INTO projects (
@@ -236,14 +237,16 @@ func (s *ProjectServiceImpl) Create(
 				deadline,
 				original_quote, current_quote,
 				opening_doc_id, assignment_doc_id,
-				created_by
+				created_by,
+				client_ip, user_agent
 			) VALUES (
 				$1, $2, $3, $4, $5, $6,
 				'dealing', $7, $8,
 				$9,
 				$10, $10,
 				$11, $12,
-				$13
+				$13,
+				$14, $15
 			)
 			RETURNING
 				id, name, customer_label, description, priority, thesis_level, subject,
@@ -261,6 +264,7 @@ func (s *ProjectServiceImpl) Create(
 			in.OriginalQuote,
 			openingDocID, assignmentDocID,
 			creatorUserID,
+			NullableIP(md.ClientIP), md.UserAgent,
 		).Scan(
 			&p.ID, &p.Name, &p.CustomerLabel, &p.Description,
 			&p.Priority, &p.ThesisLevel, &p.Subject,
@@ -313,6 +317,8 @@ func (s *ProjectServiceImpl) Create(
 			Remark:          "项目创建",
 			TriggeredByUser: creatorUserID,
 			TriggeredByRole: creatorRoleID,
+			ClientIP:        NullableIP(md.ClientIP),
+			UserAgent:       md.UserAgent,
 		})
 		if err != nil {
 			return fmt.Errorf("project_service.Create execute E0: %w", err)
@@ -333,10 +339,11 @@ func (s *ProjectServiceImpl) Create(
 		for _, fileID := range in.WechatChatFileIDs {
 			// added_by = creatorUserID：创建项目的用户即首批附件的添加者，
 			// 用于 project_activity_view 的 actor 归属（migration 0006 起 NOT NULL）
+			// + client_ip/user_agent 审计字段（migration 0008）
 			_, err = tx.Exec(ctx, `
-				INSERT INTO project_files (project_id, file_id, category, added_by)
-				VALUES ($1, $2, 'wechat_chat', $3)
-			`, p.ID, fileID, creatorUserID)
+				INSERT INTO project_files (project_id, file_id, category, added_by, client_ip, user_agent)
+				VALUES ($1, $2, 'wechat_chat', $3, $4, $5)
+			`, p.ID, fileID, creatorUserID, NullableIP(md.ClientIP), md.UserAgent)
 			if err != nil {
 				return fmt.Errorf("project_service.Create insert wechat_chat file %d: %w", fileID, err)
 			}
@@ -582,6 +589,7 @@ func (s *ProjectServiceImpl) TriggerEvent(
 		}
 
 		// 2. statemachine.Execute（含 W9 白名单 UPDATE + INSERT 日志）
+		md, _ := RequestMetadataFrom(ctx)
 		result, err := statemachine.Execute(ctx, tx, statemachine.ExecuteParams{
 			Project: statemachine.ProjectSnapshot{
 				ID:           projectID,
@@ -594,6 +602,8 @@ func (s *ProjectServiceImpl) TriggerEvent(
 			TriggeredByUser: userID,
 			TriggeredByRole: roleID,
 			NewHolderUserID: newHolderUserID,
+			ClientIP:        NullableIP(md.ClientIP),
+			UserAgent:       md.UserAgent,
 		})
 		if err != nil {
 			return err
