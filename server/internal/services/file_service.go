@@ -138,6 +138,23 @@ var allowedTextPrefix = []string{
 //     若 .pdf 在兜底表里就会被错误放行；spec §C5 明确把这种攻击列为必拒
 //   - 图片视频被改名劫持的风险仅限渲染崩溃，无 RCE 路径，可接受
 //   - 加密 PDF / 损坏 docx 等少数 sniff 失败的合法文档，请用户解密 / 修复后再传
+// oleMagic 是 Microsoft Compound File Binary（OLE）容器的 8 字节魔数，
+// 涵盖 Office 旧版 .doc/.xls/.ppt（97-2003 二进制格式）+ MSI/MSG 等。
+//
+// 设计原因：Go net/http.DetectContentType 不识别 OLE 头，sniff 一律返
+// application/octet-stream 让合法 .doc 落白名单（已含 application/msword）外。
+// 单看 8 字节魔数无法区分 .doc/.xls/.ppt（同一容器结构），子类型用扩展名分流；
+// 与"ext 兜底"的核心区别：必须先有 OLE 魔数命中，PE/Mach-O 改名 .doc 走不到这条路径。
+var oleMagic = []byte{0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1}
+
+// oleExtToMIME 是 OLE 魔数命中后的子类型分流表（按扩展名）。
+// 未在表内的 OLE 文件（如 .msi/.msg）维持拒绝，保守处理。
+var oleExtToMIME = map[string]string{
+	".doc": "application/msword",
+	".xls": "application/vnd.ms-excel",
+	".ppt": "application/vnd.ms-powerpoint",
+}
+
 var extToInferredMIME = map[string]string{
 	// 现代图片格式（sniff 不识别但前端能预览）
 	".heic": "image/heic",
@@ -342,7 +359,16 @@ func detectAndValidateMIME(header []byte, clientFilename string) (string, error)
 			return sniffed, nil
 		}
 	}
-	// 兜底：sniff 失败（典型 octet-stream）但客户端文件名扩展名在白名单 → 放行 + 用扩展推断 MIME
+	// 兜底 1：OLE 魔数（D0CF11E0...）命中 → 按扩展名分流到 .doc/.xls/.ppt 子 MIME
+	// Go sniff 不识别 OLE 头但魔数本身是 Microsoft Compound File 强约束，
+	// PE/Mach-O 等改名 .doc 不会有这 8 字节前缀，所以走魔数 + ext 分流仍安全
+	if len(header) >= len(oleMagic) && bytes.Equal(header[:len(oleMagic)], oleMagic) && clientFilename != "" {
+		ext := strings.ToLower(filepath.Ext(clientFilename))
+		if inferred, ok := oleExtToMIME[ext]; ok {
+			return inferred, nil
+		}
+	}
+	// 兜底 2：sniff 失败（典型 octet-stream）但客户端文件名扩展名在白名单 → 放行 + 用扩展推断 MIME
 	if mainType == "application/octet-stream" && clientFilename != "" {
 		ext := strings.ToLower(filepath.Ext(clientFilename))
 		if inferred, ok := extToInferredMIME[ext]; ok {
@@ -702,11 +728,13 @@ func (s *fileService) AttachToProject(
 		}
 		// added_by = ac.UserID：执行 attach 操作的用户即附件添加者，
 		// 用于 project_activity_view 的 actor 归属（migration 0006 起 NOT NULL）
+		// + client_ip/user_agent 审计字段（migration 0008）
+		md, _ := RequestMetadataFrom(ctx)
 		row := tx.QueryRow(ctx, `
-			INSERT INTO project_files (project_id, file_id, category, added_by)
-			VALUES ($1, $2, $3, $4)
+			INSERT INTO project_files (project_id, file_id, category, added_by, client_ip, user_agent)
+			VALUES ($1, $2, $3, $4, $5, $6)
 			RETURNING id, project_id, file_id, category, added_at
-		`, projectID, fileID, category, ac.UserID)
+		`, projectID, fileID, category, ac.UserID, NullableIP(md.ClientIP), md.UserAgent)
 		if err := row.Scan(&v.ID, &v.ProjectID, &v.FileID, &v.Category, &v.AddedAt); err != nil {
 			return err
 		}

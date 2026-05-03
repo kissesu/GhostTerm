@@ -154,6 +154,40 @@ func TestDetectMIME_OctetStreamFallbackByExt(t *testing.T) {
 	assert.ErrorIs(t, err, ErrMIMENotAllowed)
 }
 
+// OLE 旧版 Office 子类型分流：魔数命中 + ext 决定 .doc/.xls/.ppt
+func TestDetectMIME_OLEByMagicAndExt(t *testing.T) {
+	// Microsoft Compound File Binary 魔数 + 一些填充字节，模拟 .doc/.xls/.ppt 头
+	oleHeader := []byte{0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1, 0x00, 0x00, 0x00, 0x00}
+
+	// .doc → application/msword
+	mime, err := detectAndValidateMIME(oleHeader, "report.doc")
+	require.NoError(t, err)
+	assert.Equal(t, "application/msword", mime)
+
+	// .xls → application/vnd.ms-excel
+	mime, err = detectAndValidateMIME(oleHeader, "data.XLS")
+	require.NoError(t, err)
+	assert.Equal(t, "application/vnd.ms-excel", mime)
+
+	// .ppt → application/vnd.ms-powerpoint
+	mime, err = detectAndValidateMIME(oleHeader, "slides.ppt")
+	require.NoError(t, err)
+	assert.Equal(t, "application/vnd.ms-powerpoint", mime)
+
+	// OLE 容器但不在分流表的扩展名（如 .msi）→ 仍拒绝
+	_, err = detectAndValidateMIME(oleHeader, "installer.msi")
+	assert.ErrorIs(t, err, ErrMIMENotAllowed)
+
+	// 防 PE 攻击：PE 头改名 .doc 必须仍被拒（PE 没有 OLE 魔数前缀）
+	peHeader := []byte{0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00}
+	_, err = detectAndValidateMIME(peHeader, "fake.doc")
+	assert.ErrorIs(t, err, ErrMIMENotAllowed)
+
+	// 无文件名也拒绝（OLE 魔数命中但无法决定子类型）
+	_, err = detectAndValidateMIME(oleHeader, "")
+	assert.ErrorIs(t, err, ErrMIMENotAllowed)
+}
+
 // ============================================================
 // ensureUnderRoot
 // ============================================================
