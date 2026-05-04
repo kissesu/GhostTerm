@@ -197,12 +197,14 @@ type FileMetaView struct {
 // ProjectFileView 是 ListProjectFiles 返回的项目附件视图。
 //
 // project_files 关联表 + 嵌套 file 元数据（与 oas.ProjectFile schema 对齐）。
+// Remark 是可选备注（migration 0013 新增），nullable string。
 type ProjectFileView struct {
 	ID        int64
 	ProjectID int64
 	FileID    int64
 	Category  string
 	AddedAt   time.Time
+	Remark    *string
 	File      FileMetaView
 }
 
@@ -656,7 +658,7 @@ func (s *fileService) ListProjectFiles(
 		if category == nil {
 			rows, queryErr = tx.Query(ctx, `
 				SELECT
-					pf.id, pf.project_id, pf.file_id, pf.category, pf.added_at,
+					pf.id, pf.project_id, pf.file_id, pf.category, pf.added_at, pf.remark,
 					f.id, f.uuid, f.filename, f.size_bytes, f.mime_type, f.storage_path,
 					f.uploaded_by, f.uploaded_at
 				FROM project_files pf
@@ -667,7 +669,7 @@ func (s *fileService) ListProjectFiles(
 		} else {
 			rows, queryErr = tx.Query(ctx, `
 				SELECT
-					pf.id, pf.project_id, pf.file_id, pf.category, pf.added_at,
+					pf.id, pf.project_id, pf.file_id, pf.category, pf.added_at, pf.remark,
 					f.id, f.uuid, f.filename, f.size_bytes, f.mime_type, f.storage_path,
 					f.uploaded_by, f.uploaded_at
 				FROM project_files pf
@@ -683,7 +685,7 @@ func (s *fileService) ListProjectFiles(
 		for rows.Next() {
 			var v ProjectFileView
 			if err := rows.Scan(
-				&v.ID, &v.ProjectID, &v.FileID, &v.Category, &v.AddedAt,
+				&v.ID, &v.ProjectID, &v.FileID, &v.Category, &v.AddedAt, &v.Remark,
 				&v.File.ID, &v.File.UUID, &v.File.Filename, &v.File.SizeBytes,
 				&v.File.MimeType, &v.File.StoragePath, &v.File.UploadedBy, &v.File.UploadedAt,
 			); err != nil {
@@ -707,11 +709,14 @@ func (s *fileService) ListProjectFiles(
 //
 // category 必须 = "sample_doc" 或 "source_code"（DB CHECK 约束保护）。
 // RLS 策略：is_admin OR is_member(project_id)；非 member 触发即 INSERT 0 行 → 返回 ErrFileNotFound。
+//
+// remark 为可选附加备注（空字符串视为 NULL，migration 0013 新增字段）。
 func (s *fileService) AttachToProject(
 	ctx context.Context,
 	sc SessionContext,
 	projectID, fileID int64,
 	category string,
+	remark string,
 ) (any, error) {
 	ac, ok := sc.(AuthContext)
 	if !ok {
@@ -719,6 +724,14 @@ func (s *fileService) AttachToProject(
 	}
 	if category != "sample_doc" && category != "source_code" {
 		return nil, fmt.Errorf("%w: invalid category %q", ErrFileNameInvalid, category)
+	}
+
+	// remark 空字符串 → SQL NULL；非空 → 取指针写入（DB 字段 nullable）
+	var remarkArg any
+	if strings.TrimSpace(remark) == "" {
+		remarkArg = nil
+	} else {
+		remarkArg = remark
 	}
 
 	var v ProjectFileView
@@ -729,13 +742,14 @@ func (s *fileService) AttachToProject(
 		// added_by = ac.UserID：执行 attach 操作的用户即附件添加者，
 		// 用于 project_activity_view 的 actor 归属（migration 0006 起 NOT NULL）
 		// + client_ip/user_agent 审计字段（migration 0008）
+		// + remark：用户上传源码 / 样稿时的版本说明（migration 0013）
 		md, _ := RequestMetadataFrom(ctx)
 		row := tx.QueryRow(ctx, `
-			INSERT INTO project_files (project_id, file_id, category, added_by, client_ip, user_agent)
-			VALUES ($1, $2, $3, $4, $5, $6)
-			RETURNING id, project_id, file_id, category, added_at
-		`, projectID, fileID, category, ac.UserID, NullableIP(md.ClientIP), md.UserAgent)
-		if err := row.Scan(&v.ID, &v.ProjectID, &v.FileID, &v.Category, &v.AddedAt); err != nil {
+			INSERT INTO project_files (project_id, file_id, category, added_by, client_ip, user_agent, remark)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			RETURNING id, project_id, file_id, category, added_at, remark
+		`, projectID, fileID, category, ac.UserID, NullableIP(md.ClientIP), md.UserAgent, remarkArg)
+		if err := row.Scan(&v.ID, &v.ProjectID, &v.FileID, &v.Category, &v.AddedAt, &v.Remark); err != nil {
 			return err
 		}
 		// 拉文件元数据

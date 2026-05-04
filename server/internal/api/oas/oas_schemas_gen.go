@@ -467,6 +467,19 @@ func NewProjectFileAddedPayloadActivityPayload(v ProjectFileAddedPayload) Activi
 	return s
 }
 
+// AuthChangePasswordNoContent is response for AuthChangePassword operation.
+type AuthChangePasswordNoContent struct{}
+
+func (*AuthChangePasswordNoContent) authChangePasswordRes() {}
+
+type AuthChangePasswordUnauthorized ErrorEnvelope
+
+func (*AuthChangePasswordUnauthorized) authChangePasswordRes() {}
+
+type AuthChangePasswordUnprocessableEntity ErrorEnvelope
+
+func (*AuthChangePasswordUnprocessableEntity) authChangePasswordRes() {}
+
 // Ref: #/components/schemas/AuthLoginEnvelope
 type AuthLoginEnvelope struct {
 	Data AuthLoginResponse `json:"data"`
@@ -624,6 +637,41 @@ func (s *AuthRefreshResponse) SetRefreshToken(val string) {
 	s.RefreshToken = val
 }
 
+// PATCH 部分字段；nil/缺失字段保持不变。.
+// Ref: #/components/schemas/AuthUpdateMeRequest
+type AuthUpdateMeRequest struct {
+	DisplayName OptString `json:"displayName"`
+	Username    OptString `json:"username"`
+}
+
+// GetDisplayName returns the value of DisplayName.
+func (s *AuthUpdateMeRequest) GetDisplayName() OptString {
+	return s.DisplayName
+}
+
+// GetUsername returns the value of Username.
+func (s *AuthUpdateMeRequest) GetUsername() OptString {
+	return s.Username
+}
+
+// SetDisplayName sets the value of DisplayName.
+func (s *AuthUpdateMeRequest) SetDisplayName(val OptString) {
+	s.DisplayName = val
+}
+
+// SetUsername sets the value of Username.
+func (s *AuthUpdateMeRequest) SetUsername(val OptString) {
+	s.Username = val
+}
+
+type AuthUpdateMeUnauthorized ErrorEnvelope
+
+func (*AuthUpdateMeUnauthorized) authUpdateMeRes() {}
+
+type AuthUpdateMeUnprocessableEntity ErrorEnvelope
+
+func (*AuthUpdateMeUnprocessableEntity) authUpdateMeRes() {}
+
 type BearerAuth struct {
 	Token string
 	Roles []string
@@ -647,6 +695,34 @@ func (s *BearerAuth) SetToken(val string) {
 // SetRoles sets the value of Roles.
 func (s *BearerAuth) SetRoles(val []string) {
 	s.Roles = val
+}
+
+// Ref: #/components/schemas/ChangePasswordRequest
+type ChangePasswordRequest struct {
+	// 当前密码（明文，服务端 bcrypt 校验）.
+	OldPassword string `json:"oldPassword"`
+	// 新密码（明文，服务端 bcrypt 入库；最少 8 位与超管创建对齐）.
+	NewPassword string `json:"newPassword"`
+}
+
+// GetOldPassword returns the value of OldPassword.
+func (s *ChangePasswordRequest) GetOldPassword() string {
+	return s.OldPassword
+}
+
+// GetNewPassword returns the value of NewPassword.
+func (s *ChangePasswordRequest) GetNewPassword() string {
+	return s.NewPassword
+}
+
+// SetOldPassword sets the value of OldPassword.
+func (s *ChangePasswordRequest) SetOldPassword(val string) {
+	s.OldPassword = val
+}
+
+// SetNewPassword sets the value of NewPassword.
+func (s *ChangePasswordRequest) SetNewPassword(val string) {
+	s.NewPassword = val
 }
 
 // Ref: #/components/schemas/EarningsSummary
@@ -1206,14 +1282,18 @@ func (s *EventTriggerRequest) SetNewHolderUserId(val OptNilInt64) {
 
 // Ref: #/components/schemas/Feedback
 type Feedback struct {
-	ID            int64          `json:"id"`
-	ProjectId     int64          `json:"projectId"`
-	Content       string         `json:"content"`
-	Source        FeedbackSource `json:"source"`
-	Status        FeedbackStatus `json:"status"`
-	RecordedBy    int64          `json:"recordedBy"`
-	RecordedAt    time.Time      `json:"recordedAt"`
-	AttachmentIds []int64        `json:"attachmentIds"`
+	ID         int64          `json:"id"`
+	ProjectId  int64          `json:"projectId"`
+	Content    string         `json:"content"`
+	Source     FeedbackSource `json:"source"`
+	Status     FeedbackStatus `json:"status"`
+	RecordedBy int64          `json:"recordedBy"`
+	RecordedAt time.Time      `json:"recordedAt"`
+	// 向后兼容字段；附件 file_id 列表，前端推荐改用 attachments 拿 filename 渲染.
+	AttachmentIds []int64 `json:"attachmentIds"`
+	// 反馈附件列表 (id + filename)；前端可拼 /api/files/:id/download 下载，并按 filename
+	// 推断 mediaKind 走 MediaPreview。用户反馈 2026-05-03.
+	Attachments []FeedbackAttachmentsItem `json:"attachments"`
 }
 
 // GetID returns the value of ID.
@@ -1256,6 +1336,11 @@ func (s *Feedback) GetAttachmentIds() []int64 {
 	return s.AttachmentIds
 }
 
+// GetAttachments returns the value of Attachments.
+func (s *Feedback) GetAttachments() []FeedbackAttachmentsItem {
+	return s.Attachments
+}
+
 // SetID sets the value of ID.
 func (s *Feedback) SetID(val int64) {
 	s.ID = val
@@ -1296,6 +1381,11 @@ func (s *Feedback) SetAttachmentIds(val []int64) {
 	s.AttachmentIds = val
 }
 
+// SetAttachments sets the value of Attachments.
+func (s *Feedback) SetAttachments(val []FeedbackAttachmentsItem) {
+	s.Attachments = val
+}
+
 // Ref: #/components/schemas/FeedbackActivityPayload
 type FeedbackActivityPayload struct {
 	Content string         `json:"content"`
@@ -1304,6 +1394,9 @@ type FeedbackActivityPayload struct {
 	// 反馈附带的附件数量（migration 0010 view 内 LEFT JOIN feedback_attachments + COUNT
 	// 聚合，无附件为 0）.
 	AttachmentCount int32 `json:"attachmentCount"`
+	// 反馈附件列表 (id + filename)，前端可拼 /api/files/:id/download
+	// 渲染下载链接（migration 0011 view 内 jsonb_agg）.
+	Attachments []FeedbackActivityPayloadAttachmentsItem `json:"attachments"`
 }
 
 // GetContent returns the value of Content.
@@ -1326,6 +1419,11 @@ func (s *FeedbackActivityPayload) GetAttachmentCount() int32 {
 	return s.AttachmentCount
 }
 
+// GetAttachments returns the value of Attachments.
+func (s *FeedbackActivityPayload) GetAttachments() []FeedbackActivityPayloadAttachmentsItem {
+	return s.Attachments
+}
+
 // SetContent sets the value of Content.
 func (s *FeedbackActivityPayload) SetContent(val string) {
 	s.Content = val
@@ -1344,6 +1442,61 @@ func (s *FeedbackActivityPayload) SetStatus(val FeedbackStatus) {
 // SetAttachmentCount sets the value of AttachmentCount.
 func (s *FeedbackActivityPayload) SetAttachmentCount(val int32) {
 	s.AttachmentCount = val
+}
+
+// SetAttachments sets the value of Attachments.
+func (s *FeedbackActivityPayload) SetAttachments(val []FeedbackActivityPayloadAttachmentsItem) {
+	s.Attachments = val
+}
+
+type FeedbackActivityPayloadAttachmentsItem struct {
+	ID       int64  `json:"id"`
+	Filename string `json:"filename"`
+}
+
+// GetID returns the value of ID.
+func (s *FeedbackActivityPayloadAttachmentsItem) GetID() int64 {
+	return s.ID
+}
+
+// GetFilename returns the value of Filename.
+func (s *FeedbackActivityPayloadAttachmentsItem) GetFilename() string {
+	return s.Filename
+}
+
+// SetID sets the value of ID.
+func (s *FeedbackActivityPayloadAttachmentsItem) SetID(val int64) {
+	s.ID = val
+}
+
+// SetFilename sets the value of Filename.
+func (s *FeedbackActivityPayloadAttachmentsItem) SetFilename(val string) {
+	s.Filename = val
+}
+
+type FeedbackAttachmentsItem struct {
+	ID       int64  `json:"id"`
+	Filename string `json:"filename"`
+}
+
+// GetID returns the value of ID.
+func (s *FeedbackAttachmentsItem) GetID() int64 {
+	return s.ID
+}
+
+// GetFilename returns the value of Filename.
+func (s *FeedbackAttachmentsItem) GetFilename() string {
+	return s.Filename
+}
+
+// SetID sets the value of ID.
+func (s *FeedbackAttachmentsItem) SetID(val int64) {
+	s.ID = val
+}
+
+// SetFilename sets the value of Filename.
+func (s *FeedbackAttachmentsItem) SetFilename(val string) {
+	s.Filename = val
 }
 
 // Ref: #/components/schemas/FeedbackCreateRequest
@@ -2444,6 +2597,132 @@ func (o OptNilInt64) Or(d int64) int64 {
 	return d
 }
 
+// NewOptNilProjectCreatedPayloadAssignmentDoc returns new OptNilProjectCreatedPayloadAssignmentDoc with value set to v.
+func NewOptNilProjectCreatedPayloadAssignmentDoc(v ProjectCreatedPayloadAssignmentDoc) OptNilProjectCreatedPayloadAssignmentDoc {
+	return OptNilProjectCreatedPayloadAssignmentDoc{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptNilProjectCreatedPayloadAssignmentDoc is optional nullable ProjectCreatedPayloadAssignmentDoc.
+type OptNilProjectCreatedPayloadAssignmentDoc struct {
+	Value ProjectCreatedPayloadAssignmentDoc
+	Set   bool
+	Null  bool
+}
+
+// IsSet returns true if OptNilProjectCreatedPayloadAssignmentDoc was set.
+func (o OptNilProjectCreatedPayloadAssignmentDoc) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptNilProjectCreatedPayloadAssignmentDoc) Reset() {
+	var v ProjectCreatedPayloadAssignmentDoc
+	o.Value = v
+	o.Set = false
+	o.Null = false
+}
+
+// SetTo sets value to v.
+func (o *OptNilProjectCreatedPayloadAssignmentDoc) SetTo(v ProjectCreatedPayloadAssignmentDoc) {
+	o.Set = true
+	o.Null = false
+	o.Value = v
+}
+
+// IsNull returns true if value is Null.
+func (o OptNilProjectCreatedPayloadAssignmentDoc) IsNull() bool { return o.Null }
+
+// SetToNull sets value to null.
+func (o *OptNilProjectCreatedPayloadAssignmentDoc) SetToNull() {
+	o.Set = true
+	o.Null = true
+	var v ProjectCreatedPayloadAssignmentDoc
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptNilProjectCreatedPayloadAssignmentDoc) Get() (v ProjectCreatedPayloadAssignmentDoc, ok bool) {
+	if o.Null {
+		return v, false
+	}
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptNilProjectCreatedPayloadAssignmentDoc) Or(d ProjectCreatedPayloadAssignmentDoc) ProjectCreatedPayloadAssignmentDoc {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptNilProjectCreatedPayloadOpeningDoc returns new OptNilProjectCreatedPayloadOpeningDoc with value set to v.
+func NewOptNilProjectCreatedPayloadOpeningDoc(v ProjectCreatedPayloadOpeningDoc) OptNilProjectCreatedPayloadOpeningDoc {
+	return OptNilProjectCreatedPayloadOpeningDoc{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptNilProjectCreatedPayloadOpeningDoc is optional nullable ProjectCreatedPayloadOpeningDoc.
+type OptNilProjectCreatedPayloadOpeningDoc struct {
+	Value ProjectCreatedPayloadOpeningDoc
+	Set   bool
+	Null  bool
+}
+
+// IsSet returns true if OptNilProjectCreatedPayloadOpeningDoc was set.
+func (o OptNilProjectCreatedPayloadOpeningDoc) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptNilProjectCreatedPayloadOpeningDoc) Reset() {
+	var v ProjectCreatedPayloadOpeningDoc
+	o.Value = v
+	o.Set = false
+	o.Null = false
+}
+
+// SetTo sets value to v.
+func (o *OptNilProjectCreatedPayloadOpeningDoc) SetTo(v ProjectCreatedPayloadOpeningDoc) {
+	o.Set = true
+	o.Null = false
+	o.Value = v
+}
+
+// IsNull returns true if value is Null.
+func (o OptNilProjectCreatedPayloadOpeningDoc) IsNull() bool { return o.Null }
+
+// SetToNull sets value to null.
+func (o *OptNilProjectCreatedPayloadOpeningDoc) SetToNull() {
+	o.Set = true
+	o.Null = true
+	var v ProjectCreatedPayloadOpeningDoc
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptNilProjectCreatedPayloadOpeningDoc) Get() (v ProjectCreatedPayloadOpeningDoc, ok bool) {
+	if o.Null {
+		return v, false
+	}
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptNilProjectCreatedPayloadOpeningDoc) Or(d ProjectCreatedPayloadOpeningDoc) ProjectCreatedPayloadOpeningDoc {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptNilProjectStatus returns new OptNilProjectStatus with value set to v.
 func NewOptNilProjectStatus(v ProjectStatus) OptNilProjectStatus {
 	return OptNilProjectStatus{
@@ -2877,6 +3156,9 @@ type Payment struct {
 	Remark       string      `json:"remark"`
 	RecordedBy   int64       `json:"recordedBy"`
 	RecordedAt   time.Time   `json:"recordedAt"`
+	// 收款 / 结算凭证截图列表 (id + filename)，前端可拼 /api/files/:id/download
+	// 下载（migration 0014 payment_attachments + jsonb_agg）.
+	Attachments []PaymentAttachmentsItem `json:"attachments"`
 }
 
 // GetID returns the value of ID.
@@ -2929,6 +3211,11 @@ func (s *Payment) GetRecordedAt() time.Time {
 	return s.RecordedAt
 }
 
+// GetAttachments returns the value of Attachments.
+func (s *Payment) GetAttachments() []PaymentAttachmentsItem {
+	return s.Attachments
+}
+
 // SetID sets the value of ID.
 func (s *Payment) SetID(val int64) {
 	s.ID = val
@@ -2979,6 +3266,11 @@ func (s *Payment) SetRecordedAt(val time.Time) {
 	s.RecordedAt = val
 }
 
+// SetAttachments sets the value of Attachments.
+func (s *Payment) SetAttachments(val []PaymentAttachmentsItem) {
+	s.Attachments = val
+}
+
 // Ref: #/components/schemas/PaymentActivityPayload
 type PaymentActivityPayload struct {
 	Direction     PaymentDirection `json:"direction"`
@@ -2987,6 +3279,10 @@ type PaymentActivityPayload struct {
 	RelatedUserId OptNilInt64      `json:"relatedUserId"`
 	ScreenshotId  OptNilInt64      `json:"screenshotId"`
 	Remark        string           `json:"remark"`
+	// 结算 / 收款凭证截图列表 (id +
+	// filename)，前端时间线详情弹窗渲染下载链接（migration 0015 view 内 jsonb_agg
+	// payment_attachments）.
+	Attachments []PaymentActivityPayloadAttachmentsItem `json:"attachments"`
 }
 
 // GetDirection returns the value of Direction.
@@ -3019,6 +3315,11 @@ func (s *PaymentActivityPayload) GetRemark() string {
 	return s.Remark
 }
 
+// GetAttachments returns the value of Attachments.
+func (s *PaymentActivityPayload) GetAttachments() []PaymentActivityPayloadAttachmentsItem {
+	return s.Attachments
+}
+
 // SetDirection sets the value of Direction.
 func (s *PaymentActivityPayload) SetDirection(val PaymentDirection) {
 	s.Direction = val
@@ -3049,6 +3350,61 @@ func (s *PaymentActivityPayload) SetRemark(val string) {
 	s.Remark = val
 }
 
+// SetAttachments sets the value of Attachments.
+func (s *PaymentActivityPayload) SetAttachments(val []PaymentActivityPayloadAttachmentsItem) {
+	s.Attachments = val
+}
+
+type PaymentActivityPayloadAttachmentsItem struct {
+	ID       int64  `json:"id"`
+	Filename string `json:"filename"`
+}
+
+// GetID returns the value of ID.
+func (s *PaymentActivityPayloadAttachmentsItem) GetID() int64 {
+	return s.ID
+}
+
+// GetFilename returns the value of Filename.
+func (s *PaymentActivityPayloadAttachmentsItem) GetFilename() string {
+	return s.Filename
+}
+
+// SetID sets the value of ID.
+func (s *PaymentActivityPayloadAttachmentsItem) SetID(val int64) {
+	s.ID = val
+}
+
+// SetFilename sets the value of Filename.
+func (s *PaymentActivityPayloadAttachmentsItem) SetFilename(val string) {
+	s.Filename = val
+}
+
+type PaymentAttachmentsItem struct {
+	ID       int64  `json:"id"`
+	Filename string `json:"filename"`
+}
+
+// GetID returns the value of ID.
+func (s *PaymentAttachmentsItem) GetID() int64 {
+	return s.ID
+}
+
+// GetFilename returns the value of Filename.
+func (s *PaymentAttachmentsItem) GetFilename() string {
+	return s.Filename
+}
+
+// SetID sets the value of ID.
+func (s *PaymentAttachmentsItem) SetID(val int64) {
+	s.ID = val
+}
+
+// SetFilename sets the value of Filename.
+func (s *PaymentAttachmentsItem) SetFilename(val string) {
+	s.Filename = val
+}
+
 // Ref: #/components/schemas/PaymentCreateRequest
 type PaymentCreateRequest struct {
 	Direction     PaymentDirection `json:"direction"`
@@ -3057,6 +3413,9 @@ type PaymentCreateRequest struct {
 	RelatedUserId OptNilInt64      `json:"relatedUserId"`
 	ScreenshotId  OptNilInt64      `json:"screenshotId"`
 	Remark        string           `json:"remark"`
+	// 可选凭证截图 file_id 列表（已通过 POST /api/files 上传得到）；同事务 INSERT
+	// 进 payment_attachments.
+	AttachmentIds []int64 `json:"attachmentIds"`
 }
 
 // GetDirection returns the value of Direction.
@@ -3089,6 +3448,11 @@ func (s *PaymentCreateRequest) GetRemark() string {
 	return s.Remark
 }
 
+// GetAttachmentIds returns the value of AttachmentIds.
+func (s *PaymentCreateRequest) GetAttachmentIds() []int64 {
+	return s.AttachmentIds
+}
+
 // SetDirection sets the value of Direction.
 func (s *PaymentCreateRequest) SetDirection(val PaymentDirection) {
 	s.Direction = val
@@ -3117,6 +3481,11 @@ func (s *PaymentCreateRequest) SetScreenshotId(val OptNilInt64) {
 // SetRemark sets the value of Remark.
 func (s *PaymentCreateRequest) SetRemark(val string) {
 	s.Remark = val
+}
+
+// SetAttachmentIds sets the value of AttachmentIds.
+func (s *PaymentCreateRequest) SetAttachmentIds(val []int64) {
+	s.AttachmentIds = val
 }
 
 // Ref: #/components/schemas/PaymentDirection
@@ -3307,6 +3676,8 @@ type Project struct {
 	CreatedBy       int64             `json:"createdBy"`
 	CreatedAt       time.Time         `json:"createdAt"`
 	UpdatedAt       time.Time         `json:"updatedAt"`
+	// 项目对接的开发人员列表（来源 project_developers 表，前端展示用）.
+	Developers []ProjectDeveloperRef `json:"developers"`
 }
 
 // GetID returns the value of ID.
@@ -3459,6 +3830,11 @@ func (s *Project) GetUpdatedAt() time.Time {
 	return s.UpdatedAt
 }
 
+// GetDevelopers returns the value of Developers.
+func (s *Project) GetDevelopers() []ProjectDeveloperRef {
+	return s.Developers
+}
+
 // SetID sets the value of ID.
 func (s *Project) SetID(val int64) {
 	s.ID = val
@@ -3609,6 +3985,11 @@ func (s *Project) SetUpdatedAt(val time.Time) {
 	s.UpdatedAt = val
 }
 
+// SetDevelopers sets the value of Developers.
+func (s *Project) SetDevelopers(val []ProjectDeveloperRef) {
+	s.Developers = val
+}
+
 // Ref: #/components/schemas/ProjectCreateRequest
 type ProjectCreateRequest struct {
 	Name string `json:"name"`
@@ -3620,6 +4001,10 @@ type ProjectCreateRequest struct {
 	Subject       OptString          `json:"subject"`
 	Deadline      time.Time          `json:"deadline"`
 	OriginalQuote OptMoney           `json:"originalQuote"`
+	// 项目对接的开发人员 user.id 数组（必填，至少 1 个；后端事务 INSERT
+	// project_developers + INSERT project_members(role='dev')，让 dev 通过 RLS
+	// 看到该项目及其子资源）.
+	DeveloperUserIds []int64 `json:"developerUserIds"`
 	// 开题书文件 ID（先 POST /api/files 上传得 fileId，再带入此字段）.
 	OpeningDocId OptNilInt64 `json:"openingDocId"`
 	// 任务书文件 ID（先 POST /api/files 上传得 fileId，再带入此字段）.
@@ -3667,6 +4052,11 @@ func (s *ProjectCreateRequest) GetDeadline() time.Time {
 // GetOriginalQuote returns the value of OriginalQuote.
 func (s *ProjectCreateRequest) GetOriginalQuote() OptMoney {
 	return s.OriginalQuote
+}
+
+// GetDeveloperUserIds returns the value of DeveloperUserIds.
+func (s *ProjectCreateRequest) GetDeveloperUserIds() []int64 {
+	return s.DeveloperUserIds
 }
 
 // GetOpeningDocId returns the value of OpeningDocId.
@@ -3724,6 +4114,11 @@ func (s *ProjectCreateRequest) SetOriginalQuote(val OptMoney) {
 	s.OriginalQuote = val
 }
 
+// SetDeveloperUserIds sets the value of DeveloperUserIds.
+func (s *ProjectCreateRequest) SetDeveloperUserIds(val []int64) {
+	s.DeveloperUserIds = val
+}
+
 // SetOpeningDocId sets the value of OpeningDocId.
 func (s *ProjectCreateRequest) SetOpeningDocId(val OptNilInt64) {
 	s.OpeningDocId = val
@@ -3746,6 +4141,15 @@ type ProjectCreatedPayload struct {
 	Priority      ProjectPriority `json:"priority"`
 	Deadline      time.Time       `json:"deadline"`
 	OriginalQuote Money           `json:"originalQuote"`
+	// 项目对接的开发人员（来源 project_developers JOIN users，0018 view 内 jsonb_agg）.
+	Developers []ProjectCreatedPayloadDevelopersItem `json:"developers"`
+	// 创建项目时上传的开题报告（migration 0012 view inline，避免独立时间线条目）.
+	OpeningDoc OptNilProjectCreatedPayloadOpeningDoc `json:"openingDoc"`
+	// 创建项目时上传的任务书.
+	AssignmentDoc OptNilProjectCreatedPayloadAssignmentDoc `json:"assignmentDoc"`
+	// 创建项目时上传的微信聊天截图列表（已 inline，project_file_added
+	// 时间线分支不再产生 wechat_chat 独立条目）.
+	WechatChats []ProjectCreatedPayloadWechatChatsItem `json:"wechatChats"`
 }
 
 // GetName returns the value of Name.
@@ -3773,6 +4177,26 @@ func (s *ProjectCreatedPayload) GetOriginalQuote() Money {
 	return s.OriginalQuote
 }
 
+// GetDevelopers returns the value of Developers.
+func (s *ProjectCreatedPayload) GetDevelopers() []ProjectCreatedPayloadDevelopersItem {
+	return s.Developers
+}
+
+// GetOpeningDoc returns the value of OpeningDoc.
+func (s *ProjectCreatedPayload) GetOpeningDoc() OptNilProjectCreatedPayloadOpeningDoc {
+	return s.OpeningDoc
+}
+
+// GetAssignmentDoc returns the value of AssignmentDoc.
+func (s *ProjectCreatedPayload) GetAssignmentDoc() OptNilProjectCreatedPayloadAssignmentDoc {
+	return s.AssignmentDoc
+}
+
+// GetWechatChats returns the value of WechatChats.
+func (s *ProjectCreatedPayload) GetWechatChats() []ProjectCreatedPayloadWechatChatsItem {
+	return s.WechatChats
+}
+
 // SetName sets the value of Name.
 func (s *ProjectCreatedPayload) SetName(val string) {
 	s.Name = val
@@ -3798,6 +4222,155 @@ func (s *ProjectCreatedPayload) SetOriginalQuote(val Money) {
 	s.OriginalQuote = val
 }
 
+// SetDevelopers sets the value of Developers.
+func (s *ProjectCreatedPayload) SetDevelopers(val []ProjectCreatedPayloadDevelopersItem) {
+	s.Developers = val
+}
+
+// SetOpeningDoc sets the value of OpeningDoc.
+func (s *ProjectCreatedPayload) SetOpeningDoc(val OptNilProjectCreatedPayloadOpeningDoc) {
+	s.OpeningDoc = val
+}
+
+// SetAssignmentDoc sets the value of AssignmentDoc.
+func (s *ProjectCreatedPayload) SetAssignmentDoc(val OptNilProjectCreatedPayloadAssignmentDoc) {
+	s.AssignmentDoc = val
+}
+
+// SetWechatChats sets the value of WechatChats.
+func (s *ProjectCreatedPayload) SetWechatChats(val []ProjectCreatedPayloadWechatChatsItem) {
+	s.WechatChats = val
+}
+
+// 创建项目时上传的任务书.
+type ProjectCreatedPayloadAssignmentDoc struct {
+	ID       int64  `json:"id"`
+	Filename string `json:"filename"`
+}
+
+// GetID returns the value of ID.
+func (s *ProjectCreatedPayloadAssignmentDoc) GetID() int64 {
+	return s.ID
+}
+
+// GetFilename returns the value of Filename.
+func (s *ProjectCreatedPayloadAssignmentDoc) GetFilename() string {
+	return s.Filename
+}
+
+// SetID sets the value of ID.
+func (s *ProjectCreatedPayloadAssignmentDoc) SetID(val int64) {
+	s.ID = val
+}
+
+// SetFilename sets the value of Filename.
+func (s *ProjectCreatedPayloadAssignmentDoc) SetFilename(val string) {
+	s.Filename = val
+}
+
+type ProjectCreatedPayloadDevelopersItem struct {
+	ID          int64  `json:"id"`
+	DisplayName string `json:"displayName"`
+}
+
+// GetID returns the value of ID.
+func (s *ProjectCreatedPayloadDevelopersItem) GetID() int64 {
+	return s.ID
+}
+
+// GetDisplayName returns the value of DisplayName.
+func (s *ProjectCreatedPayloadDevelopersItem) GetDisplayName() string {
+	return s.DisplayName
+}
+
+// SetID sets the value of ID.
+func (s *ProjectCreatedPayloadDevelopersItem) SetID(val int64) {
+	s.ID = val
+}
+
+// SetDisplayName sets the value of DisplayName.
+func (s *ProjectCreatedPayloadDevelopersItem) SetDisplayName(val string) {
+	s.DisplayName = val
+}
+
+// 创建项目时上传的开题报告（migration 0012 view inline，避免独立时间线条目）.
+type ProjectCreatedPayloadOpeningDoc struct {
+	ID       int64  `json:"id"`
+	Filename string `json:"filename"`
+}
+
+// GetID returns the value of ID.
+func (s *ProjectCreatedPayloadOpeningDoc) GetID() int64 {
+	return s.ID
+}
+
+// GetFilename returns the value of Filename.
+func (s *ProjectCreatedPayloadOpeningDoc) GetFilename() string {
+	return s.Filename
+}
+
+// SetID sets the value of ID.
+func (s *ProjectCreatedPayloadOpeningDoc) SetID(val int64) {
+	s.ID = val
+}
+
+// SetFilename sets the value of Filename.
+func (s *ProjectCreatedPayloadOpeningDoc) SetFilename(val string) {
+	s.Filename = val
+}
+
+type ProjectCreatedPayloadWechatChatsItem struct {
+	ID       int64  `json:"id"`
+	Filename string `json:"filename"`
+}
+
+// GetID returns the value of ID.
+func (s *ProjectCreatedPayloadWechatChatsItem) GetID() int64 {
+	return s.ID
+}
+
+// GetFilename returns the value of Filename.
+func (s *ProjectCreatedPayloadWechatChatsItem) GetFilename() string {
+	return s.Filename
+}
+
+// SetID sets the value of ID.
+func (s *ProjectCreatedPayloadWechatChatsItem) SetID(val int64) {
+	s.ID = val
+}
+
+// SetFilename sets the value of Filename.
+func (s *ProjectCreatedPayloadWechatChatsItem) SetFilename(val string) {
+	s.Filename = val
+}
+
+// 项目对接的开发人员引用（仅暴露 id + displayName 给前端展示）.
+// Ref: #/components/schemas/ProjectDeveloperRef
+type ProjectDeveloperRef struct {
+	ID          int64  `json:"id"`
+	DisplayName string `json:"displayName"`
+}
+
+// GetID returns the value of ID.
+func (s *ProjectDeveloperRef) GetID() int64 {
+	return s.ID
+}
+
+// GetDisplayName returns the value of DisplayName.
+func (s *ProjectDeveloperRef) GetDisplayName() string {
+	return s.DisplayName
+}
+
+// SetID sets the value of ID.
+func (s *ProjectDeveloperRef) SetID(val int64) {
+	s.ID = val
+}
+
+// SetDisplayName sets the value of DisplayName.
+func (s *ProjectDeveloperRef) SetDisplayName(val string) {
+	s.DisplayName = val
+}
+
 // Ref: #/components/schemas/ProjectFile
 type ProjectFile struct {
 	ID        int64               `json:"id"`
@@ -3805,7 +4378,9 @@ type ProjectFile struct {
 	FileId    int64               `json:"fileId"`
 	Category  ProjectFileCategory `json:"category"`
 	AddedAt   time.Time           `json:"addedAt"`
-	File      FileMetadata        `json:"file"`
+	// 附加备注：源码上传说明 / 版本号 / 参考样稿描述等（migration 0013）.
+	Remark OptNilString `json:"remark"`
+	File   FileMetadata `json:"file"`
 }
 
 // GetID returns the value of ID.
@@ -3831,6 +4406,11 @@ func (s *ProjectFile) GetCategory() ProjectFileCategory {
 // GetAddedAt returns the value of AddedAt.
 func (s *ProjectFile) GetAddedAt() time.Time {
 	return s.AddedAt
+}
+
+// GetRemark returns the value of Remark.
+func (s *ProjectFile) GetRemark() OptNilString {
+	return s.Remark
 }
 
 // GetFile returns the value of File.
@@ -3863,6 +4443,11 @@ func (s *ProjectFile) SetAddedAt(val time.Time) {
 	s.AddedAt = val
 }
 
+// SetRemark sets the value of Remark.
+func (s *ProjectFile) SetRemark(val OptNilString) {
+	s.Remark = val
+}
+
 // SetFile sets the value of File.
 func (s *ProjectFile) SetFile(val FileMetadata) {
 	s.File = val
@@ -3872,6 +4457,9 @@ func (s *ProjectFile) SetFile(val FileMetadata) {
 type ProjectFileAddedPayload struct {
 	FileId   int64                           `json:"fileId"`
 	Category ProjectFileAddedPayloadCategory `json:"category"`
+	// 文件名（migration 0016 view JOIN files.
+	// filename），前端时间线详情弹窗渲染下载链接显示真实文件名.
+	Filename string `json:"filename"`
 }
 
 // GetFileId returns the value of FileId.
@@ -3884,6 +4472,11 @@ func (s *ProjectFileAddedPayload) GetCategory() ProjectFileAddedPayloadCategory 
 	return s.Category
 }
 
+// GetFilename returns the value of Filename.
+func (s *ProjectFileAddedPayload) GetFilename() string {
+	return s.Filename
+}
+
 // SetFileId sets the value of FileId.
 func (s *ProjectFileAddedPayload) SetFileId(val int64) {
 	s.FileId = val
@@ -3892,6 +4485,11 @@ func (s *ProjectFileAddedPayload) SetFileId(val int64) {
 // SetCategory sets the value of Category.
 func (s *ProjectFileAddedPayload) SetCategory(val ProjectFileAddedPayloadCategory) {
 	s.Category = val
+}
+
+// SetFilename sets the value of Filename.
+func (s *ProjectFileAddedPayload) SetFilename(val string) {
+	s.Filename = val
 }
 
 type ProjectFileAddedPayloadCategory string
@@ -3995,6 +4593,21 @@ func (s *ProjectFileListResponse) GetData() []ProjectFile {
 
 // SetData sets the value of Data.
 func (s *ProjectFileListResponse) SetData(val []ProjectFile) {
+	s.Data = val
+}
+
+// Ref: #/components/schemas/ProjectFileResponse
+type ProjectFileResponse struct {
+	Data ProjectFile `json:"data"`
+}
+
+// GetData returns the value of Data.
+func (s *ProjectFileResponse) GetData() ProjectFile {
+	return s.Data
+}
+
+// SetData sets the value of Data.
+func (s *ProjectFileResponse) SetData(val ProjectFile) {
 	s.Data = val
 }
 
@@ -4249,6 +4862,85 @@ func (s *ProjectUpdateRequest) SetSubject(val OptNilString) {
 // SetDeadline sets the value of Deadline.
 func (s *ProjectUpdateRequest) SetDeadline(val OptDateTime) {
 	s.Deadline = val
+}
+
+type ProjectsAttachFileReq struct {
+	FileId   int64                         `json:"fileId"`
+	Category ProjectsAttachFileReqCategory `json:"category"`
+	// 可选备注：源码版本号 / 上传说明 / 样稿描述等（migration 0013 project_files.
+	// remark）.
+	Remark OptString `json:"remark"`
+}
+
+// GetFileId returns the value of FileId.
+func (s *ProjectsAttachFileReq) GetFileId() int64 {
+	return s.FileId
+}
+
+// GetCategory returns the value of Category.
+func (s *ProjectsAttachFileReq) GetCategory() ProjectsAttachFileReqCategory {
+	return s.Category
+}
+
+// GetRemark returns the value of Remark.
+func (s *ProjectsAttachFileReq) GetRemark() OptString {
+	return s.Remark
+}
+
+// SetFileId sets the value of FileId.
+func (s *ProjectsAttachFileReq) SetFileId(val int64) {
+	s.FileId = val
+}
+
+// SetCategory sets the value of Category.
+func (s *ProjectsAttachFileReq) SetCategory(val ProjectsAttachFileReqCategory) {
+	s.Category = val
+}
+
+// SetRemark sets the value of Remark.
+func (s *ProjectsAttachFileReq) SetRemark(val OptString) {
+	s.Remark = val
+}
+
+type ProjectsAttachFileReqCategory string
+
+const (
+	ProjectsAttachFileReqCategorySampleDoc  ProjectsAttachFileReqCategory = "sample_doc"
+	ProjectsAttachFileReqCategorySourceCode ProjectsAttachFileReqCategory = "source_code"
+)
+
+// AllValues returns all ProjectsAttachFileReqCategory values.
+func (ProjectsAttachFileReqCategory) AllValues() []ProjectsAttachFileReqCategory {
+	return []ProjectsAttachFileReqCategory{
+		ProjectsAttachFileReqCategorySampleDoc,
+		ProjectsAttachFileReqCategorySourceCode,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s ProjectsAttachFileReqCategory) MarshalText() ([]byte, error) {
+	switch s {
+	case ProjectsAttachFileReqCategorySampleDoc:
+		return []byte(s), nil
+	case ProjectsAttachFileReqCategorySourceCode:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *ProjectsAttachFileReqCategory) UnmarshalText(data []byte) error {
+	switch ProjectsAttachFileReqCategory(data) {
+	case ProjectsAttachFileReqCategorySampleDoc:
+		*s = ProjectsAttachFileReqCategorySampleDoc
+		return nil
+	case ProjectsAttachFileReqCategorySourceCode:
+		*s = ProjectsAttachFileReqCategorySourceCode
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
 }
 
 type ProjectsCreateUnauthorized ErrorEnvelope
@@ -5408,6 +6100,9 @@ type ThesisVersionActivityPayload struct {
 	FileId    int64        `json:"fileId"`
 	VersionNo int          `json:"versionNo"`
 	Remark    OptNilString `json:"remark"`
+	// 文件名（migration 0016 view JOIN files.
+	// filename），前端时间线详情弹窗渲染下载链接显示真实文件名.
+	Filename string `json:"filename"`
 }
 
 // GetFileId returns the value of FileId.
@@ -5425,6 +6120,11 @@ func (s *ThesisVersionActivityPayload) GetRemark() OptNilString {
 	return s.Remark
 }
 
+// GetFilename returns the value of Filename.
+func (s *ThesisVersionActivityPayload) GetFilename() string {
+	return s.Filename
+}
+
 // SetFileId sets the value of FileId.
 func (s *ThesisVersionActivityPayload) SetFileId(val int64) {
 	s.FileId = val
@@ -5438,6 +6138,11 @@ func (s *ThesisVersionActivityPayload) SetVersionNo(val int) {
 // SetRemark sets the value of Remark.
 func (s *ThesisVersionActivityPayload) SetRemark(val OptNilString) {
 	s.Remark = val
+}
+
+// SetFilename sets the value of Filename.
+func (s *ThesisVersionActivityPayload) SetFilename(val string) {
+	s.Filename = val
 }
 
 // Ref: #/components/schemas/ThesisVersionCreateRequest
@@ -5776,9 +6481,10 @@ func (s *UserResponse) SetData(val User) {
 	s.Data = val
 }
 
-func (*UserResponse) authGetMeRes()   {}
-func (*UserResponse) usersCreateRes() {}
-func (*UserResponse) usersUpdateRes() {}
+func (*UserResponse) authGetMeRes()    {}
+func (*UserResponse) authUpdateMeRes() {}
+func (*UserResponse) usersCreateRes()  {}
+func (*UserResponse) usersUpdateRes()  {}
 
 // PATCH 部分字段，所有字段 optional；密码字段独立显式传以便审计.
 // Ref: #/components/schemas/UserUpdateRequest

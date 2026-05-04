@@ -75,6 +75,16 @@ type AuthService interface {
 	// Me 读取当前 session 的用户基础信息（不返回 password_hash / token_version）
 	Me(ctx context.Context, sc SessionContext) (any, error)
 
+	// ChangePassword 当前登录用户自助修改密码：bcrypt 校验旧密码 → bcrypt rehash 新密码 →
+	// 递增 token_version + revoke 全部 refresh_tokens 让其它会话失效。
+	// oldPassword 校验失败 → ErrInvalidCredentials；newPassword 弱 → ErrInvalidUserInput。
+	ChangePassword(ctx context.Context, sc SessionContext, oldPassword, newPassword string) error
+
+	// UpdateMe 当前登录用户自助修改基础信息（仅 username / displayName）。
+	// nil 字段保持原值；username 冲突 → ErrUsernameTaken。
+	// 注：roleId / isActive 不在本方法范围 —— 超管走 PATCH /api/users/{id}。
+	UpdateMe(ctx context.Context, sc SessionContext, in UpdateMeInput) (any, error)
+
 	// IssueWSTicket 签发短期（30s）WebSocket 票据，浏览器 WS 不支持 Authorization header
 	IssueWSTicket(ctx context.Context, sc SessionContext) (ticket string, expiresAt time.Time, err error)
 
@@ -207,8 +217,9 @@ type FileService interface {
 	// ListProjectFiles 列出项目附件（sample_doc / source_code）
 	ListProjectFiles(ctx context.Context, sc SessionContext, projectID int64, category *string) ([]any, error)
 
-	// AttachToProject 把已上传文件挂到项目下指定 category（同事务更新 project_files 表）
-	AttachToProject(ctx context.Context, sc SessionContext, projectID, fileID int64, category string) (any, error)
+	// AttachToProject 把已上传文件挂到项目下指定 category（同事务更新 project_files 表）。
+	// remark 为可选备注（空字符串 = NULL，migration 0013 起字段存在）。
+	AttachToProject(ctx context.Context, sc SessionContext, projectID, fileID int64, category string, remark string) (any, error)
 
 	// CreateThesisVersion 上传论文新版（永不覆盖，version_no 自动 +1）
 	CreateThesisVersion(ctx context.Context, sc SessionContext, projectID, fileID int64, remark string) (any, error)

@@ -50,6 +50,17 @@ type AuthUser struct {
 	CreatedAt   time.Time
 }
 
+// UpdateMeInput 当前登录用户自助修改基础信息的入参（个人中心）。
+//
+// 业务背景：
+//   - 仅暴露 username / displayName 两个字段；权限敏感字段 roleId / isActive
+//     由超管走 UserService.Update —— 防止用户给自己提权
+//   - 字段为 nil 表示不修改；空字符串走 service 层的 trim 校验拒绝
+type UpdateMeInput struct {
+	Username    *string
+	DisplayName *string
+}
+
 // authService 是 AuthService 的具体实现。
 //
 // 字段：
@@ -391,6 +402,187 @@ func (s *authService) IssueWSTicket(ctx context.Context, sc SessionContext) (str
 		return "", time.Time{}, fmt.Errorf("auth_service: persist ws ticket: %w", err)
 	}
 	return raw, expiresAt, nil
+}
+
+// ============================================================
+// ChangePassword（个人中心：自助修改密码）
+// ============================================================
+
+// ChangePassword 当前登录用户自助修改密码。
+//
+// 业务流程：
+//  1. 从 sc 取 AuthContext.UserID（中间件已注入；handler 不需要再传）
+//  2. SELECT password_hash FOR UPDATE 锁行，避免并发改密丢失
+//  3. bcrypt.VerifyPassword 比对 oldPassword；失败 → ErrInvalidCredentials
+//  4. 校验 newPassword 强度（≥8 位，与超管创建用户对齐）；失败 → ErrInvalidUserInput
+//  5. bcrypt rehash newPassword + UPDATE password_hash + token_version+1 + updated_at
+//  6. UPDATE refresh_tokens SET revoked_at = NOW()，让其它会话立即失效
+//
+// 设计取舍：
+//   - 不让当前 access token 立即失效：access token 仍在 TTL（默认 15min）内可用，
+//     避免修改密码后用户立刻被踢登录页；前端会引导用户主动重新登录
+//   - 用事务而非两条独立 SQL：避免"密码改了但 refresh 没 revoke"的部分失败
+func (s *authService) ChangePassword(ctx context.Context, sc SessionContext, oldPassword, newPassword string) error {
+	ac, ok := sc.(AuthContext)
+	if !ok {
+		return errors.New("auth_service: invalid session context type")
+	}
+	if len(newPassword) < 8 {
+		// 与超管创建用户的 minLength: 8 对齐；防止前端校验被绕过后 bcrypt 形同虚设
+		return fmt.Errorf("%w: 新密码至少 8 位", ErrInvalidUserInput)
+	}
+	if oldPassword == newPassword {
+		// 业务约束：防止用户"修改"成相同密码（误操作或误以为已改）
+		return fmt.Errorf("%w: 新密码不能与旧密码相同", ErrInvalidUserInput)
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("auth_service: begin change-password tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var passHash string
+	row := tx.QueryRow(ctx, `
+		SELECT password_hash FROM users WHERE id = $1 FOR UPDATE
+	`, ac.UserID)
+	if err := row.Scan(&passHash); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// 中间件已通过 token_version 校验保证用户存在；走到这里 = 数据被并发删
+			return ErrInvalidCredentials
+		}
+		return fmt.Errorf("auth_service: lock user for change-password: %w", err)
+	}
+	if !auth.VerifyPassword(oldPassword, passHash) {
+		// 与登录路径同样合并提示，避免 timing 暴露用户存在性
+		return ErrInvalidCredentials
+	}
+
+	newHash, err := auth.HashPassword(newPassword, s.bcryptCost)
+	if err != nil {
+		return fmt.Errorf("auth_service: hash new password: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE users
+		SET password_hash = $1,
+		    token_version = token_version + 1,
+		    updated_at = NOW()
+		WHERE id = $2
+	`, newHash, ac.UserID); err != nil {
+		return fmt.Errorf("auth_service: update password: %w", err)
+	}
+	// 撤销其它会话的 refresh：当前会话的 access token 仍在内存有效；用户主动重登才彻底失效
+	if _, err := tx.Exec(ctx, `
+		UPDATE refresh_tokens SET revoked_at = NOW()
+		WHERE user_id = $1 AND revoked_at IS NULL
+	`, ac.UserID); err != nil {
+		return fmt.Errorf("auth_service: revoke refresh tokens: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("auth_service: commit change-password: %w", err)
+	}
+	return nil
+}
+
+// ============================================================
+// UpdateMe（个人中心：自助修改 username / displayName）
+// ============================================================
+
+// UpdateMe 当前登录用户自助修改基础信息（仅 username / displayName）。
+//
+// 业务流程：
+//  1. 从 sc 取 AuthContext.UserID
+//  2. SELECT 当前快照 + FOR UPDATE 锁行
+//  3. 按非 nil 字段动态构造 UPDATE；空白 username 拒绝；不变化字段不写
+//  4. UNIQUE 冲突 → ErrUsernameTaken
+//  5. RETURNING 回 AuthUser 给 handler 包成 oas.User 返前端
+//
+// 设计取舍：
+//   - 复用 UserService.Update 的列锁 + 动态 SQL 模式（同语义）；
+//     不直接调 UserService.Update 是因为后者要求超管校验，此处属于"自助"路径
+//   - 修改 username / displayName 不递增 token_version（不是安全敏感字段）
+func (s *authService) UpdateMe(ctx context.Context, sc SessionContext, in UpdateMeInput) (any, error) {
+	ac, ok := sc.(AuthContext)
+	if !ok {
+		return nil, errors.New("auth_service: invalid session context type")
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("auth_service: begin update-me tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var existing AuthUser
+	if err := tx.QueryRow(ctx, `
+		SELECT id, username, display_name, role_id, is_active, created_at
+		FROM users WHERE id = $1 FOR UPDATE
+	`, ac.UserID).Scan(
+		&existing.ID, &existing.Username, &existing.DisplayName, &existing.RoleID, &existing.IsActive, &existing.CreatedAt,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("auth_service: lock user for update-me: %w", err)
+	}
+
+	// 动态字段（白名单 SQL 列名，禁止拼用户输入）
+	sets := []string{}
+	args := []any{}
+	idx := 1
+	if in.Username != nil {
+		un := strings.TrimSpace(*in.Username)
+		if un == "" {
+			return nil, fmt.Errorf("%w: username 不能为空", ErrInvalidUserInput)
+		}
+		if un != existing.Username {
+			sets = append(sets, fmt.Sprintf("username = $%d", idx))
+			args = append(args, un)
+			idx++
+		}
+	}
+	if in.DisplayName != nil {
+		dn := strings.TrimSpace(*in.DisplayName)
+		if dn == "" {
+			return nil, fmt.Errorf("%w: displayName 不能为空", ErrInvalidUserInput)
+		}
+		if dn != existing.DisplayName {
+			sets = append(sets, fmt.Sprintf("display_name = $%d", idx))
+			args = append(args, dn)
+			idx++
+		}
+	}
+
+	if len(sets) == 0 {
+		// 无字段变化：不写库直接返回当前快照
+		if err := tx.Commit(ctx); err != nil {
+			return nil, fmt.Errorf("auth_service: commit update-me no-op: %w", err)
+		}
+		return existing, nil
+	}
+	sets = append(sets, "updated_at = NOW()")
+	args = append(args, ac.UserID)
+
+	q := fmt.Sprintf(`
+		UPDATE users SET %s
+		WHERE id = $%d
+		RETURNING id, username, display_name, role_id, is_active, created_at
+	`, strings.Join(sets, ", "), idx)
+
+	var updated AuthUser
+	if err := tx.QueryRow(ctx, q, args...).Scan(
+		&updated.ID, &updated.Username, &updated.DisplayName, &updated.RoleID, &updated.IsActive, &updated.CreatedAt,
+	); err != nil {
+		if isUniqueViolation(err) {
+			return nil, ErrUsernameTaken
+		}
+		return nil, fmt.Errorf("auth_service: update me: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("auth_service: commit update-me: %w", err)
+	}
+	return updated, nil
 }
 
 // VerifyWSTicket 调 consume_ws_ticket(hash) SECURITY DEFINER 函数一次性消费。

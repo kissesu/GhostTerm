@@ -273,6 +273,71 @@ func decodeNotificationsMarkReadParams(args [1]string, argsEscaped bool, r *http
 	return params, nil
 }
 
+// ProjectsAttachFileParams is parameters of projectsAttachFile operation.
+type ProjectsAttachFileParams struct {
+	ID int64
+}
+
+func unpackProjectsAttachFileParams(packed middleware.Parameters) (params ProjectsAttachFileParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "id",
+			In:   "path",
+		}
+		params.ID = packed[key].(int64)
+	}
+	return params
+}
+
+func decodeProjectsAttachFileParams(args [1]string, argsEscaped bool, r *http.Request) (params ProjectsAttachFileParams, _ error) {
+	// Decode path: id.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "id",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToInt64(val)
+				if err != nil {
+					return err
+				}
+
+				params.ID = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "id",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // ProjectsCreateFeedbackParams is parameters of projectsCreateFeedback operation.
 type ProjectsCreateFeedbackParams struct {
 	ID int64

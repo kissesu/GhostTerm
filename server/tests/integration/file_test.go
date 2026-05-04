@@ -435,9 +435,9 @@ func TestFileService_ListProjectFiles(t *testing.T) {
 	require.NoError(t, err)
 	fileB := rawB.(services.FileMetaView).ID
 
-	_, err = env.svc.AttachToProject(ctx, dev, env.projectID, fileA, "sample_doc")
+	_, err = env.svc.AttachToProject(ctx, dev, env.projectID, fileA, "sample_doc", "")
 	require.NoError(t, err)
-	_, err = env.svc.AttachToProject(ctx, dev, env.projectID, fileB, "source_code")
+	_, err = env.svc.AttachToProject(ctx, dev, env.projectID, fileB, "source_code", "")
 	require.NoError(t, err)
 
 	// 全部

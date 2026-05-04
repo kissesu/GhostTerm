@@ -14,6 +14,20 @@ import (
 	"github.com/ogen-go/ogen/uri"
 )
 
+func encodeAuthChangePasswordRequest(
+	req *ChangePasswordRequest,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
 func encodeAuthLoginRequest(
 	req *AuthLoginRequest,
 	r *http.Request,
@@ -30,6 +44,20 @@ func encodeAuthLoginRequest(
 
 func encodeAuthRefreshRequest(
 	req *AuthRefreshRequest,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
+func encodeAuthUpdateMeRequest(
+	req *AuthUpdateMeRequest,
 	r *http.Request,
 ) error {
 	const contentType = "application/json"
@@ -74,6 +102,20 @@ func encodeFilesUploadRequest(
 		return nil
 	})
 	ht.SetCloserBody(r, body, mime.FormatMediaType(contentType, map[string]string{"boundary": boundary}))
+	return nil
+}
+
+func encodeProjectsAttachFileRequest(
+	req *ProjectsAttachFileReq,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
 	return nil
 }
 

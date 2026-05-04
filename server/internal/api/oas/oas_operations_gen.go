@@ -6,10 +6,12 @@ package oas
 type OperationName = string
 
 const (
+	AuthChangePasswordOperation             OperationName = "AuthChangePassword"
 	AuthGetMeOperation                      OperationName = "AuthGetMe"
 	AuthLoginOperation                      OperationName = "AuthLogin"
 	AuthLogoutOperation                     OperationName = "AuthLogout"
 	AuthRefreshOperation                    OperationName = "AuthRefresh"
+	AuthUpdateMeOperation                   OperationName = "AuthUpdateMe"
 	DashboardGetRisksOperation              OperationName = "DashboardGetRisks"
 	FeedbacksUpdateOperation                OperationName = "FeedbacksUpdate"
 	FilesDownloadOperation                  OperationName = "FilesDownload"
@@ -20,6 +22,7 @@ const (
 	NotificationsMarkAllReadOperation       OperationName = "NotificationsMarkAllRead"
 	NotificationsMarkReadOperation          OperationName = "NotificationsMarkRead"
 	PermissionsListOperation                OperationName = "PermissionsList"
+	ProjectsAttachFileOperation             OperationName = "ProjectsAttachFile"
 	ProjectsCreateOperation                 OperationName = "ProjectsCreate"
 	ProjectsCreateFeedbackOperation         OperationName = "ProjectsCreateFeedback"
 	ProjectsCreatePaymentOperation          OperationName = "ProjectsCreatePayment"

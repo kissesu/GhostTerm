@@ -61,15 +61,17 @@ func requireAdmin(ctx context.Context) (services.AuthContext, *oas.ErrorEnvelope
 // UsersList — GET /api/users
 // ============================================================
 
-// UsersList 列出系统全部用户（超管用）。
+// UsersList 列出系统全部用户。
+//
+// 用户反馈 2026-05-03"新建项目时应该必须选择当前项目对接的开发人员"——客服角色创建项目时
+// 也需要拉用户列表选开发人员，因此本 endpoint 对所有登录用户开放（仅返回 username +
+// displayName + roleId 等公开字段，不含 password_hash 等敏感信息，由 toOASUserList 控制）。
+// Atlas 用户管理的 create/update/delete 仍保留 requireAdmin 限制。
 func (h *UsersHandler) UsersList(ctx context.Context) (oas.UsersListRes, error) {
-	if _, errEnv := requireAdmin(ctx); errEnv != nil {
-		// roleID 错误用 403；未登录用 401。两个 res 类型都是 ErrorEnvelope alias
-		if errEnv.Error.Code == oas.ErrorEnvelopeErrorCodeUnauthorized {
-			r := oas.UsersListUnauthorized(*errEnv)
-			return &r, nil
-		}
-		r := oas.UsersListForbidden(*errEnv)
+	// 仅校验登录态，不校验角色
+	if _, ok := middleware.AuthContextFrom(ctx); !ok {
+		envelope := newErrorEnvelope(oas.ErrorEnvelopeErrorCodeUnauthorized, "未登录")
+		r := oas.UsersListUnauthorized(envelope)
 		return &r, nil
 	}
 

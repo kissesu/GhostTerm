@@ -128,6 +128,12 @@ func (h *PaymentHandler) ProjectsCreatePayment(
 	relatedUserID := optNilInt64ToPtr(req.RelatedUserId)
 	screenshotID := optNilInt64ToPtr(req.ScreenshotId)
 
+	// AttachmentIds 是 []int64（OAS 直接生成切片）；nil 视为空切片
+	var attachmentIDs []int64
+	if len(req.AttachmentIds) > 0 {
+		attachmentIDs = append(attachmentIDs, req.AttachmentIds...)
+	}
+
 	input := services.PaymentCreateInput{
 		Direction:     services.PaymentDirection(req.Direction),
 		Amount:        amount,
@@ -135,6 +141,7 @@ func (h *PaymentHandler) ProjectsCreatePayment(
 		RelatedUserID: relatedUserID,
 		ScreenshotID:  screenshotID,
 		Remark:        req.Remark,
+		AttachmentIDs: attachmentIDs,
 		RecordedBy:    ac.UserID, // 强制用当前登录用户，不允许前端伪造
 	}
 
@@ -195,6 +202,15 @@ func toOASPayment(p services.Payment) oas.Payment {
 		out.ScreenshotId.SetTo(*p.ScreenshotID)
 	} else {
 		out.ScreenshotId.SetToNull()
+	}
+	// Attachments 永远返回非 nil 切片（migration 0014 + service 层兜底）；
+	// 即便服务返回 nil 也用空切片，避免 oas 编码 attachments: null 让前端 zod 拒
+	out.Attachments = make([]oas.PaymentAttachmentsItem, 0, len(p.Attachments))
+	for _, a := range p.Attachments {
+		out.Attachments = append(out.Attachments, oas.PaymentAttachmentsItem{
+			ID:       a.ID,
+			Filename: a.Filename,
+		})
 	}
 	return out
 }

@@ -79,6 +79,18 @@ type Feedback struct {
 	RecordedBy    int64
 	RecordedAt    time.Time
 	AttachmentIDs []int64
+	// Attachments 含 id + filename，前端用 filename 推断 mediaKind 渲染 MediaPreview。
+	// 与 AttachmentIDs 同步填充（loadAttachmentsWithFilename 一次性返回两份）。
+	Attachments []FeedbackAttachmentRef
+}
+
+// FeedbackAttachmentRef 反馈附件最小元信息（id + filename）。
+//
+// 业务背景（用户反馈 2026-05-03 "反馈 tab 还是没有正常显示反馈记录中的附件"）：
+// 前端只拿 file_id 数组无法推断 mediaKind 走 MediaPreview；附带 filename 后可直接渲染。
+type FeedbackAttachmentRef struct {
+	ID       int64
+	Filename string
 }
 
 // CreateFeedbackInput 是 Create 接受的领域级输入参数。
@@ -200,10 +212,16 @@ func (s *feedbackService) List(ctx context.Context, sc SessionContext, projectID
 		}
 
 		// 二次查附件（同事务，RLS 仍生效）
+		// 一次 JOIN 拿 (file_id, filename) 同时填充 AttachmentIDs（向后兼容）和 Attachments（带 filename）。
 		for i := range feedbacks {
-			ids, err := loadAttachmentIDs(ctx, tx, feedbacks[i].ID)
+			refs, err := loadAttachmentsWithFilename(ctx, tx, feedbacks[i].ID)
 			if err != nil {
 				return err
+			}
+			feedbacks[i].Attachments = refs
+			ids := make([]int64, 0, len(refs))
+			for _, r := range refs {
+				ids = append(ids, r.ID)
 			}
 			feedbacks[i].AttachmentIDs = ids
 		}
@@ -299,8 +317,18 @@ func (s *feedbackService) Create(ctx context.Context, sc SessionContext, project
 			`, f.ID, in.AttachmentIDs); err != nil {
 				return fmt.Errorf("feedback_service: insert attachments: %w", err)
 			}
-			// 拼装到返回结构（保持调用方拿到的 Feedback 与 List 行为一致）
-			f.AttachmentIDs = append([]int64(nil), in.AttachmentIDs...)
+			// 重新查带 filename 的附件列表（caller 用 Attachments 渲染 MediaPreview）。
+			refs, err := loadAttachmentsWithFilename(ctx, tx, f.ID)
+			if err != nil {
+				return err
+			}
+			f.Attachments = refs
+			// AttachmentIDs 兼容旧字段：从查询结果复算，确保顺序与 attachments 一致
+			ids := make([]int64, 0, len(refs))
+			for _, r := range refs {
+				ids = append(ids, r.ID)
+			}
+			f.AttachmentIDs = ids
 		}
 
 		// ============================================================
@@ -404,9 +432,14 @@ func (s *feedbackService) UpdateStatus(ctx context.Context, sc SessionContext, f
 			return fmt.Errorf("feedback_service: update status: %w", err)
 		}
 
-		ids, err := loadAttachmentIDs(ctx, tx, f.ID)
+		refs, err := loadAttachmentsWithFilename(ctx, tx, f.ID)
 		if err != nil {
 			return err
+		}
+		f.Attachments = refs
+		ids := make([]int64, 0, len(refs))
+		for _, r := range refs {
+			ids = append(ids, r.ID)
 		}
 		f.AttachmentIDs = ids
 		return nil
@@ -425,6 +458,9 @@ func (s *feedbackService) UpdateStatus(ctx context.Context, sc SessionContext, f
 //
 // 业务背景：调用方都在 InTx 内、RLS 已注入；feedback_attachments_all 策略
 // 通过 feedback → project 间接判定 is_member，未越权访问能直接拿到结果。
+//
+// 注：此函数保留供未来需要"仅 id"路径使用；当前 List/Create/UpdateStatus 已切到
+// loadAttachmentsWithFilename（一次 JOIN 同时拿到 filename，省一次 round-trip）。
 func loadAttachmentIDs(ctx context.Context, tx pgx.Tx, feedbackID int64) ([]int64, error) {
 	rows, err := tx.Query(ctx, `
 		SELECT file_id FROM feedback_attachments
@@ -448,4 +484,38 @@ func loadAttachmentIDs(ctx context.Context, tx pgx.Tx, feedbackID int64) ([]int6
 		return nil, fmt.Errorf("feedback_service: iterate attachments: %w", err)
 	}
 	return ids, nil
+}
+
+// loadAttachmentsWithFilename 查询某 feedback_id 关联的所有附件（id + filename）。
+//
+// 业务背景（用户反馈 2026-05-03 "反馈 tab 还是没有正常显示反馈记录中的附件"）：
+//   - 仅 file_id 列表无法让前端推断 mediaKind 走 MediaPreview（image/video/document）
+//   - JOIN files 一次性拿到 filename，避免前端额外 N+1 调 /api/files/:id 拿元数据
+//
+// 排序：按 feedback_attachments.id 升序，与 jsonb_agg view（migration 0011）保持一致顺序。
+func loadAttachmentsWithFilename(ctx context.Context, tx pgx.Tx, feedbackID int64) ([]FeedbackAttachmentRef, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT fa.file_id, files.filename
+		FROM feedback_attachments fa
+		JOIN files ON files.id = fa.file_id
+		WHERE fa.feedback_id = $1
+		ORDER BY fa.id
+	`, feedbackID)
+	if err != nil {
+		return nil, fmt.Errorf("feedback_service: query attachments with filename: %w", err)
+	}
+	defer rows.Close()
+
+	var refs []FeedbackAttachmentRef
+	for rows.Next() {
+		var r FeedbackAttachmentRef
+		if err := rows.Scan(&r.ID, &r.Filename); err != nil {
+			return nil, fmt.Errorf("feedback_service: scan attachment ref: %w", err)
+		}
+		refs = append(refs, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("feedback_service: iterate attachment refs: %w", err)
+	}
+	return refs, nil
 }

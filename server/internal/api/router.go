@@ -84,6 +84,16 @@ func (h *oasHandler) AuthGetMe(ctx context.Context) (oas.AuthGetMeRes, error) {
 	return h.auth.AuthGetMe(ctx)
 }
 
+// AuthUpdateMe 转发到 AuthHandler 实现（个人中心：自助修改 username / displayName）
+func (h *oasHandler) AuthUpdateMe(ctx context.Context, req *oas.AuthUpdateMeRequest) (oas.AuthUpdateMeRes, error) {
+	return h.auth.AuthUpdateMe(ctx, req)
+}
+
+// AuthChangePassword 转发到 AuthHandler 实现（个人中心：自助修改密码）
+func (h *oasHandler) AuthChangePassword(ctx context.Context, req *oas.ChangePasswordRequest) (oas.AuthChangePasswordRes, error) {
+	return h.auth.AuthChangePassword(ctx, req)
+}
+
 // WsTicketIssue 转发到 AuthHandler 实现
 func (h *oasHandler) WsTicketIssue(ctx context.Context) (*oas.WSTicketResponse, error) {
 	return h.auth.WsTicketIssue(ctx)
@@ -194,7 +204,7 @@ func (h *oasHandler) ProjectsListActivities(ctx context.Context, params oas.Proj
 }
 
 // ============================================================
-// Worker C — File：5 个方法 forward
+// Worker C — File：6 个方法 forward
 // ============================================================
 
 // FilesUpload 转发到 FileHandler 实现
@@ -210,6 +220,15 @@ func (h *oasHandler) FilesDownload(ctx context.Context, params oas.FilesDownload
 // ProjectsListFiles 转发到 FileHandler 实现
 func (h *oasHandler) ProjectsListFiles(ctx context.Context, params oas.ProjectsListFilesParams) (*oas.ProjectFileListResponse, error) {
 	return h.file.ProjectsListFiles(ctx, params)
+}
+
+// ProjectsAttachFile 转发到 FileHandler 实现
+//
+// 用户反馈 2026-05-03："上传源码报错 internal server error"——根因是 oasHandler 漏写本 forward
+// 让请求落到内嵌的 UnimplementedHandler.ProjectsAttachFile 返回 ogen ErrNotImplemented (501→500)。
+// 上次类似问题（OAS yaml 未暴露 endpoint）参见记忆 feedback_oas_endpoint_missing_view_filter_breaks_frontend_aggregate。
+func (h *oasHandler) ProjectsAttachFile(ctx context.Context, req *oas.ProjectsAttachFileReq, params oas.ProjectsAttachFileParams) (*oas.ProjectFileResponse, error) {
+	return h.file.ProjectsAttachFile(ctx, req, params)
 }
 
 // ProjectsCreateThesisVersion 转发到 FileHandler 实现

@@ -252,6 +252,14 @@ func (h *ProjectHandler) ProjectsStatusChanges(ctx context.Context, params oas.P
 
 // projectToOAS service.ProjectModel → oas.Project。
 func projectToOAS(p *services.ProjectModel) oas.Project {
+	// developers: service ref → oas.ProjectDeveloperRef
+	devs := make([]oas.ProjectDeveloperRef, 0, len(p.Developers))
+	for _, d := range p.Developers {
+		devs = append(devs, oas.ProjectDeveloperRef{
+			ID:          d.ID,
+			DisplayName: d.DisplayName,
+		})
+	}
 	out := oas.Project{
 		ID:              p.ID,
 		Name:            p.Name,
@@ -268,6 +276,7 @@ func projectToOAS(p *services.ProjectModel) oas.Project {
 		CreatedBy:       p.CreatedBy,
 		CreatedAt:       p.CreatedAt,
 		UpdatedAt:       p.UpdatedAt,
+		Developers:      devs,
 	}
 	if p.ThesisLevel != nil {
 		out.ThesisLevel.SetTo(*p.ThesisLevel)
@@ -375,6 +384,10 @@ func oasCreateToInput(req *oas.ProjectCreateRequest) (services.CreateProjectInpu
 	}
 	if len(req.WechatChatFileIds) > 0 {
 		in.WechatChatFileIDs = append(in.WechatChatFileIDs, req.WechatChatFileIds...)
+	}
+	// 项目对接的开发人员（必填，至少 1 个；service 层兜底校验）
+	if len(req.DeveloperUserIds) > 0 {
+		in.DeveloperUserIDs = append(in.DeveloperUserIDs, req.DeveloperUserIds...)
 	}
 	return in, nil
 }

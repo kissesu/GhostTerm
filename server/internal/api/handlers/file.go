@@ -202,16 +202,51 @@ func (h *FileHandler) ProjectsListFiles(
 		if !ok {
 			return nil, errors.New("file handler: unexpected ProjectFileView type")
 		}
-		out = append(out, oas.ProjectFile{
-			ID:        v.ID,
-			ProjectId: v.ProjectID,
-			FileId:    v.FileID,
-			Category:  oas.ProjectFileCategory(v.Category),
-			AddedAt:   v.AddedAt,
-			File:      toOASFileMetadata(v.File),
-		})
+		out = append(out, toOASProjectFile(v))
 	}
 	return &oas.ProjectFileListResponse{Data: out}, nil
+}
+
+// ============================================================
+// ProjectsAttachFile — POST /api/projects/{id}/files
+// ============================================================
+
+// ProjectsAttachFile 把已上传的 file 挂到项目下指定 category（sample_doc / source_code）。
+//
+// 业务背景（用户反馈 2026-05-03）："上传源码显示的数据不对, category 应该是源码而不是聊天记录"
+// 之前前端"上传源码"按钮只调 POST /api/files，文件进 files 表但没绑到 project_files 任何 category；
+// 文件 tab 加载时拉所有 project_files 看到的是项目创建时的 wechat_chat 截图（误导）。
+// 新增本 endpoint 让前端上传后显式 attach 到 source_code/sample_doc。
+func (h *FileHandler) ProjectsAttachFile(
+	ctx context.Context,
+	req *oas.ProjectsAttachFileReq,
+	params oas.ProjectsAttachFileParams,
+) (*oas.ProjectFileResponse, error) {
+	sc, ok := middleware.AuthContextFrom(ctx)
+	if !ok {
+		return nil, errors.New("file handler: missing auth context")
+	}
+	if req == nil {
+		return nil, fmt.Errorf("file handler: %w: nil request body", services.ErrFileNameInvalid)
+	}
+
+	// remark 可选：OptString.IsSet 区分"未传"与"空字符串"（service 层都视为 NULL）
+	remark := ""
+	if req.Remark.IsSet() {
+		remark = req.Remark.Value
+	}
+
+	raw, err := h.Svc.AttachToProject(ctx, sc, params.ID, req.FileId, string(req.Category), remark)
+	if err != nil {
+		return nil, fmt.Errorf("file handler: attach: %w", err)
+	}
+	v, ok := raw.(services.ProjectFileView)
+	if !ok {
+		return nil, errors.New("file handler: unexpected ProjectFileView type")
+	}
+	return &oas.ProjectFileResponse{
+		Data: toOASProjectFile(v),
+	}, nil
 }
 
 // ============================================================
@@ -292,6 +327,27 @@ func toOASFileMetadata(v services.FileMetaView) oas.FileMetadata {
 		UploadedBy: v.UploadedBy,
 		UploadedAt: v.UploadedAt,
 	}
+}
+
+// toOASProjectFile 把 services.ProjectFileView 转为 oas.ProjectFile。
+//
+// 业务背景：Remark 是 *string（DB nullable），oas 用 OptNilString 三态表达；
+// nil → SetToNull / 非空 → SetTo(*v.Remark)。与 ThesisVersion.Remark 模式一致。
+func toOASProjectFile(v services.ProjectFileView) oas.ProjectFile {
+	out := oas.ProjectFile{
+		ID:        v.ID,
+		ProjectId: v.ProjectID,
+		FileId:    v.FileID,
+		Category:  oas.ProjectFileCategory(v.Category),
+		AddedAt:   v.AddedAt,
+		File:      toOASFileMetadata(v.File),
+	}
+	if v.Remark != nil {
+		out.Remark.SetTo(*v.Remark)
+	} else {
+		out.Remark.SetToNull()
+	}
+	return out
 }
 
 func toOASThesisVersion(v services.ThesisVersionView) oas.ThesisVersion {

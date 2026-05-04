@@ -28,6 +28,13 @@ func trimTrailingSlashes(u *url.URL) {
 
 // Invoker invokes operations described by OpenAPI v3 specification.
 type Invoker interface {
+	// AuthChangePassword invokes authChangePassword operation.
+	//
+	// 需要提供旧密码二次校验；成功后递增 token_version 让其它会话失效（当前
+	// access token 仍在 TTL 内可用一会儿，由前端引导用户重新登录）。.
+	//
+	// POST /api/auth/change-password
+	AuthChangePassword(ctx context.Context, request *ChangePasswordRequest) (AuthChangePasswordRes, error)
 	// AuthGetMe invokes authGetMe operation.
 	//
 	// 获取当前登录用户.
@@ -52,6 +59,13 @@ type Invoker interface {
 	//
 	// POST /api/auth/refresh
 	AuthRefresh(ctx context.Context, request *AuthRefreshRequest) (AuthRefreshRes, error)
+	// AuthUpdateMe invokes authUpdateMe operation.
+	//
+	// 仅允许 displayName / username 两个字段；roleId / isActive 必须由超管通过
+	// /api/users/{id} 修改。.
+	//
+	// PATCH /api/auth/me
+	AuthUpdateMe(ctx context.Context, request *AuthUpdateMeRequest) (AuthUpdateMeRes, error)
 	// DashboardGetRisks invokes dashboardGetRisks operation.
 	//
 	// 风险总览（临近 deadline / 已超期 / 应收逾期），按 RBAC 过滤.
@@ -112,6 +126,12 @@ type Invoker interface {
 	//
 	// GET /api/permissions
 	PermissionsList(ctx context.Context) (PermissionsListRes, error)
+	// ProjectsAttachFile invokes projectsAttachFile operation.
+	//
+	// 把已上传的 file 挂到项目下指定 category（用户上传源码 / 参考样稿后调用）.
+	//
+	// POST /api/projects/{id}/files
+	ProjectsAttachFile(ctx context.Context, request *ProjectsAttachFileReq, params ProjectsAttachFileParams) (*ProjectFileResponse, error)
 	// ProjectsCreate invokes projectsCreate operation.
 	//
 	// 创建项目（默认进入 dealing 状态）.
@@ -312,6 +332,117 @@ func (c *Client) requestURL(ctx context.Context) *url.URL {
 		return c.serverURL
 	}
 	return u
+}
+
+// AuthChangePassword invokes authChangePassword operation.
+//
+// 需要提供旧密码二次校验；成功后递增 token_version 让其它会话失效（当前
+// access token 仍在 TTL 内可用一会儿，由前端引导用户重新登录）。.
+//
+// POST /api/auth/change-password
+func (c *Client) AuthChangePassword(ctx context.Context, request *ChangePasswordRequest) (AuthChangePasswordRes, error) {
+	res, err := c.sendAuthChangePassword(ctx, request)
+	return res, err
+}
+
+func (c *Client) sendAuthChangePassword(ctx context.Context, request *ChangePasswordRequest) (res AuthChangePasswordRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("authChangePassword"),
+		semconv.HTTPRequestMethodKey.String("POST"),
+		semconv.URLTemplateKey.String("/api/auth/change-password"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, AuthChangePasswordOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [1]string
+	pathParts[0] = "/api/auth/change-password"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "POST", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+	if err := encodeAuthChangePasswordRequest(request, r); err != nil {
+		return res, errors.Wrap(err, "encode request")
+	}
+
+	{
+		type bitset = [1]uint8
+		var satisfied bitset
+		{
+			stage = "Security:BearerAuth"
+			switch err := c.securityBearerAuth(ctx, AuthChangePasswordOperation, r); {
+			case err == nil: // if NO error
+				satisfied[0] |= 1 << 0
+			case errors.Is(err, ogenerrors.ErrSkipClientSecurity):
+				// Skip this security.
+			default:
+				return res, errors.Wrap(err, "security \"BearerAuth\"")
+			}
+		}
+
+		if ok := func() bool {
+		nextRequirement:
+			for _, requirement := range []bitset{
+				{0b00000001},
+			} {
+				for i, mask := range requirement {
+					if satisfied[i]&mask != mask {
+						continue nextRequirement
+					}
+				}
+				return true
+			}
+			return false
+		}(); !ok {
+			return res, ogenerrors.ErrSecurityRequirementIsNotSatisfied
+		}
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer body.Close()
+
+	stage = "DecodeResponse"
+	result, err := decodeAuthChangePasswordResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
 }
 
 // AuthGetMe invokes authGetMe operation.
@@ -675,6 +806,117 @@ func (c *Client) sendAuthRefresh(ctx context.Context, request *AuthRefreshReques
 
 	stage = "DecodeResponse"
 	result, err := decodeAuthRefreshResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
+// AuthUpdateMe invokes authUpdateMe operation.
+//
+// 仅允许 displayName / username 两个字段；roleId / isActive 必须由超管通过
+// /api/users/{id} 修改。.
+//
+// PATCH /api/auth/me
+func (c *Client) AuthUpdateMe(ctx context.Context, request *AuthUpdateMeRequest) (AuthUpdateMeRes, error) {
+	res, err := c.sendAuthUpdateMe(ctx, request)
+	return res, err
+}
+
+func (c *Client) sendAuthUpdateMe(ctx context.Context, request *AuthUpdateMeRequest) (res AuthUpdateMeRes, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("authUpdateMe"),
+		semconv.HTTPRequestMethodKey.String("PATCH"),
+		semconv.URLTemplateKey.String("/api/auth/me"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, AuthUpdateMeOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [1]string
+	pathParts[0] = "/api/auth/me"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "PATCH", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+	if err := encodeAuthUpdateMeRequest(request, r); err != nil {
+		return res, errors.Wrap(err, "encode request")
+	}
+
+	{
+		type bitset = [1]uint8
+		var satisfied bitset
+		{
+			stage = "Security:BearerAuth"
+			switch err := c.securityBearerAuth(ctx, AuthUpdateMeOperation, r); {
+			case err == nil: // if NO error
+				satisfied[0] |= 1 << 0
+			case errors.Is(err, ogenerrors.ErrSkipClientSecurity):
+				// Skip this security.
+			default:
+				return res, errors.Wrap(err, "security \"BearerAuth\"")
+			}
+		}
+
+		if ok := func() bool {
+		nextRequirement:
+			for _, requirement := range []bitset{
+				{0b00000001},
+			} {
+				for i, mask := range requirement {
+					if satisfied[i]&mask != mask {
+						continue nextRequirement
+					}
+				}
+				return true
+			}
+			return false
+		}(); !ok {
+			return res, ogenerrors.ErrSecurityRequirementIsNotSatisfied
+		}
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer body.Close()
+
+	stage = "DecodeResponse"
+	result, err := decodeAuthUpdateMeResponse(resp)
 	if err != nil {
 		return res, errors.Wrap(err, "decode response")
 	}
@@ -1827,6 +2069,135 @@ func (c *Client) sendPermissionsList(ctx context.Context) (res PermissionsListRe
 
 	stage = "DecodeResponse"
 	result, err := decodePermissionsListResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
+// ProjectsAttachFile invokes projectsAttachFile operation.
+//
+// 把已上传的 file 挂到项目下指定 category（用户上传源码 / 参考样稿后调用）.
+//
+// POST /api/projects/{id}/files
+func (c *Client) ProjectsAttachFile(ctx context.Context, request *ProjectsAttachFileReq, params ProjectsAttachFileParams) (*ProjectFileResponse, error) {
+	res, err := c.sendProjectsAttachFile(ctx, request, params)
+	return res, err
+}
+
+func (c *Client) sendProjectsAttachFile(ctx context.Context, request *ProjectsAttachFileReq, params ProjectsAttachFileParams) (res *ProjectFileResponse, err error) {
+	otelAttrs := []attribute.KeyValue{
+		otelogen.OperationID("projectsAttachFile"),
+		semconv.HTTPRequestMethodKey.String("POST"),
+		semconv.URLTemplateKey.String("/api/projects/{id}/files"),
+	}
+	otelAttrs = append(otelAttrs, c.cfg.Attributes...)
+
+	// Run stopwatch.
+	startTime := time.Now()
+	defer func() {
+		// Use floating point division here for higher precision (instead of Millisecond method).
+		elapsedDuration := time.Since(startTime)
+		c.duration.Record(ctx, float64(elapsedDuration)/float64(time.Millisecond), metric.WithAttributes(otelAttrs...))
+	}()
+
+	// Increment request counter.
+	c.requests.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+
+	// Start a span for this request.
+	ctx, span := c.cfg.Tracer.Start(ctx, ProjectsAttachFileOperation,
+		trace.WithAttributes(otelAttrs...),
+		clientSpanKind,
+	)
+	// Track stage for error reporting.
+	var stage string
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, stage)
+			c.errors.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+		}
+		span.End()
+	}()
+
+	stage = "BuildURL"
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [3]string
+	pathParts[0] = "/api/projects/"
+	{
+		// Encode "id" parameter.
+		e := uri.NewPathEncoder(uri.PathEncoderConfig{
+			Param:   "id",
+			Style:   uri.PathStyleSimple,
+			Explode: false,
+		})
+		if err := func() error {
+			return e.EncodeValue(conv.Int64ToString(params.ID))
+		}(); err != nil {
+			return res, errors.Wrap(err, "encode path")
+		}
+		encoded, err := e.Result()
+		if err != nil {
+			return res, errors.Wrap(err, "encode path")
+		}
+		pathParts[1] = encoded
+	}
+	pathParts[2] = "/files"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	stage = "EncodeRequest"
+	r, err := ht.NewRequest(ctx, "POST", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+	if err := encodeProjectsAttachFileRequest(request, r); err != nil {
+		return res, errors.Wrap(err, "encode request")
+	}
+
+	{
+		type bitset = [1]uint8
+		var satisfied bitset
+		{
+			stage = "Security:BearerAuth"
+			switch err := c.securityBearerAuth(ctx, ProjectsAttachFileOperation, r); {
+			case err == nil: // if NO error
+				satisfied[0] |= 1 << 0
+			case errors.Is(err, ogenerrors.ErrSkipClientSecurity):
+				// Skip this security.
+			default:
+				return res, errors.Wrap(err, "security \"BearerAuth\"")
+			}
+		}
+
+		if ok := func() bool {
+		nextRequirement:
+			for _, requirement := range []bitset{
+				{0b00000001},
+			} {
+				for i, mask := range requirement {
+					if satisfied[i]&mask != mask {
+						continue nextRequirement
+					}
+				}
+				return true
+			}
+			return false
+		}(); !ok {
+			return res, ogenerrors.ErrSecurityRequirementIsNotSatisfied
+		}
+	}
+
+	stage = "SendRequest"
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer body.Close()
+
+	stage = "DecodeResponse"
+	result, err := decodeProjectsAttachFileResponse(resp)
 	if err != nil {
 		return res, errors.Wrap(err, "decode response")
 	}

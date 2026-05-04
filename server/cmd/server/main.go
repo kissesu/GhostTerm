@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ghostterm/progress-server/internal/api"
+	apimiddleware "github.com/ghostterm/progress-server/internal/api/middleware"
 	"github.com/ghostterm/progress-server/internal/config"
 	"github.com/ghostterm/progress-server/internal/cron"
 	"github.com/ghostterm/progress-server/internal/db"
@@ -195,6 +196,10 @@ func main() {
 		log.Fatalf("init deadline checker: %v", err)
 	}
 	go deadlineChecker.Run(ctx)
+
+	// 异步预热公网 IP 缓存（用户审计需求 2026-05-03"需要公网IP而不是局域网IP"）
+	// 不阻塞启动；首次请求若 cached 未就绪走 loopback 兜底
+	apimiddleware.PrimePublicIP()
 
 	go func() {
 		log.Printf("progress-server listening on %s", cfg.HTTPAddr)

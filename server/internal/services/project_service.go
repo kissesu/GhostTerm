@@ -23,6 +23,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -71,6 +72,18 @@ type CreateProjectInput struct {
 	AssignmentDocID *int64  // 任务书 → projects.assignment_doc_id
 	// 微信聊天记录截图文件 ID 数组；非空时事务内 INSERT N 行 project_files(category='wechat_chat')
 	WechatChatFileIDs []int64
+	// 项目对接的开发人员 user.id 数组（业务需求 2026-05-03）：
+	// - 必填非空（handler 已校验 minItems:1）
+	// - 事务内 INSERT 到 project_developers（用于 projects RLS 可见性）
+	// - 同步 INSERT 到 project_members(role='dev')（让 dev 通过 is_member 看到子资源）
+	DeveloperUserIDs []int64
+}
+
+// ProjectDeveloperRef 是项目对接开发人员的最小展示 DTO（id + 显示名）。
+// handler 转 oas.ProjectDevelopersItem。
+type ProjectDeveloperRef struct {
+	ID          int64
+	DisplayName string
 }
 
 // UpdateProjectInput 修改项目基础字段；nil 字段表示不变。
@@ -122,6 +135,9 @@ type ProjectModel struct {
 	CreatedBy       int64
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+	// Developers 项目对接的开发人员（List/Get 时填充；Create 后立即 reload 也会填充）。
+	// 来源 project_developers JOIN users.display_name，jsonb_agg 聚合。
+	Developers []ProjectDeveloperRef
 }
 
 // StatusChangeLogModel 是 ListStatusChanges 返回的 DTO。
@@ -229,7 +245,15 @@ func (s *ProjectServiceImpl) Create(
 		}
 
 		md, _ := RequestMetadataFrom(ctx)
-		var p ProjectModel
+		// INSERT projects RETURNING 仅最小必要列（id + dealing_at + status + holder_*）
+		// 给状态机和后续 reload 使用；完整 ProjectModel 在事务尾部用 projectSelectSQL 重新加载
+		// （含 developers jsonb 聚合）。
+		var (
+			pID           int64
+			pStatus       oas.ProjectStatus
+			pHolderRoleID *int64
+			pHolderUserID *int64
+		)
 		err := tx.QueryRow(ctx, `
 			INSERT INTO projects (
 				name, customer_label, description, priority, thesis_level, subject,
@@ -248,15 +272,7 @@ func (s *ProjectServiceImpl) Create(
 				$13,
 				$14, $15
 			)
-			RETURNING
-				id, name, customer_label, description, priority, thesis_level, subject,
-				status, holder_role_id, holder_user_id,
-				deadline,
-				dealing_at, quoting_at, dev_started_at, confirming_at,
-				delivered_at, paid_at, archived_at, after_sales_at, cancelled_at,
-				original_quote, current_quote, after_sales_total, total_received,
-				opening_doc_id, assignment_doc_id, format_spec_doc_id,
-				created_by, created_at, updated_at
+			RETURNING id, status, holder_role_id, holder_user_id
 		`,
 			in.Name, in.CustomerLabel, in.Description, string(priority), thesisLevel, subject,
 			statemachine.RoleCS, creatorUserID,
@@ -265,53 +281,60 @@ func (s *ProjectServiceImpl) Create(
 			openingDocID, assignmentDocID,
 			creatorUserID,
 			NullableIP(md.ClientIP), md.UserAgent,
-		).Scan(
-			&p.ID, &p.Name, &p.CustomerLabel, &p.Description,
-			&p.Priority, &p.ThesisLevel, &p.Subject,
-			&p.Status, &p.HolderRoleID, &p.HolderUserID,
-			&p.Deadline,
-			&p.DealingAt, &p.QuotingAt, &p.DevStartedAt, &p.ConfirmingAt,
-			&p.DeliveredAt, &p.PaidAt, &p.ArchivedAt, &p.AfterSalesAt, &p.CancelledAt,
-			&p.OriginalQuote, &p.CurrentQuote, &p.AfterSalesTotal, &p.TotalReceived,
-			&p.OpeningDocID, &p.AssignmentDocID, &p.FormatSpecDocID,
-			&p.CreatedBy, &p.CreatedAt, &p.UpdatedAt,
-		)
+		).Scan(&pID, &pStatus, &pHolderRoleID, &pHolderUserID)
 		if err != nil {
 			return fmt.Errorf("project_service.Create insert projects: %w", err)
 		}
 
-		// 2) INSERT project_members（owner + 全量 admin viewer + 全量 dev）
-		// 业务规则（v2 §C2）：
-		//   - 创建者本人加 owner
-		//   - 所有 active admin 加 viewer（超管始终能看到）
-		//   - 所有 active dev 加 dev（开发能看到所有项目以分配工作）
-		// pgx 类型推导注：UNION ALL 时 $1 类型由第一行决定（CASE 让 pgx 推为 unknown→bigint
-		// 在 OK 路径，但稳健做法是显式 ::bigint 强制类型，避免某些路径推成 text）。
+		// 2) INSERT project_developers（业务需求 2026-05-03）：
+		// 项目对接的开发人员关系；service 层校验已确保 in.DeveloperUserIDs 非空。
+		// 用 unnest 单语句批量插入；user_id 必须是 active dev (role_id=2)，否则报错。
+		// 不在此处校验 role_id（DB 仅有 FK 到 users），由 handler/前端选择器保证只传 dev 用户。
+		// 重复 ID 由 PRIMARY KEY 兜底，去重交给前端。
+		if len(in.DeveloperUserIDs) > 0 {
+			_, err = tx.Exec(ctx, `
+				INSERT INTO project_developers (project_id, user_id)
+				SELECT $1::bigint, uid
+				FROM unnest($2::bigint[]) AS uid
+				ON CONFLICT (project_id, user_id) DO NOTHING
+			`, pID, in.DeveloperUserIDs)
+			if err != nil {
+				return fmt.Errorf("project_service.Create insert project_developers: %w", err)
+			}
+		}
+
+		// 3) INSERT project_members
+		// 业务规则（修订 2026-05-03）：
+		//   - 创建者本人加 owner（用于 is_member 子资源 RLS）
+		//   - 所有 active admin 加 viewer（超管始终能看到子资源）
+		//   - 仅指派的 dev（in.DeveloperUserIDs）加 'dev' member（让 dev 通过 is_member 看到子资源）
+		//
+		// 与旧实现差异：不再把"所有 active dev"全量加入；未指派的 dev 不会进 project_members，
+		// 也无法通过 is_member 看到子资源 —— 这正是新需求"开发只能看到自己对接的项目"。
 		_, err = tx.Exec(ctx, `
 			INSERT INTO project_members (project_id, user_id, role)
-			SELECT $1::bigint, u.id,
-				CASE u.role_id
-					WHEN 1 THEN 'viewer'::project_member_role
-					WHEN 2 THEN 'dev'::project_member_role
-				END
-			FROM users u WHERE u.is_active AND u.role_id IN (1, 2)
+			SELECT $1::bigint, u.id, 'viewer'::project_member_role
+			FROM users u WHERE u.is_active AND u.role_id = 1
 			UNION ALL
 			SELECT $1::bigint, $2::bigint, 'owner'::project_member_role
+			UNION ALL
+			SELECT $1::bigint, uid, 'dev'::project_member_role
+			FROM unnest($3::bigint[]) AS uid
 			ON CONFLICT (project_id, user_id) DO NOTHING
-		`, p.ID, creatorUserID)
+		`, pID, creatorUserID, in.DeveloperUserIDs)
 		if err != nil {
 			return fmt.Errorf("project_service.Create insert members: %w", err)
 		}
 
-		// 3) statemachine.Execute(E0)：写 status_change_logs
+		// 4) statemachine.Execute(E0)：写 status_change_logs
 		// 注：dealing_at 已在 INSERT projects 时由 DB DEFAULT NOW() 设置；
 		// applyStateChange 再写一次 dealing_at=NOW() 是幂等的（同一事务内时间一致）
 		_, err = statemachine.Execute(ctx, tx, statemachine.ExecuteParams{
 			Project: statemachine.ProjectSnapshot{
-				ID:           p.ID,
-				Status:       p.Status, // dealing
-				HolderRoleID: p.HolderRoleID,
-				HolderUserID: p.HolderUserID,
+				ID:           pID,
+				Status:       pStatus, // dealing
+				HolderRoleID: pHolderRoleID,
+				HolderUserID: pHolderUserID,
 			},
 			Event:           oas.EventCodeE0,
 			Remark:          "项目创建",
@@ -324,16 +347,41 @@ func (s *ProjectServiceImpl) Create(
 			return fmt.Errorf("project_service.Create execute E0: %w", err)
 		}
 
-		// 4) INSERT notifications：球在创建者
-		_, err = tx.Exec(ctx, `
-			INSERT INTO notifications (user_id, type, project_id, title, body)
-			VALUES ($1, 'ball_passed', $2, '球在你这里', '新项目 ' || $3 || ' 创建完成，等待洽谈')
-		`, creatorUserID, p.ID, p.Name)
-		if err != nil {
-			return fmt.Errorf("project_service.Create insert notification: %w", err)
+		// 5) INSERT notifications：按 EventTemplates[E0] 模板群发"项目已创建"
+		//
+		// 业务规则（用户需求 2026-05-03）：
+		//   - 通知中心文案必须承载业务语义，不再使用"球在你这里"占位
+		//   - 创建项目应通知所有指派开发"客服 X 创建了项目 Y, 需要开发报价"
+		//
+		// 注：此处先查 creator display_name —— project.created_by 即是 creatorUserID，
+		// 但通知文案需要中文显示名，必须 JOIN users 表取出。
+		var creatorName string
+		if err := tx.QueryRow(ctx,
+			`SELECT display_name FROM users WHERE id = $1`, creatorUserID,
+		).Scan(&creatorName); err != nil {
+			return fmt.Errorf("project_service.Create lookup creator name: %w", err)
+		}
+		notifyCtx := NotifyContext{
+			ProjectID:        pID,
+			ProjectName:      in.Name,
+			ProjectDeadline:  in.Deadline,
+			OriginalQuote:    in.OriginalQuote,
+			CurrentQuote:     in.OriginalQuote,
+			ActorUserID:      creatorUserID,
+			ActorDisplayName: creatorName,
+			ActorRoleID:      creatorRoleID,
+			CreatorUserID:    creatorUserID,
+			CreatorName:      creatorName,
+			DeveloperUserIDs: in.DeveloperUserIDs,
+			HolderUserID:     &creatorUserID,
+			NewHolderUserID:  &creatorUserID,
+			Remark:           "项目创建",
+		}
+		if err := dispatchEventNotifications(ctx, tx, oas.EventCodeE0, pID, notifyCtx); err != nil {
+			return fmt.Errorf("project_service.Create notify: %w", err)
 		}
 
-		// 5) 微信聊天记录截图：逐个 INSERT project_files (category='wechat_chat')
+		// 6) 微信聊天记录截图：逐个 INSERT project_files (category='wechat_chat')
 		// 文件本身已由前端先 POST /api/files 上传（拿到 file_id 入 in.WechatChatFileIDs）；
 		// 这里仅在事务内建立 project ↔ file 关联。任一失败 → 回滚保证 0 残留。
 		for _, fileID := range in.WechatChatFileIDs {
@@ -343,13 +391,19 @@ func (s *ProjectServiceImpl) Create(
 			_, err = tx.Exec(ctx, `
 				INSERT INTO project_files (project_id, file_id, category, added_by, client_ip, user_agent)
 				VALUES ($1, $2, 'wechat_chat', $3, $4, $5)
-			`, p.ID, fileID, creatorUserID, NullableIP(md.ClientIP), md.UserAgent)
+			`, pID, fileID, creatorUserID, NullableIP(md.ClientIP), md.UserAgent)
 			if err != nil {
 				return fmt.Errorf("project_service.Create insert wechat_chat file %d: %w", fileID, err)
 			}
 		}
 
-		project = &p
+		// 7) 重新加载完整 ProjectModel（含 developers jsonb 聚合）
+		row := tx.QueryRow(ctx, projectSelectSQL+` WHERE p.id = $1`, pID)
+		loaded, err := scanProject(row)
+		if err != nil {
+			return fmt.Errorf("project_service.Create reload: %w", err)
+		}
+		project = loaded
 		return nil
 	})
 	if err != nil {
@@ -371,6 +425,10 @@ func validateCreateInput(in CreateProjectInput) error {
 	}
 	if in.Deadline.IsZero() {
 		return fmt.Errorf("%w: deadline is required", ErrProjectInvalidInput)
+	}
+	// 业务需求 2026-05-03：必须指派至少 1 个开发对接人
+	if len(in.DeveloperUserIDs) == 0 {
+		return fmt.Errorf("%w: developerUserIds is required (at least 1)", ErrProjectInvalidInput)
 	}
 	return nil
 }
@@ -395,23 +453,14 @@ func (s *ProjectServiceImpl) List(
 		}
 
 		// 静态 SQL；status 过滤通过 NULL 短路（$1 IS NULL OR status=$1）
+		// 复用 projectSelectSQL（含 developers jsonb 聚合子查询）
 		var statusVal any
 		if statusFilter != nil {
 			statusVal = string(*statusFilter)
 		}
-		rows, err := tx.Query(ctx, `
-			SELECT
-				id, name, customer_label, description, priority, thesis_level, subject,
-				status, holder_role_id, holder_user_id,
-				deadline,
-				dealing_at, quoting_at, dev_started_at, confirming_at,
-				delivered_at, paid_at, archived_at, after_sales_at, cancelled_at,
-				original_quote, current_quote, after_sales_total, total_received,
-				opening_doc_id, assignment_doc_id, format_spec_doc_id,
-				created_by, created_at, updated_at
-			FROM projects
-			WHERE ($1::project_status IS NULL OR status = $1::project_status)
-			ORDER BY created_at DESC
+		rows, err := tx.Query(ctx, projectSelectSQL+`
+			WHERE ($1::project_status IS NULL OR p.status = $1::project_status)
+			ORDER BY p.created_at DESC
 		`, statusVal)
 		if err != nil {
 			return fmt.Errorf("project_service.List query: %w", err)
@@ -441,7 +490,7 @@ func (s *ProjectServiceImpl) Get(ctx context.Context, userID, roleID, projectID 
 		if err := progressdb.SetSessionContext(ctx, tx, userID, roleID); err != nil {
 			return err
 		}
-		row := tx.QueryRow(ctx, projectSelectSQL+` WHERE id = $1`, projectID)
+		row := tx.QueryRow(ctx, projectSelectSQL+` WHERE p.id = $1`, projectID)
 		p, err := scanProject(row)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrProjectNotFound
@@ -609,21 +658,25 @@ func (s *ProjectServiceImpl) TriggerEvent(
 			return err
 		}
 
-		// 3. 通知：新 holder_user 收"球在你这里"通知
-		if result.NewHolderUserID != nil &&
-			(curHolderUserID == nil || *result.NewHolderUserID != *curHolderUserID) {
-			_, err = tx.Exec(ctx, `
-				INSERT INTO notifications (user_id, type, project_id, title, body)
-				VALUES ($1, 'ball_passed', $2, '球在你这里', $3)
-			`, *result.NewHolderUserID, projectID,
-				fmt.Sprintf("项目状态进入 %s（事件 %s）", result.NewStatus, event))
-			if err != nil {
-				return fmt.Errorf("project_service.TriggerEvent notify: %w", err)
-			}
+		// 3. 通知：按 EventTemplates[event] 模板群发规范化文案
+		//
+		// 业务规则（用户需求 2026-05-03）：
+		//   - 每个事件触发都必须推送通知，不只在 holder 切换时
+		//   - 文案必须承载业务语义（金额、截止日、操作人）而非"球到你了"占位
+		//   - 接收者由 EventTemplates[event].Recipients 决定（业务语义驱动）
+		//
+		// 拉取通知所需上下文：项目快照（金额/截止日/创建者）+ 触发者 display_name
+		// + 全体对接开发 user_ids，一次 JOIN 查询满足。
+		notifyCtx, err := loadNotifyContext(ctx, tx, projectID, userID, roleID, remark, result.NewHolderUserID)
+		if err != nil {
+			return fmt.Errorf("project_service.TriggerEvent load notify ctx: %w", err)
+		}
+		if err := dispatchEventNotifications(ctx, tx, event, projectID, notifyCtx); err != nil {
+			return fmt.Errorf("project_service.TriggerEvent notify: %w", err)
 		}
 
 		// 4. 重新 SELECT 返回最新数据
-		row := tx.QueryRow(ctx, projectSelectSQL+` WHERE id = $1`, projectID)
+		row := tx.QueryRow(ctx, projectSelectSQL+` WHERE p.id = $1`, projectID)
 		p, err := scanProject(row)
 		if err != nil {
 			return fmt.Errorf("project_service.TriggerEvent reload: %w", err)
@@ -694,21 +747,31 @@ func (s *ProjectServiceImpl) ListStatusChanges(
 // SQL helpers
 // ============================================================
 
-// projectSelectSQL 选出全部 project 字段（与 scanProject 一致）。
+// projectSelectSQL 选出全部 project 字段（与 scanProject 一致）+ 嵌入 developers jsonb 聚合。
 //
 // 业务背景：把 SELECT 列固化在常量里，避免 List/Get/Update/TriggerEvent 各自 SELECT
 // 出现列序漂移导致的 scan 错位。
+//
+// developers 列：LEFT JOIN project_developers + JOIN users，按 displayName 升序聚合
+// 成 [{id, displayName}, ...]，COALESCE 保证空数组而非 NULL（前端 zod default([]) 仍兜底）。
+// 参考记忆 feedback_pg_inet_host_func_view_jsonb_agg_payload。
 const projectSelectSQL = `
 	SELECT
-		id, name, customer_label, description, priority, thesis_level, subject,
-		status, holder_role_id, holder_user_id,
-		deadline,
-		dealing_at, quoting_at, dev_started_at, confirming_at,
-		delivered_at, paid_at, archived_at, after_sales_at, cancelled_at,
-		original_quote, current_quote, after_sales_total, total_received,
-		opening_doc_id, assignment_doc_id, format_spec_doc_id,
-		created_by, created_at, updated_at
-	FROM projects
+		p.id, p.name, p.customer_label, p.description, p.priority, p.thesis_level, p.subject,
+		p.status, p.holder_role_id, p.holder_user_id,
+		p.deadline,
+		p.dealing_at, p.quoting_at, p.dev_started_at, p.confirming_at,
+		p.delivered_at, p.paid_at, p.archived_at, p.after_sales_at, p.cancelled_at,
+		p.original_quote, p.current_quote, p.after_sales_total, p.total_received,
+		p.opening_doc_id, p.assignment_doc_id, p.format_spec_doc_id,
+		p.created_by, p.created_at, p.updated_at,
+		COALESCE((
+			SELECT jsonb_agg(jsonb_build_object('id', u.id, 'displayName', u.display_name) ORDER BY u.display_name)
+			FROM project_developers pd
+			JOIN users u ON u.id = pd.user_id
+			WHERE pd.project_id = p.id
+		), '[]'::jsonb) AS developers
+	FROM projects p
 `
 
 // rowScanner 是 *pgx.Row / pgx.Rows 的最小公共面，用于复用 scanProject。
@@ -719,6 +782,7 @@ type rowScanner interface {
 // scanProject 把单行扫描成 ProjectModel。列序与 projectSelectSQL 严格对齐。
 func scanProject(s rowScanner) (*ProjectModel, error) {
 	var p ProjectModel
+	var developersJSON []byte
 	err := s.Scan(
 		&p.ID, &p.Name, &p.CustomerLabel, &p.Description,
 		&p.Priority, &p.ThesisLevel, &p.Subject,
@@ -729,9 +793,28 @@ func scanProject(s rowScanner) (*ProjectModel, error) {
 		&p.OriginalQuote, &p.CurrentQuote, &p.AfterSalesTotal, &p.TotalReceived,
 		&p.OpeningDocID, &p.AssignmentDocID, &p.FormatSpecDocID,
 		&p.CreatedBy, &p.CreatedAt, &p.UpdatedAt,
+		&developersJSON,
 	)
 	if err != nil {
 		return nil, err
+	}
+	if len(developersJSON) > 0 {
+		// jsonb 反序列化：[{"id":..., "displayName":"..."}]
+		// 用 json.Unmarshal 避免引第三方库；developers 列 COALESCE 兜底为 '[]'
+		var raw []struct {
+			ID          int64  `json:"id"`
+			DisplayName string `json:"displayName"`
+		}
+		if err := json.Unmarshal(developersJSON, &raw); err != nil {
+			return nil, fmt.Errorf("project_service.scanProject: parse developers jsonb: %w", err)
+		}
+		p.Developers = make([]ProjectDeveloperRef, 0, len(raw))
+		for _, r := range raw {
+			p.Developers = append(p.Developers, ProjectDeveloperRef{ID: r.ID, DisplayName: r.DisplayName})
+		}
+	}
+	if p.Developers == nil {
+		p.Developers = []ProjectDeveloperRef{}
 	}
 	return &p, nil
 }

@@ -115,6 +115,14 @@ func (s *activityService) List(
 		if _, err := tx.Exec(ctx, `SET LOCAL ROLE progress_app`); err != nil {
 			return fmt.Errorf("activity_service: set role progress_app: %w", err)
 		}
+		// SET LOCAL jit = off：用户反馈 2026-05-03"每次进入进度详情页面... 3 秒以上才能加载"
+		// project_activity_view 7 UNION + 多 LEFT JOIN + RLS check + jsonb_agg 让 plan cost
+		// 超过默认 jit_above_cost (500000)，触发 PostgreSQL JIT 编译。EXPLAIN ANALYZE 显示
+		// JIT Optimization+Emission 占 2.5 秒，比真实执行 (25ms) 慢 100 倍。小数据集 + 复杂
+		// plan 是 JIT 反优化场景；关闭 JIT 让此 endpoint 从 2.5s 降到 ~50ms。
+		if _, err := tx.Exec(ctx, `SET LOCAL jit = off`); err != nil {
+			return fmt.Errorf("activity_service: disable jit: %w", err)
+		}
 		if err := progressdb.SetSessionContext(ctx, tx, ac.UserID, ac.RoleID); err != nil {
 			return fmt.Errorf("activity_service: set rls context: %w", err)
 		}
@@ -159,7 +167,7 @@ func (s *activityService) List(
 				u.display_name AS actor_name,
 				u.username AS actor_username,
 				r.name AS actor_role_name,
-				av.client_ip::TEXT AS client_ip,
+				host(av.client_ip) AS client_ip,
 				av.user_agent,
 				av.payload
 			FROM project_activity_view av

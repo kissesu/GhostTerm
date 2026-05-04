@@ -13,6 +13,16 @@ type UnimplementedHandler struct{}
 
 var _ Handler = UnimplementedHandler{}
 
+// AuthChangePassword implements authChangePassword operation.
+//
+// 需要提供旧密码二次校验；成功后递增 token_version 让其它会话失效（当前
+// access token 仍在 TTL 内可用一会儿，由前端引导用户重新登录）。.
+//
+// POST /api/auth/change-password
+func (UnimplementedHandler) AuthChangePassword(ctx context.Context, req *ChangePasswordRequest) (r AuthChangePasswordRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // AuthGetMe implements authGetMe operation.
 //
 // 获取当前登录用户.
@@ -46,6 +56,16 @@ func (UnimplementedHandler) AuthLogout(ctx context.Context) (r AuthLogoutRes, _ 
 //
 // POST /api/auth/refresh
 func (UnimplementedHandler) AuthRefresh(ctx context.Context, req *AuthRefreshRequest) (r AuthRefreshRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// AuthUpdateMe implements authUpdateMe operation.
+//
+// 仅允许 displayName / username 两个字段；roleId / isActive 必须由超管通过
+// /api/users/{id} 修改。.
+//
+// PATCH /api/auth/me
+func (UnimplementedHandler) AuthUpdateMe(ctx context.Context, req *AuthUpdateMeRequest) (r AuthUpdateMeRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -136,6 +156,15 @@ func (UnimplementedHandler) NotificationsMarkRead(ctx context.Context, params No
 //
 // GET /api/permissions
 func (UnimplementedHandler) PermissionsList(ctx context.Context) (r PermissionsListRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ProjectsAttachFile implements projectsAttachFile operation.
+//
+// 把已上传的 file 挂到项目下指定 category（用户上传源码 / 参考样稿后调用）.
+//
+// POST /api/projects/{id}/files
+func (UnimplementedHandler) ProjectsAttachFile(ctx context.Context, req *ProjectsAttachFileReq, params ProjectsAttachFileParams) (r *ProjectFileResponse, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

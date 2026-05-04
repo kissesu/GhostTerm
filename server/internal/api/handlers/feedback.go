@@ -231,12 +231,23 @@ func (h *FeedbackHandler) FeedbacksUpdate(ctx context.Context, req *oas.Feedback
 
 // toOASFeedback 把 services.Feedback 转为 oas.Feedback。
 //
-// 注：oas.Feedback.AttachmentIds 是非 nullable []int64（required），
-// 即便没有附件也要给 [] 而非 nil（避免前端 zod schema 解析炸）。
+// 注：
+//   - oas.Feedback.AttachmentIds 是非 nullable []int64（required），即便没有附件也要给 [] 而非 nil
+//     避免前端 zod schema 解析炸
+//   - oas.Feedback.Attachments 同样是 required（用户反馈 2026-05-03 新增），no-attachment 时给 []
+//     让前端可直接 .map 渲染 MediaPreview / 下载链接
 func toOASFeedback(f services.Feedback) oas.Feedback {
 	atts := f.AttachmentIDs
 	if atts == nil {
 		atts = []int64{}
+	}
+	// 映射 services.FeedbackAttachmentRef → oas.FeedbackAttachmentsItem
+	attachments := make([]oas.FeedbackAttachmentsItem, 0, len(f.Attachments))
+	for _, a := range f.Attachments {
+		attachments = append(attachments, oas.FeedbackAttachmentsItem{
+			ID:       a.ID,
+			Filename: a.Filename,
+		})
 	}
 	return oas.Feedback{
 		ID:            f.ID,
@@ -247,6 +258,7 @@ func toOASFeedback(f services.Feedback) oas.Feedback {
 		RecordedBy:    f.RecordedBy,
 		RecordedAt:    f.RecordedAt,
 		AttachmentIds: atts,
+		Attachments:   attachments,
 	}
 }
 

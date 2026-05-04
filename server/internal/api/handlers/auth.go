@@ -187,6 +187,119 @@ func (h *AuthHandler) AuthGetMe(ctx context.Context) (oas.AuthGetMeRes, error) {
 }
 
 // ============================================================
+// AuthChangePassword
+// ============================================================
+
+// AuthChangePassword 实现 POST /api/auth/change-password。
+//
+// 业务流程：
+//  1. 从 ctx 取 AuthContext；缺失 → 401
+//  2. 调 svc.ChangePassword(sc, oldPassword, newPassword)
+//  3. 错误映射：
+//     - ErrInvalidCredentials → 401（旧密码错或用户被并发删）
+//     - ErrInvalidUserInput   → 422（新密码弱 / 与旧相同）
+//     - 其它                  → 500
+//
+// 注：成功后不让前端立刻 logout —— access token 仍可用一会儿；
+// 前端展示提示，引导用户主动重登。
+func (h *AuthHandler) AuthChangePassword(ctx context.Context, req *oas.ChangePasswordRequest) (oas.AuthChangePasswordRes, error) {
+	sc, ok := middleware.AuthContextFrom(ctx)
+	if !ok {
+		// ogen 给本 op 生成的 *Unauthorized 是 ErrorEnvelope alias
+		e := newErrorEnvelope(oas.ErrorEnvelopeErrorCodeUnauthorized, "未登录")
+		r := oas.AuthChangePasswordUnauthorized(e)
+		return &r, nil
+	}
+	if req == nil {
+		e := newErrorEnvelope(oas.ErrorEnvelopeErrorCodeValidationFailed, "请求体缺失")
+		r := oas.AuthChangePasswordUnprocessableEntity(e)
+		return &r, nil
+	}
+	if err := h.Svc.ChangePassword(ctx, sc, req.OldPassword, req.NewPassword); err != nil {
+		switch {
+		case errors.Is(err, services.ErrInvalidCredentials):
+			e := newErrorEnvelope(oas.ErrorEnvelopeErrorCodeUnauthorized, "旧密码错误")
+			r := oas.AuthChangePasswordUnauthorized(e)
+			return &r, nil
+		case errors.Is(err, services.ErrInvalidUserInput):
+			e := newErrorEnvelope(oas.ErrorEnvelopeErrorCodeValidationFailed, err.Error())
+			r := oas.AuthChangePasswordUnprocessableEntity(e)
+			return &r, nil
+		default:
+			return nil, err
+		}
+	}
+	return &oas.AuthChangePasswordNoContent{}, nil
+}
+
+// ============================================================
+// AuthUpdateMe
+// ============================================================
+
+// AuthUpdateMe 实现 PATCH /api/auth/me。
+//
+// 业务流程：
+//  1. 从 ctx 取 AuthContext；缺失 → 401
+//  2. 把 oas optional 字段（OptString.Set）转 *string 入参
+//  3. 调 svc.UpdateMe；返回新 oas.User（不附 permissions —— 与 Atlas 用户列表保持一致）
+//
+// 错误映射：
+//   - ErrUsernameTaken    → 422 用户名已存在
+//   - ErrInvalidUserInput → 422 字段非法
+//   - ErrUserNotFound     → 401（被并发删，等同会话失效）
+func (h *AuthHandler) AuthUpdateMe(ctx context.Context, req *oas.AuthUpdateMeRequest) (oas.AuthUpdateMeRes, error) {
+	sc, ok := middleware.AuthContextFrom(ctx)
+	if !ok {
+		e := newErrorEnvelope(oas.ErrorEnvelopeErrorCodeUnauthorized, "未登录")
+		r := oas.AuthUpdateMeUnauthorized(e)
+		return &r, nil
+	}
+	if req == nil {
+		e := newErrorEnvelope(oas.ErrorEnvelopeErrorCodeValidationFailed, "请求体缺失")
+		r := oas.AuthUpdateMeUnprocessableEntity(e)
+		return &r, nil
+	}
+
+	in := services.UpdateMeInput{}
+	if req.Username.Set {
+		v := req.Username.Value
+		in.Username = &v
+	}
+	if req.DisplayName.Set {
+		v := req.DisplayName.Value
+		in.DisplayName = &v
+	}
+
+	raw, err := h.Svc.UpdateMe(ctx, sc, in)
+	if err != nil {
+		switch {
+		case errors.Is(err, services.ErrUsernameTaken):
+			e := newErrorEnvelope(oas.ErrorEnvelopeErrorCodeValidationFailed, "用户名已存在")
+			r := oas.AuthUpdateMeUnprocessableEntity(e)
+			return &r, nil
+		case errors.Is(err, services.ErrInvalidUserInput):
+			e := newErrorEnvelope(oas.ErrorEnvelopeErrorCodeValidationFailed, err.Error())
+			r := oas.AuthUpdateMeUnprocessableEntity(e)
+			return &r, nil
+		case errors.Is(err, services.ErrUserNotFound):
+			e := newErrorEnvelope(oas.ErrorEnvelopeErrorCodeUnauthorized, "用户不存在或已被禁用")
+			r := oas.AuthUpdateMeUnauthorized(e)
+			return &r, nil
+		default:
+			return nil, err
+		}
+	}
+	user, ok := raw.(services.AuthUser)
+	if !ok {
+		return nil, errors.New("auth handler: unexpected user type from UpdateMe")
+	}
+	// 与 toOASUserView 一致：Permissions 显式给空数组，避免前端 zod schema_drift
+	oasUser := toOASUser(user)
+	oasUser.Permissions = []string{}
+	return &oas.UserResponse{Data: oasUser}, nil
+}
+
+// ============================================================
 // WsTicketIssue
 // ============================================================
 

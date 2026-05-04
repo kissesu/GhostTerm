@@ -8,6 +8,13 @@ import (
 
 // Handler handles operations described by OpenAPI v3 specification.
 type Handler interface {
+	// AuthChangePassword implements authChangePassword operation.
+	//
+	// 需要提供旧密码二次校验；成功后递增 token_version 让其它会话失效（当前
+	// access token 仍在 TTL 内可用一会儿，由前端引导用户重新登录）。.
+	//
+	// POST /api/auth/change-password
+	AuthChangePassword(ctx context.Context, req *ChangePasswordRequest) (AuthChangePasswordRes, error)
 	// AuthGetMe implements authGetMe operation.
 	//
 	// 获取当前登录用户.
@@ -32,6 +39,13 @@ type Handler interface {
 	//
 	// POST /api/auth/refresh
 	AuthRefresh(ctx context.Context, req *AuthRefreshRequest) (AuthRefreshRes, error)
+	// AuthUpdateMe implements authUpdateMe operation.
+	//
+	// 仅允许 displayName / username 两个字段；roleId / isActive 必须由超管通过
+	// /api/users/{id} 修改。.
+	//
+	// PATCH /api/auth/me
+	AuthUpdateMe(ctx context.Context, req *AuthUpdateMeRequest) (AuthUpdateMeRes, error)
 	// DashboardGetRisks implements dashboardGetRisks operation.
 	//
 	// 风险总览（临近 deadline / 已超期 / 应收逾期），按 RBAC 过滤.
@@ -92,6 +106,12 @@ type Handler interface {
 	//
 	// GET /api/permissions
 	PermissionsList(ctx context.Context) (PermissionsListRes, error)
+	// ProjectsAttachFile implements projectsAttachFile operation.
+	//
+	// 把已上传的 file 挂到项目下指定 category（用户上传源码 / 参考样稿后调用）.
+	//
+	// POST /api/projects/{id}/files
+	ProjectsAttachFile(ctx context.Context, req *ProjectsAttachFileReq, params ProjectsAttachFileParams) (*ProjectFileResponse, error)
 	// ProjectsCreate implements projectsCreate operation.
 	//
 	// 创建项目（默认进入 dealing 状态）.

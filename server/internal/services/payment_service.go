@@ -30,6 +30,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -39,6 +40,10 @@ import (
 
 	progressdb "github.com/ghostterm/progress-server/internal/db"
 )
+
+// jsonUnmarshal 是 encoding/json.Unmarshal 的本文件 alias，
+// 让 decodePaymentAttachments 内不直接耦合 stdlib 包名（便于未来切到 jsoniter 等）。
+func jsonUnmarshal(data []byte, v any) error { return json.Unmarshal(data, v) }
 
 // ============================================================
 // Sentinel errors
@@ -87,9 +92,19 @@ func (d PaymentDirection) IsValid() bool {
 	return d == PaymentDirectionCustomerIn || d == PaymentDirectionDevSettlement
 }
 
+// PaymentAttachmentRef 是 payment_attachments 关联文件的精简视图（id + 文件名）。
+//
+// 业务背景：前端时间线 / 详情弹窗只需要 id（拼下载 URL）+ filename（展示），
+// 不需要完整 file 元数据；与 FeedbackActivityPayload.attachments 同款形状。
+type PaymentAttachmentRef struct {
+	ID       int64
+	Filename string
+}
+
 // Payment 数据库行映射。
 //
 // Money 走 db.Money（NUMERIC text codec），保证全链路无浮点精度损失。
+// Attachments 是凭证截图列表（migration 0014 payment_attachments），可空数组。
 type Payment struct {
 	ID            int64
 	ProjectID     int64
@@ -101,6 +116,7 @@ type Payment struct {
 	Remark        string
 	RecordedBy    int64
 	RecordedAt    time.Time
+	Attachments   []PaymentAttachmentRef
 }
 
 // PaymentCreateInput Create 入参。
@@ -114,6 +130,10 @@ type PaymentCreateInput struct {
 	RelatedUserID *int64
 	ScreenshotID  *int64
 	Remark        string
+
+	// AttachmentIDs 可选凭证截图 file_id 列表（migration 0014）。
+	// 同事务 INSERT 进 payment_attachments；空 slice 时跳过。
+	AttachmentIDs []int64
 
 	// RecordedBy 由 handler 从 AuthContext 注入（不让前端传，防止伪造记账人）
 	RecordedBy int64
@@ -197,12 +217,29 @@ func (s *paymentService) List(ctx context.Context, sc SessionContext, projectID 
 			return err
 		}
 
+		// 用 LEFT JOIN + jsonb_agg 把 payment_attachments 数组内联进每行 payment，
+		// 避免 N+1 查询；与 0011 migration feedback view 同模式（参考记忆
+		// feedback_pg_inet_host_func_view_jsonb_agg_payload）。
+		// COALESCE '[]'::jsonb 兜底无附件时返回空数组而非 NULL。
 		rows, err := tx.Query(ctx, `
-			SELECT id, project_id, direction, amount, paid_at,
-			       related_user_id, screenshot_id, remark, recorded_by, recorded_at
-			FROM payments
-			WHERE project_id = $1
-			ORDER BY paid_at DESC, id DESC
+			SELECT
+				p.id, p.project_id, p.direction, p.amount, p.paid_at,
+				p.related_user_id, p.screenshot_id, p.remark, p.recorded_by, p.recorded_at,
+				COALESCE(att.list, '[]'::jsonb) AS attachments
+			FROM payments p
+			LEFT JOIN (
+				SELECT
+					pa.payment_id,
+					jsonb_agg(
+						jsonb_build_object('id', f.id, 'filename', f.filename)
+						ORDER BY pa.attached_at, pa.file_id
+					) AS list
+				FROM payment_attachments pa
+				JOIN files f ON f.id = pa.file_id
+				GROUP BY pa.payment_id
+			) att ON att.payment_id = p.id
+			WHERE p.project_id = $1
+			ORDER BY p.paid_at DESC, p.id DESC
 		`, projectID)
 		if err != nil {
 			return fmt.Errorf("payment: query payments: %w", err)
@@ -211,26 +248,57 @@ func (s *paymentService) List(ctx context.Context, sc SessionContext, projectID 
 
 		for rows.Next() {
 			var (
-				p             Payment
-				directionRaw  string
-				relatedUserID *int64
-				screenshotID  *int64
+				p              Payment
+				directionRaw   string
+				relatedUserID  *int64
+				screenshotID   *int64
+				attachmentsRaw []byte // jsonb 走 []byte，service 层手动 unmarshal
 			)
 			if err := rows.Scan(
 				&p.ID, &p.ProjectID, &directionRaw, &p.Amount, &p.PaidAt,
 				&relatedUserID, &screenshotID, &p.Remark, &p.RecordedBy, &p.RecordedAt,
+				&attachmentsRaw,
 			); err != nil {
 				return fmt.Errorf("payment: scan row: %w", err)
 			}
 			p.Direction = PaymentDirection(directionRaw)
 			p.RelatedUserID = relatedUserID
 			p.ScreenshotID = screenshotID
+			atts, err := decodePaymentAttachments(attachmentsRaw)
+			if err != nil {
+				return fmt.Errorf("payment: decode attachments: %w", err)
+			}
+			p.Attachments = atts
 			out = append(out, p)
 		}
 		return rows.Err()
 	})
 	if err != nil {
 		return nil, err
+	}
+	return out, nil
+}
+
+// decodePaymentAttachments 把 jsonb_agg 返回的字节切片解析为 PaymentAttachmentRef 切片。
+//
+// 业务背景：jsonb 列在 pgx 默认走 []byte；手动 json.Unmarshal 比注册自定义 codec 简单，
+// 且 attachments 数组通常 0~5 个元素，性能足够。空数组兜底返回空 slice 而非 nil
+// （让 oas 编码 attachments: [] 而不是 null，与前端 zod default([]) 对齐）。
+func decodePaymentAttachments(raw []byte) ([]PaymentAttachmentRef, error) {
+	if len(raw) == 0 {
+		return []PaymentAttachmentRef{}, nil
+	}
+	type rawAtt struct {
+		ID       int64  `json:"id"`
+		Filename string `json:"filename"`
+	}
+	var arr []rawAtt
+	if err := jsonUnmarshal(raw, &arr); err != nil {
+		return nil, err
+	}
+	out := make([]PaymentAttachmentRef, 0, len(arr))
+	for _, a := range arr {
+		out = append(out, PaymentAttachmentRef{ID: a.ID, Filename: a.Filename})
 	}
 	return out, nil
 }
@@ -344,6 +412,48 @@ func (s *paymentService) Create(ctx context.Context, sc SessionContext, projectI
 		out.Direction = PaymentDirection(directionRaw)
 		out.RelatedUserID = relatedUserID
 		out.ScreenshotID = screenshotID
+		out.Attachments = []PaymentAttachmentRef{}
+
+		// ============================================================
+		// 同事务 INSERT payment_attachments（凭证截图）
+		//
+		// 业务背景：用户反馈 2026-05-03 "结算弹窗没有上传截图的入口"；migration 0014 起
+		// 支持多张截图凭证。同事务 INSERT 保证"payment 已写但 attachments 失败"不会发生。
+		// 用 UNNEST 一次写入；RLS payment_attachments_insert 策略已通过父 payments 的 is_member 校验。
+		//
+		// 写完再 SELECT 一次 files.filename 拼装回 out.Attachments，保持调用方拿到的
+		// Payment 与 List 输出一致（attachments 数组带 filename）。
+		// ============================================================
+		if len(input.AttachmentIDs) > 0 {
+			if _, err := tx.Exec(ctx, `
+				INSERT INTO payment_attachments (payment_id, file_id)
+				SELECT $1, UNNEST($2::BIGINT[])
+			`, out.ID, input.AttachmentIDs); err != nil {
+				return fmt.Errorf("payment: insert attachments: %w", err)
+			}
+			// 拉文件名拼装返回视图（顺序与 input.AttachmentIDs 一致）
+			rows, err := tx.Query(ctx, `
+				SELECT pa.file_id, f.filename
+				FROM payment_attachments pa
+				JOIN files f ON f.id = pa.file_id
+				WHERE pa.payment_id = $1
+				ORDER BY pa.attached_at, pa.file_id
+			`, out.ID)
+			if err != nil {
+				return fmt.Errorf("payment: query attachments: %w", err)
+			}
+			defer rows.Close()
+			for rows.Next() {
+				var ref PaymentAttachmentRef
+				if err := rows.Scan(&ref.ID, &ref.Filename); err != nil {
+					return fmt.Errorf("payment: scan attachment: %w", err)
+				}
+				out.Attachments = append(out.Attachments, ref)
+			}
+			if err := rows.Err(); err != nil {
+				return fmt.Errorf("payment: iterate attachments: %w", err)
+			}
+		}
 
 		// 客户付款累加 projects.total_received（同事务原子）
 		if input.Direction == PaymentDirectionCustomerIn {
