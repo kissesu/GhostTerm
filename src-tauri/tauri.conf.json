@@ -37,21 +37,46 @@
       {
         "name": "Text File",
         "description": "Text and markup files",
-        "ext": ["txt", "md", "markdown", "rst", "log"]
+        "ext": ["txt", "md", "markdown", "mdx", "rst", "log",
+                "adoc", "asciidoc", "org", "wiki",
+                "csv", "tsv", "tex", "bib",
+                "diff", "patch"]
       },
       {
         "name": "Source Code",
         "description": "Source code files",
-        "ext": ["js", "ts", "jsx", "tsx", "mjs", "cjs", "vue", "svelte",
-                "rs", "py", "go", "java", "kt", "swift", "c", "cpp", "h", "hpp",
-                "cs", "rb", "php", "lua", "r", "dart", "zig"]
+        "ext": ["js", "ts", "jsx", "tsx", "mjs", "cjs", "mts", "cts",
+                "vue", "svelte", "astro",
+                "wxml", "wxss", "wxs", "axml", "acss",
+                "pug", "jade", "ejs", "hbs", "handlebars", "mustache",
+                "liquid", "njk", "twig", "erb",
+                "rs", "py", "go", "java", "kt", "kts", "swift",
+                "c", "cpp", "h", "hpp", "cs", "rb", "php", "lua", "r", "dart", "zig",
+                "scala", "sc", "groovy", "gradle",
+                "clj", "cljs", "cljc", "edn", "lisp", "el",
+                "ex", "exs", "eex", "heex", "leex", "erl", "hrl",
+                "hs", "lhs", "ml", "mli", "elm",
+                "nim", "cr", "v", "tcl", "mm", "nu",
+                "proto", "thrift", "avsc", "wat",
+                "sql", "graphql", "gql", "prisma",
+                "sol", "move", "cairo", "vy",
+                "tf", "tfvars", "hcl", "nix",
+                "ipynb",
+                "cmd", "bat", "csh", "ksh", "nush"]
       },
       {
         "name": "Config File",
         "description": "Configuration and data files",
         "ext": ["json", "jsonc", "toml", "yaml", "yml", "xml", "ini",
                 "sh", "bash", "zsh", "fish", "ps1",
-                "css", "scss", "less", "html", "htm", "svg"]
+                "css", "scss", "less", "html", "htm", "svg",
+                "env", "conf", "cfg", "properties", "lock",
+                "gitignore", "gitattributes", "dockerignore", "editorconfig",
+                "gitconfig", "gitmodules", "bashrc", "zshrc", "vimrc", "inputrc",
+                "npmrc", "yarnrc", "nvmrc", "eslintrc", "prettierrc", "babelrc", "stylelintrc",
+                "cmake", "mk", "ninja",
+                "gemspec", "podspec", "mod", "sum",
+                "htaccess", "htpasswd", "webmanifest"]
       }
     ],
     "icon": [
