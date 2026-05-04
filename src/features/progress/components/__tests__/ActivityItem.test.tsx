@@ -46,7 +46,7 @@ describe('ActivityItem', () => {
     };
     render(<ActivityItem activity={activity} />);
     // chip 显示目标流程名（用户反馈 2026-05-03"状态 tag 应该使用实际的流程名"）
-    expect(screen.getByText('开发中')).toBeInTheDocument();
-    expect(screen.getByText(/「报价中」.*「开发中」/)).toBeInTheDocument();
+    expect(screen.getByText('开发')).toBeInTheDocument();
+    expect(screen.getByText(/「报价」.*「开发」/)).toBeInTheDocument();
   });
 });

@@ -36,7 +36,7 @@ describe('DetailMainHead', () => {
   it('渲染项目名 + 客户 + 学位 + 报价 + 已收', () => {
     render(<DetailMainHead project={makeProject()} />);
     expect(screen.getByText('测试项目')).toBeInTheDocument();
-    expect(screen.getByText('李四 · master')).toBeInTheDocument();
+    expect(screen.getByText('李四 · 硕士')).toBeInTheDocument();
     // 报价格式：¥9,000
     expect(screen.getByText('¥9,000')).toBeInTheDocument();
     // 已收：¥3,000

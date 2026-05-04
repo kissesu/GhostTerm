@@ -81,8 +81,8 @@ describe('EventTriggerDialog · a11y 与基础渲染', () => {
       />,
     );
     const transition = screen.getByTestId('event-transition');
-    // from = developing → 中文 "开发中"；to = E7 transitionTo 是 confirming → "验收"
-    expect(transition.textContent).toContain('开发中');
+    // from = developing → STATUS_LABEL "开发"；to = E7 transitionTo 是 confirming → "验收"
+    expect(transition.textContent).toContain('开发');
     expect(transition.textContent).toContain('验收');
     expect(transition.textContent).toContain('E7');
   });
@@ -130,7 +130,7 @@ describe('EventTriggerDialog · 不同 EventCode 字段动态渲染', () => {
         onClose={vi.fn()}
       />,
     );
-    const amount = screen.getByLabelText(/收款金额/) as HTMLInputElement;
+    const amount = screen.getByLabelText(/结算金额/) as HTMLInputElement;
     expect(amount.type).toBe('number');
     const method = screen.getByLabelText(/支付方式/) as HTMLSelectElement;
     expect(method.tagName).toBe('SELECT');
@@ -227,11 +227,11 @@ describe('EventTriggerDialog · 提交成功 / 失败路径', () => {
     });
     expect(onSuccess).toHaveBeenCalledOnce();
     expect(onClose).toHaveBeenCalledOnce();
-    // toast 文案含 "标记开发完成 完成 · 开发中 → 验收"
+    // toast 文案含 "标记开发完成 完成 · 开发 → 验收"
     expect(showToast).toHaveBeenCalledOnce();
     const toastArg = showToast.mock.calls[0][0] as string;
     expect(toastArg).toContain('标记开发完成');
-    expect(toastArg).toContain('开发中');
+    expect(toastArg).toContain('开发');
     expect(toastArg).toContain('验收');
   });
 
@@ -247,7 +247,7 @@ describe('EventTriggerDialog · 提交成功 / 失败路径', () => {
         onClose={vi.fn()}
       />,
     );
-    await userEvent.type(screen.getByLabelText(/收款金额/), '5000');
+    await userEvent.type(screen.getByLabelText(/结算金额/), '5000');
     await userEvent.selectOptions(screen.getByLabelText(/支付方式/), '微信');
     await userEvent.type(screen.getByLabelText(/^备注/), '尾款已收');
     await userEvent.click(screen.getByRole('button', { name: '确认提交' }));

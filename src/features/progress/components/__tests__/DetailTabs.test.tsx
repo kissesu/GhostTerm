@@ -16,7 +16,7 @@ describe('DetailTabs', () => {
     expect(screen.getByRole('tab', { name: '反馈' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '论文版本' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '源码' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '收款' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '结算' })).toBeInTheDocument();
   });
 
   it('active="timeline" → timeline tab aria-selected=true', () => {

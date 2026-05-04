@@ -44,7 +44,7 @@ describe('KanbanCard', () => {
     );
     expect(screen.getByText('测试论文项目')).toBeInTheDocument();
     expect(screen.getByText('张三')).toBeInTheDocument();
-    expect(screen.getByText('master')).toBeInTheDocument();
+    expect(screen.getByText('硕士')).toBeInTheDocument();
     // CTA 按钮文案 = developing 的 primary action label（找 native <button> 元素）
     const ctaBtn = screen.getAllByRole('button').find((el) => el.tagName === 'BUTTON');
     expect(ctaBtn).toBeTruthy();

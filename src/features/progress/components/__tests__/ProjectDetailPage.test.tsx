@@ -187,14 +187,14 @@ describe('ProjectDetailPage', () => {
 
   it('点击 "收款" tab → 渲染"+ 新增收款"按钮', async () => {
     render(<ProjectDetailPage projectId={7} />);
-    await userEvent.click(screen.getByRole('tab', { name: '收款' }));
-    expect(screen.getByRole('button', { name: '+ 新增收款' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: '结算' }));
+    expect(screen.getByRole('button', { name: '+ 新增结算' })).toBeInTheDocument();
   });
 
   it('点击"+ 新增收款"→ PaymentDialog 出现', async () => {
     render(<ProjectDetailPage projectId={7} />);
-    await userEvent.click(screen.getByRole('tab', { name: '收款' }));
-    await userEvent.click(screen.getByRole('button', { name: '+ 新增收款' }));
+    await userEvent.click(screen.getByRole('tab', { name: '结算' }));
+    await userEvent.click(screen.getByRole('button', { name: '+ 新增结算' }));
     expect(screen.getByTestId('payment-dialog')).toBeInTheDocument();
   });
 

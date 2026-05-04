@@ -67,9 +67,9 @@ describe('KanbanView', () => {
     render(<KanbanView />);
     expect(screen.getByText('洽谈')).toBeInTheDocument();
     expect(screen.getByText('报价')).toBeInTheDocument();
-    expect(screen.getByText('开发中')).toBeInTheDocument();
+    expect(screen.getByText('开发')).toBeInTheDocument();
     expect(screen.getByText('验收')).toBeInTheDocument();
-    expect(screen.getByText('已交付')).toBeInTheDocument();
+    expect(screen.getByText('交付')).toBeInTheDocument();
   });
 
   it('developing 列有 KanbanCard 显示 "标记开发完成" CTA', () => {

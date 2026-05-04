@@ -84,9 +84,9 @@ describe('StatusChangeRenderer', () => {
       },
     };
     render(<StatusChangeRenderer activity={activity} />);
-    // chip 显示 toStatus 对应的流程名 "报价中"（用户反馈"状态 tag 应该使用实际的流程名"）
-    expect(screen.getByText('报价中')).toBeInTheDocument();
-    expect(screen.getByText(/项目从「洽谈中」进入「报价中」/)).toBeInTheDocument();
+    // chip 显示 toStatus 对应的流程名 "报价"（用户反馈"状态 tag 应该使用实际的流程名"）
+    expect(screen.getByText('报价')).toBeInTheDocument();
+    expect(screen.getByText(/项目从「洽谈」进入「报价」/)).toBeInTheDocument();
     expect(screen.getByText(/发出报价 · 走加急通道/)).toBeInTheDocument();
   });
 
@@ -104,7 +104,7 @@ describe('StatusChangeRenderer', () => {
       },
     };
     render(<StatusChangeRenderer activity={activity} />);
-    expect(screen.getByText(/项目从「初始」进入「洽谈中」/)).toBeInTheDocument();
+    expect(screen.getByText(/项目从「初始」进入「洽谈」/)).toBeInTheDocument();
   });
 });
 
@@ -144,7 +144,8 @@ describe('PaymentRenderer', () => {
       },
     };
     render(<PaymentRenderer activity={activity} />);
-    expect(screen.getByText('款项')).toBeInTheDocument();
+    // 用户反馈"结算的时间线 tag 应该显示为结算而不是款项"——chip 用 STATUS_LABEL.paid='结算'
+    expect(screen.getByText('结算')).toBeInTheDocument();
     expect(screen.getByText(/录入客户收款 ¥2000\.00/)).toBeInTheDocument();
     expect(screen.getByText(/首款 · 实际/)).toBeInTheDocument();
   });
@@ -185,7 +186,8 @@ describe('ProjectFileRenderer', () => {
       payload: { fileId: 1, category: 'sample_doc', filename: 'sample.pdf' },
     };
     render(<ProjectFileRenderer activity={activity} />);
-    expect(screen.getByText('附件')).toBeInTheDocument();
+    // 用户反馈"源码的时间线 tag 应该显示为源码而不是附件"——chip 用 categoryLabel 动态化
+    expect(screen.getByText('参考样稿')).toBeInTheDocument();
     expect(screen.getByText(/上传参考样稿/)).toBeInTheDocument();
   });
 });
