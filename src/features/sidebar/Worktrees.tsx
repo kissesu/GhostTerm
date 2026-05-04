@@ -199,7 +199,7 @@ export default function Worktrees() {
                 type="text"
                 value={createPath}
                 onChange={(event) => setCreatePath(event.target.value)}
-                placeholder="/absolute/path/to/worktree"
+                placeholder="例如 /Users/foo/worktree 或 C:\Users\foo\worktree"
                 style={dialogInputStyle()}
                 data-testid="worktree-create-path-input"
               />

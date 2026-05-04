@@ -556,7 +556,7 @@ export default function SettingsPage({
                       value={terminal.customShellPath}
                       onChange={(e) => updateTerminalSettings({ customShellPath: e.target.value })}
                       disabled={terminal.useSystemShell}
-                      placeholder="/opt/homebrew/bin/fish"
+                      placeholder="例如 /opt/homebrew/bin/fish 或 powershell.exe"
                       style={{
                         ...inputStyle,
                         opacity: terminal.useSystemShell ? 0.4 : 1,

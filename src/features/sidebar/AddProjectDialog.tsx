@@ -264,7 +264,7 @@ export default function AddProjectDialog({ onClose }: AddProjectDialogProps) {
                     type="text"
                     value={localPath}
                     onChange={(event) => setLocalPath(event.target.value)}
-                    placeholder="/path/to/repository"
+                    placeholder="例如 /Users/foo/proj 或 C:\Users\foo\proj"
                     style={{ ...inputStyle(), flex: 1 }}
                     data-testid="add-project-local-path-input"
                   />
@@ -311,7 +311,7 @@ export default function AddProjectDialog({ onClose }: AddProjectDialogProps) {
                     type="text"
                     value={clonePath}
                     onChange={(event) => setClonePath(event.target.value)}
-                    placeholder="/absolute/path/to/new-project"
+                    placeholder="例如 /Users/foo/new-project 或 C:\Users\foo\new-project"
                     style={{ ...inputStyle(), flex: 1 }}
                     data-testid="add-project-clone-path-input"
                   />
@@ -358,7 +358,7 @@ export default function AddProjectDialog({ onClose }: AddProjectDialogProps) {
                     type="text"
                     value={sshPath}
                     onChange={(event) => setSshPath(event.target.value)}
-                    placeholder="/absolute/path/to/new-project"
+                    placeholder="例如 /Users/foo/new-project 或 C:\Users\foo\new-project"
                     style={{ ...inputStyle(), flex: 1 }}
                     data-testid="add-project-ssh-path-input"
                   />
