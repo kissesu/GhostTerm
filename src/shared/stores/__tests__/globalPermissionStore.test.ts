@@ -28,6 +28,9 @@ vi.mock('../globalAuthStore', () => ({
 vi.mock('../../../features/progress/api/client', () => ({
   getBaseUrl: vi.fn(() => 'http://test'),
   silentRefreshOnce: vi.fn(async () => true),
+  // tauriAwareFetch 在 vitest jsdom 环境委托给全局 fetch（与生产代码 dual-mode 行为一致：
+  // jsdom 无 __TAURI_INTERNALS__ → 走 fetch 路径），保留现有 vi.mocked(globalThis.fetch) mock 链
+  tauriAwareFetch: vi.fn((url: string, init?: RequestInit) => globalThis.fetch(url, init)),
   ProgressApiError: class ProgressApiError extends Error {
     constructor(
       public status: number,
