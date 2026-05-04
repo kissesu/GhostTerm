@@ -23,6 +23,19 @@ use std::time::UNIX_EPOCH;
 // 避免一次性加载超大文件导致内存压力
 const LARGE_FILE_THRESHOLD: u64 = 5 * 1024 * 1024;
 
+/// 把 Path 规范为前端友好的 forward-slash 字符串
+///
+/// 业务说明：
+/// 前端 JS 用 `/` 做 split/startsWith/dirname 等 path 处理（VSCode 同样约定）。
+/// Rust `to_string_lossy()` 在 Windows 返回反斜杠路径 `C:\foo\bar`，
+/// 让前端 9+ 处 `path.split('/')` 全部失效（文件名/父路径/相对路径错误）。
+/// Tauri 的 shell/dialog/opener/fs API 双向接受 `/`，故后端规范无副作用。
+///
+/// 所有跨 Tauri 边界返回给前端的 path 字符串必须经此 helper。
+pub(crate) fn to_fwd_path(p: impl AsRef<Path>) -> String {
+    p.as_ref().to_string_lossy().replace('\\', "/")
+}
+
 /// 读取文件内容，返回判别联合类型
 ///
 /// 业务逻辑：
@@ -191,7 +204,8 @@ pub fn list_dir(path: &str, show_hidden: bool) -> Result<Vec<FileEntry>, String>
 
         entries.push(FileEntry {
             name,
-            path: entry_path.to_string_lossy().to_string(),
+            // 跨 Tauri 边界：规范 forward slash 让前端 split('/') 跨平台正确
+            path: to_fwd_path(&entry_path),
             is_dir,
             size,
             modified,

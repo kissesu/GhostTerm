@@ -4,6 +4,9 @@
 // @author: Atlas.oi
 // @date: 2026-04-16
 
+// Path 规范化 helper：跨 Tauri 边界给前端的 path 必须 forward slash
+use super::to_fwd_path;
+
 // 每个文件最多返回的匹配条数，超出后设 truncated=true 并停止该文件扫描
 const MAX_MATCHES_PER_FILE: usize = 50;
 
@@ -174,12 +177,8 @@ fn search_file_content(
         return None;
     }
 
-    let abs_path = path.to_string_lossy().to_string();
-    let file_path = path
-        .strip_prefix(root)
-        .unwrap_or(path)
-        .to_string_lossy()
-        .to_string();
+    let abs_path = to_fwd_path(path);
+    let file_path = to_fwd_path(path.strip_prefix(root).unwrap_or(path));
 
     Some(SearchFileResult {
         file_path,
@@ -200,11 +199,7 @@ fn search_file_name(
 ) -> Option<SearchFileResult> {
     // 规范化 root_path：Path::new 自动处理末尾斜杠，与 search_file_content 保持一致
     let root = std::path::Path::new(root_path);
-    let rel = path
-        .strip_prefix(root)
-        .unwrap_or(path)
-        .to_string_lossy()
-        .to_string();
+    let rel = to_fwd_path(path.strip_prefix(root).unwrap_or(path));
 
     // 先提取匹配区间，再 move rel；re.find 借用 rel，需先记录偏移
     let (col_start, col_end) = {
@@ -212,7 +207,7 @@ fn search_file_name(
         (m.start() as u32, m.end() as u32)
     };
 
-    let abs_path = path.to_string_lossy().to_string();
+    let abs_path = to_fwd_path(path);
 
     Some(SearchFileResult {
         file_path: rel.clone(),

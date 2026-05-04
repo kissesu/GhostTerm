@@ -13,6 +13,8 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{mpsc, Mutex};
 use std::thread;
+// Path 规范化 helper：跨 Tauri 边界给前端的 path 必须 forward slash
+use super::to_fwd_path;
 use std::time::{Duration, Instant};
 
 // ============================================
@@ -116,7 +118,7 @@ fn handle_notify_event(
         // ============================================
         EventKind::Create(_) => {
             if let Some(path) = paths.first() {
-                let path_str = path.to_string_lossy().to_string();
+                let path_str = to_fwd_path(path);
                 if !should_exclude(&path_str) {
                     debounce_map.insert(
                         path_str.clone(),
@@ -136,8 +138,8 @@ fn handle_notify_event(
                     // 重命名事件：paths[0] = 旧路径, paths[1] = 新路径
                     // 但某些平台只有一条路径，对此情况降级为 modified
                     if paths.len() >= 2 {
-                        let old_path = paths[0].to_string_lossy().to_string();
-                        let new_path = paths[1].to_string_lossy().to_string();
+                        let old_path = to_fwd_path(&paths[0]);
+                        let new_path = to_fwd_path(&paths[1]);
                         if !should_exclude(&old_path) && !should_exclude(&new_path) {
                             // 使用旧路径作为 debounce key，避免同一重命名操作重复触发
                             debounce_map.insert(
@@ -146,7 +148,7 @@ fn handle_notify_event(
                             );
                         }
                     } else if let Some(path) = paths.first() {
-                        let path_str = path.to_string_lossy().to_string();
+                        let path_str = to_fwd_path(path);
                         if !should_exclude(&path_str) {
                             debounce_map.insert(
                                 path_str.clone(),
@@ -158,7 +160,7 @@ fn handle_notify_event(
                 _ => {
                     // 普通内容修改
                     if let Some(path) = paths.first() {
-                        let path_str = path.to_string_lossy().to_string();
+                        let path_str = to_fwd_path(path);
                         if !should_exclude(&path_str) {
                             debounce_map.insert(
                                 path_str.clone(),
@@ -175,7 +177,7 @@ fn handle_notify_event(
         // ============================================
         EventKind::Remove(_) => {
             if let Some(path) = paths.first() {
-                let path_str = path.to_string_lossy().to_string();
+                let path_str = to_fwd_path(path);
                 if !should_exclude(&path_str) {
                     debounce_map.insert(
                         path_str.clone(),
@@ -291,7 +293,7 @@ mod tests {
         let mut debounce_map: HashMap<String, (Instant, FsEvent)> = HashMap::new();
 
         // 模拟 3 次快速修改事件（同一路径）
-        let path_str = file_path.to_string_lossy().to_string();
+        let path_str = to_fwd_path(&file_path);
         for _ in 0..3 {
             let event = notify::Event {
                 kind: EventKind::Modify(notify::event::ModifyKind::Data(
@@ -345,7 +347,7 @@ mod tests {
 
         handle_notify_event(event, &mut debounce_map);
 
-        let path_str = path.to_string_lossy().to_string();
+        let path_str = to_fwd_path(path);
         let entry = debounce_map.get(&path_str).unwrap();
         match &entry.1 {
             FsEvent::Created { path: p } => assert_eq!(p, &path_str),
@@ -367,7 +369,7 @@ mod tests {
 
         handle_notify_event(event, &mut debounce_map);
 
-        let path_str = path.to_string_lossy().to_string();
+        let path_str = to_fwd_path(path);
         let entry = debounce_map.get(&path_str).unwrap();
         match &entry.1 {
             FsEvent::Deleted { path: p } => assert_eq!(p, &path_str),
