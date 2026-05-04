@@ -19,18 +19,43 @@ const { EditorViewMock } = vi.hoisted(() => {
     const div = document.createElement('div');
     div.className = 'cm-editor';
     if (parent) parent.appendChild(div);
-    return { destroy: vi.fn(), dispatch: vi.fn(), dom: div };
+    return {
+      destroy: vi.fn(),
+      dispatch: vi.fn(),
+      dom: div,
+      state: {
+        doc: { toString: () => '', lines: 0, lineAt: () => ({ number: 1, from: 0, to: 0, text: '' }) },
+        field: vi.fn().mockReturnValue(undefined),
+        selection: { main: { from: 0, to: 0, head: 0, anchor: 0 } },
+      },
+      focus: vi.fn(),
+    };
   }) as any;
   mockFn.updateListener = { of: vi.fn().mockReturnValue([]) };
   mockFn.theme = vi.fn().mockReturnValue([]);
   mockFn.editable = { of: vi.fn().mockReturnValue([]) };
+  mockFn.lineWrapping = [];
+  mockFn.domEventHandlers = vi.fn().mockReturnValue([]);
+  mockFn.scrollIntoView = vi.fn().mockReturnValue([]);
   return { EditorViewMock: mockFn };
 });
 
-vi.mock('@codemirror/view', () => ({
-  EditorView: EditorViewMock,
-  keymap: vi.fn().mockReturnValue([]),
-}));
+vi.mock('@codemirror/view', () => {
+  // Decoration mock 需 .mark 工厂返回 spec 兼容对象
+  const markFactory = () => ({ range: (from: number, to: number) => ({ from, to }) });
+  return {
+    EditorView: EditorViewMock,
+    keymap: { of: vi.fn().mockReturnValue([]) },
+    Decoration: { mark: vi.fn().mockReturnValue(markFactory()), none: [] },
+    MatchDecorator: vi.fn().mockImplementation(() => ({
+      createDeco: vi.fn().mockReturnValue([]),
+      updateDeco: vi.fn().mockReturnValue([]),
+    })),
+    ViewPlugin: { fromClass: vi.fn().mockReturnValue([]) },
+    gutter: vi.fn().mockReturnValue([]),
+    GutterMarker: class { eq() { return false; } toDOM() { return document.createElement('div'); } },
+  };
+});
 
 vi.mock('codemirror', () => ({
   basicSetup: [],
@@ -38,12 +63,17 @@ vi.mock('codemirror', () => ({
 
 vi.mock('@codemirror/state', () => ({
   EditorState: {
-    create: vi.fn().mockReturnValue({ doc: { toString: () => '' } }),
+    create: vi.fn().mockReturnValue({ doc: { toString: () => '', lines: 1 } }),
+    languageData: { of: vi.fn().mockReturnValue([]) },
+    phrases: { of: vi.fn().mockReturnValue([]) },
   },
   Compartment: vi.fn().mockImplementation(() => ({
     of: vi.fn().mockReturnValue([]),
     reconfigure: vi.fn().mockReturnValue({}),
   })),
+  Prec: { highest: (x: unknown) => x, high: (x: unknown) => x, default: (x: unknown) => x, low: (x: unknown) => x },
+  StateField: { define: vi.fn().mockReturnValue({}) },
+  StateEffect: { define: vi.fn().mockReturnValue({ of: vi.fn().mockReturnValue({}) }) },
 }));
 
 vi.mock('@codemirror/theme-one-dark', () => ({
@@ -78,6 +108,33 @@ vi.mock('@codemirror/commands', () => ({
   defaultKeymap: [],
   historyKeymap: [],
   indentWithTab: {},
+  moveLineUp: vi.fn(),
+  moveLineDown: vi.fn(),
+  copyLineUp: vi.fn(),
+  copyLineDown: vi.fn(),
+  selectLine: vi.fn(),
+  deleteLine: vi.fn(),
+  insertBlankLine: vi.fn(),
+}));
+
+vi.mock('@codemirror/search', () => ({
+  openSearchPanel: vi.fn(),
+  gotoLine: vi.fn(),
+  selectNextOccurrence: vi.fn(),
+  searchKeymap: [],
+}));
+
+vi.mock('@replit/codemirror-indentation-markers', () => ({
+  indentationMarkers: vi.fn().mockReturnValue([]),
+}));
+
+vi.mock('@tauri-apps/plugin-opener', () => ({
+  openUrl: vi.fn().mockResolvedValue(undefined),
+  openPath: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('@tauri-apps/api/path', () => ({
+  homeDir: vi.fn().mockResolvedValue('/Users/test'),
 }));
 
 vi.mock('@codemirror/language', () => ({
