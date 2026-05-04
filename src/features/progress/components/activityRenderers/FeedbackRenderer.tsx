@@ -8,7 +8,7 @@ import type { ReactElement } from 'react';
 import { MessageSquare } from 'lucide-react';
 import type { Activity } from '../../api/activities';
 import styles from '../../progress.module.css';
-import { FEEDBACK_SOURCE_LABEL, formatActor, formatWhen } from './shared';
+import { formatActor, formatWhen, summarizeAttachmentCategories } from './shared';
 import { ActorChip } from './ActorChip';
 
 interface Props {
@@ -17,10 +17,12 @@ interface Props {
 
 export function FeedbackRenderer({ activity }: Props): ReactElement {
   const actor = formatActor(activity);
-  const sourceLabel = FEEDBACK_SOURCE_LABEL[activity.payload.source] ?? activity.payload.source;
   const attachmentCount = activity.payload.attachmentCount;
-  // 反馈附件数 > 0 时在标题尾部加"含 N 个附件"，0 时不显示避免噪音
-  const attachmentSuffix = attachmentCount > 0 ? ` · 含 ${attachmentCount} 个附件` : '';
+  // 媒体/文档两类聚合（用户反馈 2026-05-03"进度功能模块应该只有两类文件"），0 时不显示
+  const categorySummary = summarizeAttachmentCategories(activity.payload.attachments);
+  const attachmentSuffix = attachmentCount > 0
+    ? ` · 含 ${attachmentCount} 个附件${categorySummary ? `（${categorySummary}）` : ''}`
+    : '';
 
   return (
     <div className={styles.timelineItem}>
@@ -33,7 +35,7 @@ export function FeedbackRenderer({ activity }: Props): ReactElement {
           <ActorChip actorName={activity.actorName} actorUsername={activity.actorUsername} />
           <span className={styles.when}>{formatWhen(activity.occurredAt)}</span>
         </div>
-        <p className={styles.what}>{`${actor} 提交反馈（${sourceLabel}）${attachmentSuffix}`}</p>
+        <p className={styles.what}>{`${actor} 提交反馈${attachmentSuffix}`}</p>
         <p className={styles.meta}>{activity.payload.content}</p>
       </div>
     </div>

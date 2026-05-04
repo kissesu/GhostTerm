@@ -76,6 +76,7 @@ const baseProject: Project = {
   createdBy: 1,
   createdAt: '2026-01-01',
   updatedAt: '2026-01-01',
+  developers: [],
 };
 
 vi.mock('../../stores/projectsStore', () => ({

@@ -28,6 +28,7 @@ function makeProject(overrides: Partial<Project> = {}): Project {
     createdAt: '2026-01-01',
     updatedAt: '2026-01-01',
     thesisLevel: 'master',
+    developers: [],
     ...overrides,
   };
 }

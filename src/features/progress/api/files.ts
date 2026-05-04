@@ -40,13 +40,23 @@ export const FileMetadataSchema = z.object({
 
 export type FileMetadata = z.infer<typeof FileMetadataSchema>;
 
-/** ProjectFile：附件视图（含嵌套 file 元数据）。 */
+/** ProjectFile：附件视图（含嵌套 file 元数据）。
+ *
+ * 读 schema 必须接受 DB CHECK 全部 category 值（migration 0004：
+ * sample_doc / source_code / wechat_chat），写 endpoint 才限 sample_doc/source_code。
+ * 用户反馈 2026-05-03"上传源码不显示列表" 根因：之前漏 wechat_chat 让 zod
+ * 解析整个 list 失败，store catch 后 byProject 空。读写共用 enum 是反模式
+ * （参见记忆 feedback_db_check_enum_sync_three_places）。
+ */
 export const ProjectFileSchema = z.object({
   id: z.number().int(),
   projectId: z.number().int(),
   fileId: z.number().int(),
-  category: z.enum(['sample_doc', 'source_code']),
+  category: z.enum(['sample_doc', 'source_code', 'wechat_chat']),
   addedAt: z.string(),
+  // remark：源码 / 样稿上传时的可选备注（migration 0013 起字段存在；
+  // 历史行为 NULL → null；ogen OptNilString 序列化为 null/缺失/字符串三态）
+  remark: z.string().nullish(),
   file: FileMetadataSchema,
 });
 
@@ -208,7 +218,11 @@ export async function downloadFile(fileId: number, fallbackName: string): Promis
 
   // 解析 Content-Disposition 拿 filename*=UTF-8'' 编码值（§C5 响应头）
   const cd = res.headers.get('Content-Disposition') ?? '';
-  const filename = parseContentDispositionFilename(cd) ?? fallbackName;
+  const rawFilename = parseContentDispositionFilename(cd) ?? fallbackName;
+  // Windows 兼容：9 个非法字符 < > : " / \ | ? * 必须 sanitize 否则
+  // WebView2 / Edge 在 Windows 触发 a.download 时会失败或截断（用户反馈 2026-05-03
+  // "windows 平台需要注意兼容"）。控制字符（0x00-0x1F）也一并去掉。
+  const filename = sanitizeDownloadFilename(rawFilename);
 
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
@@ -222,6 +236,21 @@ export async function downloadFile(fileId: number, fallbackName: string): Promis
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+/**
+ * 把文件名清理为跨平台兼容形式。
+ *
+ * Windows 非法字符（NTFS reserved）：< > : " / \ | ? *
+ * 控制字符 0x00-0x1F：在 Win/Mac/Linux 都不应出现在文件名
+ * 末尾的 . 和空格在 Windows 被裁掉，主动 trim
+ *
+ * 替换为 _ 而非删除，让用户能看出原 filename 结构。
+ */
+export function sanitizeDownloadFilename(name: string): string {
+  // eslint-disable-next-line no-control-regex
+  const cleaned = name.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').replace(/[. ]+$/, '');
+  return cleaned || 'download';
 }
 
 /**
@@ -260,6 +289,33 @@ export async function listProjectFiles(projectId: number): Promise<ProjectFile[]
     `/api/projects/${projectId}/files`,
     { method: 'GET' },
     ProjectFileListSchema,
+  );
+}
+
+/** 把已上传文件挂到项目下指定 category（migration 0004 起 wechat_chat 仅创建期使用，
+ *  这里只暴露 sample_doc/source_code；用户反馈 2026-05-03 用于"上传源码"按钮）。
+ *
+ *  remark 可选：源码版本号 / 上传说明 / 样稿描述（migration 0013 project_files.remark）。
+ *  仅在用户填写时附带，省略时后端写 NULL。
+ */
+export async function attachProjectFile(
+  projectId: number,
+  fileId: number,
+  category: 'sample_doc' | 'source_code',
+  remark?: string,
+): Promise<ProjectFile> {
+  const trimmed = remark?.trim();
+  return apiFetch(
+    `/api/projects/${projectId}/files`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        fileId,
+        category,
+        ...(trimmed ? { remark: trimmed } : {}),
+      }),
+    },
+    ProjectFileSchema,
   );
 }
 

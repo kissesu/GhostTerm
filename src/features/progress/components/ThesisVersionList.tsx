@@ -14,6 +14,7 @@
 import { useEffect, useState, type ReactElement } from 'react';
 import type { ThesisVersion } from '../api/files';
 import { listThesisVersions } from '../api/files';
+import { FileItem } from './FileItem';
 
 interface ThesisVersionListProps {
   projectId: number;
@@ -75,7 +76,9 @@ export function ThesisVersionList({
           <span style={{ color: 'var(--accent)', fontWeight: 800 }}>
             v{v.versionNo}
           </span>
-          <span style={{ flex: 1 }}>{v.file.filename}</span>
+          <span style={{ flex: 1 }}>
+            <FileItem fileId={v.fileId} filename={v.file.filename} />
+          </span>
           {v.remark && (
             <span style={{ color: 'var(--muted)', fontSize: 12 }}>{v.remark}</span>
           )}

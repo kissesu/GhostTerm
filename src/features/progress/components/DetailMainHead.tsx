@@ -9,7 +9,7 @@
  */
 import type { ReactElement } from 'react';
 import styles from '../progress.module.css';
-import type { Project } from '../api/projects';
+import { type Project, THESIS_LEVEL_LABEL } from '../api/projects';
 import { StatusPill } from './StatusPill';
 import { daysToDeadline, formatDeadline, deadlineClass } from '../utils/deadlineCountdown';
 
@@ -37,7 +37,7 @@ export function DetailMainHead({ project }: DetailMainHeadProps): ReactElement {
       <div className={styles.metaRow}>
         <div>
           <div className={styles.k}>客户</div>
-          <strong>{project.customerLabel} · {project.thesisLevel ?? '—'}</strong>
+          <strong>{project.customerLabel} · {project.thesisLevel ? THESIS_LEVEL_LABEL[project.thesisLevel] : '—'}</strong>
         </div>
         <div>
           <div className={styles.k}>报价</div>

@@ -27,16 +27,25 @@ export const PAYMENT_DIRECTION_LABEL: Record<string, string> = {
   dev_settlement: '开发结算',
 };
 
-/** 项目状态（status_change.payload.fromStatus / toStatus）label 映射 */
+/** 项目优先级（project_created.payload.priority 等）label 映射。
+ *  用户反馈 2026-05-03"项目创建详情的优先级不能使用英文"——normal/urgent → 普通/紧急 */
+export const PROJECT_PRIORITY_LABEL: Record<string, string> = {
+  normal: '普通',
+  urgent: '紧急',
+};
+
+/** 项目状态（status_change.payload.fromStatus / toStatus）label 映射。
+ *  用户反馈 2026-05-03"文案描述不要加'中'这个字符"——4 处进行中态去"中"，
+ *  与 nbaConfig.STATUS_LABEL（PipelineStepper 用）保持文案一致。 */
 export const PROJECT_STATUS_LABEL: Record<string, string> = {
-  dealing: '洽谈中',
-  quoting: '报价中',
-  developing: '开发中',
-  confirming: '验收中',
+  dealing: '洽谈',
+  quoting: '报价',
+  developing: '开发',
+  confirming: '验收',
   delivered: '已交付',
-  paid: '已收款',
+  paid: '已结算',
   archived: '已归档',
-  after_sales: '售后中',
+  after_sales: '售后',
   cancelled: '已取消',
 };
 
@@ -47,11 +56,55 @@ export const QUOTE_CHANGE_TYPE_LABEL: Record<string, string> = {
   after_sales: '售后',
 };
 
-/** 项目附件类别（project_file_added.payload.category）label 映射 */
+/** 项目附件类别（project_file_added.payload.category）label 映射
+ *  与后端 DB CHECK 保持一致：sample_doc / source_code (0001) + wechat_chat (0004) */
 export const PROJECT_FILE_CATEGORY_LABEL: Record<string, string> = {
   sample_doc: '参考样稿',
   source_code: '源码',
+  wechat_chat: '微信聊天截图',
 };
+
+/** EventTriggerDialog [fields] JSON 字段名 → 中文 label
+ *  来源：nbaConfig.ts 各事件 form fields；新加事件字段时同步补本表，否则备注行将显示英文 key */
+export const EVENT_FIELD_LABEL: Record<string, string> = {
+  // 用户反馈 2026-05-03"报价时间线详情的预估进度应该改为报价"——
+  // estimatedAmount 在 quoting 事件下记录的就是报价金额，文案与 PipelineStepper 一致
+  estimatedAmount: '报价（¥）',
+  prepayment: '预付款（¥）',
+  amount: '结算金额（¥）',
+  method: '支付方式',
+};
+
+/**
+ * 拆解 EventTriggerDialog 拼接的 remark：
+ *   "note 文字\n[fields]{"estimatedAmount":"800",...}"
+ * 还原为人类可读的 note + 结构化 fields map。
+ *
+ * 业务背景（用户反馈 2026-05-03）："为什么会出现 [fields\"estimatedAmount\": \"800\")?"
+ * 后端 status_change_logs.remark 是单 string 字段，前端 EventTriggerDialog 把多 form 字段
+ * 拼成"note + [fields]JSON"塞进去。详情弹窗渲染时必须拆开，不能直接 textContent。
+ *
+ * 解析规则：
+ *   - 找 "[fields]" 标记：之前是 note，之后是 JSON
+ *   - JSON.parse 失败 / 标记缺失 → fields 空 + note 是整个 remark（向后兼容老数据）
+ *   - note 末尾 \n 去掉
+ */
+export function parseRemarkFields(remark: string | null | undefined): {
+  note: string;
+  fields: Record<string, string>;
+} {
+  if (!remark) return { note: '', fields: {} };
+  const idx = remark.indexOf('[fields]');
+  if (idx < 0) return { note: remark, fields: {} };
+  const note = remark.slice(0, idx).replace(/\n$/, '');
+  const jsonStr = remark.slice(idx + '[fields]'.length);
+  try {
+    const fields = JSON.parse(jsonStr) as Record<string, string>;
+    return { note, fields };
+  } catch {
+    return { note: remark, fields: {} };
+  }
+}
 
 /**
  * 把 ISO 时间字符串格式化为 `YYYY-MM-DD HH:mm`（用户需求 2026-05-02：
@@ -116,6 +169,91 @@ export function formatMoney(s: string): string {
   const n = Number(s);
   if (Number.isNaN(n)) return s;
   return `¥${n.toFixed(2)}`;
+}
+
+/**
+ * 把 User-Agent 字符串提取平台名（macOS/Windows/Linux/iOS/Android/其它）。
+ *
+ * 业务背景（用户反馈 2026-05-03）："时间线详情的设备只显示平台就可以了"
+ * 完整 UA 字符串太长（"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/..."）
+ * 只展示平台让审计列表清爽。
+ */
+export function parseUserAgentPlatform(ua: string | null | undefined): string {
+  if (!ua) return '';
+  if (/iPhone|iPad|iPod/.test(ua)) return 'iOS';
+  if (/Android/.test(ua)) return 'Android';
+  if (/Macintosh|Mac OS X/.test(ua)) return 'macOS';
+  if (/Windows NT/.test(ua)) return 'Windows';
+  if (/Linux/.test(ua)) return 'Linux';
+  return '其它';
+}
+
+/**
+ * 客户端 IP 归一化：::1 → 127.0.0.1；::ffff:192.168.1.1 → 192.168.1.1。
+ *
+ * 业务背景（用户反馈 2026-05-03）："IP字段显示用户真实的 IPv4 地址"
+ * 后端 middleware/metadata.go 已加同款归一化覆盖**新写入**的活动；本前端 helper
+ * 兜底**已存在的历史活动**（client_ip 列仍是 ::1），让详情弹窗统一显示 IPv4 形式。
+ */
+export function normalizeClientIp(ip: string | null | undefined): string {
+  if (!ip) return '';
+  if (ip === '::1') return '127.0.0.1';
+  const m = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
+  if (m) return m[1];
+  return ip;
+}
+
+/** 媒体类扩展名（图片 + 视频） */
+const MEDIA_EXTS = new Set([
+  // 图片
+  'png', 'jpg', 'jpeg', 'gif', 'webp', 'heic', 'heif', 'avif', 'svg', 'bmp', 'tiff', 'tif', 'ico',
+  // 视频
+  'mp4', 'mov', 'webm', 'avi', 'mkv', 'wmv', 'flv', 'm4v',
+]);
+
+/** 文档类扩展名（PDF + Office + 文本 + 压缩包） */
+const DOCUMENT_EXTS = new Set([
+  // PDF / Office
+  'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+  // 文本
+  'txt', 'md', 'csv', 'rtf',
+  // OpenDocument
+  'odt', 'ods', 'odp',
+  // 压缩包
+  'zip', 'rar', '7z', 'tar', 'gz',
+]);
+
+/** 单文件按扩展名归类为 'media' / 'doc' / 'other' */
+function categorizeFile(filename: string): 'media' | 'doc' | 'other' {
+  const idx = filename.lastIndexOf('.');
+  if (idx <= 0 || idx >= filename.length - 1) return 'other';
+  const ext = filename.slice(idx + 1).toLowerCase();
+  if (MEDIA_EXTS.has(ext)) return 'media';
+  if (DOCUMENT_EXTS.has(ext)) return 'doc';
+  return 'other';
+}
+
+/**
+ * 按媒体/文档两类聚合附件计数 → "2 个媒体、1 个文档"。
+ *
+ * 业务背景（用户反馈 2026-05-03）："进度功能模块应该只有两类文件, 媒体、文档,
+ * 那么时间线就显示 *个媒体, *个文档附件"——替代之前按扩展名详细列出的 .png ×2 .pdf。
+ *
+ * 规则：
+ *  - 媒体 = 图片 + 视频；文档 = PDF/Office/文本/压缩包
+ *  - 0 类不显示对应 segment
+ *  - 'other' 仅当存在时才显示，避免常态噪音
+ *  - 空数组返回空串
+ */
+export function summarizeAttachmentCategories(files: { filename: string }[]): string {
+  if (files.length === 0) return '';
+  const counts = { media: 0, doc: 0, other: 0 };
+  for (const f of files) counts[categorizeFile(f.filename)]++;
+  const parts: string[] = [];
+  if (counts.media > 0) parts.push(`${counts.media} 个媒体`);
+  if (counts.doc > 0) parts.push(`${counts.doc} 个文档`);
+  if (counts.other > 0) parts.push(`${counts.other} 个其它`);
+  return parts.join('、');
 }
 
 /**

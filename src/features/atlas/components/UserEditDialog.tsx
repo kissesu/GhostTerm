@@ -15,12 +15,19 @@
  * @date 2026-04-29
  */
 
-import { useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 
 import type { UserPayload } from '../../progress/api/schemas';
 import { useAtlasUsersStore } from '../stores/atlasUsersStore';
 import { useAtlasRolesStore } from '../stores/atlasRolesStore';
 import styles from '../atlas.module.css';
+
+/**
+ * super_admin 角色 ID，与后端 services.SuperAdminRoleID = 1 对齐。
+ * 业务规则 2026-05-03：超级管理员角色不允许通过此对话框新建/转授，
+ * 因此 select 选项需过滤掉 id=1；编辑现有 super_admin 用户时整个 select 锁定为只读。
+ */
+const SUPER_ADMIN_ROLE_ID = 1;
 
 interface UserEditDialogProps {
   mode: 'create' | 'edit';
@@ -40,6 +47,17 @@ export function UserEditDialog({ mode, user, onClose }: UserEditDialogProps) {
   const roles = useAtlasRolesStore((s) => s.roles);
   const createUser = useAtlasUsersStore((s) => s.createUser);
   const updateUser = useAtlasUsersStore((s) => s.updateUser);
+
+  // 是否在编辑超级管理员（编辑模式 + 用户原本即为 super_admin）
+  // 该场景下 select 必须只读，禁止通过此对话框转授/降权 super_admin
+  const isEditingSuperAdmin = mode === 'edit' && user?.roleId === SUPER_ADMIN_ROLE_ID;
+
+  // 可选角色列表：始终过滤掉 super_admin
+  // 编辑非超管用户与新建用户时，下拉框均不出现"超级管理员"选项
+  const selectableRoles = useMemo(
+    () => roles.filter((r) => r.id !== SUPER_ADMIN_ROLE_ID),
+    [roles],
+  );
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -119,18 +137,32 @@ export function UserEditDialog({ mode, user, onClose }: UserEditDialogProps) {
 
         <label className={styles.label}>
           角色
-          <select
-            className={styles.select}
-            value={roleId}
-            onChange={(e) => setRoleId(Number(e.target.value))}
-            data-testid="user-edit-role"
-          >
-            {roles.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </select>
+          {isEditingSuperAdmin ? (
+            // 编辑超级管理员：select 只读化，避免通过此对话框降权或转授
+            // 视觉上仍保持与其它 select 一致（同 className），仅以 disabled 拒交互
+            <select
+              className={styles.select}
+              value={SUPER_ADMIN_ROLE_ID}
+              disabled
+              data-testid="user-edit-role"
+              aria-readonly="true"
+            >
+              <option value={SUPER_ADMIN_ROLE_ID}>超级管理员（不可改）</option>
+            </select>
+          ) : (
+            <select
+              className={styles.select}
+              value={roleId}
+              onChange={(e) => setRoleId(Number(e.target.value))}
+              data-testid="user-edit-role"
+            >
+              {selectableRoles.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+          )}
         </label>
 
         {mode === 'edit' && (

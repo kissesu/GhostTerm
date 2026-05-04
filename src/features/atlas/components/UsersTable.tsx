@@ -113,7 +113,19 @@ export function UsersTable() {
                   <td>{u.username}</td>
                   <td>{u.displayName}</td>
                   <td>
-                    <span className={`${styles.tag} ${u.roleId === 1 ? styles.tagAdmin : ''}`}>
+                    {/* 用户反馈 2026-05-03"为用户管理角色字段的开发和客服使用不同颜色的 tag 区分"
+                     *  roleId=1 超管 accent 绿 / =2 开发 蓝 / =3 客服 青 / 其它 default */}
+                    <span
+                      className={`${styles.tag} ${
+                        u.roleId === 1
+                          ? styles.tagAdmin
+                          : u.roleId === 2
+                            ? styles.tagDev
+                            : u.roleId === 3
+                              ? styles.tagCs
+                              : ''
+                      }`}
+                    >
                       {roleName(u.roleId)}
                     </span>
                   </td>

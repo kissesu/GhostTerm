@@ -32,6 +32,14 @@
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif;
   line-height: 1.5;
   font-size: 14px;
+
+  /* flex 高度链根：让 detailLayout flex:1 撑满剩余视口，timelineList/tabPanel 内部独立滚动
+   * 用户反馈 2026-05-03"必须自适应页面高度, 且容器内可以上下滚动"
+   * 替代之前 max-height: calc(100vh - 360px) 魔数估算（mainHead/tabs 实际高度变化让魔数偏移） */
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  box-sizing: border-box;
 }
 
 /* ============ Pagehead ============ (设计稿 line 35-42) */
@@ -51,6 +59,7 @@
   border-radius: 10px;
   overflow: hidden;
   border: 1px solid var(--line);
+  flex-shrink: 0;
 }
 
 .step {
@@ -84,7 +93,20 @@
 .stepFuture .stepMeta { color: var(--faint); }
 
 /* 原 .step.dim */
-.stepDim { opacity: 0.4; }
+.stepDim { opacity: 0.3; }
+
+/* 看板模式下"该 stage 有进行中项目"的醒目态（用户反馈 2026-05-03"看板页面的进度条激活状态不醒目"）。
+ * 与 stepCurrent 区别：current 是详情页"项目当前所在 stage"重高亮（含背景渐变），
+ * active 是看板页"全局项目分布"轻高亮（仅 border-top + count 数字 accent）。 */
+.stepActive {
+  border-top-color: var(--accent);
+}
+.stepActive .stepName { color: var(--accent); }
+.stepActive .stepMeta span:nth-child(1) {
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 12px;
+}
 
 /* 原 .step-name */
 .stepName {
@@ -126,6 +148,7 @@
   margin-bottom: 16px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
 }
 
 .crumb {
@@ -307,19 +330,31 @@
 
 /* ============ Detail View ============ (设计稿 line 226-290) */
 /* 原 .detail-layout */
-.detailLayout { display: grid; grid-template-columns: 1fr 340px; gap: 16px; align-items: start; }
+/* detailLayout 占据 shellRoot 剩余高度，让 .main 内部 flex column 撑满后按子项分配 */
+.detailLayout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 16px;
+  align-items: stretch;
+  flex: 1 1 auto;
+  min-height: 0;
+}
 
 .main {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--panel);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 /* 原 .main-head */
 .mainHead {
   padding: 20px 24px;
   border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
 }
 .mainHead h2 { margin: 0 0 8px; font-size: 18px; font-weight: 700; }
 /* 原 .main-head .meta-row */
@@ -338,6 +373,7 @@
   display: flex;
   padding: 0 24px;
   border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
 }
 
 /* 原 .tab-btn */
@@ -358,7 +394,23 @@
 .tabBtnActive { color: var(--accent); border-bottom-color: var(--accent); }
 
 /* 原 .timeline-list */
-.timelineList { padding: 16px 24px; }
+/* timeline / tabPanel 共享：作为 .main 的 flex 子项独立滚动
+ * 用户反馈 2026-05-03"必须自适应页面高度, 且容器内可以上下滚动"
+ * 改前用 max-height: calc(100vh - 360px) 魔数估算 mainHead/tabs 高度，实际 mainHead 包含
+ * "调整报价"按钮行 + DetailMainHead metaRow 4 列变化让魔数偏移导致内容超出 .main 底部或留白
+ * 改后纯 flex:1 + min-height:0 + overflow-y:auto，由父链 shellRoot→detailLayout→.main 撑出准确高度 */
+.timelineList,
+.tabPanel {
+  padding: 16px 24px;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  /* 隐藏滚动条但保留滚动（与 .modalBody/.colBody 同方案） */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.timelineList::-webkit-scrollbar,
+.tabPanel::-webkit-scrollbar { display: none; width: 0; height: 0; }
 
 /* 原 .timeline-item */
 .timelineItem {
@@ -587,11 +639,13 @@
 /* 原 .modal-overlay.open */
 .modalOverlayOpen { display: flex; }
 
+/* 用户反馈 2026-05-03"所有弹窗统一使用新建项目弹窗的宽度"
+ * 之前 .modal 480 + .modalWide 720 两套，统一成 720（NewProjectDialog 历史宽度） */
 .modal {
-  width: 480px;
+  width: 720px;
   max-width: calc(100vw - 64px);
   /* 防止内容撑出视口让 footer 按钮被压到屏幕外（用 flex 列让 body 弹性，foot 始终贴底） */
-  max-height: calc(100vh - 64px);
+  max-height: calc(100dvh - 64px);
   display: flex;
   flex-direction: column;
   border: 1px solid var(--line-strong);
@@ -601,7 +655,7 @@
   box-shadow: 0 24px 64px rgba(0,0,0,0.5);
 }
 
-/* 大尺寸 modal 修饰：用于含多区块表单（如新建项目附文档上传） */
+/* @deprecated modalWide 已与 .modal 合并（720 统一），保留 alias 防 NewProjectDialog 等 caller 报错 */
 .modalWide {
   width: 720px;
 }
@@ -784,8 +838,15 @@
   flex-shrink: 0;
 }
 
-.btn {
-  /* 统一按钮基线：所有 .btn 和 .btnPrimary 高度/圆角/字号/动画完全一致 */
+/* 按钮基线：.btn 和 .btnPrimary 共享尺寸/圆角/字号/过渡动画。
+   关键：用 selector list 让两者都拿基线，调用方单挂任一 class 即完整，
+   避免"漏挂 .btn 让 btnPrimary 变小"的反复 bug（用户反馈 2026-05-03：
+   "为什么弹窗的按钮又出现了风格不一致的问题? 项目中出现这么多按钮不应该
+    使用统一的组件吗?根据使用情况的不同只需要更换颜色和文案就可以了"）。
+   .btn:active / .btnPrimary:active / :disabled 早已用 selector list 共享，
+   基线属性也要同样处理才一致。 */
+.btn,
+.btnPrimary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -797,7 +858,6 @@
   font-weight: 850; /* 设计稿原值 */
   line-height: 1;
   cursor: pointer;
-  border: 1px solid var(--line);
   background: transparent;
   color: var(--text);
   /* 弹性 cubic-bezier 让 hover/active 更"有意思"：overshoot 微反弹 */
@@ -811,8 +871,13 @@
   user-select: none;
 }
 
-/* 原 .btn-primary - 用 transparent border 保 height 与 .btn 像素一致；
-   配色覆盖 .btn 默认；hover/active 保持同一交互语言 */
+/* .btn 默认（次按钮）：visible 边框 + 透明背景 */
+.btn {
+  border: 1px solid var(--line);
+}
+
+/* .btnPrimary 修饰：accent 背景 + 透明边框（占位防 height 漂移）
+   颜色覆盖是 modifier 的本质职责，尺寸已由上面 selector list 提供 */
 .btnPrimary {
   border: 1px solid transparent;
   background: var(--accent);

@@ -8,16 +8,10 @@
  */
 import { useEffect, useMemo, type ReactElement } from 'react';
 import { useFeedbacksStore } from '../stores/feedbacksStore';
-import type { FeedbackSource } from '../api/feedbacks';
+import { FileItem } from './FileItem';
 
-// source 枚举 → 中文展示标签
-const SOURCE_LABEL: Record<FeedbackSource, string> = {
-  wechat: '微信',
-  phone: '电话',
-  email: '邮件',
-  meeting: '面谈',
-  other: '其他',
-};
+// 用户反馈 2026-05-03"不要显示微信"——删除 source 文案拼接，仅展示日期
+// （source 信息保留在 API 中供未来筛选/统计用）
 
 interface FeedbackListProps {
   projectId: number;
@@ -43,17 +37,30 @@ export function FeedbackList({ projectId }: FeedbackListProps): ReactElement {
         <div
           key={f.id}
           style={{
-            borderBottom: '1px solid var(--line)',
-            padding: '10px 0',
+            // 用户反馈 2026-05-03"记录与记录之间分辨不清晰"——加 panel-2 卡片背景 + padding + 圆角
+            background: 'var(--panel-2)',
+            border: '1px solid var(--line)',
+            borderRadius: 8,
+            padding: 12,
+            marginBottom: 12,
             fontSize: 13,
           }}
         >
-          <div style={{ color: 'var(--muted)', fontSize: 11, marginBottom: 4 }}>
+          <div style={{ color: 'var(--muted)', fontSize: 11, marginBottom: 6 }}>
             {new Date(f.recordedAt).toLocaleString('zh-CN')}
-            {' · '}
-            {SOURCE_LABEL[f.source] ?? f.source}
           </div>
           <div>{f.content}</div>
+          {/* 附件渲染：用户反馈 2026-05-03"反馈 tab 中的记录的媒体应该一行显示多个缩略图"
+           *  flex wrap + 每 item 限宽 160 让多媒体横向排列；FileItem 智能路由保持不变 */}
+          {f.attachments && f.attachments.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+              {f.attachments.map((a) => (
+                <div key={a.id} style={{ width: 160, maxWidth: '100%' }}>
+                  <FileItem fileId={a.id} filename={a.filename} />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       ))}
     </div>

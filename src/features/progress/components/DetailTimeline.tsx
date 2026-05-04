@@ -12,8 +12,9 @@
  * @author Atlas.oi
  * @date 2026-05-01
  */
-import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { useActivitiesStore } from '../stores/activitiesStore';
+import { useProjectsStore } from '../stores/projectsStore';
 import { ActivityItem } from './ActivityItem';
 import { ActivityDetailDialog } from './ActivityDetailDialog';
 import type { Activity } from '../api/activities';
@@ -26,7 +27,18 @@ interface Props {
 export function DetailTimeline({ projectId }: Props): ReactElement {
   const state = useActivitiesStore((s) => s.byProject.get(projectId));
   const loadActivities = useActivitiesStore((s) => s.loadActivities);
+  // 项目当前状态用于判断"哪条 status_change 是当前阶段"（用户反馈"已停留"实时计时）
+  const currentStatus = useProjectsStore((s) => s.projects.get(projectId)?.status);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // 计算最新一条 status_change 的 id：当 toStatus === project.currentStatus 时，
+  // 该条就是"项目当前所处阶段的进入记录"，需用 useNow 实时算 now-occurredAt 显示"已停留 X"
+  const currentStatusEventId = useMemo(() => {
+    if (!currentStatus || !state?.items) return null;
+    const latest = state.items.find((a) => a.kind === 'status_change');
+    if (!latest || latest.kind !== 'status_change') return null;
+    return latest.payload.toStatus === currentStatus ? latest.id : null;
+  }, [currentStatus, state?.items]);
   // 用户需求 2026-05-02：每条时间线点击弹 modal 显示完整详情
   const [activeDetail, setActiveDetail] = useState<Activity | null>(null);
 
@@ -99,12 +111,16 @@ export function DetailTimeline({ projectId }: Props): ReactElement {
           }}
           data-testid={`timeline-item-${a.id}`}
         >
-          <ActivityItem activity={a} />
+          <ActivityItem activity={a} isCurrentStatus={a.id === currentStatusEventId} />
         </button>
       ))}
       {state.nextCursor ? <div ref={sentinelRef} className={styles.timelineSentinel} /> : null}
       {activeDetail && (
-        <ActivityDetailDialog activity={activeDetail} onClose={() => setActiveDetail(null)} />
+        <ActivityDetailDialog
+          activity={activeDetail}
+          onClose={() => setActiveDetail(null)}
+          isCurrentStatus={activeDetail.id === currentStatusEventId}
+        />
       )}
     </div>
   );

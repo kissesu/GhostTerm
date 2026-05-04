@@ -19,22 +19,30 @@
  */
 import { useEffect, type ReactElement, type ReactNode } from 'react';
 import type { Activity } from '../api/activities';
+import { FileItem } from './FileItem';
+import { useNow } from '../hooks/useNow';
 import {
-  FEEDBACK_SOURCE_LABEL,
   PAYMENT_DIRECTION_LABEL,
   PROJECT_STATUS_LABEL,
+  PROJECT_PRIORITY_LABEL,
   QUOTE_CHANGE_TYPE_LABEL,
   PROJECT_FILE_CATEGORY_LABEL,
+  EVENT_FIELD_LABEL,
   formatActor,
   formatMoney,
   formatWhen,
   formatDwellMs,
+  parseRemarkFields,
+  normalizeClientIp,
+  parseUserAgentPlatform,
 } from './activityRenderers/shared';
 import styles from '../progress.module.css';
 
 interface Props {
   activity: Activity;
   onClose: () => void;
+  /** 仅 status_change 关心：是否当前最新阶段（实时显示"已停留 X"，否则只显示 historical） */
+  isCurrentStatus?: boolean;
 }
 
 /** 单行 key-value 渲染 */
@@ -47,15 +55,6 @@ function Row({ label, children }: { label: string; children: ReactNode }): React
   );
 }
 
-/** 文件下载链接 */
-function FileLink({ url, name }: { url: string; name?: string }): ReactElement {
-  return (
-    <a href={url} target="_blank" rel="noopener noreferrer" className={styles.detailLink}>
-      {name ?? '打开文件'}
-    </a>
-  );
-}
-
 /** 审计 metadata 行：IP / 设备；老数据 null 时跳过不渲染避免空行 */
 function AuditRows({
   clientIp,
@@ -65,15 +64,19 @@ function AuditRows({
   userAgent?: string | null;
 }): ReactElement | null {
   if (!clientIp && !userAgent) return null;
+  // normalizeClientIp 兜底历史数据 ::1 → 127.0.0.1（后端 middleware 已同款归一化覆盖新数据）
+  const ip = normalizeClientIp(clientIp);
+  // 设备只显示平台名（用户反馈 2026-05-03）；完整 UA 字符串过长不利审计阅读
+  const platform = parseUserAgentPlatform(userAgent);
   return (
     <>
-      {clientIp && <Row label="IP">{clientIp}</Row>}
-      {userAgent && <Row label="设备">{userAgent}</Row>}
+      {ip && <Row label="IP">{ip}</Row>}
+      {platform && <Row label="设备">{platform}</Row>}
     </>
   );
 }
 
-function renderBody(activity: Activity): ReactElement {
+function renderBody(activity: Activity, isCurrentStatus?: boolean, now?: number): ReactElement {
   // 操作人 = displayName（角色） @username；账号 username 让审计追溯精确
   const baseActor = formatActor(activity);
   const actor = activity.actorUsername
@@ -87,15 +90,21 @@ function renderBody(activity: Activity): ReactElement {
         <div className={styles.detailRows}>
           <Row label="时间">{when}</Row>
           <Row label="操作人">{actor}</Row>
-          <Row label="来源">
-            {FEEDBACK_SOURCE_LABEL[activity.payload.source] ?? activity.payload.source}
-          </Row>
-          {activity.payload.attachmentCount > 0 && (
-            <Row label="附件数量">{activity.payload.attachmentCount}</Row>
-          )}
           <Row label="反馈内容">
             <div style={{ whiteSpace: 'pre-wrap' }}>{activity.payload.content}</div>
           </Row>
+          {activity.payload.attachments.length > 0 && (
+            <Row label="附件">
+              {/* 用户反馈 2026-05-03"各弹窗中的媒体附件也应该一行显示多个缩略图"——flex wrap + 每 item 限宽 160 */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {activity.payload.attachments.map((a) => (
+                  <div key={a.id} style={{ width: 160, maxWidth: '100%' }}>
+                    <FileItem fileId={a.id} filename={a.filename} />
+                  </div>
+                ))}
+              </div>
+            </Row>
+          )}
         </div>
       );
 
@@ -109,6 +118,20 @@ function renderBody(activity: Activity): ReactElement {
           </Row>
           <Row label="金额">{formatMoney(activity.payload.amount)}</Row>
           {activity.payload.remark && <Row label="备注">{activity.payload.remark}</Row>}
+          {/* 凭证截图：用户反馈 2026-05-03"结算时间线详情弹窗没有显示结算凭证截图"
+           *  后端 0015 migration activity view payment 分支已嵌入 attachments jsonb_agg */}
+          {activity.payload.attachments && activity.payload.attachments.length > 0 && (
+            <Row label="凭证">
+              {/* flex wrap 横向缩略，与 feedback / project_created 媒体区一致 */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {activity.payload.attachments.map((a) => (
+                  <div key={a.id} style={{ width: 160, maxWidth: '100%' }}>
+                    <FileItem fileId={a.id} filename={a.filename} />
+                  </div>
+                ))}
+              </div>
+            </Row>
+          )}
         </div>
       );
 
@@ -117,6 +140,16 @@ function renderBody(activity: Activity): ReactElement {
       const fromLabel = activity.payload.fromStatus
         ? (PROJECT_STATUS_LABEL[activity.payload.fromStatus] ?? activity.payload.fromStatus)
         : '初始';
+      const toLabel =
+        PROJECT_STATUS_LABEL[activity.payload.toStatus] ?? activity.payload.toStatus;
+      // 当前阶段实时停留：caller 传 now（visibilitychange 触发更新）+ 是 isCurrentStatus 时算
+      const currentDwell =
+        isCurrentStatus && now !== undefined
+          ? formatDwellMs(now - new Date(activity.occurredAt).getTime())
+          : '';
+      // 拆解 remark：note 是用户文字、fields 是 EventTriggerDialog 拼接的额外结构化字段
+      const { note, fields } = parseRemarkFields(activity.payload.remark);
+      const fieldEntries = Object.entries(fields);
       return (
         <div className={styles.detailRows}>
           <Row label="时间">{when}</Row>
@@ -124,13 +157,19 @@ function renderBody(activity: Activity): ReactElement {
           <Row label="状态">
             {fromLabel}
             {' → '}
-            {PROJECT_STATUS_LABEL[activity.payload.toStatus] ?? activity.payload.toStatus}
+            {toLabel}
           </Row>
           <Row label="事件">{activity.payload.eventName}（{activity.payload.eventCode}）</Row>
-          {dwell && activity.payload.fromStatus && (
-            <Row label="停留时长">在「{fromLabel}」停留 {dwell}</Row>
+          {currentDwell && (
+            <Row label="当前停留">已在「{toLabel}」停留 {currentDwell}</Row>
           )}
-          {activity.payload.remark && <Row label="备注">{activity.payload.remark}</Row>}
+          {dwell && activity.payload.fromStatus && (
+            <Row label="历史停留">在「{fromLabel}」停留 {dwell}</Row>
+          )}
+          {note && <Row label="备注">{note}</Row>}
+          {fieldEntries.map(([key, value]) => (
+            <Row key={key} label={EVENT_FIELD_LABEL[key] ?? key}>{value}</Row>
+          ))}
         </div>
       );
     }
@@ -158,7 +197,7 @@ function renderBody(activity: Activity): ReactElement {
           <Row label="操作人">{actor}</Row>
           <Row label="版本号">v{activity.payload.versionNo}</Row>
           <Row label="文件">
-            <FileLink url={`/api/files/${activity.payload.fileId}/download`} name="下载论文版本" />
+            <FileItem fileId={activity.payload.fileId} filename={activity.payload.filename} />
           </Row>
           {activity.payload.remark && <Row label="备注">{activity.payload.remark}</Row>}
         </div>
@@ -173,22 +212,52 @@ function renderBody(activity: Activity): ReactElement {
             {PROJECT_FILE_CATEGORY_LABEL[activity.payload.category] ?? activity.payload.category}
           </Row>
           <Row label="文件">
-            <FileLink url={`/api/files/${activity.payload.fileId}/download`} name="下载文件" />
+            <FileItem fileId={activity.payload.fileId} filename={activity.payload.filename} />
           </Row>
         </div>
       );
 
-    case 'project_created':
+    case 'project_created': {
+      const { openingDoc, assignmentDoc, wechatChats, developers } = activity.payload;
       return (
         <div className={styles.detailRows}>
           <Row label="时间">{when}</Row>
           <Row label="操作人">{actor}</Row>
           <Row label="项目名">{activity.payload.name}</Row>
           <Row label="初始报价">{formatMoney(activity.payload.originalQuote)}</Row>
-          <Row label="优先级">{activity.payload.priority}</Row>
-          <Row label="截止时间">{activity.payload.deadline}</Row>
+          <Row label="优先级">{PROJECT_PRIORITY_LABEL[activity.payload.priority] ?? activity.payload.priority}</Row>
+          <Row label="截止时间">{formatWhen(activity.payload.deadline)}</Row>
+          {/* 用户反馈 2026-05-03"项目创建详情应该显示对接开发人员字段"
+           *  migration 0018 view JOIN project_developers + users 嵌入 displayName */}
+          {developers.length > 0 && (
+            <Row label="对接开发人员">
+              {developers.map((d) => d.displayName).join('、')}
+            </Row>
+          )}
+          {openingDoc && (
+            <Row label="开题报告">
+              <FileItem fileId={openingDoc.id} filename={openingDoc.filename} />
+            </Row>
+          )}
+          {assignmentDoc && (
+            <Row label="任务书">
+              <FileItem fileId={assignmentDoc.id} filename={assignmentDoc.filename} />
+            </Row>
+          )}
+          {wechatChats.length > 0 && (
+            <Row label="媒体">
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {wechatChats.map((f) => (
+                  <div key={f.id} style={{ width: 160, maxWidth: '100%' }}>
+                    <FileItem fileId={f.id} filename={f.filename} />
+                  </div>
+                ))}
+              </div>
+            </Row>
+          )}
         </div>
       );
+    }
   }
 }
 
@@ -197,12 +266,32 @@ const KIND_TITLE: Record<Activity['kind'], string> = {
   feedback: '反馈详情',
   status_change: '状态变更详情',
   quote_change: '报价变更详情',
-  payment: '收款详情',
+  payment: '结算详情',
   thesis_version: '论文版本详情',
-  project_file_added: '文件详情',
+  project_file_added: '附件详情',
 };
 
-export function ActivityDetailDialog({ activity, onClose }: Props): ReactElement {
+/** 详情弹窗动态标题。
+ *  用户反馈 2026-05-03"报价、开发、验收的时间线弹窗标题应该使用报价/开发/验收详情"
+ *  status_change kind 静态"状态变更详情"过于笼统；按 toStatus 取 PROJECT_STATUS_LABEL 拼"X 详情"
+ *  非 status_change 走 KIND_TITLE 字典。 */
+function resolveKindTitle(activity: Activity): string {
+  if (activity.kind === 'status_change') {
+    const toStatus = activity.payload.toStatus;
+    const toLabel = PROJECT_STATUS_LABEL[toStatus] ?? toStatus;
+    return `${toLabel}详情`;
+  }
+  if (activity.kind === 'project_file_added') {
+    const cat = activity.payload.category;
+    const catLabel = PROJECT_FILE_CATEGORY_LABEL[cat] ?? cat;
+    return `${catLabel}详情`;
+  }
+  return KIND_TITLE[activity.kind];
+}
+
+export function ActivityDetailDialog({ activity, onClose, isCurrentStatus }: Props): ReactElement {
+  // useNow：visibilitychange/focus 触发更新（不持续 tick），用于"当前停留"实时计算
+  const now = useNow();
   // ESC 关闭
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -216,14 +305,14 @@ export function ActivityDetailDialog({ activity, onClose }: Props): ReactElement
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={KIND_TITLE[activity.kind]}
+      aria-label={resolveKindTitle(activity)}
       onClick={onClose}
       className={`${styles.modalOverlay} ${styles.modalOverlayOpen}`}
       data-testid="activity-detail-dialog"
     >
       <div onClick={(e) => e.stopPropagation()} className={styles.modal}>
         <div className={styles.modalHead}>
-          <h3>{KIND_TITLE[activity.kind]}</h3>
+          <h3>{resolveKindTitle(activity)}</h3>
           <button
             type="button"
             onClick={onClose}
@@ -234,7 +323,7 @@ export function ActivityDetailDialog({ activity, onClose }: Props): ReactElement
           </button>
         </div>
         <div className={styles.modalBody}>
-          {renderBody(activity)}
+          {renderBody(activity, isCurrentStatus, now)}
           {(activity.clientIp || activity.userAgent) && (
             <div className={styles.detailRows} style={{ marginTop: 12 }}>
               <AuditRows clientIp={activity.clientIp} userAgent={activity.userAgent} />

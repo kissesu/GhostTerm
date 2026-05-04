@@ -37,6 +37,8 @@ describe('ProjectCreatedRenderer', () => {
         priority: 'normal',
         deadline: '2026-06-01',
         originalQuote: '8000',
+        wechatChats: [],
+        developers: [],
       },
     };
     render(<ProjectCreatedRenderer activity={activity} />);
@@ -57,17 +59,18 @@ describe('FeedbackRenderer', () => {
         source: 'wechat',
         status: 'pending',
         attachmentCount: 0,
+        attachments: [],
       },
     };
     render(<FeedbackRenderer activity={activity} />);
     expect(screen.getByText('反馈')).toBeInTheDocument();
-    expect(screen.getByText(/微信/)).toBeInTheDocument();
+    // source label 已删（用户反馈 2026-05-03"不需要来源字段"）
     expect(screen.getByText('客户问进度')).toBeInTheDocument();
   });
 });
 
 describe('StatusChangeRenderer', () => {
-  it('渲染 状态 chip + from→to label + eventName · remark', () => {
+  it('渲染 目标流程名 chip + from→to label + eventName · remark', () => {
     const activity: Extract<Activity, { kind: 'status_change' }> = {
       ...base,
       id: 'status_change:1',
@@ -81,7 +84,8 @@ describe('StatusChangeRenderer', () => {
       },
     };
     render(<StatusChangeRenderer activity={activity} />);
-    expect(screen.getByText('状态')).toBeInTheDocument();
+    // chip 显示 toStatus 对应的流程名 "报价中"（用户反馈"状态 tag 应该使用实际的流程名"）
+    expect(screen.getByText('报价中')).toBeInTheDocument();
     expect(screen.getByText(/项目从「洽谈中」进入「报价中」/)).toBeInTheDocument();
     expect(screen.getByText(/发出报价 · 走加急通道/)).toBeInTheDocument();
   });
@@ -136,6 +140,7 @@ describe('PaymentRenderer', () => {
         amount: '2000',
         paidAt: '2026-05-01T03:00:00Z',
         remark: '首款',
+        attachments: [],
       },
     };
     render(<PaymentRenderer activity={activity} />);
@@ -151,7 +156,7 @@ describe('ThesisVersionRenderer', () => {
       ...base,
       id: 'thesis_version:1',
       kind: 'thesis_version',
-      payload: { fileId: 1, versionNo: 3, remark: '终稿' },
+      payload: { fileId: 1, versionNo: 3, remark: '终稿', filename: 'thesis_v3.pdf' },
     };
     render(<ThesisVersionRenderer activity={activity} />);
     expect(screen.getByText('论文')).toBeInTheDocument();
@@ -164,7 +169,7 @@ describe('ThesisVersionRenderer', () => {
       ...base,
       id: 'thesis_version:2',
       kind: 'thesis_version',
-      payload: { fileId: 1, versionNo: 1, remark: '' },
+      payload: { fileId: 1, versionNo: 1, remark: '', filename: 'thesis_v1.pdf' },
     };
     const { container } = render(<ThesisVersionRenderer activity={activity} />);
     expect(container.querySelector('.meta')).toBeNull();
@@ -177,7 +182,7 @@ describe('ProjectFileRenderer', () => {
       ...base,
       id: 'project_file_added:1',
       kind: 'project_file_added',
-      payload: { fileId: 1, category: 'sample_doc' },
+      payload: { fileId: 1, category: 'sample_doc', filename: 'sample.pdf' },
     };
     render(<ProjectFileRenderer activity={activity} />);
     expect(screen.getByText('附件')).toBeInTheDocument();

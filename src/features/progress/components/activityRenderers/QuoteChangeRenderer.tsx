@@ -29,6 +29,8 @@ export function QuoteChangeRenderer({ activity }: Props): ReactElement {
       <div className={styles.timelineBody}>
         <div className={styles.timelineHeader}>
           <span className={`${styles.chip} ${styles.chipWarning}`}>报价</span>
+          {/* 用户反馈 2026-05-03"报价时间线也应该显示报价金额"——chipAccent 醒目展示新报价 */}
+          <span className={`${styles.chip} ${styles.chipAccent}`}>{formatMoney(newQuote)}</span>
           <ActorChip actorName={activity.actorName} actorUsername={activity.actorUsername} />
           <span className={styles.when}>{formatWhen(activity.occurredAt)}</span>
         </div>

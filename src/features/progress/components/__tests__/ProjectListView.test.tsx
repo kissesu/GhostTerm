@@ -28,6 +28,7 @@ function makeProject(id: number, status: Project['status'], name: string): Proje
     createdAt: '2026-01-01',
     updatedAt: '2026-01-01',
     thesisLevel: 'master',
+    developers: [],
   };
 }
 

@@ -30,7 +30,10 @@ export function PaymentRenderer({ activity }: Props): ReactElement {
       </div>
       <div className={styles.timelineBody}>
         <div className={styles.timelineHeader}>
-          <span className={`${styles.chip} ${styles.chipSuccess}`}>款项</span>
+          {/* 用户反馈 2026-05-03"结算的时间线 tag 应该显示为结算而不是款项, 且应该使用 tag 显示已结算金额"
+           *  chipSuccess "结算" + chipAccent 金额 */}
+          <span className={`${styles.chip} ${styles.chipSuccess}`}>结算</span>
+          <span className={`${styles.chip} ${styles.chipAccent}`}>{formatMoney(amount)}</span>
           <ActorChip actorName={activity.actorName} actorUsername={activity.actorUsername} />
           <span className={styles.when}>{formatWhen(activity.occurredAt)}</span>
         </div>

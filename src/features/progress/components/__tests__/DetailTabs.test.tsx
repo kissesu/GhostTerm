@@ -15,7 +15,7 @@ describe('DetailTabs', () => {
     expect(screen.getByRole('tab', { name: '进度时间线' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '反馈' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '论文版本' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '文件' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '源码' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '收款' })).toBeInTheDocument();
   });
 

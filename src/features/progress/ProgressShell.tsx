@@ -24,7 +24,7 @@ import { NotificationsCenterView } from './components/NotificationsCenterView';
 import { EarningsView } from './components/EarningsView';
 import { ProjectDetailPage } from './components/ProjectDetailPage';
 import { NewProjectDialog } from './components/NewProjectDialog';
-import { KANBAN_STAGES } from './config/nbaConfig';
+import { KANBAN_STAGES, STATUS_LABEL } from './config/nbaConfig';
 
 export default function ProgressShell(): ReactElement {
   // ============================================
@@ -35,6 +35,7 @@ export default function ProgressShell(): ReactElement {
   const loadNotifications = useNotificationsStore((s) => s.load);
   const currentView = useProgressUiStore((s) => s.currentView);
   const selectedProjectId = useProgressUiStore((s) => s.selectedProjectId);
+  const statusFilter = useProgressUiStore((s) => s.statusFilter);
   const closeProject = useProgressUiStore((s) => s.closeProject);
   const openProjectFromView = useProgressUiStore((s) => s.openProjectFromView);
   const [showCreate, setShowCreate] = useState(false);
@@ -74,6 +75,12 @@ export default function ProgressShell(): ReactElement {
       if (a.kind === 'status_change') {
         // 同 stage 多次进入（如售后回流）取**最早**那次：DESC 数组中后遍历的是更早的
         map[a.payload.toStatus] = a.occurredAt;
+      } else if (a.kind === 'project_created') {
+        // dealing 阶段进入时间 = project_created 的 occurredAt
+        // migration 0012 view 过滤了 E0 status_change（与 project_created 语义重复）
+        // 必须从 project_created 兜底拿 dealing 时间，否则 PipelineStepper 显示"洽谈 -"
+        // （用户反馈 2026-05-03"新建项目进度就应该是流程的洽谈了, 需要同步更新洽谈的时间"）
+        map['dealing'] = a.occurredAt;
       }
     }
     return map;
@@ -106,17 +113,47 @@ export default function ProgressShell(): ReactElement {
   }
 
   return (
-    <div className={styles.shellRoot} style={{ padding: '24px 28px 60px', minHeight: '100%' }}>
+    <div className={styles.shellRoot} style={{ padding: '24px 28px 60px' }}>
       <PipelineStepper
         projects={projectList}
         currentStatus={pipelineCurrentStatus}
         projectStages={selectedProject ? projectStages : undefined}
+        selectedProject={selectedProject ?? undefined}
+        // 仅在看板/列表/甘特顶层（非 detail 模式）允许点击 step 跳列表过滤
+        // 用户反馈 2026-05-03"归档进度需要可以点击打开查看所有已归档的项目"
+        onStepClick={
+          selectedProject
+            ? undefined
+            : (stage) => {
+                useProgressUiStore.getState().setStatusFilter(stage);
+                useProgressUiStore.getState().setCurrentView('list');
+              }
+        }
+        // 看板/列表模式互斥单选 active：statusFilter 对应 stage 激活；'all' 时默认第一个
+        // 用户原话 2026-05-03"默认第一个进度条被激活, 然后点击了A进度条之后A进度条是被激活状态"
+        activeStage={
+          selectedProject
+            ? undefined
+            : statusFilter !== 'all'
+              ? statusFilter
+              : KANBAN_STAGES[0]
+        }
       />
       <ViewBar
         // 用户原话 2026-05-02 "点开通知中心后无法返回看板"：
         // notifications/earnings 是非 kanban 子视图，复用 detail 模式的"看板/标题 + 返回"
         // 既能让 ViewBar 显示"返回看板"按钮，又能给非项目类子页一个面包屑
-        mode={selectedProject || currentView === 'notifications' || currentView === 'earnings' ? 'detail' : 'kanban'}
+        // 用户原话 2026-05-03"进入进度条的列表页后不应该还显示新建项目, 应该显示返回看板按钮"：
+        // list 视图（来自 PipelineStepper step click 进入的过滤模式）也走 detail 模式
+        mode={
+          selectedProject ||
+          currentView === 'notifications' ||
+          currentView === 'earnings' ||
+          currentView === 'list' ||
+          currentView === 'gantt'
+            ? 'detail'
+            : 'kanban'
+        }
         activeProjectCount={activeProjectCount}
         projectTitle={
           selectedProject?.name
@@ -124,24 +161,43 @@ export default function ProgressShell(): ReactElement {
               ? '通知中心'
               : currentView === 'earnings'
                 ? '收益概览'
-                : undefined)
+                : currentView === 'list'
+                  ? (statusFilter !== 'all' ? `${STATUS_LABEL[statusFilter] ?? statusFilter}项目` : '项目列表')
+                  : currentView === 'gantt'
+                    ? '甘特图'
+                    : undefined)
         }
         onBack={
           selectedProject
             ? closeProject
-            : (currentView === 'notifications' || currentView === 'earnings')
-              ? () => useProgressUiStore.getState().setCurrentView('kanban')
+            : (
+              currentView === 'notifications' ||
+              currentView === 'earnings' ||
+              currentView === 'list' ||
+              currentView === 'gantt'
+            )
+              ? () => {
+                  // 返回看板时清除 statusFilter 让看板视图不被过滤干扰
+                  useProgressUiStore.getState().setStatusFilter('all');
+                  useProgressUiStore.getState().setCurrentView('kanban');
+                }
               : undefined
         }
-        actions={!selectedProject && currentView !== 'notifications' && currentView !== 'earnings' ? (
-          <button
-            type="button"
-            className={`${styles.btn} ${styles.btnPrimary}`}
-            onClick={() => setShowCreate(true)}
-          >
-            + 新建项目
-          </button>
-        ) : null}
+        actions={
+          !selectedProject &&
+          currentView !== 'notifications' &&
+          currentView !== 'earnings' &&
+          currentView !== 'list' &&
+          currentView !== 'gantt' ? (
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnPrimary}`}
+              onClick={() => setShowCreate(true)}
+            >
+              + 新建项目
+            </button>
+          ) : null
+        }
       />
       {mainContent}
       {showCreate && (

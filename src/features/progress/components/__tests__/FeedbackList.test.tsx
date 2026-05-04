@@ -32,6 +32,7 @@ function makeFeedback(id: number, content: string, recordedAt: string): Feedback
     recordedBy: 1,
     recordedAt,
     attachmentIds: [],
+    attachments: [],
   };
 }
 

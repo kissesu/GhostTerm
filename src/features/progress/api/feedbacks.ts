@@ -55,6 +55,11 @@ export type FeedbackStatus = z.infer<typeof FeedbackStatusSchema>;
  *
  * recordedAt 是 RFC3339 字符串（服务端 time.Time 序列化结果）；前端用 new Date() 即可
  * 转 Date 实例供 toLocaleString 渲染。
+ *
+ * attachments：附件 (id + filename) 列表（用户反馈 2026-05-03 新增）。
+ *   - 前端用 filename 推断 mediaKind 走 MediaPreview 组件渲染图片/视频
+ *   - 拼 /api/files/:id/download 做下载链接
+ *   - 与 attachmentIds 同步：attachments[i].id === attachmentIds[i]
  */
 export const FeedbackSchema = z.object({
   id: z.number().int(),
@@ -65,6 +70,15 @@ export const FeedbackSchema = z.object({
   recordedBy: z.number().int(),
   recordedAt: z.string(),
   attachmentIds: z.array(z.number().int()).optional().default([]),
+  attachments: z
+    .array(
+      z.object({
+        id: z.number().int(),
+        filename: z.string(),
+      }),
+    )
+    .optional()
+    .default([]),
 });
 
 export type Feedback = z.infer<typeof FeedbackSchema>;

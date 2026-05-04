@@ -14,7 +14,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback, lazy, Suspense } from 'react';
-import { LogOut } from 'lucide-react';
+import { LogOut, User as UserIcon, ChevronDown } from 'lucide-react';
 import { useSidebarStore, useProjectStore } from '../features/sidebar';
 import { useKeyboardShortcuts } from '../shared/hooks/useKeyboardShortcuts';
 import WindowTitleBar from '../shared/components/WindowTitleBar';
@@ -23,6 +23,7 @@ import { useGlobalAuthStore } from '../shared/stores/globalAuthStore';
 import { useGlobalPermissionStore } from '../shared/stores/globalPermissionStore';
 import GlobalLoginPage from '../shared/components/GlobalLoginPage';
 import NoPermissionFallback from '../shared/components/NoPermissionFallback';
+import ProfileDialog from '../shared/components/ProfileDialog';
 import { NotificationBell } from '../features/progress/components/NotificationBell';
 import { ProjectWorkspace } from './ProjectWorkspace';
 
@@ -89,6 +90,10 @@ export default function AppLayout() {
 
   const [activePanel, setActivePanel] = useState<'editor' | 'terminal'>('editor');
   const userCollapsedRef = useRef(false);
+
+  // 个人中心弹窗（标题栏用户名下拉菜单触发）
+  // 用户原话 2026-05-03"需要使用下拉菜单, 增加个人中心, 可供用户编辑用户信息及修改密码"
+  const [profileDialogOpen, setProfileDialogOpen] = useState(false);
 
   // ============================================
   // 顶层工作区切换：work（终端+编辑器） / progress（进度模块） / atlas（超管）
@@ -344,6 +349,7 @@ export default function AppLayout() {
             displayName={user.displayName ?? user.username}
             onLogout={() => void logout()}
             onOpenSettings={openSettings}
+            onOpenProfile={() => setProfileDialogOpen(true)}
           />
         }
       />
@@ -451,6 +457,11 @@ export default function AppLayout() {
           )}
         </div>
       )}
+
+      {/* 个人中心弹窗：从标题栏用户名下拉菜单"个人中心"项触发 */}
+      {profileDialogOpen && (
+        <ProfileDialog onClose={() => setProfileDialogOpen(false)} />
+      )}
     </div>
   );
 }
@@ -537,16 +548,59 @@ function WorkspaceTabs({
 }
 
 // ============================================
-// 用户栏（标题栏右侧）：通知铃 + 用户名 + 退出 + 设置齿轮
-// 顺序（左→右）：bell · 用户名 · 退出 · 齿轮
+// 用户栏（标题栏右侧）：齿轮 · 通知铃 · 用户名下拉菜单
+// 用户原话 2026-05-03"需要使用下拉菜单, 增加个人中心, 可供用户编辑用户信息及修改密码"
+// 用户名 chip 改为可点击触发 dropdown，菜单项：个人中心 / 退出登录
 // ============================================
 interface UserBarProps {
   displayName: string;
   onLogout: () => void;
   onOpenSettings: () => void;
+  onOpenProfile: () => void;
 }
 
-function UserBar({ displayName, onLogout, onOpenSettings }: UserBarProps) {
+function UserBar({ displayName, onLogout, onOpenSettings, onOpenProfile }: UserBarProps) {
+  // dropdown 开关 + outside click / ESC 关闭
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuWrapRef = useRef<HTMLDivElement | null>(null);
+
+  // 点击菜单外或按 ESC 关闭：避免菜单常驻遮挡操作
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      // 点击区域不在 wrapper 内 → 关闭
+      if (menuWrapRef.current && !menuWrapRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    // mousedown 让点击 menu item 时先触发 onClick 再关菜单（避免 click 被 outside 误判）
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [menuOpen]);
+
+  // 菜单项通用样式（避免每个 button 内联重复）
+  const menuItemStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    width: '100%',
+    padding: '8px 12px',
+    border: 'none',
+    background: 'transparent',
+    color: 'var(--c-fg)',
+    fontSize: 12,
+    fontFamily: 'inherit',
+    cursor: 'pointer',
+    textAlign: 'left',
+  };
+
   return (
     <div
       data-testid="global-userbar"
@@ -556,7 +610,7 @@ function UserBar({ displayName, onLogout, onOpenSettings }: UserBarProps) {
         gap: 6,
       }}
     >
-      {/* 用户需求 2026-04-30：齿轮在通知中心左侧（顺序左→右：齿轮 · 铃铛 · 用户名 · 退出） */}
+      {/* 用户需求 2026-04-30：齿轮在通知中心左侧（顺序左→右：齿轮 · 铃铛 · 用户名菜单） */}
       <button
         type="button"
         onClick={onOpenSettings}
@@ -573,47 +627,112 @@ function UserBar({ displayName, onLogout, onOpenSettings }: UserBarProps) {
 
       <NotificationBell />
 
-      <span
-        data-testid="global-userbar-name"
-        style={{
-          fontSize: 12,
-          color: 'var(--c-fg-muted)',
-          fontWeight: 600,
-          padding: '0 4px',
-          maxWidth: 120,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}
-        title={displayName}
-      >
-        {displayName}
-      </span>
+      {/* 用户名 + dropdown：保留原 testid global-userbar-name，让既有 e2e 选择器无需修改 */}
+      <div ref={menuWrapRef} style={{ position: 'relative', display: 'inline-flex' }}>
+        <button
+          type="button"
+          onClick={() => setMenuOpen((v) => !v)}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          data-testid="global-userbar-trigger"
+          title={displayName}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            height: 26,
+            padding: '0 8px',
+            border: '1px solid var(--c-border-sub)',
+            borderRadius: 6,
+            background: menuOpen ? 'rgba(255,255,255,0.04)' : 'transparent',
+            color: 'var(--c-fg-muted)',
+            fontSize: 11,
+            fontFamily: 'inherit',
+            cursor: 'pointer',
+          }}
+        >
+          <span
+            data-testid="global-userbar-name"
+            style={{
+              fontSize: 12,
+              color: 'var(--c-fg-muted)',
+              fontWeight: 600,
+              maxWidth: 120,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {displayName}
+          </span>
+          <ChevronDown
+            size={12}
+            aria-hidden="true"
+            style={{
+              transition: 'transform 0.15s',
+              transform: menuOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+            }}
+          />
+        </button>
 
-      <button
-        type="button"
-        onClick={onLogout}
-        data-testid="global-logout"
-        title="退出登录"
-        aria-label="退出登录"
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 4,
-          height: 26,
-          padding: '0 8px',
-          border: '1px solid var(--c-border-sub)',
-          borderRadius: 6,
-          background: 'transparent',
-          color: 'var(--c-fg-muted)',
-          fontSize: 11,
-          fontFamily: 'inherit',
-          cursor: 'pointer',
-        }}
-      >
-        <LogOut size={12} aria-hidden="true" />
-        退出
-      </button>
+        {menuOpen && (
+          <div
+            role="menu"
+            data-testid="global-userbar-menu"
+            style={{
+              position: 'absolute',
+              top: 'calc(100% + 4px)',
+              right: 0,
+              minWidth: 160,
+              padding: 4,
+              border: '1px solid var(--c-border-sub)',
+              borderRadius: 6,
+              background: 'var(--c-panel, #161616)',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+              zIndex: 50,
+            }}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
+                onOpenProfile();
+              }}
+              data-testid="global-userbar-menu-profile"
+              style={menuItemStyle}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent';
+              }}
+            >
+              <UserIcon size={14} aria-hidden="true" />
+              个人中心
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
+                onLogout();
+              }}
+              data-testid="global-logout"
+              style={menuItemStyle}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent';
+              }}
+            >
+              <LogOut size={14} aria-hidden="true" />
+              退出登录
+            </button>
+          </div>
+        )}
+      </div>
 
     </div>
   );

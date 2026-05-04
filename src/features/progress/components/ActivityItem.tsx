@@ -21,14 +21,21 @@ import { PaymentRenderer } from './activityRenderers/PaymentRenderer';
 import { ThesisVersionRenderer } from './activityRenderers/ThesisVersionRenderer';
 import { ProjectFileRenderer } from './activityRenderers/ProjectFileRenderer';
 
-export function ActivityItem({ activity }: { activity: Activity }): ReactElement | null {
+export function ActivityItem({
+  activity,
+  isCurrentStatus,
+}: {
+  activity: Activity;
+  /** 仅 status_change 关心：是否为最新且匹配 project.currentStatus 的活动 */
+  isCurrentStatus?: boolean;
+}): ReactElement | null {
   switch (activity.kind) {
     case 'project_created':
       return <ProjectCreatedRenderer activity={activity} />;
     case 'feedback':
       return <FeedbackRenderer activity={activity} />;
     case 'status_change':
-      return <StatusChangeRenderer activity={activity} />;
+      return <StatusChangeRenderer activity={activity} isCurrent={isCurrentStatus} />;
     case 'quote_change':
       return <QuoteChangeRenderer activity={activity} />;
     case 'payment':

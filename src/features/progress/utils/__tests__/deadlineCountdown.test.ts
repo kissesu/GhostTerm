@@ -33,14 +33,14 @@ describe('daysToDeadline', () => {
 });
 
 describe('formatDeadline', () => {
-  it('正数天数格式化为 Xd', () => {
-    expect(formatDeadline(5)).toBe('5d');
-    expect(formatDeadline(0)).toBe('0d');
+  it('正数天数格式化为 X 天', () => {
+    expect(formatDeadline(5)).toBe('5 天');
+    expect(formatDeadline(0)).toBe('0 天');
   });
 
-  it('负数天数格式化为 超期 Xd', () => {
-    expect(formatDeadline(-3)).toBe('超期 3d');
-    expect(formatDeadline(-1)).toBe('超期 1d');
+  it('负数天数格式化为 超期 X 天', () => {
+    expect(formatDeadline(-3)).toBe('超期 3 天');
+    expect(formatDeadline(-1)).toBe('超期 1 天');
   });
 });
 

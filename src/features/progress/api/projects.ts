@@ -48,6 +48,15 @@ export type ProjectPriority = z.infer<typeof ProjectPriorityEnum>;
 export const ThesisLevelEnum = z.enum(['bachelor', 'master', 'doctor']);
 export type ThesisLevel = z.infer<typeof ThesisLevelEnum>;
 
+/** 论文级别 → 中文 label。
+ *  用户反馈 2026-05-03"客户名字后的bachelor 是什么意思?"——KanbanCard / DetailMainHead /
+ *  ProjectListView 之前用 raw enum 值渲染，必须经此字典翻译。 */
+export const THESIS_LEVEL_LABEL: Record<ThesisLevel, string> = {
+  bachelor: '本科',
+  master: '硕士',
+  doctor: '博士',
+};
+
 /**
  * spec §6.2 16 事件
  *
@@ -76,6 +85,16 @@ export type Money = z.infer<typeof MoneySchema>;
 // ============================================
 // Project schema
 // ============================================
+
+/**
+ * 项目对接的开发人员引用（业务需求 2026-05-03）。
+ * 后端来源 project_developers JOIN users，用于前端展示项目对接人。
+ */
+export const ProjectDeveloperRefSchema = z.object({
+  id: z.number().int(),
+  displayName: z.string(),
+});
+export type ProjectDeveloperRef = z.infer<typeof ProjectDeveloperRefSchema>;
 
 export const ProjectSchema = z.object({
   id: z.number().int(),
@@ -108,6 +127,9 @@ export const ProjectSchema = z.object({
   createdBy: z.number().int(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  // 项目对接的开发人员（业务需求 2026-05-03）；后端始终返非 null（COALESCE '[]'），
+  // default([]) 兜底防御历史/边缘场景的 schema 漂移
+  developers: z.array(ProjectDeveloperRefSchema).default([]),
 });
 export type Project = z.infer<typeof ProjectSchema>;
 
@@ -152,6 +174,9 @@ export interface CreateProjectInput {
   assignmentDocId?: number;
   // 微信聊天记录截图 ID 数组；后端事务 INSERT N 行 project_files (category='wechat_chat')
   wechatChatFileIds?: number[];
+  // 项目对接的开发人员 user.id 数组（业务需求 2026-05-03 必填，至少 1 个）：
+  // 后端事务内同步 INSERT project_developers + INSERT project_members(role='dev')
+  developerUserIds: number[];
 }
 
 export interface UpdateProjectInput {

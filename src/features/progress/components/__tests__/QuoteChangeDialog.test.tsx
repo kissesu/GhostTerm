@@ -68,7 +68,8 @@ describe('QuoteChangeDialog', () => {
       3,
       expect.objectContaining({
         changeType: 'modify',
-        newQuote: '9000',
+        // 输入 "9000" → toFixed(2) 归一为 "9000.00" 让 OAS Money pattern 通过
+        newQuote: '9000.00',
         reason: '需求增加',
       }),
     );

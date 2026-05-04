@@ -56,9 +56,15 @@ vi.mock('../FeedbackList', () => ({
   FeedbackList: () => <div data-testid="feedback-list">反馈列表</div>,
 }));
 
-// mock FileUploadButton + ThesisVersionList（避免 filesStore / listThesisVersions API）
+// mock FileUploadButton + ThesisVersionUploadDialog + ThesisVersionList
+// （避免 filesStore / uploadFile / listThesisVersions API 在单测里被真实调用）
 vi.mock('../FileUploadButton', () => ({
   FileUploadButton: () => <div data-testid="file-upload-button">上传文件</div>,
+}));
+vi.mock('../ThesisVersionUploadDialog', () => ({
+  ThesisVersionUploadDialog: () => (
+    <div data-testid="thesis-version-upload-dialog">上传论文版本</div>
+  ),
 }));
 vi.mock('../ThesisVersionList', () => ({
   ThesisVersionList: () => <div data-testid="thesis-version-list">论文版本</div>,
@@ -81,6 +87,7 @@ const baseProject: Project = {
   createdAt: '2026-01-01',
   updatedAt: '2026-01-01',
   thesisLevel: 'master',
+  developers: [],
 };
 
 const mockLoadOne = vi.fn();
@@ -171,10 +178,10 @@ describe('ProjectDetailPage', () => {
     expect(screen.getByTestId('feedback-list')).toBeInTheDocument();
   });
 
-  it('点击 "论文版本" tab → 渲染 FileUploadButton + ThesisVersionList', async () => {
+  it('点击 "论文版本" tab → 渲染 ThesisVersionUploadDialog + ThesisVersionList', async () => {
     render(<ProjectDetailPage projectId={7} />);
     await userEvent.click(screen.getByRole('tab', { name: '论文版本' }));
-    expect(screen.getByTestId('file-upload-button')).toBeInTheDocument();
+    expect(screen.getByTestId('thesis-version-upload-dialog')).toBeInTheDocument();
     expect(screen.getByTestId('thesis-version-list')).toBeInTheDocument();
   });
 

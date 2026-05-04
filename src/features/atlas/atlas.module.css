@@ -250,6 +250,23 @@
   border: 1px solid rgba(184, 255, 106, 0.3);
 }
 
+/* 用户反馈 2026-05-03"为用户管理角色字段的开发和客服使用不同颜色的 tag 区分"
+ *  二轮："区分不清晰"——blue/cyan 冷色系相似度高；改三色高对比度：
+ *  超管 accent 绿 (冷绿) / 开发 amber 琥珀 (暖黄) / 客服 violet 紫 (中性紫)
+ *  色相相距 ≥120° 让 tag 一眼可辨。tagInactive(amber) 出现在"激活"列文字"禁用"，
+ *  与本色 tag 在不同列不会混淆 */
+.tagDev {
+  background: rgba(231, 186, 74, 0.14);
+  color: var(--amber);
+  border: 1px solid rgba(231, 186, 74, 0.4);
+}
+
+.tagCs {
+  background: rgba(167, 139, 250, 0.14);
+  color: #a78bfa;
+  border: 1px solid rgba(167, 139, 250, 0.4);
+}
+
 .tagActive {
   background: rgba(121, 209, 124, 0.12);
   color: var(--green);
@@ -265,6 +282,15 @@
 .actionCol {
   display: inline-flex;
   gap: 6px;
+}
+
+/* 角色权限矩阵操作列内的"保存/重置"按钮：
+   2026-05-03 用户反馈"宽度太挤"——给两字按钮额外的 min-width 与左右 padding，
+   使中文两字符显示有呼吸感；不影响其它使用 btnPrimary/btnGhost 的位置。 */
+.actionCol .btnPrimary,
+.actionCol .btnGhost {
+  min-width: 64px;
+  padding: 0 16px;
 }
 
 /* ===================================================================

@@ -27,7 +27,8 @@ export function ProjectFileRenderer({ activity }: Props): ReactElement {
       </div>
       <div className={styles.timelineBody}>
         <div className={styles.timelineHeader}>
-          <span className={`${styles.chip} ${styles.chipMuted}`}>附件</span>
+          {/* 用户反馈 2026-05-03"源码的时间线 tag 应该显示为源码而不是附件"——chip 用 categoryLabel 动态化 */}
+          <span className={`${styles.chip} ${styles.chipMuted}`}>{categoryLabel}</span>
           <ActorChip actorName={activity.actorName} actorUsername={activity.actorUsername} />
           <span className={styles.when}>{formatWhen(activity.occurredAt)}</span>
         </div>

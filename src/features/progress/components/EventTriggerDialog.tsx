@@ -294,7 +294,7 @@ export function EventTriggerDialog({
             <button type="button" className={styles.btn} onClick={onClose}>
               取消
             </button>
-            <button type="submit" className={styles.btnPrimary} disabled={submitting}>
+            <button type="submit" className={`${styles.btn} ${styles.btnPrimary}`} disabled={submitting}>
               {submitting ? '提交中…' : '确认提交'}
             </button>
           </div>

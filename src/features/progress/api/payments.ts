@@ -46,6 +46,18 @@ export type PaymentDirection = z.infer<typeof PaymentDirectionSchema>;
  *   - amount 是 ^-?\d+(\.\d{1,2})?$（Money string）
  *   - relatedUserId / screenshotId 仅 dev_settlement 必填，其它情况 null
  */
+/**
+ * PaymentAttachmentRefSchema —— 单个凭证截图（id + filename）。
+ *
+ * 业务背景：migration 0014 payment_attachments 表 + payment_service.go LEFT JOIN jsonb_agg；
+ * 与 FeedbackActivityPayload.attachments 同款形状（id 拼 /api/files/:id/download）。
+ */
+export const PaymentAttachmentRefSchema = z.object({
+  id: z.number().int(),
+  filename: z.string(),
+});
+export type PaymentAttachmentRef = z.infer<typeof PaymentAttachmentRefSchema>;
+
 export const PaymentSchema = z.object({
   id: z.number().int(),
   projectId: z.number().int(),
@@ -57,6 +69,9 @@ export const PaymentSchema = z.object({
   remark: z.string(),
   recordedBy: z.number().int(),
   recordedAt: z.string(), // ISO datetime
+  // 凭证截图列表：服务端永远返回数组（migration 0014 + handler 兜底空切片）；
+  // .default([]) 兜底老快照里少这字段的极端情况
+  attachments: z.array(PaymentAttachmentRefSchema).default([]),
 });
 export type Payment = z.infer<typeof PaymentSchema>;
 
@@ -79,6 +94,9 @@ export interface PaymentCreatePayload {
   relatedUserId?: number | null;
   screenshotId?: number | null;
   remark: string;
+  // attachmentIds 可选：已通过 POST /api/files 上传得到的凭证截图 file_id 列表
+  // （migration 0014 同事务 INSERT payment_attachments）
+  attachmentIds?: number[];
 }
 
 // ============================================

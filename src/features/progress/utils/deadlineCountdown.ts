@@ -24,13 +24,15 @@ export function daysToDeadline(deadlineISO: string, now: Date = new Date()): num
  * 格式化剩余天数为可读字符串。
  *
  * @param days daysToDeadline 返回值
- * @returns "超期 Xd"（超期时）/ "Xd"（正常时）
+ * @returns "超期 X 天"（超期时）/ "X 天"（正常时）
+ *
+ * 用户反馈 2026-05-03"日期中使用的单位 d、h 全部改为使用 天、小时"——单位中文化。
  */
 export function formatDeadline(days: number): string {
   if (days < 0) {
-    return `超期 ${Math.abs(days)}d`;
+    return `超期 ${Math.abs(days)} 天`;
   }
-  return `${days}d`;
+  return `${days} 天`;
 }
 
 /**

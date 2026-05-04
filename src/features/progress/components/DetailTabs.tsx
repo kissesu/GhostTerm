@@ -16,8 +16,8 @@ const TABS: ReadonlyArray<{ id: DetailTab; label: string }> = [
   { id: 'timeline', label: '进度时间线' },
   { id: 'feedback', label: '反馈' },
   { id: 'thesis', label: '论文版本' },
-  { id: 'files', label: '文件' },
-  { id: 'payments', label: '收款' },
+  { id: 'files', label: '源码' },
+  { id: 'payments', label: '结算' },
 ];
 
 interface DetailTabsProps {

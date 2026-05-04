@@ -150,12 +150,16 @@ export const NBA_CONFIG: Record<ProjectStatus, NbaConfig> = {
     ],
   },
   delivered: {
-    defaultReason: '已交付，建议催收尾款。',
+    // 用户反馈 2026-05-03"这里不应该是确认收款而是结算, 这里是客服结算给开发的流程"
+    defaultReason: '已交付，建议结算给开发。',
     primaryAction: {
-      eventCode: 'E10', label: '确认收款', modalTitle: '确认收款',
+      eventCode: 'E10', label: '结算', modalTitle: '结算',
       transitionTo: 'paid', meta: '预计 1 分钟', kind: 'primary', permCode: 'event:E10',
+      // 注：fields 仍保留 amount/method/note，但 ProjectDetailPage 检测到 eventCode==='E10' 时
+      // 改弹 PaymentDialog（已支持凭证上传附件，用户原话"点开的结算弹窗应该收上传结算凭证截图入口"），
+      // 不再走通用 EventTriggerDialog；PaymentDialog 提交后由 onSuccess 内额外调 triggerEvent E10 推进 status
       fields: [
-        { name: 'amount', label: '收款金额（¥）', type: 'number', required: true },
+        { name: 'amount', label: '结算金额（¥）', type: 'number', required: true },
         { name: 'method', label: '支付方式', type: 'select', options: ['支付宝', '微信', '银行转账', '现金', '其他'], required: true },
         { name: 'note', label: '备注', type: 'textarea' },
       ],
@@ -282,11 +286,11 @@ export const PIPELINE_STAGES: ProjectStatus[] = ['dealing', 'quoting', 'developi
 export const STATUS_LABEL: Record<ProjectStatus, string> = {
   dealing: '洽谈',
   quoting: '报价',
-  developing: '开发中',
+  developing: '开发',
   confirming: '验收',
-  delivered: '已交付',
-  paid: '已收款',
-  archived: '已归档',
+  delivered: '交付',
+  paid: '结算',
+  archived: '归档',
   after_sales: '售后',
   cancelled: '已取消',
 };

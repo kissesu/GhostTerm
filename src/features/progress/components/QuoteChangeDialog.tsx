@@ -46,8 +46,9 @@ export function QuoteChangeDialog({
     e.preventDefault();
     const trimmedAmount = newAmount.trim();
     const trimmedReason = reason.trim();
-
-    if (!trimmedAmount || Number.isNaN(Number(trimmedAmount))) {
+    // 金额数值校验：必须是有限非负数；接受 "5000" / "5000.5" / "5000.50"
+    const parsedAmount = Number(trimmedAmount);
+    if (!trimmedAmount || !Number.isFinite(parsedAmount) || parsedAmount < 0) {
       setError('请输入有效金额');
       return;
     }
@@ -59,10 +60,15 @@ export function QuoteChangeDialog({
     setSubmitting(true);
     setError(null);
     try {
+      // OAS Money pattern 强制 2 位小数（^-?\d+\.\d{2}$）；
+      // 输入框 step=0.01 但浏览器允许整数（"5000"），后端 ogen 会在解码阶段
+      // 拒掉无小数的字符串并 500，所以前端必须 toFixed(2) 归一到 "5000.00"。
+      // 与 NewProjectDialog originalQuote / PaymentDialog amount 保持同一约定。
+      const normalizedAmount = parsedAmount.toFixed(2);
       // changeType=modify 需传 newQuote；quotes.ts createQuoteChange 会做客户端校验
       await addQuoteChange(projectId, {
         changeType: 'modify',
-        newQuote: trimmedAmount,
+        newQuote: normalizedAmount,
         reason: trimmedReason,
       });
       onSuccess?.();

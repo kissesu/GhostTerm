@@ -9,9 +9,10 @@
  * @author Atlas.oi
  * @date 2026-05-01
  */
-import { useState, useEffect, type ReactElement, type FormEvent } from 'react';
+import { useState, useEffect, useRef, type ReactElement, type FormEvent, type ChangeEvent } from 'react';
 import styles from '../progress.module.css';
 import { usePaymentsStore } from '../stores/paymentsStore';
+import { uploadFile } from '../api/files';
 
 const METHODS = ['支付宝', '微信', '银行转账', '现金', '其他'] as const;
 type Method = typeof METHODS[number];
@@ -35,6 +36,14 @@ export function PaymentDialog({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 凭证截图附件（用户反馈 2026-05-03"结算弹窗没有上传截图的入口"）
+  // - 多文件 + 即时 uploadFile 拿 fileId，attachments 累积；提交时把 ids 传给 addPayment
+  // - 模式与 FeedbackInput 一致（allSettled + chip 列表 + 移除按钮）
+  const [attachments, setAttachments] = useState<{ id: number; filename: string }[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadErrors, setUploadErrors] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const addPayment = usePaymentsStore((s) => s.addPayment);
 
   // Escape 键关闭
@@ -49,7 +58,8 @@ export function PaymentDialog({
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const trimmed = amount.trim();
-    if (!trimmed || Number.isNaN(Number(trimmed)) || Number(trimmed) <= 0) {
+    const parsed = Number(trimmed);
+    if (!trimmed || !Number.isFinite(parsed) || parsed <= 0) {
       setError('请输入有效金额');
       return;
     }
@@ -59,16 +69,20 @@ export function PaymentDialog({
       // ============================================
       // 构造符合 PaymentCreatePayload 类型的请求体：
       // - direction: 固定 customer_in（本弹窗仅用于客户收款）
-      // - amount: 金额字符串（Money 类型，后端期望 "123.45"）
+      // - amount: Money 字符串，OAS pattern 强制 2 位小数（^-?\d+\.\d{2}$），
+      //          必须 toFixed(2) 归一让 "500" → "500.00"，
+      //          否则后端 ogen 解码阶段 500（与 QuoteChangeDialog 同一约定）
       // - paidAt: 当前 ISO datetime
       // - remark: "方式：备注" 拼接，便于后续检索
       // ============================================
       const remark = note.trim() ? `${method}：${note.trim()}` : method;
+      const attachmentIds = attachments.map((a) => a.id);
       await addPayment(projectId, {
         direction: 'customer_in',
-        amount: trimmed,
+        amount: parsed.toFixed(2),
         paidAt: new Date().toISOString(),
         remark,
+        ...(attachmentIds.length > 0 ? { attachmentIds } : {}),
       });
       onSuccess?.();
       onClose();
@@ -77,6 +91,34 @@ export function PaymentDialog({
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // 多文件上传：复用 FeedbackInput allSettled 模式（单文件失败不阻断其它）
+  const handleFilesPicked = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    if (files.length === 0) return;
+    setUploading(true);
+    setUploadErrors([]);
+    const results = await Promise.allSettled(files.map((f) => uploadFile(f)));
+    const ok: { id: number; filename: string }[] = [];
+    const fail: string[] = [];
+    results.forEach((r, idx) => {
+      const f = files[idx];
+      if (r.status === 'fulfilled') {
+        ok.push({ id: r.value.id, filename: r.value.filename });
+      } else {
+        const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+        fail.push(`${f.name}：${msg}`);
+      }
+    });
+    if (ok.length > 0) setAttachments((prev) => [...prev, ...ok]);
+    if (fail.length > 0) setUploadErrors(fail);
+    setUploading(false);
+  };
+
+  const removeAttachment = (id: number) => {
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
   };
 
   return (
@@ -94,7 +136,7 @@ export function PaymentDialog({
         data-testid="payment-dialog"
       >
         <div className={styles.modalHead}>
-          <h3 id={TITLE_ID}>新增收款</h3>
+          <h3 id={TITLE_ID}>新增结算</h3>
           <button
             type="button"
             className={styles.modalClose}
@@ -107,7 +149,7 @@ export function PaymentDialog({
         <form onSubmit={handleSubmit}>
           <div className={styles.modalBody}>
             <div className={styles.field}>
-              <label htmlFor="payment-amount">收款金额（¥） *</label>
+              <label htmlFor="payment-amount">结算金额（¥） *</label>
               <input
                 id="payment-amount"
                 type="number"
@@ -140,6 +182,52 @@ export function PaymentDialog({
                 onChange={(e) => setNote(e.target.value)}
               />
             </div>
+            {/* 凭证截图：用户反馈 2026-05-03"结算弹窗没有上传截图的入口" */}
+            <div className={styles.field}>
+              <label>凭证截图（可选，可多选）</label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*,application/pdf"
+                aria-label="选择凭证截图"
+                style={{ display: 'none' }}
+                onChange={handleFilesPicked}
+                data-testid="payment-attachment-input"
+              />
+              <button
+                type="button"
+                className={styles.btn}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading || submitting}
+                style={{ padding: '4px 12px', fontSize: 12 }}
+              >
+                {uploading ? '上传中…' : '+ 添加凭证'}
+              </button>
+              {attachments.length > 0 && (
+                <div className={styles.docUploadList} aria-label="凭证列表" style={{ marginTop: 8 }}>
+                  {attachments.map((a) => (
+                    <span key={a.id} className={styles.docUploadChip}>
+                      {a.filename}
+                      <button
+                        type="button"
+                        onClick={() => removeAttachment(a.id)}
+                        aria-label={`移除 ${a.filename}`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {uploadErrors.length > 0 && (
+                <ul style={{ marginTop: 8, paddingLeft: 16, color: 'var(--red)', fontSize: 12 }}>
+                  {uploadErrors.map((msg, i) => (
+                    <li key={i}>{msg}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
             {error && <p className={styles.fieldError}>{error}</p>}
           </div>
           <div className={styles.modalFoot}>
@@ -151,7 +239,7 @@ export function PaymentDialog({
               className={`${styles.btn} ${styles.btnPrimary}`}
               disabled={submitting}
             >
-              {submitting ? '提交中…' : '确认收款'}
+              {submitting ? '提交中…' : '确认结算'}
             </button>
           </div>
         </form>

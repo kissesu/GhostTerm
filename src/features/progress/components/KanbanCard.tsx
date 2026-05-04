@@ -12,7 +12,7 @@
  */
 import type { ReactElement } from 'react';
 import styles from '../progress.module.css';
-import type { Project } from '../api/projects';
+import { type Project, THESIS_LEVEL_LABEL } from '../api/projects';
 import { getPrimaryAction, type ActionMeta } from '../config/nbaConfig';
 import { daysToDeadline, formatDeadline, deadlineClass } from '../utils/deadlineCountdown';
 
@@ -50,7 +50,7 @@ export function KanbanCard({ project, onOpenDetail, onTriggerCta }: KanbanCardPr
       {/* meta 行：客户标签 + 学位级别 + 截止 tag */}
       <div className={styles.cardMeta}>
         <span>{project.customerLabel}</span>
-        <span>{project.thesisLevel ?? '—'}</span>
+        <span>{project.thesisLevel ? THESIS_LEVEL_LABEL[project.thesisLevel] : '—'}</span>
         <span className={ddClassName}>{ddText}</span>
       </div>
 

@@ -14,6 +14,8 @@ import { useProjectsStore } from '../stores/projectsStore';
 import { useToastStore } from '../stores/toastStore';
 import { uploadFile } from '../api/files';
 import type { CreateProjectInput, ProjectPriority, ThesisLevel } from '../api/projects';
+import { listUsers } from '../../atlas/api/users';
+import type { UserPayload } from '../api/schemas';
 
 interface NewProjectDialogProps {
   onClose: () => void;
@@ -30,6 +32,10 @@ const Schema = z.object({
   deadline: z.string().min(1, '此字段必填'),
   originalQuote: z.string().optional(),
 });
+
+/** developer 角色 ID（与后端 services 角色映射一致；subagent B 验证：role=2 dev / role=3 cs / role=1 admin）。
+ *  用户原话 2026-05-03"新建项目时应该必须选择当前项目对接的开发人员"——下拉仅显示 dev 角色用户。 */
+const DEVELOPER_ROLE_ID = 2;
 
 export function NewProjectDialog({ onClose, onSuccess }: NewProjectDialogProps): ReactElement {
   const create = useProjectsStore((s) => s.create);
@@ -50,7 +56,8 @@ export function NewProjectDialog({ onClose, onSuccess }: NewProjectDialogProps):
     customerLabel: '',
     description: '',
     priority: 'normal' as ProjectPriority,
-    thesisLevel: 'master' as ThesisLevel,
+    // 默认本科（用户反馈 2026-05-03"新建项目时论文级别需要默认为本科"，覆盖原 master）
+    thesisLevel: 'bachelor' as ThesisLevel,
     subject: '',
     deadline: defaultDeadline,
     originalQuote: '',
@@ -59,6 +66,11 @@ export function NewProjectDialog({ onClose, onSuccess }: NewProjectDialogProps):
   const [openingDoc, setOpeningDoc] = useState<File | null>(null);
   const [assignmentDoc, setAssignmentDoc] = useState<File | null>(null);
   const [wechatFiles, setWechatFiles] = useState<File[]>([]);
+
+  // 开发人员候选 + 已选 ID 集合（必选，至少 1 个）
+  const [devCandidates, setDevCandidates] = useState<UserPayload[]>([]);
+  const [developerUserIds, setDeveloperUserIds] = useState<number[]>([]);
+  const [devLoadError, setDevLoadError] = useState<string | null>(null);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -72,6 +84,30 @@ export function NewProjectDialog({ onClose, onSuccess }: NewProjectDialogProps):
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose, submitting]);
+
+  // 开发人员候选拉取（已放宽 GET /api/users RBAC，所有登录用户可调）
+  useEffect(() => {
+    let cancelled = false;
+    void listUsers()
+      .then((all) => {
+        if (cancelled) return;
+        const devs = all.filter((u) => u.roleId === DEVELOPER_ROLE_ID && u.isActive);
+        setDevCandidates(devs);
+      })
+      .catch((err) => {
+        if (!cancelled) setDevLoadError(err instanceof Error ? err.message : String(err));
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const toggleDeveloper = (id: number) => {
+    setDeveloperUserIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+    if (errors.developerUserIds) {
+      const next = { ...errors }; delete next.developerUserIds; setErrors(next);
+    }
+  };
 
   const update = (k: keyof typeof form) => (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setForm({ ...form, [k]: e.target.value });
@@ -114,6 +150,10 @@ export function NewProjectDialog({ onClose, onSuccess }: NewProjectDialogProps):
       setErrors(errs);
       return;
     }
+    if (developerUserIds.length === 0) {
+      setErrors({ developerUserIds: '请至少选择一个开发人员' });
+      return;
+    }
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -148,6 +188,7 @@ export function NewProjectDialog({ onClose, onSuccess }: NewProjectDialogProps):
         priority: form.priority,
         thesisLevel: form.thesisLevel,
         deadline: isoDeadline,
+        developerUserIds,
       };
       if (form.subject.trim()) input.subject = form.subject.trim();
       if (form.originalQuote.trim()) {
@@ -231,6 +272,51 @@ export function NewProjectDialog({ onClose, onSuccess }: NewProjectDialogProps):
               <div className={styles.field}>
                 <label htmlFor="np-quote">报价（¥，可选）</label>
                 <input id="np-quote" type="number" min="0" step="0.01" value={form.originalQuote} onChange={update('originalQuote')} placeholder="如 5000.00" disabled={submitting} />
+              </div>
+
+              {/* 对接开发人员（必填，多选）：用户原话 2026-05-03"新建项目时应该必须选择当前项目对接的开发人员"
+               *  下拉显示 displayName，roleId === DEVELOPER_ROLE_ID 的用户作候选 */}
+              <div className={`${styles.field} ${styles.formRowFull}`}>
+                <label>对接开发人员 <span style={{ color: 'var(--red)' }}>*</span></label>
+                {devLoadError ? (
+                  <div className={styles.fieldError}>开发人员列表加载失败：{devLoadError}</div>
+                ) : devCandidates.length === 0 ? (
+                  <div style={{ color: 'var(--muted)', fontSize: 12 }}>暂无可选开发人员</div>
+                ) : (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {devCandidates.map((u) => {
+                      const checked = developerUserIds.includes(u.id);
+                      const label = u.displayName ?? u.username;
+                      return (
+                        <label
+                          key={u.id}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            padding: '4px 10px',
+                            border: `1px solid ${checked ? 'var(--accent)' : 'var(--line)'}`,
+                            borderRadius: 16,
+                            background: checked ? 'rgba(184,255,106,0.10)' : 'transparent',
+                            color: checked ? 'var(--accent)' : 'var(--text)',
+                            cursor: submitting ? 'not-allowed' : 'pointer',
+                            fontSize: 12,
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleDeveloper(u.id)}
+                            disabled={submitting}
+                            style={{ display: 'none' }}
+                          />
+                          {label}
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+                {errors.developerUserIds && <div className={styles.fieldError}>{errors.developerUserIds}</div>}
               </div>
 
               {/* 资料文件区：全宽 */}

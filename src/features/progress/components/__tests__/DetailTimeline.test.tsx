@@ -58,6 +58,7 @@ describe('DetailTimeline', () => {
         source: 'wechat',
         status: 'pending',
         attachmentCount: 0,
+        attachments: [],
       },
     };
     setStoreState({

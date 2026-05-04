@@ -31,12 +31,26 @@ import { getBaseUrl, ProgressApiError, silentRefreshOnce } from './client';
 // 7 个 *Payload schema —— 与 server/openapi.yaml components.schemas.*Payload 一致
 // ============================================
 
+// migration 0012：单文件附件视图（开题/任务书）
+const FileRefSchema = z.object({
+  id: z.number().int(),
+  filename: z.string(),
+});
+
 const ProjectCreatedPayloadSchema = z.object({
   name: z.string(),
   status: z.string(),
   priority: z.string(),
   deadline: z.string(),
   originalQuote: z.string(), // Money: decimal as string
+  // migration 0012 inline 创建期附件，避免时间线产生 5 条独立条目
+  openingDoc: FileRefSchema.nullable().optional(),
+  assignmentDoc: FileRefSchema.nullable().optional(),
+  wechatChats: z.array(FileRefSchema).default([]),
+  // migration 0018：项目对接的开发人员（用户反馈 2026-05-03"项目创建详情应该显示对接开发人员字段"）
+  developers: z
+    .array(z.object({ id: z.number().int(), displayName: z.string() }))
+    .default([]),
 });
 
 const FeedbackActivityPayloadSchema = z.object({
@@ -45,6 +59,15 @@ const FeedbackActivityPayloadSchema = z.object({
   status: z.enum(['pending', 'done']),
   // migration 0010：聚合 feedback_attachments COUNT，无附件为 0
   attachmentCount: z.number().int().default(0),
+  // migration 0011：附件 (id+filename) 数组，前端拼 /api/files/:id/download 渲染下载链接
+  attachments: z
+    .array(
+      z.object({
+        id: z.number().int(),
+        filename: z.string(),
+      }),
+    )
+    .default([]),
 });
 
 const StatusChangeActivityPayloadSchema = z.object({
@@ -77,17 +100,33 @@ const PaymentActivityPayloadSchema = z.object({
   relatedUserId: z.number().int().nullable().optional(),
   screenshotId: z.number().int().nullable().optional(),
   remark: z.string(),
+  // migration 0015：聚合 payment_attachments (id + filename)，时间线详情弹窗渲染下载链接
+  // 用户反馈 2026-05-03 "结算时间线详情弹窗没有显示结算凭证截图"
+  attachments: z
+    .array(
+      z.object({
+        id: z.number().int(),
+        filename: z.string(),
+      }),
+    )
+    .default([]),
 });
 
 const ThesisVersionActivityPayloadSchema = z.object({
   fileId: z.number().int(),
   versionNo: z.number().int(),
   remark: z.string().nullable().optional(),
+  // migration 0016：view JOIN files 拿 filename，详情弹窗显示真实文件名
+  filename: z.string(),
 });
 
 const ProjectFileAddedPayloadSchema = z.object({
   fileId: z.number().int(),
-  category: z.enum(['sample_doc', 'source_code']),
+  // migration 0004 加了 wechat_chat 到 DB CHECK 但前端 zod 漏同步 → 用户报"动态加载失败"
+  // schema 漂移让整个 activity list 解析抛错，必须维持与 DB CHECK 严格一致
+  category: z.enum(['sample_doc', 'source_code', 'wechat_chat']),
+  // migration 0016：view JOIN files 拿 filename，详情弹窗显示真实文件名
+  filename: z.string(),
 });
 
 // ============================================

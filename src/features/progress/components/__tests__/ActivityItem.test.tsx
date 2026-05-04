@@ -24,14 +24,14 @@ describe('ActivityItem', () => {
       ...base,
       id: 'feedback:1',
       kind: 'feedback',
-      payload: { content: '随手记一笔', source: 'phone', status: 'pending', attachmentCount: 0 },
+      payload: { content: '随手记一笔', source: 'phone', status: 'pending', attachmentCount: 0, attachments: [] },
     };
     render(<ActivityItem activity={activity} />);
     expect(screen.getByText('反馈')).toBeInTheDocument();
-    expect(screen.getByText(/电话/)).toBeInTheDocument();
+    // source 字段已删除（用户反馈 2026-05-03"不需要来源字段"）
   });
 
-  it('status_change 类活动 → 路由到 StatusChangeRenderer（出现 状态 chip）', () => {
+  it('status_change 类活动 → 路由到 StatusChangeRenderer（chip 显示目标流程名）', () => {
     const activity: Activity = {
       ...base,
       id: 'status_change:1',
@@ -45,7 +45,8 @@ describe('ActivityItem', () => {
       },
     };
     render(<ActivityItem activity={activity} />);
-    expect(screen.getByText('状态')).toBeInTheDocument();
+    // chip 显示目标流程名（用户反馈 2026-05-03"状态 tag 应该使用实际的流程名"）
+    expect(screen.getByText('开发中')).toBeInTheDocument();
     expect(screen.getByText(/「报价中」.*「开发中」/)).toBeInTheDocument();
   });
 });

@@ -28,6 +28,7 @@ function makeProject(overrides: Partial<Project> & { status: Project['status'] }
     createdBy: 1,
     createdAt: '2026-01-01',
     updatedAt: '2026-01-01',
+    developers: [],
     ...rest,
   };
 }
