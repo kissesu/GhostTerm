@@ -1,6 +1,6 @@
 [package]
 name = "ghostterm"
-version = "0.3.1"
+version = "0.4.0"
 description = "GhostTerm - 轻量级代码编辑器 + 终端一体化工具，深度集成 Claude Code"
 authors = ["Atlas.oi"]
 edition = "2021"
@@ -70,6 +70,12 @@ infer = "0.16"
 
 # Base64 编码 - 用于图片文件读取后转为 data URL，供前端 <img> 直接渲染
 base64 = "0.22"
+
+# HTTP 客户端 - 给 progress-server 后端 HTTP 请求做 Tauri 层代理
+# default-features = false + rustls-tls：避免 OpenSSL 依赖；跨平台一致；支持 dangerous_accept_invalid_certs
+# 业务背景：progress-server 用自签 IP 证书，WebView 原生 fetch 不能跳过 cert 验证，
+# 必须通过 reqwest 在 Rust 层做 HTTP 转发；前端 invoke 'http_request_cmd' 调用
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "multipart"] }
 
 # E2E 测试支持 - tauri-webdriver + WebdriverIO 集成（PBI-6 使用）
 tauri-plugin-webdriver-automation = "0.1"

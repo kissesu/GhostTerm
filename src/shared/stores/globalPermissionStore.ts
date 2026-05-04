@@ -38,6 +38,7 @@ import {
   getBaseUrl,
   ProgressApiError,
   silentRefreshOnce,
+  tauriAwareFetch,
 } from '../../features/progress/api/client';
 import { getAccessToken } from './globalAuthStore';
 
@@ -113,7 +114,7 @@ export const useGlobalPermissionStore = create<GlobalPermissionState>((set, get)
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       const token = getAccessToken();
       if (token) headers.Authorization = `Bearer ${token}`;
-      return fetch(`${getBaseUrl()}/api/me/effective-permissions`, {
+      return tauriAwareFetch(`${getBaseUrl()}/api/me/effective-permissions`, {
         method: 'GET',
         headers,
       });

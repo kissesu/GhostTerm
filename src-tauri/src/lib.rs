@@ -14,6 +14,7 @@ pub mod pty_manager;
 pub mod fs_backend;
 pub mod git_backend;
 pub mod project_manager;
+pub mod http_proxy;
 
 // PBI-1 Commands
 use pty_manager::{spawn_pty_cmd, kill_pty_cmd, resize_pty_cmd, reconnect_pty_cmd, get_default_shell_cmd};
@@ -32,6 +33,9 @@ use project_manager::{list_recent_projects_cmd, open_project_cmd, close_project_
 use git_backend::{git_status_cmd, git_stage_cmd, git_unstage_cmd, git_diff_cmd,
                   git_current_branch_cmd, worktree_switch_cmd};
 use git_backend::worktree::{worktree_list_cmd, worktree_add_cmd, worktree_remove_cmd};
+
+// progress-server HTTP 代理 - 让前端绕过 WebView SSL 限制访问自签证书后端
+use http_proxy::{http_request_cmd, http_request_multipart_cmd};
 
 // ============================================
 // "打开方式"启动时暂存的文件路径队列
@@ -180,6 +184,9 @@ pub fn run() {
             worktree_switch_cmd,
             // 打开方式：获取启动时传入的文件路径
             get_startup_files_cmd,
+            // progress-server HTTP 代理（绕过 WebView 自签证书限制）
+            http_request_cmd,
+            http_request_multipart_cmd,
         ])
         // ============================================
         // 改用 build().run() 以便在 RunEvent 回调中处理 macOS"打开方式"事件

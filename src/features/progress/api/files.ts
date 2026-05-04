@@ -101,17 +101,61 @@ export async function uploadFile(file: File): Promise<FileMetadata> {
   const fd = new FormData();
   fd.append('file', file);
 
-  // 内联函数：拿当前 token 发起单次 fetch（refresh 后用新 token 再发要用同一个函数）
+  // 内联函数：拿当前 token 发起单次请求（refresh 后用新 token 再发要用同一个函数）
+  // Tauri 桌面环境走 invoke('http_request_multipart_cmd')：File → base64 → Rust reqwest::multipart 重组装
+  // 业务背景：原生 fetch 走 WebView 不能跳自签证书；reqwest danger_accept_invalid_certs 在 Rust 层完成
   const send = async (): Promise<Response> => {
     const token = getAccessToken();
+    const url = `${getBaseUrl()}/api/files`;
     const headers: Record<string, string> = {};
     if (token) headers.Authorization = `Bearer ${token}`;
-    return fetch(`${getBaseUrl()}/api/files`, {
+
+    if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const contentBase64 = await fileToBase64(file);
+      const httpResp = await invoke<{
+        status: number;
+        headers: Record<string, string>;
+        body: string;
+      }>('http_request_multipart_cmd', {
+        method: 'POST',
+        url,
+        headers,
+        parts: [{
+          type: 'file',
+          name: 'file',
+          filename: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          contentBase64,
+        }],
+      });
+      return new Response(httpResp.body, {
+        status: httpResp.status,
+        headers: httpResp.headers,
+      });
+    }
+
+    return fetch(url, {
       method: 'POST',
       body: fd,
       headers, // 不设置 Content-Type，浏览器自带 boundary
     });
   };
+
+  // File → base64 工具（去掉 data URL 前缀，仅保留纯 base64）
+  // 注意：base64 编码会让 payload 体积 +33%，单文件上限 100MB（FILE_MAX_SIZE_MB）后实际传输 ~133MB
+  async function fileToBase64(f: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        const idx = result.indexOf(',');
+        resolve(idx >= 0 ? result.slice(idx + 1) : result);
+      };
+      reader.onerror = () => reject(new Error('FileReader failed'));
+      reader.readAsDataURL(f);
+    });
+  }
 
   // 第一次发；401 时复用 apiFetch 同款 silent refresh + retry 一次（避免直接 logout）
   let res = await send();

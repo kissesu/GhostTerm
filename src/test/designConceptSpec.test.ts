@@ -4,6 +4,7 @@ import workspaceHtml from '../../designs/habitat-grid-workspace.html?raw';
 import toolsHtml from '../../designs/habitat-grid-tools.html?raw';
 import progressHtml from '../../designs/habitat-grid-progress.html?raw';
 import progressInteractionsHtml from '../../designs/habitat-grid-progress-interactions.html?raw';
+import atlasIconPreviewHtml from '../../designs/atlas-icon-preview.html?raw';
 
 describe('GhostTerm 设计稿交付物', () => {
   it('应存在包含三套高保真方案的静态设计页', () => {
@@ -51,5 +52,16 @@ describe('GhostTerm 设计稿交付物', () => {
     expect(progressInteractionsHtml).toContain('PaymentDialog');
     expect(progressInteractionsHtml).toContain('内部面板独立滚动');
     expect(progressInteractionsHtml).toContain('同 habitat-grid-progress.html 视觉系统');
+    expect(atlasIconPreviewHtml).toContain('Atlas Control Brandkit Preview');
+    expect(atlasIconPreviewHtml).toContain('Atlas Control Mark / Brandkit Skill Trial');
+    expect(atlasIconPreviewHtml).toContain('atlas-control-brandkit-board.png');
+    expect(atlasIconPreviewHtml).toContain('atlas-control-mark.png');
+    expect(atlasIconPreviewHtml).toContain('Leonxlnx/taste-skill');
+    expect(atlasIconPreviewHtml).toContain('Control core / 项目运行总控');
+    expect(atlasIconPreviewHtml).not.toContain('atlas-icon.svg');
+    expect(atlasIconPreviewHtml).not.toContain('Atlas Navigator Mascot');
+    expect(atlasIconPreviewHtml).not.toContain('Atlas Paperflow Mark Preview');
+    expect(atlasIconPreviewHtml).not.toContain('Atlas Folio Map Mark');
+    expect(atlasIconPreviewHtml).toContain('单图标候选 / Atlas Control Mark');
   });
 });

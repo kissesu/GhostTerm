@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Atlas Control Brandkit Preview</title>
+    <style>
+      :root {
+        --bg: #0d0d0c;
+        --panel: #191916;
+        --panel-2: #20201c;
+        --line: rgba(233, 226, 204, 0.11);
+        --text: #f0eee4;
+        --muted: #b4ae9c;
+        --faint: #7e796c;
+        --accent: #b8ff6a;
+        --cyan: #63d5ff;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+      }
+
+      body {
+        min-height: 100vh;
+        padding: 44px;
+        background:
+          linear-gradient(180deg, rgba(184, 255, 106, 0.035), transparent 260px),
+          radial-gradient(circle at 76% 0%, rgba(99, 213, 255, 0.08), transparent 320px),
+          var(--bg);
+        color: var(--text);
+        font-family: "Avenir Next", "PingFang SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif;
+      }
+
+      .page {
+        width: 1180px;
+        margin: 0 auto;
+        display: grid;
+        gap: 18px;
+      }
+
+      .hero,
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: linear-gradient(180deg, var(--panel), #11110f);
+        overflow: hidden;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: 690px 1fr;
+        min-height: 620px;
+      }
+
+      .brandkit-board {
+        display: grid;
+        place-items: center;
+        padding: 28px;
+        border-right: 1px solid var(--line);
+        background:
+          linear-gradient(rgba(233, 226, 204, 0.045) 1px, transparent 1px) 0 0 / 38px 38px,
+          linear-gradient(90deg, rgba(233, 226, 204, 0.045) 1px, transparent 1px) 0 0 / 38px 38px,
+          #10110f;
+      }
+
+      .brandkit-board img {
+        width: 620px;
+        height: 620px;
+        border-radius: 14px;
+        box-shadow: 0 28px 70px rgba(0, 0, 0, 0.45);
+      }
+
+      .hero-copy {
+        padding: 46px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+
+      .eyebrow {
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 900;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 18px 0 16px;
+        font-size: 64px;
+        line-height: 0.94;
+        letter-spacing: -0.06em;
+      }
+
+      p {
+        max-width: 380px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.8;
+      }
+
+      .spec {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 30px;
+      }
+
+      .spec div {
+        min-height: 90px;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.025);
+      }
+
+      .spec strong {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--text);
+        font-size: 13px;
+      }
+
+      .spec span {
+        color: var(--faint);
+        font-size: 11px;
+        line-height: 1.5;
+      }
+
+      .panel {
+        padding: 20px;
+      }
+
+      .panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+      }
+
+      .panel-title {
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 850;
+      }
+
+      .icon-row {
+        display: grid;
+        grid-template-columns: 320px 1fr;
+        gap: 18px;
+        align-items: stretch;
+      }
+
+      .icon-stage {
+        min-height: 320px;
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background:
+          linear-gradient(rgba(233, 226, 204, 0.035) 1px, transparent 1px) 0 0 / 24px 24px,
+          #11110f;
+      }
+
+      .icon-stage img {
+        width: 240px;
+        height: 240px;
+      }
+
+      .sizes {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .size-card {
+        min-height: 142px;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        display: grid;
+        align-content: center;
+        justify-items: center;
+        gap: 12px;
+        background: #11110f;
+      }
+
+      .size-card img {
+        width: var(--s);
+        height: var(--s);
+      }
+
+      .size-card span {
+        color: var(--faint);
+        font-size: 11px;
+      }
+
+      .usage {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .usage-card {
+        min-height: 142px;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--panel-2);
+      }
+
+      .usage-card img {
+        width: 42px;
+        height: 42px;
+        vertical-align: middle;
+        margin-right: 12px;
+      }
+
+      .usage-card strong {
+        font-size: 18px;
+      }
+
+      .usage-card p {
+        margin-top: 14px;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <div class="brandkit-board">
+          <img src="./atlas-control-brandkit-board.png" alt="Atlas Brandkit Board" />
+        </div>
+        <div class="hero-copy">
+          <div class="eyebrow">Atlas Control Mark / Brandkit Skill Trial</div>
+          <h1>Atlas</h1>
+          <p>
+            这版禁用地图、路线和导航隐喻，把 Atlas 定义为项目运行系统的总控层：中心控制核负责协调终端、进度、客户、收款、反馈和权限模块。
+          </p>
+          <div class="spec">
+            <div><strong>品牌隐喻</strong><span>Control core / 项目运行总控</span></div>
+            <div><strong>图标逻辑</strong><span>中心控制核 + 五个功能模块</span></div>
+            <div><strong>产品覆盖</strong><span>Terminal / Progress / Client / Payment / Feedback</span></div>
+            <div><strong>来源</strong><span>Leonxlnx/taste-skill · brandkit</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title">单图标候选 / Atlas Control Mark</div>
+          <div class="panel-title">RGBA PNG · 1254px</div>
+        </div>
+        <div class="icon-row">
+          <div class="icon-stage">
+            <img src="./atlas-control-mark.png" alt="Atlas Control Mark icon" />
+          </div>
+          <div class="sizes">
+            <div class="size-card" style="--s: 160px"><img src="./atlas-control-mark.png" alt="" /><span>160</span></div>
+            <div class="size-card" style="--s: 112px"><img src="./atlas-control-mark.png" alt="" /><span>112</span></div>
+            <div class="size-card" style="--s: 84px"><img src="./atlas-control-mark.png" alt="" /><span>84</span></div>
+            <div class="size-card" style="--s: 56px"><img src="./atlas-control-mark.png" alt="" /><span>56</span></div>
+            <div class="size-card" style="--s: 36px"><img src="./atlas-control-mark.png" alt="" /><span>36</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title">应用场景</div>
+        </div>
+        <div class="usage">
+          <div class="usage-card">
+            <img src="./atlas-control-mark.png" alt="" /><strong>Atlas Shell</strong>
+            <p>作为系统级品牌锚点，不绑定单一终端，也不使用地图、幽灵或幼态角色。</p>
+          </div>
+          <div class="usage-card">
+            <img src="./atlas-control-mark.png" alt="" /><strong>运行总控</strong>
+            <p>中心控制核协调终端、进度、客户、收款和反馈模块，回应产品的总控层定位。</p>
+          </div>
+          <div class="usage-card">
+            <img src="./atlas-control-mark.png" alt="" /><strong>协作上下文</strong>
+            <p>可延展到权限、角色、客户、收款、反馈等协作模块入口。</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

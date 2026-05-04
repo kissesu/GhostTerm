@@ -25,7 +25,7 @@ import { z } from 'zod';
 
 import { getAccessToken } from '../../../shared/stores/globalAuthStore';
 
-import { getBaseUrl, ProgressApiError, silentRefreshOnce } from './client';
+import { getBaseUrl, ProgressApiError, silentRefreshOnce, tauriAwareFetch } from './client';
 
 // ============================================
 // 7 个 *Payload schema —— 与 server/openapi.yaml components.schemas.*Payload 一致
@@ -312,5 +312,5 @@ async function doFetch(path: string): Promise<Response> {
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
-  return fetch(`${getBaseUrl()}${path}`, { method: 'GET', headers });
+  return tauriAwareFetch(`${getBaseUrl()}${path}`, { method: 'GET', headers });
 }

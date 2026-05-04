@@ -118,6 +118,42 @@ export async function silentRefreshOnce(): Promise<boolean> {
   return inflightRefresh;
 }
 
+/**
+ * Tauri 感知 fetch — 在桌面应用环境用 invoke 调用 Rust reqwest 做 HTTP 转发（绕过 WebView 自签证书限制）；
+ * 在 vitest / 浏览器 dev 环境走原生 fetch（单测 mock 兼容）。
+ *
+ * 业务背景：progress-server 用自签 IP 证书部署，WebView (WKWebView/WebView2) 原生 fetch 不能跳过 cert 验证
+ * → reqwest .danger_accept_invalid_certs(true) 在 Rust 层做 HTTP 转发
+ *
+ * 暴露给 client.ts 自身的 doFetch + globalPermissionStore + atlas/api/permissions 等手写 fetch 路径复用，
+ * 避免每个模块各自重复 Tauri 分支判断。
+ *
+ * @param url    完整 URL（含 BASE_URL）
+ * @param init   RequestInit（method/headers/body）
+ * @returns      Response 对象（Tauri 分支构造的 Response 与原生 fetch 返回的 Response API 等价）
+ */
+export async function tauriAwareFetch(url: string, init: RequestInit): Promise<Response> {
+  if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    const headers = (init.headers as Record<string, string> | undefined) ?? {};
+    const httpResp = await invoke<{
+      status: number;
+      headers: Record<string, string>;
+      body: string;
+    }>('http_request_cmd', {
+      method: init.method ?? 'GET',
+      url,
+      headers,
+      body: typeof init.body === 'string' ? init.body : null,
+    });
+    return new Response(httpResp.body, {
+      status: httpResp.status,
+      headers: httpResp.headers,
+    });
+  }
+  return fetch(url, init);
+}
+
 async function doFetch(path: string, rest: RequestInit, anonymous: boolean | undefined, initHeaders: Record<string, string> | undefined): Promise<Response> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -129,7 +165,7 @@ async function doFetch(path: string, rest: RequestInit, anonymous: boolean | und
       headers.Authorization = `Bearer ${token}`;
     }
   }
-  return fetch(`${BASE_URL}${path}`, { ...rest, headers });
+  return tauriAwareFetch(`${BASE_URL}${path}`, { ...rest, headers });
 }
 
 export async function apiFetch<T>(

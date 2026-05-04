@@ -203,9 +203,11 @@ func (s *authService) Login(ctx context.Context, username, password string) (str
 	}
 
 	expiresAt := time.Now().Add(s.refreshTTL)
+	// 走 SECURITY DEFINER 函数 issue_refresh_token（owner=progress_rls_definer BYPASSRLS）
+	// 直接 INSERT 在生产 progress_app NOBYPASSRLS + FORCE RLS 下被拒（refresh_tokens 仅 SELECT policy）
+	// 与 rotate_refresh_token 路径同模式；详见 0019_issue_refresh_token_function.up.sql
 	if _, err := s.pool.Exec(ctx, `
-		INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
-		VALUES ($1, $2, $3)
+		SELECT issue_refresh_token($1, $2, $3)
 	`, user.ID, refreshHash, expiresAt); err != nil {
 		return "", "", nil, fmt.Errorf("auth_service: persist refresh: %w", err)
 	}

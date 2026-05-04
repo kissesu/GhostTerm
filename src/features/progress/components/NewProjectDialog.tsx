@@ -9,6 +9,10 @@
  */
 import { useEffect, useRef, useState, type ChangeEvent, type ReactElement } from 'react';
 import { z } from 'zod';
+import { DayPicker } from 'react-day-picker';
+import { zhCN } from 'date-fns/locale';
+import { format } from 'date-fns';
+import 'react-day-picker/style.css';
 import styles from '../progress.module.css';
 import { useProjectsStore } from '../stores/projectsStore';
 import { useToastStore } from '../stores/toastStore';
@@ -66,6 +70,8 @@ export function NewProjectDialog({ onClose, onSuccess }: NewProjectDialogProps):
   const [openingDoc, setOpeningDoc] = useState<File | null>(null);
   const [assignmentDoc, setAssignmentDoc] = useState<File | null>(null);
   const [wechatFiles, setWechatFiles] = useState<File[]>([]);
+  // 截止日期 picker 展开状态（react-day-picker 中文，替代 native input[type=date]，因为 macOS WKWebView 不读 <html lang>）
+  const [deadlinePickerOpen, setDeadlinePickerOpen] = useState(false);
 
   // 开发人员候选 + 已选 ID 集合（必选，至少 1 个）
   const [devCandidates, setDevCandidates] = useState<UserPayload[]>([]);
@@ -266,7 +272,38 @@ export function NewProjectDialog({ onClose, onSuccess }: NewProjectDialogProps):
               </div>
               <div className={styles.field}>
                 <label htmlFor="np-deadline">截止日期 <span style={{ color: 'var(--red)' }}>*</span></label>
-                <input id="np-deadline" type="date" value={form.deadline} onChange={update('deadline')} disabled={submitting} />
+                <input
+                  id="np-deadline"
+                  type="text"
+                  readOnly
+                  value={form.deadline}
+                  placeholder="点击选择日期"
+                  onClick={() => !submitting && setDeadlinePickerOpen((o) => !o)}
+                  disabled={submitting}
+                  style={{ cursor: submitting ? 'not-allowed' : 'pointer' }}
+                />
+                {deadlinePickerOpen && (
+                  <div style={{
+                    background: 'var(--c-panel, var(--bg-2))',
+                    border: '1px solid var(--c-border, var(--border))',
+                    borderRadius: 8,
+                    padding: 8,
+                    marginTop: 4,
+                  }}>
+                    <DayPicker
+                      mode="single"
+                      locale={zhCN}
+                      selected={form.deadline ? new Date(form.deadline) : undefined}
+                      onSelect={(date) => {
+                        if (date) {
+                          setForm((prev) => ({ ...prev, deadline: format(date, 'yyyy-MM-dd') }));
+                          setDeadlinePickerOpen(false);
+                        }
+                      }}
+                      disabled={{ before: new Date() }}
+                    />
+                  </div>
+                )}
                 {errors.deadline && <div className={styles.fieldError}>{errors.deadline}</div>}
               </div>
               <div className={styles.field}>

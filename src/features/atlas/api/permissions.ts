@@ -37,6 +37,7 @@ import {
   getBaseUrl,
   ProgressApiError,
   silentRefreshOnce,
+  tauriAwareFetch,
 } from '../../progress/api/client';
 
 // ============================================================================
@@ -220,7 +221,7 @@ async function doFetch(path: string, init: RequestInit): Promise<Response> {
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
-  return fetch(`${getBaseUrl()}${path}`, { ...init, headers });
+  return tauriAwareFetch(`${getBaseUrl()}${path}`, { ...init, headers });
 }
 
 /**
