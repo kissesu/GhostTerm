@@ -1,9 +1,12 @@
 [package]
 name = "ghostterm"
-version = "0.2.9"
+version = "0.3.0"
 description = "GhostTerm - 轻量级代码编辑器 + 终端一体化工具，深度集成 Claude Code"
 authors = ["Atlas.oi"]
 edition = "2021"
+# Cargo 1.79+ 才识别 [lints.rust] check-cfg 字段（用于 objc 0.2 cargo-clippy cfg 消音）
+# 旧 toolchain 编译仍可工作，但 cargo-clippy warning 不会消除
+rust-version = "1.79"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -79,3 +82,16 @@ objc = "0.2"
 [dev-dependencies]
 # 测试用临时目录 - 避免测试污染真实文件系统
 tempfile = "3"
+
+# ============================================
+# Lints 配置 - 声明已知合法的 cfg 值，消除上游 crate 旧版宏警告
+#
+# objc 0.2.x（macOS NSWindow 操作必需）内部用 #[cfg(feature = "cargo-clippy")]
+# 这是 Rust 1.79 之前的 clippy 检测方式，新 cargo 严格 cfg 检查会报
+# unexpected_cfgs warning。声明该 feature 合法即可消音，不影响功能。
+#
+# 真正升级路径：将 objc 0.2 + cocoa 0.x 全套替换为 objc2 系列 — 工程量大且
+# 与现役 tauri/cocoa 依赖链耦合，作为独立现代化任务延后。
+# ============================================
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cargo-clippy"))'] }
