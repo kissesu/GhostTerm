@@ -39,7 +39,7 @@ describe('fileTreeStore - refreshFileTree', () => {
 
     await useFileTreeStore.getState().refreshFileTree('/proj');
 
-    expect(mockInvoke).toHaveBeenCalledWith('list_dir_cmd', { path: '/proj', showHidden: false });
+    expect(mockInvoke).toHaveBeenCalledWith('list_dir_cmd', { path: '/proj', showHidden: true });
 
     const { tree } = useFileTreeStore.getState();
     expect(tree).toHaveLength(3);
@@ -105,7 +105,7 @@ describe('fileTreeStore - toggleDir', () => {
 
     await useFileTreeStore.getState().toggleDir('/proj/src');
 
-    expect(mockInvoke).toHaveBeenCalledWith('list_dir_cmd', { path: '/proj/src', showHidden: false });
+    expect(mockInvoke).toHaveBeenCalledWith('list_dir_cmd', { path: '/proj/src', showHidden: true });
   });
 
   it('展开目录后 expandedPaths 应包含该路径', async () => {
@@ -283,7 +283,7 @@ describe('fileTreeStore - applyFsEvent（完整实现）', () => {
       useFileTreeStore.getState().applyFsEvent({ type: 'created', path: '/proj/src/new.rs' });
 
       await vi.waitFor(() => {
-        expect(mockInvoke).toHaveBeenCalledWith('list_dir_cmd', { path: '/proj/src', showHidden: false });
+        expect(mockInvoke).toHaveBeenCalledWith('list_dir_cmd', { path: '/proj/src', showHidden: true });
       });
     });
 
@@ -365,7 +365,7 @@ describe('fileTreeStore - applyFsEvent（完整实现）', () => {
 
       // 必须触发对项目根的 list_dir_cmd 调用
       await vi.waitFor(() => {
-        expect(mockInvoke).toHaveBeenCalledWith('list_dir_cmd', { path: '/proj', showHidden: false });
+        expect(mockInvoke).toHaveBeenCalledWith('list_dir_cmd', { path: '/proj', showHidden: true });
       });
 
       // 顶层 tree 应包含新文件
@@ -394,7 +394,7 @@ describe('fileTreeStore - applyFsEvent（完整实现）', () => {
 
       // 异步阶段：触发根目录刷新并插入新节点
       await vi.waitFor(() => {
-        expect(mockInvoke).toHaveBeenCalledWith('list_dir_cmd', { path: '/proj', showHidden: false });
+        expect(mockInvoke).toHaveBeenCalledWith('list_dir_cmd', { path: '/proj', showHidden: true });
       });
       tree = useFileTreeStore.getState().tree;
       expect(tree.find((n) => n.entry.path === '/proj/README.rst')).toBeDefined();

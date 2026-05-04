@@ -92,7 +92,9 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => ({
    *    显式清空会让新建/重命名/删除文件后用户展开的目录塌陷（已修 bug）
    */
   refreshFileTree: async (rootPath: string) => {
-    const entries = await invoke<FileEntry[]>('list_dir_cmd', { path: rootPath, showHidden: false });
+    // 工作区必须显示项目目录下所有文件（含 . 开头的隐藏配置文件如 .env/.gitignore），
+    // 否则用户无法在编辑器中编辑这类文件。后端 list_dir 在 show_hidden=true 时一视同仁返回。
+    const entries = await invoke<FileEntry[]>('list_dir_cmd', { path: rootPath, showHidden: true });
 
     // 将 FileEntry 列表转换为 FileNode 树（第一层）
     const tree: FileNode[] = entries.map((entry) => ({
@@ -139,7 +141,7 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => ({
 
     if (node.children === undefined) {
       // children=undefined 表示尚未加载，懒加载子目录
-      const entries = await invoke<FileEntry[]>('list_dir_cmd', { path, showHidden: false });
+      const entries = await invoke<FileEntry[]>('list_dir_cmd', { path, showHidden: true });
       const children: FileNode[] = entries.map((entry) => ({
         entry,
         children: entry.is_dir ? undefined : null,
@@ -189,7 +191,7 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => ({
      */
     const refreshParentDir = async (parentPath: string, treeSnapshot: FileNode[]) => {
       try {
-        const entries = await invoke<FileEntry[]>('list_dir_cmd', { path: parentPath, showHidden: false });
+        const entries = await invoke<FileEntry[]>('list_dir_cmd', { path: parentPath, showHidden: true });
         const newChildren: FileNode[] = entries.map((entry) => ({
           entry,
           children: entry.is_dir ? undefined : null,
