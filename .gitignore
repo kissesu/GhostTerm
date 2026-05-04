@@ -61,6 +61,8 @@ Thumbs.db
 # ============================================
 .env
 .env.*
+# .env.production 例外：线上 build 必须的公开 client 配置（VITE_*），无 secrets
+!.env.production
 *.key
 *.pem
 
