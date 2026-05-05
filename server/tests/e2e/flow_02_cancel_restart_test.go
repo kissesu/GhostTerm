@@ -33,11 +33,10 @@ func TestFlow02_CancelRestart(t *testing.T) {
 	dev.loginAs(t, e2eEnv.Dev1)
 
 	// ============================================================
-	// 推进到 developing 状态
+	// 推进到 developing 状态（2026-05-04 简化：E0 直接进 quoting/dev，省去 E1）
 	// ============================================================
 	project := createProject(t, cs, "cancel-restart-customer", "cancel-restart-project",
 		time.Now().Add(15*24*time.Hour), "2000.00")
-	project = triggerEvent(t, cs, project.ID, "E1", "评估", nil)
 	project = triggerEvent(t, dev, project.ID, "E2", "评估完成", nil)
 	project = triggerEvent(t, cs, project.ID, "E4", "客户接受", nil)
 	require.Equal(t, "developing", project.Status)

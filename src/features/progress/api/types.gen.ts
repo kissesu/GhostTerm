@@ -69,6 +69,30 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
+        /**
+         * 修改当前登录用户的基础信息（个人中心）
+         * @description 仅允许 displayName / username 两个字段；roleId / isActive 必须由超管通过 /api/users/{id} 修改。
+         */
+        patch: operations["authUpdateMe"];
+        trace?: never;
+    };
+    "/api/auth/change-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 修改当前登录用户的密码（个人中心）
+         * @description 需要提供旧密码二次校验；成功后递增 token_version 让其它会话失效（当前 access token 仍在 TTL 内可用一会儿，由前端引导用户重新登录）。
+         */
+        post: operations["authChangePassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
         patch?: never;
         trace?: never;
     };
@@ -212,7 +236,7 @@ export interface paths {
         /** 列出项目（按 RBAC 过滤） */
         get: operations["projectsList"];
         put?: never;
-        /** 创建项目（默认进入 dealing 状态） */
+        /** 创建项目（直接进入 quoting 状态由 first dev 报价） */
         post: operations["projectsCreate"];
         delete?: never;
         options?: never;
@@ -364,7 +388,8 @@ export interface paths {
         /** 列出项目附件（sample_doc / source_code） */
         get: operations["projectsListFiles"];
         put?: never;
-        post?: never;
+        /** 把已上传的 file 挂到项目下指定 category（用户上传源码 / 参考样稿后调用） */
+        post: operations["projectsAttachFile"];
         delete?: never;
         options?: never;
         head?: never;
@@ -673,11 +698,17 @@ export interface components {
             superAdmin: boolean;
         };
         /** @enum {string} */
-        ProjectStatus: "dealing" | "quoting" | "developing" | "confirming" | "delivered" | "paid" | "archived" | "after_sales" | "cancelled";
+        ProjectStatus: "quoting" | "developing" | "confirming" | "delivered" | "paid" | "archived" | "after_sales" | "cancelled";
         /** @enum {string} */
         ProjectPriority: "urgent" | "normal";
         /** @enum {string} */
         ThesisLevel: "bachelor" | "master" | "doctor";
+        /** @description 项目对接的开发人员引用（仅暴露 id + displayName 给前端展示） */
+        ProjectDeveloperRef: {
+            /** Format: int64 */
+            id: number;
+            displayName: string;
+        };
         Project: {
             /** Format: int64 */
             id: number;
@@ -696,9 +727,7 @@ export interface components {
             /** Format: date-time */
             deadline: string;
             /** Format: date-time */
-            dealingAt: string;
-            /** Format: date-time */
-            quotingAt?: string | null;
+            quotingAt: string;
             /** Format: date-time */
             devStartedAt?: string | null;
             /** Format: date-time */
@@ -729,6 +758,8 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+            /** @description 项目对接的开发人员列表（来源 project_developers 表，前端展示用） */
+            developers: components["schemas"]["ProjectDeveloperRef"][];
         };
         ProjectCreateRequest: {
             name: string;
@@ -741,6 +772,8 @@ export interface components {
             /** Format: date-time */
             deadline: string;
             originalQuote?: components["schemas"]["Money"];
+            /** @description 项目对接的开发人员 user.id 数组（必填，至少 1 个；后端事务 INSERT project_developers + INSERT project_members(role='dev')，让 dev 通过 RLS 看到该项目及其子资源） */
+            developerUserIds: number[];
             /**
              * Format: int64
              * @description 开题书文件 ID（先 POST /api/files 上传得 fileId，再带入此字段）
@@ -770,7 +803,7 @@ export interface components {
          * @description 状态机事件代码，详见 spec §6.2
          * @enum {string}
          */
-        EventCode: "E0" | "E1" | "E2" | "E3" | "E4" | "E5" | "E6" | "E7" | "E8" | "E9" | "E10" | "E11" | "E12" | "E13" | "E_AS1" | "E_AS3";
+        EventCode: "E0" | "E2" | "E3" | "E4" | "E5" | "E7" | "E8" | "E9" | "E10" | "E11" | "E12" | "E13" | "E_AS1" | "E_AS3";
         EventTriggerRequest: {
             event: components["schemas"]["EventCode"];
             /** @description 状态变更日志必填备注 */
@@ -816,7 +849,14 @@ export interface components {
             recordedBy: number;
             /** Format: date-time */
             recordedAt: string;
+            /** @description 向后兼容字段；附件 file_id 列表，前端推荐改用 attachments 拿 filename 渲染 */
             attachmentIds?: number[];
+            /** @description 反馈附件列表 (id + filename)；前端可拼 /api/files/:id/download 下载，并按 filename 推断 mediaKind 走 MediaPreview。用户反馈 2026-05-03 */
+            attachments: {
+                /** Format: int64 */
+                id: number;
+                filename: string;
+            }[];
         };
         FeedbackCreateRequest: {
             content: string;
@@ -852,6 +892,12 @@ export interface components {
             recordedBy: number;
             /** Format: date-time */
             recordedAt: string;
+            /** @description 收款 / 结算凭证截图列表 (id + filename)，前端可拼 /api/files/:id/download 下载（migration 0014 payment_attachments + jsonb_agg） */
+            attachments: {
+                /** Format: int64 */
+                id: number;
+                filename: string;
+            }[];
         };
         PaymentCreateRequest: {
             direction: components["schemas"]["PaymentDirection"];
@@ -863,6 +909,8 @@ export interface components {
             /** Format: int64 */
             screenshotId?: number | null;
             remark: string;
+            /** @description 可选凭证截图 file_id 列表（已通过 POST /api/files 上传得到）；同事务 INSERT 进 payment_attachments */
+            attachmentIds?: number[];
         };
         FileMetadata: {
             /** Format: int64 */
@@ -889,6 +937,8 @@ export interface components {
             category: "sample_doc" | "source_code" | "wechat_chat";
             /** Format: date-time */
             addedAt: string;
+            /** @description 附加备注：源码上传说明 / 版本号 / 参考样稿描述等（migration 0013） */
+            remark?: string | null;
             file: components["schemas"]["FileMetadata"];
         };
         ThesisVersion: {
@@ -1014,6 +1064,17 @@ export interface components {
             /** @description rotate 后的新 refresh token，client 必须写回 localStorage 替换旧值（旧值已在 DB revoked） */
             refreshToken: string;
         };
+        ChangePasswordRequest: {
+            /** @description 当前密码（明文，服务端 bcrypt 校验） */
+            oldPassword: string;
+            /** @description 新密码（明文，服务端 bcrypt 入库；最少 8 位与超管创建对齐） */
+            newPassword: string;
+        };
+        /** @description PATCH 部分字段；nil/缺失字段保持不变。 */
+        AuthUpdateMeRequest: {
+            displayName?: string;
+            username?: string;
+        };
         WSTicket: {
             /** @description 短期 WS 票据，用于建立 /ws/notifications 连接 */
             ticket: string;
@@ -1058,6 +1119,9 @@ export interface components {
         };
         ProjectFileListResponse: {
             data: components["schemas"]["ProjectFile"][];
+        };
+        ProjectFileResponse: {
+            data: components["schemas"]["ProjectFile"];
         };
         FileMetadataResponse: {
             data: components["schemas"]["FileMetadata"];
@@ -1110,7 +1174,13 @@ export interface components {
             /** Format: int64 */
             actorId: number;
             actorName?: string | null;
+            /** @description 操作人登录账号（users.username）；与 actorName(displayName) 配合显示，便于审计追溯 */
+            actorUsername?: string | null;
             actorRoleName?: string | null;
+            /** @description 操作时客户端 IP（INET）；migration 0008 加列，老活动数据为 NULL */
+            clientIp?: string | null;
+            /** @description 操作时 User-Agent 头原值；含 OS/版本信息便于审计区分（如 Tauri WKWebView vs Chrome） */
+            userAgent?: string | null;
             payload: components["schemas"]["ProjectCreatedPayload"] | components["schemas"]["FeedbackActivityPayload"] | components["schemas"]["StatusChangeActivityPayload"] | components["schemas"]["QuoteChangeActivityPayload"] | components["schemas"]["PaymentActivityPayload"] | components["schemas"]["ThesisVersionActivityPayload"] | components["schemas"]["ProjectFileAddedPayload"];
         };
         ActivityListResponse: {
@@ -1124,11 +1194,46 @@ export interface components {
             /** Format: date-time */
             deadline: string;
             originalQuote: components["schemas"]["Money"];
+            /** @description 项目对接的开发人员（来源 project_developers JOIN users，0018 view 内 jsonb_agg） */
+            developers: {
+                /** Format: int64 */
+                id: number;
+                displayName: string;
+            }[];
+            /** @description 创建项目时上传的开题报告（migration 0012 view inline，避免独立时间线条目） */
+            openingDoc?: {
+                /** Format: int64 */
+                id: number;
+                filename: string;
+            } | null;
+            /** @description 创建项目时上传的任务书 */
+            assignmentDoc?: {
+                /** Format: int64 */
+                id: number;
+                filename: string;
+            } | null;
+            /** @description 创建项目时上传的微信聊天截图列表（已 inline，project_file_added 时间线分支不再产生 wechat_chat 独立条目） */
+            wechatChats: {
+                /** Format: int64 */
+                id: number;
+                filename: string;
+            }[];
         };
         FeedbackActivityPayload: {
             content: string;
             source: components["schemas"]["FeedbackSource"];
             status: components["schemas"]["FeedbackStatus"];
+            /**
+             * Format: int32
+             * @description 反馈附带的附件数量（migration 0010 view 内 LEFT JOIN feedback_attachments + COUNT 聚合，无附件为 0）
+             */
+            attachmentCount: number;
+            /** @description 反馈附件列表 (id + filename)，前端可拼 /api/files/:id/download 渲染下载链接（migration 0011 view 内 jsonb_agg） */
+            attachments: {
+                /** Format: int64 */
+                id: number;
+                filename: string;
+            }[];
         };
         StatusChangeActivityPayload: {
             eventCode: string;
@@ -1144,6 +1249,11 @@ export interface components {
             /** Format: int64 */
             toHolderUserId?: number | null;
             remark: string;
+            /**
+             * Format: double
+             * @description 进入前一状态后停留的毫秒数（migration 0009 LAG 计算）；项目首条状态记录无前一行 → null
+             */
+            dwellMs?: number | null;
         };
         QuoteChangeActivityPayload: {
             changeType: components["schemas"]["QuoteChangeType"];
@@ -1163,18 +1273,28 @@ export interface components {
             /** Format: int64 */
             screenshotId?: number | null;
             remark: string;
+            /** @description 结算 / 收款凭证截图列表 (id + filename)，前端时间线详情弹窗渲染下载链接（migration 0015 view 内 jsonb_agg payment_attachments） */
+            attachments: {
+                /** Format: int64 */
+                id: number;
+                filename: string;
+            }[];
         };
         ThesisVersionActivityPayload: {
             /** Format: int64 */
             fileId: number;
             versionNo: number;
             remark?: string | null;
+            /** @description 文件名（migration 0016 view JOIN files.filename），前端时间线详情弹窗渲染下载链接显示真实文件名 */
+            filename: string;
         };
         ProjectFileAddedPayload: {
             /** Format: int64 */
             fileId: number;
             /** @enum {string} */
             category: "sample_doc" | "source_code";
+            /** @description 文件名（migration 0016 view JOIN files.filename），前端时间线详情弹窗渲染下载链接显示真实文件名 */
+            filename: string;
         };
     };
     responses: {
@@ -1320,6 +1440,56 @@ export interface operations {
                 };
             };
             401: components["responses"]["UnauthorizedError"];
+        };
+    };
+    authUpdateMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthUpdateMeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            401: components["responses"]["UnauthorizedError"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    authChangePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description 修改成功 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["UnauthorizedError"];
+            422: components["responses"]["ValidationError"];
         };
     };
     usersList: {
@@ -1961,6 +2131,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectFileListResponse"];
+                };
+            };
+        };
+    };
+    projectsAttachFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: int64 */
+                    fileId: number;
+                    /** @enum {string} */
+                    category: "sample_doc" | "source_code";
+                    /** @description 可选备注：源码版本号 / 上传说明 / 样稿描述等（migration 0013 project_files.remark） */
+                    remark?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectFileResponse"];
                 };
             };
         };

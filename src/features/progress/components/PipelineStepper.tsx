@@ -18,7 +18,7 @@ interface PipelineStepperProps {
   /**
    * 详情页模式：传入"该项目首次进入每个 stage 的时间"映射；非空时 stepMeta
    * 替换为 YYYY-MM-DD HH:mm 时间戳替代默认的"X 单 / ¥pending"全局统计。
-   * key 为 stage code（dealing/quoting/...），value 为 ISO 时间或 null（未进入）。
+   * key 为 stage code（quoting/developing/...），value 为 ISO 时间或 null（未进入）。
    * 用户需求 2026-05-02：进度条应显示当前项目进度的创建时间。
    */
   projectStages?: Record<string, string | null>;
@@ -110,8 +110,8 @@ export function PipelineStepper({
     >
       {stats.map(({ stage, count, pending }, idx) => {
         const state = stateOf(idx, count, stage);
-        // dealing 阶段显示"—"（无待收概念）；count=0 也显示"—"
-        const sumText = stage === 'dealing' || count === 0 ? '—' : '¥' + pending.toLocaleString();
+        // count=0 显示"—"（无待收概念）
+        const sumText = count === 0 ? '—' : '¥' + pending.toLocaleString();
         // 详情页模式：替换 stepMeta 内容为该项目进入该 stage 的时间戳
         const stageTime = detailMode ? formatStageTime(projectStages?.[stage]) : null;
         // 详情页模式 + quoting/paid 阶段已 done/current 时附加金额行（reach 之前不显示避免误导）

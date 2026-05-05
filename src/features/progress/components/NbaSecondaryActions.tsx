@@ -9,17 +9,29 @@
 import { useState, type ReactElement } from 'react';
 import styles from '../progress.module.css';
 import type { ActionMeta } from '../config/nbaConfig';
+import type { Project } from '../api/projects';
+import { canTriggerEvent } from '../utils/eventGate';
+import { useGlobalAuthStore } from '../../../shared/stores/globalAuthStore';
+import { useProgressPermissionStore } from '../stores/progressPermissionStore';
 
 interface NbaSecondaryActionsProps {
   actions: readonly ActionMeta[];
+  project: Pick<Project, 'holderUserId'>;
   onTrigger: (action: ActionMeta) => void;
 }
 
-export function NbaSecondaryActions({ actions, onTrigger }: NbaSecondaryActionsProps): ReactElement | null {
+export function NbaSecondaryActions({ actions, project, onTrigger }: NbaSecondaryActionsProps): ReactElement | null {
   const [open, setOpen] = useState(false);
 
-  // actions 为空时不渲染面板
-  if (actions.length === 0) return null;
+  // holder gate：仅显示当前用户能触发的动作
+  const user = useGlobalAuthStore((s) => s.user);
+  const hasCancelPerm = useProgressPermissionStore((s) => s.has('progress:project:cancel'));
+  const hasAfterSalesPerm = useProgressPermissionStore((s) => s.has('progress:project:after_sales'));
+  const currentUser = user ? { id: user.id, roleId: user.roleId } : null;
+  const visible = actions.filter((a) => canTriggerEvent(a.eventCode, project, currentUser, hasCancelPerm, hasAfterSalesPerm));
+
+  // visible actions 为空时不渲染面板
+  if (visible.length === 0) return null;
 
   return (
     <div className={styles.nbaSecondary + (open ? ' ' + styles.nbaSecondaryOpen : '')}>
@@ -41,7 +53,7 @@ export function NbaSecondaryActions({ actions, onTrigger }: NbaSecondaryActionsP
 
       {/* 折叠体 - hidden 属性配合 CSS display:none 双保险隐藏 */}
       <div id="nba-secondary-body" className={styles.nbaSecondaryBody} hidden={!open}>
-        {actions.map((a) => (
+        {visible.map((a) => (
           <button
             key={a.eventCode}
             type="button"

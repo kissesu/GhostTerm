@@ -1876,7 +1876,7 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 							return r, true
 						case "POST":
 							r.name = ProjectsCreateOperation
-							r.summary = "创建项目（默认进入 dealing 状态）"
+							r.summary = "创建项目（直接进入 quoting 状态由 first dev 报价）"
 							r.operationID = "projectsCreate"
 							r.operationGroup = ""
 							r.pathPattern = "/api/projects"

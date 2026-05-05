@@ -25,7 +25,7 @@ function makeProject(overrides: Partial<Project> = {}): Project {
     priority: 'normal',
     status: 'developing',
     deadline: '2026-12-31',
-    dealingAt: '2026-01-01',
+    quotingAt: '2026-01-01',
     originalQuote: '0',
     currentQuote: '0',
     afterSalesTotal: '0',
@@ -104,19 +104,19 @@ describe('EventTriggerDialog · a11y 与基础渲染', () => {
 });
 
 describe('EventTriggerDialog · 不同 EventCode 字段动态渲染', () => {
-  it('E1 提交报价评估 → 渲染金额(number) + 评估说明(textarea)', () => {
+  it('E2 提交报价 → 渲染预估金额(number) + 报价说明(textarea)（2026-05-04 替代旧 E1）', () => {
     render(
       <EventTriggerDialog
         projectId={1}
-        fromStatus="dealing"
-        event="E1"
-        eventLabel="提交报价评估"
+        fromStatus="quoting"
+        event="E2"
+        eventLabel="提交报价"
         onClose={vi.fn()}
       />,
     );
     const amount = screen.getByLabelText(/预估金额/) as HTMLInputElement;
     expect(amount.type).toBe('number');
-    const note = screen.getByLabelText(/评估说明/) as HTMLTextAreaElement;
+    const note = screen.getByLabelText(/报价说明/) as HTMLTextAreaElement;
     expect(note.tagName).toBe('TEXTAREA');
   });
 
@@ -143,7 +143,7 @@ describe('EventTriggerDialog · 不同 EventCode 字段动态渲染', () => {
     render(
       <EventTriggerDialog
         projectId={1}
-        fromStatus="dealing"
+        fromStatus="quoting"
         event="E12"
         eventLabel="取消项目"
         onClose={vi.fn()}
@@ -175,15 +175,15 @@ describe('EventTriggerDialog · zod 客户端校验', () => {
     expect(triggerEvent).not.toHaveBeenCalled();
   });
 
-  it('E1 仅填金额漏 note → note 字段错误显示，金额无错误', async () => {
+  it('E2 仅填金额漏 note → note 字段错误显示，金额无错误', async () => {
     const triggerEvent = vi.fn();
     useProjectsStore.setState({ triggerEvent });
     render(
       <EventTriggerDialog
         projectId={1}
-        fromStatus="dealing"
-        event="E1"
-        eventLabel="提交报价评估"
+        fromStatus="quoting"
+        event="E2"
+        eventLabel="提交报价"
         onClose={vi.fn()}
       />,
     );

@@ -4,7 +4,7 @@
  *              提交调 quoteChangesStore.addQuoteChange，changeType 固定 modify
  *
  *              changeType 固定 modify：UI 入口语义是"直接设新报价"（非累加 delta），
- *              与 dealing/quoting 阶段报价调整对齐。
+ *              与 quoting 阶段报价调整对齐（2026-05-04 删 dealing 后简化）。
  *
  * @author Atlas.oi
  * @date 2026-05-01

@@ -134,7 +134,7 @@ type Invoker interface {
 	ProjectsAttachFile(ctx context.Context, request *ProjectsAttachFileReq, params ProjectsAttachFileParams) (*ProjectFileResponse, error)
 	// ProjectsCreate invokes projectsCreate operation.
 	//
-	// 创建项目（默认进入 dealing 状态）.
+	// 创建项目（直接进入 quoting 状态由 first dev 报价）.
 	//
 	// POST /api/projects
 	ProjectsCreate(ctx context.Context, request *ProjectCreateRequest) (ProjectsCreateRes, error)
@@ -2207,7 +2207,7 @@ func (c *Client) sendProjectsAttachFile(ctx context.Context, request *ProjectsAt
 
 // ProjectsCreate invokes projectsCreate operation.
 //
-// 创建项目（默认进入 dealing 状态）.
+// 创建项目（直接进入 quoting 状态由 first dev 报价）.
 //
 // POST /api/projects
 func (c *Client) ProjectsCreate(ctx context.Context, request *ProjectCreateRequest) (ProjectsCreateRes, error) {

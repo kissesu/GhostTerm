@@ -21,7 +21,7 @@
              - ErrProjectInvalidInput      → 422 validation_failed
              - statemachine.ErrInvalidStateTransition / ErrInvalidHolder
                                            → 409 state_machine_invalid_transition
-             - statemachine.ErrPermissionDenied / ErrUnknownEvent
+             - services.ErrCancelPermissionDenied / statemachine.ErrUnknownEvent
                                            → 422 validation_failed
              - statemachine.ErrRemarkRequired / ErrNoCancelHistory
                                            → 422 validation_failed
@@ -49,12 +49,20 @@ import (
 
 // ProjectHandler 实现 ogen 生成的 oas.Handler 中与项目相关的方法。
 type ProjectHandler struct {
-	Svc *services.ProjectServiceImpl
+	Svc            *services.ProjectServiceImpl
+	EffectivePerms services.EffectivePermissionsService
 }
 
 // NewProjectHandler 构造 ProjectHandler。
-func NewProjectHandler(svc *services.ProjectServiceImpl) *ProjectHandler {
-	return &ProjectHandler{Svc: svc}
+//
+// EffectivePerms 用于细粒度权限校验（E12/E13 取消 + E_AS1 售后启动等 holder=nil 类事件）。
+// 必须非 nil；router wiring 已构造 effSvc 传入。nil 会导致 cancel/after_sales 权限被跳过 →
+// API 越权，故启动期 panic 拦住配置错误。
+func NewProjectHandler(svc *services.ProjectServiceImpl, effSvc services.EffectivePermissionsService) *ProjectHandler {
+	if effSvc == nil {
+		panic("NewProjectHandler: EffectivePerms is required (nil 会导致权限校验被跳过)")
+	}
+	return &ProjectHandler{Svc: svc, EffectivePerms: effSvc}
 }
 
 // ============================================================
@@ -184,6 +192,29 @@ func (h *ProjectHandler) ProjectsTriggerEvent(ctx context.Context, req *oas.Even
 		return nil, errors.New("project handler: missing auth context")
 	}
 
+	// E12/E13/E_AS1 是 holder=nil 类事件，需细粒度权限码兜底（dev 默认无权，仅 admin/cs 有）：
+	//   - E12 取消 / E13 重启取消 → progress:project:cancel
+	//   - E_AS1 客户报售后 → progress:project:after_sales（archived 终态 holder=nil，无 holder 校验可走）
+	// 业务背景（2026-05-04 决策）：删 AllowedRoleIDs 双层守门后，FromHolderRole=nil 的事件
+	// 必须由权限码兜底，避免任何登录用户对 archived 项目越权挑起售后流。
+	var permCode string
+	switch req.Event {
+	case oas.EventCodeE12, oas.EventCodeE13:
+		permCode = "progress:project:cancel"
+	case oas.EventCodeEAS1:
+		permCode = "progress:project:after_sales"
+	}
+	if permCode != "" {
+		if err := h.checkPermission(ctx, ac.UserID, permCode); err != nil {
+			if errors.Is(err, services.ErrCancelPermissionDenied) {
+				e := newErrorEnvelope(oas.ErrorEnvelopeErrorCodePermissionDenied, "无操作权限")
+				res := oas.ProjectsTriggerEventUnprocessableEntity(e)
+				return &res, nil
+			}
+			return nil, fmt.Errorf("project handler: check perm: %w", err)
+		}
+	}
+
 	if req.Remark == "" {
 		e := newErrorEnvelope(oas.ErrorEnvelopeErrorCodeValidationFailed, "remark is required")
 		res := oas.ProjectsTriggerEventUnprocessableEntity(e)
@@ -208,8 +239,11 @@ func (h *ProjectHandler) ProjectsTriggerEvent(ctx context.Context, req *oas.Even
 			e := newErrorEnvelope(oas.ErrorEnvelopeErrorCodeStateMachineInvalidTransition, err.Error())
 			res := oas.ProjectsTriggerEventConflict(e)
 			return &res, nil
-		case errors.Is(err, statemachine.ErrPermissionDenied),
-			errors.Is(err, statemachine.ErrUnknownEvent),
+		case errors.Is(err, services.ErrCancelPermissionDenied):
+			e := newErrorEnvelope(oas.ErrorEnvelopeErrorCodePermissionDenied, "无取消项目权限")
+			res := oas.ProjectsTriggerEventUnprocessableEntity(e)
+			return &res, nil
+		case errors.Is(err, statemachine.ErrUnknownEvent),
 			errors.Is(err, statemachine.ErrRemarkRequired),
 			errors.Is(err, statemachine.ErrNoCancelHistory):
 			e := newErrorEnvelope(oas.ErrorEnvelopeErrorCodeValidationFailed, err.Error())
@@ -268,7 +302,7 @@ func projectToOAS(p *services.ProjectModel) oas.Project {
 		Priority:        p.Priority,
 		Status:          p.Status,
 		Deadline:        p.Deadline,
-		DealingAt:       p.DealingAt,
+		QuotingAt:       p.QuotingAt,
 		OriginalQuote:   moneyToOAS(p.OriginalQuote),
 		CurrentQuote:    moneyToOAS(p.CurrentQuote),
 		AfterSalesTotal: moneyToOAS(p.AfterSalesTotal),
@@ -298,7 +332,6 @@ func projectToOAS(p *services.ProjectModel) oas.Project {
 	} else {
 		out.HolderUserId.SetToNull()
 	}
-	setOptDateTime(&out.QuotingAt, p.QuotingAt)
 	setOptDateTime(&out.DevStartedAt, p.DevStartedAt)
 	setOptDateTime(&out.ConfirmingAt, p.ConfirmingAt)
 	setOptDateTime(&out.DeliveredAt, p.DeliveredAt)
@@ -446,6 +479,24 @@ func setOptInt64(dst *oas.OptNilInt64, src *int64) {
 	} else {
 		dst.SetTo(*src)
 	}
+}
+
+// checkPermission 校验当前用户是否有指定权限码（统一处理破坏性/特权事件）。
+//
+// 业务背景：E12/E13/E_AS1 等 FromHolderRole=nil 的事件无 holder 校验天然约束，
+// 必须由权限码兜底；admin 通过 *:* 通配自然有；cs 由 0020 migration grant 相应权限。
+// 利用 EffectivePermissionsService 已有的 super_admin 短路 + grant/deny 三层语义。
+func (h *ProjectHandler) checkPermission(ctx context.Context, userID int64, permCode string) error {
+	codes, err := h.EffectivePerms.Compute(ctx, userID)
+	if err != nil {
+		return err
+	}
+	for _, c := range codes {
+		if c == "*:*" || c == permCode {
+			return nil
+		}
+	}
+	return services.ErrCancelPermissionDenied
 }
 
 // projectListErrUnauthorized 构造 ProjectListRes 的 401 envelope（OAS 没生成

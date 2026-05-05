@@ -6,9 +6,32 @@
  */
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NbaSecondaryActions } from '../NbaSecondaryActions';
 import type { ActionMeta } from '../../config/nbaConfig';
+import { useGlobalAuthStore } from '../../../../shared/stores/globalAuthStore';
+import { useProgressPermissionStore } from '../../stores/progressPermissionStore';
+
+// 2026-05-04 holder gate：NbaSecondaryActions 现按 user.id===holderUserId 过滤动作
+// 测试 fixture 用 holderUserId=6，并 setState 让当前用户匹配以便所有 secondary 都可见
+const mockProject = { holderUserId: 6 };
+
+beforeEach(() => {
+  // 模拟当前登录用户：id=6 与 holderUserId 匹配 → 通过 holder gate
+  useGlobalAuthStore.setState({
+    user: {
+      id: 6,
+      username: 'tester',
+      displayName: '测试',
+      roleId: 2, // dev
+      isActive: true,
+      createdAt: '2026-01-01',
+      permissions: [],
+    },
+  });
+  // E12 走 cancel 权限路径，mock 持有 progress:project:cancel 权限
+  useProgressPermissionStore.getState().set(['progress:project:cancel']);
+});
 
 const mockActions: ActionMeta[] = [
   {
@@ -35,19 +58,21 @@ const mockActions: ActionMeta[] = [
 
 describe('NbaSecondaryActions', () => {
   it('actions=[] 时返回 null（不渲染任何 DOM）', () => {
-    const { container } = render(<NbaSecondaryActions actions={[]} onTrigger={vi.fn()} />);
+    const { container } = render(
+      <NbaSecondaryActions actions={[]} project={mockProject} onTrigger={vi.fn()} />,
+    );
     expect(container.firstChild).toBeNull();
   });
 
   it('折叠头是 BUTTON 元素，默认 aria-expanded=false', () => {
-    render(<NbaSecondaryActions actions={mockActions} onTrigger={vi.fn()} />);
+    render(<NbaSecondaryActions actions={mockActions} project={mockProject} onTrigger={vi.fn()} />);
     const btn = screen.getByRole('button', { name: /其它操作/ });
     expect(btn.tagName).toBe('BUTTON');
     expect(btn.getAttribute('aria-expanded')).toBe('false');
   });
 
   it('点击折叠头后 aria-expanded=true，动作列表可见', async () => {
-    render(<NbaSecondaryActions actions={mockActions} onTrigger={vi.fn()} />);
+    render(<NbaSecondaryActions actions={mockActions} project={mockProject} onTrigger={vi.fn()} />);
     const btn = screen.getByRole('button', { name: /其它操作/ });
     await userEvent.click(btn);
     expect(btn.getAttribute('aria-expanded')).toBe('true');
@@ -58,7 +83,7 @@ describe('NbaSecondaryActions', () => {
 
   it('点击 secondary 按钮触发 onTrigger(action)', async () => {
     const onTrigger = vi.fn();
-    render(<NbaSecondaryActions actions={mockActions} onTrigger={onTrigger} />);
+    render(<NbaSecondaryActions actions={mockActions} project={mockProject} onTrigger={onTrigger} />);
     // 先展开
     await userEvent.click(screen.getByRole('button', { name: /其它操作/ }));
     // 点击取消项目
@@ -68,7 +93,7 @@ describe('NbaSecondaryActions', () => {
   });
 
   it('kind=critical 的 action 使用 danger class（不验证 CSS，只验证按钮内容被渲染）', async () => {
-    render(<NbaSecondaryActions actions={mockActions} onTrigger={vi.fn()} />);
+    render(<NbaSecondaryActions actions={mockActions} project={mockProject} onTrigger={vi.fn()} />);
     await userEvent.click(screen.getByRole('button', { name: /其它操作/ }));
     // 取消项目按钮应存在于 DOM
     const cancelBtn = screen.getByText('取消项目').closest('button');
@@ -76,7 +101,7 @@ describe('NbaSecondaryActions', () => {
   });
 
   it('再次点击折叠头后收起，aria-expanded=false', async () => {
-    render(<NbaSecondaryActions actions={mockActions} onTrigger={vi.fn()} />);
+    render(<NbaSecondaryActions actions={mockActions} project={mockProject} onTrigger={vi.fn()} />);
     const btn = screen.getByRole('button', { name: /其它操作/ });
     await userEvent.click(btn); // 展开
     await userEvent.click(btn); // 收起

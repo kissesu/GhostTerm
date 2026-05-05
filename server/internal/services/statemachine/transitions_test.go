@@ -1,10 +1,10 @@
 /*
 @file transitions_test.go
 @description transitions 表的纯逻辑覆盖测试：
-             - 16 个事件全部存在
+             - 14 个事件全部存在（2026-05-04 删 E1/E6 后）
              - 每条 transition 的 (From, To, holder, EnterTSColumn) 与 spec §6.2 对齐
              - EnterTSColumn 全部在 AllowedEnterTSColumns 白名单内
-             - EnterTSColumnForStatus 9 状态全覆盖
+             - EnterTSColumnForStatus 8 状态全覆盖（删 dealing 后）
 @author Atlas.oi
 @date 2026-04-29
 */
@@ -18,13 +18,13 @@ import (
 )
 
 // ============================================================
-// 16 个事件全部在 Transitions 表中
+// 14 个事件全部在 Transitions 表中
 // ============================================================
 
 func TestTransitions_AllEventsCovered(t *testing.T) {
 	want := []EventCode{
-		oas.EventCodeE0, oas.EventCodeE1, oas.EventCodeE2, oas.EventCodeE3,
-		oas.EventCodeE4, oas.EventCodeE5, oas.EventCodeE6, oas.EventCodeE7,
+		oas.EventCodeE0, oas.EventCodeE2, oas.EventCodeE3,
+		oas.EventCodeE4, oas.EventCodeE5, oas.EventCodeE7,
 		oas.EventCodeE8, oas.EventCodeE9, oas.EventCodeE10, oas.EventCodeE11,
 		oas.EventCodeE12, oas.EventCodeE13,
 		oas.EventCodeEAS1, oas.EventCodeEAS3,
@@ -45,33 +45,30 @@ func TestTransitions_AllEventsCovered(t *testing.T) {
 
 // expectedTransition 是 spec §6.2 表格的精简表示。
 type expectedTransition struct {
-	from         ProjectStatus
-	fromHolder   *int64 // nil = 无要求
-	to           ProjectStatus
-	toHolder     *int64 // nil = 终态/不变
-	enterCol     string
-	allowedRoles []int64
+	from       ProjectStatus
+	fromHolder *int64 // nil = 无要求
+	to         ProjectStatus
+	toHolder   *int64 // nil = 终态/不变
+	enterCol   string
 }
 
 func TestTransitions_MatchSpec(t *testing.T) {
 	cs := func(v int64) *int64 { return &v }
 	expected := map[EventCode]expectedTransition{
-		oas.EventCodeE0:   {"", nil, oas.ProjectStatusDealing, cs(RoleCS), "dealing_at", []int64{RoleAdmin, RoleCS}},
-		oas.EventCodeE1:   {oas.ProjectStatusDealing, cs(RoleCS), oas.ProjectStatusQuoting, cs(RoleDev), "quoting_at", []int64{RoleAdmin, RoleCS}},
-		oas.EventCodeE2:   {oas.ProjectStatusQuoting, cs(RoleDev), oas.ProjectStatusQuoting, cs(RoleCS), "quoting_at", []int64{RoleAdmin, RoleDev}},
-		oas.EventCodeE3:   {oas.ProjectStatusQuoting, cs(RoleCS), oas.ProjectStatusQuoting, cs(RoleDev), "quoting_at", []int64{RoleAdmin, RoleCS}},
-		oas.EventCodeE4:   {oas.ProjectStatusQuoting, cs(RoleCS), oas.ProjectStatusDeveloping, cs(RoleDev), "dev_started_at", []int64{RoleAdmin, RoleCS}},
-		oas.EventCodeE5:   {oas.ProjectStatusQuoting, cs(RoleCS), oas.ProjectStatusCancelled, nil, "cancelled_at", []int64{RoleAdmin, RoleCS}},
-		oas.EventCodeE6:   {oas.ProjectStatusQuoting, cs(RoleCS), oas.ProjectStatusDealing, cs(RoleCS), "dealing_at", []int64{RoleAdmin, RoleCS}},
-		oas.EventCodeE7:   {oas.ProjectStatusDeveloping, cs(RoleDev), oas.ProjectStatusConfirming, cs(RoleCS), "confirming_at", []int64{RoleAdmin, RoleDev}},
-		oas.EventCodeE8:   {oas.ProjectStatusConfirming, cs(RoleCS), oas.ProjectStatusDeveloping, cs(RoleDev), "dev_started_at", []int64{RoleAdmin, RoleCS}},
-		oas.EventCodeE9:   {oas.ProjectStatusConfirming, cs(RoleCS), oas.ProjectStatusDelivered, cs(RoleCS), "delivered_at", []int64{RoleAdmin, RoleCS}},
-		oas.EventCodeE10:  {oas.ProjectStatusDelivered, cs(RoleCS), oas.ProjectStatusPaid, cs(RoleCS), "paid_at", []int64{RoleAdmin, RoleCS}},
-		oas.EventCodeE11:  {oas.ProjectStatusPaid, cs(RoleCS), oas.ProjectStatusArchived, nil, "archived_at", []int64{RoleAdmin, RoleCS}},
-		oas.EventCodeE12:  {"", nil, oas.ProjectStatusCancelled, nil, "cancelled_at", []int64{RoleAdmin, RoleCS}},
-		oas.EventCodeE13:  {oas.ProjectStatusCancelled, nil, "", nil, "", []int64{RoleAdmin, RoleCS}},
-		oas.EventCodeEAS1: {oas.ProjectStatusArchived, nil, oas.ProjectStatusAfterSales, cs(RoleCS), "after_sales_at", []int64{RoleAdmin, RoleCS}},
-		oas.EventCodeEAS3: {oas.ProjectStatusAfterSales, cs(RoleCS), oas.ProjectStatusArchived, nil, "archived_at", []int64{RoleAdmin, RoleCS}},
+		oas.EventCodeE0:   {"", nil, oas.ProjectStatusQuoting, cs(RoleDev), "quoting_at"},
+		oas.EventCodeE2:   {oas.ProjectStatusQuoting, cs(RoleDev), oas.ProjectStatusQuoting, cs(RoleCS), "quoting_at"},
+		oas.EventCodeE3:   {oas.ProjectStatusQuoting, cs(RoleCS), oas.ProjectStatusQuoting, cs(RoleDev), "quoting_at"},
+		oas.EventCodeE4:   {oas.ProjectStatusQuoting, cs(RoleCS), oas.ProjectStatusDeveloping, cs(RoleDev), "dev_started_at"},
+		oas.EventCodeE5:   {oas.ProjectStatusQuoting, cs(RoleCS), oas.ProjectStatusCancelled, nil, "cancelled_at"},
+		oas.EventCodeE7:   {oas.ProjectStatusDeveloping, cs(RoleDev), oas.ProjectStatusConfirming, cs(RoleCS), "confirming_at"},
+		oas.EventCodeE8:   {oas.ProjectStatusConfirming, cs(RoleCS), oas.ProjectStatusDeveloping, cs(RoleDev), "dev_started_at"},
+		oas.EventCodeE9:   {oas.ProjectStatusConfirming, cs(RoleCS), oas.ProjectStatusDelivered, cs(RoleCS), "delivered_at"},
+		oas.EventCodeE10:  {oas.ProjectStatusDelivered, cs(RoleCS), oas.ProjectStatusPaid, cs(RoleCS), "paid_at"},
+		oas.EventCodeE11:  {oas.ProjectStatusPaid, cs(RoleCS), oas.ProjectStatusArchived, nil, "archived_at"},
+		oas.EventCodeE12:  {"", nil, oas.ProjectStatusCancelled, nil, "cancelled_at"},
+		oas.EventCodeE13:  {oas.ProjectStatusCancelled, nil, "", nil, ""},
+		oas.EventCodeEAS1: {oas.ProjectStatusArchived, nil, oas.ProjectStatusAfterSales, cs(RoleCS), "after_sales_at"},
+		oas.EventCodeEAS3: {oas.ProjectStatusAfterSales, cs(RoleCS), oas.ProjectStatusArchived, nil, "archived_at"},
 	}
 
 	for ec, exp := range expected {
@@ -94,9 +91,6 @@ func TestTransitions_MatchSpec(t *testing.T) {
 		if got.EnterTSColumn != exp.enterCol {
 			t.Errorf("%s.EnterTSColumn = %q; want %q", ec, got.EnterTSColumn, exp.enterCol)
 		}
-		if !sliceEq(got.AllowedRoleIDs, exp.allowedRoles) {
-			t.Errorf("%s.AllowedRoleIDs = %v; want %v", ec, got.AllowedRoleIDs, exp.allowedRoles)
-		}
 	}
 }
 
@@ -118,12 +112,11 @@ func TestTransitions_EnterTSColumnsInWhitelist(t *testing.T) {
 }
 
 // ============================================================
-// EnterTSColumnForStatus：9 状态全覆盖
+// EnterTSColumnForStatus：8 状态全覆盖（2026-05-04 删 dealing 后）
 // ============================================================
 
 func TestEnterTSColumnForStatus(t *testing.T) {
 	cases := map[ProjectStatus]string{
-		oas.ProjectStatusDealing:    "dealing_at",
 		oas.ProjectStatusQuoting:    "quoting_at",
 		oas.ProjectStatusDeveloping: "dev_started_at",
 		oas.ProjectStatusConfirming: "confirming_at",
@@ -180,16 +173,4 @@ func derefOrNil(p *int64) any {
 		return nil
 	}
 	return *p
-}
-
-func sliceEq(a, b []int64) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }

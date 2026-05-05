@@ -141,12 +141,13 @@ func TestAuth_RefreshRotation(t *testing.T) {
 	require.NoError(t, err)
 
 	// 第一次 refresh 应当成功
-	newAccess1, err := env.svc.Refresh(context.Background(), refresh)
+	// 注（2026-05-04）：Refresh 签名升级为 (access, newRefresh, error)；本用例不用新 refresh
+	newAccess1, _, err := env.svc.Refresh(context.Background(), refresh)
 	require.NoError(t, err)
 	assert.NotEmpty(t, newAccess1)
 
 	// 重放：用同一个旧 refresh 再 Refresh 应当被 rotate_refresh_token 函数检测
-	_, err = env.svc.Refresh(context.Background(), refresh)
+	_, _, err = env.svc.Refresh(context.Background(), refresh)
 	assert.ErrorIs(t, err, services.ErrInvalidRefreshToken,
 		"旧 refresh 在第一次 rotate 后已 revoked，重放必须被拒")
 }
@@ -155,7 +156,7 @@ func TestAuth_RefreshInvalidToken(t *testing.T) {
 	env := setupAuthEnv(t)
 	defer env.cleanup()
 
-	_, err := env.svc.Refresh(context.Background(), "totally-not-a-jwt")
+	_, _, err := env.svc.Refresh(context.Background(), "totally-not-a-jwt")
 	assert.ErrorIs(t, err, services.ErrInvalidRefreshToken)
 }
 
@@ -186,7 +187,7 @@ func TestAuth_LogoutInvalidatesAccess(t *testing.T) {
 		"logout 后旧 access token 因 token_version 不匹配应被拒")
 
 	// 登出后旧 refresh 也应被 rotate_refresh_token 视为 revoked
-	_, err = env.svc.Refresh(context.Background(), refresh)
+	_, _, err = env.svc.Refresh(context.Background(), refresh)
 	assert.ErrorIs(t, err, services.ErrInvalidRefreshToken,
 		"logout 后旧 refresh 因已 revoked 应被拒")
 }

@@ -48,8 +48,7 @@ func TestFlow06_RLSIsolation(t *testing.T) {
 	project := createProject(t, cs, "rls-isolation-customer", "rls-isolation-project",
 		time.Now().Add(7*24*time.Hour), "5000.00")
 
-	// 通过 statemachine 推到 delivered
-	project = triggerEvent(t, cs, project.ID, "E1", "评估", nil)
+	// 通过 statemachine 推到 delivered（2026-05-04 简化：E0 直接进 quoting/dev1，省去 E1）
 	project = triggerEvent(t, dev1, project.ID, "E2", "评估完成", nil)
 	project = triggerEvent(t, cs, project.ID, "E4", "客户接受", nil)
 	project = triggerEvent(t, dev1, project.ID, "E7", "开发完成", nil)

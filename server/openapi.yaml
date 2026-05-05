@@ -184,7 +184,6 @@ components:
     ProjectStatus:
       type: string
       enum:
-        - dealing
         - quoting
         - developing
         - confirming
@@ -225,7 +224,7 @@ components:
         - afterSalesTotal
         - totalReceived
         - createdBy
-        - dealingAt
+        - quotingAt
         - createdAt
         - updatedAt
         - developers
@@ -243,8 +242,7 @@ components:
         holderRoleId: { type: integer, format: int64, nullable: true }
         holderUserId: { type: integer, format: int64, nullable: true }
         deadline: { type: string, format: date-time }
-        dealingAt: { type: string, format: date-time }
-        quotingAt: { type: string, format: date-time, nullable: true }
+        quotingAt: { type: string, format: date-time }
         devStartedAt: { type: string, format: date-time, nullable: true }
         confirmingAt: { type: string, format: date-time, nullable: true }
         deliveredAt: { type: string, format: date-time, nullable: true }
@@ -317,12 +315,10 @@ components:
       description: "状态机事件代码，详见 spec §6.2"
       enum:
         - E0
-        - E1
         - E2
         - E3
         - E4
         - E5
-        - E6
         - E7
         - E8
         - E9
@@ -1490,7 +1486,7 @@ paths:
         '401': { $ref: '#/components/responses/UnauthorizedError' }
     post:
       operationId: projectsCreate
-      summary: 创建项目（默认进入 dealing 状态）
+      summary: 创建项目（直接进入 quoting 状态由 first dev 报价）
       tags: [projects]
       requestBody:
         required: true

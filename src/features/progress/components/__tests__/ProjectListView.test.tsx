@@ -19,7 +19,7 @@ function makeProject(id: number, status: Project['status'], name: string): Proje
     priority: 'normal',
     status,
     deadline: new Date(Date.now() + 30 * 86_400_000).toISOString(),
-    dealingAt: '2026-01-01',
+    quotingAt: '2026-01-01',
     originalQuote: '8000',
     currentQuote: '8000',
     afterSalesTotal: '0',

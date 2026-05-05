@@ -71,8 +71,9 @@ describe('getActivities', () => {
             actorName: 'Admin',
             actorRoleName: 'admin',
             payload: {
+              // 2026-05-04 删 dealing 后：项目创建即 quoting
               name: 'P',
-              status: 'dealing',
+              status: 'quoting',
               priority: 'normal',
               deadline: '2026-06-01T00:00:00Z',
               originalQuote: '1000.00',

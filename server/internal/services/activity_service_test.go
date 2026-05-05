@@ -106,8 +106,9 @@ func TestActivityService_List_StatusChange(t *testing.T) {
 	pid := fixtures.SeedProject(t, ctx, tdb.Pool, auth.UserID)
 
 	at := time.Now().UTC()
+	// 2026-05-04 简化：删 dealing + E1；E2 是 dev → cs 的 "提交报价"，from/to 同为 quoting
 	sid := fixtures.SeedStatusChange(t, ctx, tdb.Pool, pid, auth.UserID,
-		"E1", "进入报价", "dealing", "quoting", "客户确认需求", at)
+		"E2", "提交报价", "quoting", "quoting", "客户确认需求", at)
 
 	got, err := svc.List(ctx, auth, pid, 50, "")
 	require.NoError(t, err)
@@ -123,8 +124,8 @@ func TestActivityService_List_StatusChange(t *testing.T) {
 
 	var p map[string]any
 	require.NoError(t, json.Unmarshal(item.Payload, &p))
-	assert.Equal(t, "E1", p["eventCode"])
-	assert.Equal(t, "dealing", p["fromStatus"])
+	assert.Equal(t, "E2", p["eventCode"])
+	assert.Equal(t, "quoting", p["fromStatus"])
 	assert.Equal(t, "quoting", p["toStatus"])
 }
 

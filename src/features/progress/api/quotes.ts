@@ -60,9 +60,9 @@ export function isValidMoneyString(s: string): boolean {
 export const QuoteChangeTypeSchema = z.enum(['append', 'modify', 'after_sales']);
 export type QuoteChangeType = z.infer<typeof QuoteChangeTypeSchema>;
 
-/** ProjectStatus 与 openapi.yaml ProjectStatus 对齐（仅本文件用） */
+/** ProjectStatus 与 openapi.yaml ProjectStatus 对齐（仅本文件用；2026-05-04 删 dealing） */
 const ProjectStatusSchema = z.enum([
-  'dealing', 'quoting', 'developing', 'confirming',
+  'quoting', 'developing', 'confirming',
   'delivered', 'paid', 'archived', 'after_sales', 'cancelled',
 ]);
 

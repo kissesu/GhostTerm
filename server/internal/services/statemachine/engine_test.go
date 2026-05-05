@@ -2,9 +2,14 @@
 @file engine_test.go
 @description 状态机引擎纯逻辑单测：
              - CanFire：每个事件的合法 / 非法路径
-             - admin (RoleAdmin) 兜底放行：spec §6.2 备注
+             - admin (RoleAdmin) 兜底放行：spec §6.2 备注（仅对 holder 检查兜底）
              - E12 不能从 cancelled / archived 触发（终态保护）
              - applyStateChange：白名单防御（不在白名单 → 错误，不发 SQL）
+
+             2026-05-04 简化后：
+             - 删 dealing 状态 + E1/E6 事件
+             - 删 AllowedRoleIDs 字段及 ErrPermissionDenied（角色控制由 service 层权限码做）
+             - CanFire 仅校验 status + holder
 
              不做的事：
              - Execute 的完整事务测试在 tests/integration/project_test.go（含真 DB）
@@ -30,24 +35,22 @@ import (
 func TestCanFire_HappyPaths(t *testing.T) {
 	cs := func(v int64) *int64 { return &v }
 	cases := []struct {
-		name        string
-		project     ProjectSnapshot
-		event       EventCode
-		userRole    int64
+		name     string
+		project  ProjectSnapshot
+		event    EventCode
+		userRole int64
 	}{
-		{"E0 客服创建", ProjectSnapshot{}, oas.EventCodeE0, RoleCS},
-		{"E1 客服报价", ProjectSnapshot{Status: oas.ProjectStatusDealing, HolderRoleID: cs(RoleCS)}, oas.EventCodeE1, RoleCS},
-		{"E2 开发回传", ProjectSnapshot{Status: oas.ProjectStatusQuoting, HolderRoleID: cs(RoleDev)}, oas.EventCodeE2, RoleDev},
-		{"E3 客服再问", ProjectSnapshot{Status: oas.ProjectStatusQuoting, HolderRoleID: cs(RoleCS)}, oas.EventCodeE3, RoleCS},
+		{"E0 创建", ProjectSnapshot{}, oas.EventCodeE0, RoleCS},
+		{"E2 开发提交报价", ProjectSnapshot{Status: oas.ProjectStatusQuoting, HolderRoleID: cs(RoleDev)}, oas.EventCodeE2, RoleDev},
+		{"E3 客服再问开发", ProjectSnapshot{Status: oas.ProjectStatusQuoting, HolderRoleID: cs(RoleCS)}, oas.EventCodeE3, RoleCS},
 		{"E4 客户接受报价", ProjectSnapshot{Status: oas.ProjectStatusQuoting, HolderRoleID: cs(RoleCS)}, oas.EventCodeE4, RoleCS},
 		{"E5 客户拒绝", ProjectSnapshot{Status: oas.ProjectStatusQuoting, HolderRoleID: cs(RoleCS)}, oas.EventCodeE5, RoleCS},
-		{"E6 重新洽谈", ProjectSnapshot{Status: oas.ProjectStatusQuoting, HolderRoleID: cs(RoleCS)}, oas.EventCodeE6, RoleCS},
 		{"E7 开发完成", ProjectSnapshot{Status: oas.ProjectStatusDeveloping, HolderRoleID: cs(RoleDev)}, oas.EventCodeE7, RoleDev},
 		{"E8 客户要修改", ProjectSnapshot{Status: oas.ProjectStatusConfirming, HolderRoleID: cs(RoleCS)}, oas.EventCodeE8, RoleCS},
 		{"E9 验收通过", ProjectSnapshot{Status: oas.ProjectStatusConfirming, HolderRoleID: cs(RoleCS)}, oas.EventCodeE9, RoleCS},
 		{"E10 收款", ProjectSnapshot{Status: oas.ProjectStatusDelivered, HolderRoleID: cs(RoleCS)}, oas.EventCodeE10, RoleCS},
 		{"E11 归档", ProjectSnapshot{Status: oas.ProjectStatusPaid, HolderRoleID: cs(RoleCS)}, oas.EventCodeE11, RoleCS},
-		{"E12 客服取消（dealing）", ProjectSnapshot{Status: oas.ProjectStatusDealing, HolderRoleID: cs(RoleCS)}, oas.EventCodeE12, RoleCS},
+		{"E12 客服取消（quoting）", ProjectSnapshot{Status: oas.ProjectStatusQuoting, HolderRoleID: cs(RoleDev)}, oas.EventCodeE12, RoleCS},
 		{"E12 客服取消（developing）", ProjectSnapshot{Status: oas.ProjectStatusDeveloping, HolderRoleID: cs(RoleDev)}, oas.EventCodeE12, RoleCS},
 		{"E13 重启", ProjectSnapshot{Status: oas.ProjectStatusCancelled}, oas.EventCodeE13, RoleCS},
 		{"E_AS1 报售后", ProjectSnapshot{Status: oas.ProjectStatusArchived}, oas.EventCodeEAS1, RoleCS},
@@ -74,23 +77,11 @@ func TestCanFire_UnknownEvent(t *testing.T) {
 }
 
 // ============================================================
-// CanFire：role 不在 AllowedRoleIDs（admin 兜底）
+// CanFire：admin 兜底（holder 不匹配仍放行）
 // ============================================================
 
-func TestCanFire_PermissionDenied(t *testing.T) {
-	cs := func(v int64) *int64 { return &v }
-	// E1 仅允许 admin/cs；dev 不允许
-	err := CanFire(
-		ProjectSnapshot{Status: oas.ProjectStatusDealing, HolderRoleID: cs(RoleCS)},
-		oas.EventCodeE1, RoleDev,
-	)
-	if !errors.Is(err, ErrPermissionDenied) {
-		t.Errorf("err = %v；应为 ErrPermissionDenied", err)
-	}
-}
-
 func TestCanFire_AdminAlwaysAllowed(t *testing.T) {
-	// admin 触发 E2（默认允许 admin/dev），即使 holder 不是 dev 也放行
+	// admin 触发 E2，即使 holder 是 cs（不是 dev）也放行
 	cs := func(v int64) *int64 { return &v }
 	err := CanFire(
 		ProjectSnapshot{Status: oas.ProjectStatusQuoting, HolderRoleID: cs(RoleCS)},
@@ -107,10 +98,10 @@ func TestCanFire_AdminAlwaysAllowed(t *testing.T) {
 
 func TestCanFire_InvalidStateTransition(t *testing.T) {
 	cs := func(v int64) *int64 { return &v }
-	// 项目当前是 dealing，但试图 E3（要求 quoting/cs）
+	// 项目当前是 quoting，但试图 E7（要求 developing/dev）
 	err := CanFire(
-		ProjectSnapshot{Status: oas.ProjectStatusDealing, HolderRoleID: cs(RoleCS)},
-		oas.EventCodeE3, RoleCS,
+		ProjectSnapshot{Status: oas.ProjectStatusQuoting, HolderRoleID: cs(RoleDev)},
+		oas.EventCodeE7, RoleDev,
 	)
 	if !errors.Is(err, ErrInvalidStateTransition) {
 		t.Errorf("err = %v；应为 ErrInvalidStateTransition", err)
@@ -123,10 +114,10 @@ func TestCanFire_InvalidStateTransition(t *testing.T) {
 
 func TestCanFire_InvalidHolder(t *testing.T) {
 	cs := func(v int64) *int64 { return &v }
-	// E1 要求 holder=cs；但传 holder=dev
+	// E2 要求 holder=dev；但传 holder=cs（dev 触发）
 	err := CanFire(
-		ProjectSnapshot{Status: oas.ProjectStatusDealing, HolderRoleID: cs(RoleDev)},
-		oas.EventCodeE1, RoleCS,
+		ProjectSnapshot{Status: oas.ProjectStatusQuoting, HolderRoleID: cs(RoleCS)},
+		oas.EventCodeE2, RoleDev,
 	)
 	if !errors.Is(err, ErrInvalidHolder) {
 		t.Errorf("err = %v；应为 ErrInvalidHolder", err)
@@ -155,10 +146,10 @@ func TestCanFire_E12_TerminalGuard(t *testing.T) {
 // ============================================================
 
 func TestCanFire_HolderNilWhenRequired(t *testing.T) {
-	// E1 要求 holder=cs；project.HolderRoleID=nil
+	// E2 要求 holder=dev；project.HolderRoleID=nil
 	err := CanFire(
-		ProjectSnapshot{Status: oas.ProjectStatusDealing, HolderRoleID: nil},
-		oas.EventCodeE1, RoleCS,
+		ProjectSnapshot{Status: oas.ProjectStatusQuoting, HolderRoleID: nil},
+		oas.EventCodeE2, RoleDev,
 	)
 	if !errors.Is(err, ErrInvalidHolder) {
 		t.Errorf("err = %v；应为 ErrInvalidHolder（holder 为 nil 但事件要求）", err)
@@ -175,7 +166,7 @@ func TestApplyStateChange_WhitelistDefense(t *testing.T) {
 		context.Background(),
 		nil, // tx: 不会被用到，因为白名单先报错
 		1,
-		oas.ProjectStatusDealing,
+		oas.ProjectStatusQuoting,
 		nil, nil,
 		`evil_col=1; DROP TABLE projects --`,
 	)
@@ -184,7 +175,7 @@ func TestApplyStateChange_WhitelistDefense(t *testing.T) {
 	}
 
 	// 空字符串也必须被白名单拦截
-	err = applyStateChange(context.Background(), nil, 1, oas.ProjectStatusDealing, nil, nil, "")
+	err = applyStateChange(context.Background(), nil, 1, oas.ProjectStatusQuoting, nil, nil, "")
 	if !errors.Is(err, ErrInvalidEnterTSColumn) {
 		t.Errorf("空列名 err = %v；应为 ErrInvalidEnterTSColumn", err)
 	}
@@ -204,16 +195,10 @@ func TestExecute_NilTx(t *testing.T) {
 }
 
 // ============================================================
-// Execute 入参防御：未知事件
+// Execute 入参防御：未知事件（CanFire 路径已能验证）
 // ============================================================
 
-// 注：用 nil tx 但事件要在 tx 之前先报 ErrUnknownEvent；
-// 实测代码顺序：先 tx 校验 → 再 FindTransition；所以这里跑不了 nil tx case。
-// 改用一个不会真访问 tx 的 path：未知事件让 FindTransition 在 tx 校验之后立即返回错误，
-// 但因 tx 校验先发生，构造不进 FindTransition 分支。这里只验证未知事件经 CanFire 失败。
 func TestExecute_UnknownEventViaCanFire(t *testing.T) {
-	// CanFire 路径已经能验证未知事件；Execute 内部依赖 FindTransition 在 tx 之后，
-	// 真实场景测试看 integration test。
 	err := CanFire(ProjectSnapshot{}, EventCode("E_NOTEXIST"), RoleAdmin)
 	if !errors.Is(err, ErrUnknownEvent) {
 		t.Errorf("CanFire 未知事件 err = %v；应为 ErrUnknownEvent", err)

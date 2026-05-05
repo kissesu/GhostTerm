@@ -990,14 +990,6 @@ func (s *ActivityPayload) Decode(d *jx.Decoder) error {
 					}
 					found = true
 					s.Type = match
-				case "dealing":
-					match := ProjectCreatedPayloadActivityPayload
-					if found && s.Type != match {
-						s.Type = ""
-						return errors.Errorf("multiple oneOf matches: (%v, %v)", s.Type, match)
-					}
-					found = true
-					s.Type = match
 				case "delivered":
 					match := ProjectCreatedPayloadActivityPayload
 					if found && s.Type != match {
@@ -3083,8 +3075,6 @@ func (s *EventCode) Decode(d *jx.Decoder) error {
 	switch EventCode(v) {
 	case EventCodeE0:
 		*s = EventCodeE0
-	case EventCodeE1:
-		*s = EventCodeE1
 	case EventCodeE2:
 		*s = EventCodeE2
 	case EventCodeE3:
@@ -3093,8 +3083,6 @@ func (s *EventCode) Decode(d *jx.Decoder) error {
 		*s = EventCodeE4
 	case EventCodeE5:
 		*s = EventCodeE5
-	case EventCodeE6:
-		*s = EventCodeE6
 	case EventCodeE7:
 		*s = EventCodeE7
 	case EventCodeE8:
@@ -7431,14 +7419,8 @@ func (s *Project) encodeFields(e *jx.Encoder) {
 		json.EncodeDateTime(e, s.Deadline)
 	}
 	{
-		e.FieldStart("dealingAt")
-		json.EncodeDateTime(e, s.DealingAt)
-	}
-	{
-		if s.QuotingAt.Set {
-			e.FieldStart("quotingAt")
-			s.QuotingAt.Encode(e, json.EncodeDateTime)
-		}
+		e.FieldStart("quotingAt")
+		json.EncodeDateTime(e, s.QuotingAt)
 	}
 	{
 		if s.DevStartedAt.Set {
@@ -7538,7 +7520,7 @@ func (s *Project) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfProject = [31]string{
+var jsonFieldsNameOfProject = [30]string{
 	0:  "id",
 	1:  "name",
 	2:  "customerLabel",
@@ -7550,26 +7532,25 @@ var jsonFieldsNameOfProject = [31]string{
 	8:  "holderRoleId",
 	9:  "holderUserId",
 	10: "deadline",
-	11: "dealingAt",
-	12: "quotingAt",
-	13: "devStartedAt",
-	14: "confirmingAt",
-	15: "deliveredAt",
-	16: "paidAt",
-	17: "archivedAt",
-	18: "afterSalesAt",
-	19: "cancelledAt",
-	20: "originalQuote",
-	21: "currentQuote",
-	22: "afterSalesTotal",
-	23: "totalReceived",
-	24: "openingDocId",
-	25: "assignmentDocId",
-	26: "formatSpecDocId",
-	27: "createdBy",
-	28: "createdAt",
-	29: "updatedAt",
-	30: "developers",
+	11: "quotingAt",
+	12: "devStartedAt",
+	13: "confirmingAt",
+	14: "deliveredAt",
+	15: "paidAt",
+	16: "archivedAt",
+	17: "afterSalesAt",
+	18: "cancelledAt",
+	19: "originalQuote",
+	20: "currentQuote",
+	21: "afterSalesTotal",
+	22: "totalReceived",
+	23: "openingDocId",
+	24: "assignmentDocId",
+	25: "formatSpecDocId",
+	26: "createdBy",
+	27: "createdAt",
+	28: "updatedAt",
+	29: "developers",
 }
 
 // Decode decodes Project from json.
@@ -7701,22 +7682,12 @@ func (s *Project) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"deadline\"")
 			}
-		case "dealingAt":
+		case "quotingAt":
 			requiredBitSet[1] |= 1 << 3
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
-				s.DealingAt = v
+				s.QuotingAt = v
 				if err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"dealingAt\"")
-			}
-		case "quotingAt":
-			if err := func() error {
-				s.QuotingAt.Reset()
-				if err := s.QuotingAt.Decode(d, json.DecodeDateTime); err != nil {
 					return err
 				}
 				return nil
@@ -7794,7 +7765,7 @@ func (s *Project) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"cancelledAt\"")
 			}
 		case "originalQuote":
-			requiredBitSet[2] |= 1 << 4
+			requiredBitSet[2] |= 1 << 3
 			if err := func() error {
 				if err := s.OriginalQuote.Decode(d); err != nil {
 					return err
@@ -7804,7 +7775,7 @@ func (s *Project) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"originalQuote\"")
 			}
 		case "currentQuote":
-			requiredBitSet[2] |= 1 << 5
+			requiredBitSet[2] |= 1 << 4
 			if err := func() error {
 				if err := s.CurrentQuote.Decode(d); err != nil {
 					return err
@@ -7814,7 +7785,7 @@ func (s *Project) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"currentQuote\"")
 			}
 		case "afterSalesTotal":
-			requiredBitSet[2] |= 1 << 6
+			requiredBitSet[2] |= 1 << 5
 			if err := func() error {
 				if err := s.AfterSalesTotal.Decode(d); err != nil {
 					return err
@@ -7824,7 +7795,7 @@ func (s *Project) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"afterSalesTotal\"")
 			}
 		case "totalReceived":
-			requiredBitSet[2] |= 1 << 7
+			requiredBitSet[2] |= 1 << 6
 			if err := func() error {
 				if err := s.TotalReceived.Decode(d); err != nil {
 					return err
@@ -7864,7 +7835,7 @@ func (s *Project) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"formatSpecDocId\"")
 			}
 		case "createdBy":
-			requiredBitSet[3] |= 1 << 3
+			requiredBitSet[3] |= 1 << 2
 			if err := func() error {
 				v, err := d.Int64()
 				s.CreatedBy = int64(v)
@@ -7876,7 +7847,7 @@ func (s *Project) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"createdBy\"")
 			}
 		case "createdAt":
-			requiredBitSet[3] |= 1 << 4
+			requiredBitSet[3] |= 1 << 3
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
 				s.CreatedAt = v
@@ -7888,7 +7859,7 @@ func (s *Project) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"createdAt\"")
 			}
 		case "updatedAt":
-			requiredBitSet[3] |= 1 << 5
+			requiredBitSet[3] |= 1 << 4
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
 				s.UpdatedAt = v
@@ -7900,7 +7871,7 @@ func (s *Project) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"updatedAt\"")
 			}
 		case "developers":
-			requiredBitSet[3] |= 1 << 6
+			requiredBitSet[3] |= 1 << 5
 			if err := func() error {
 				s.Developers = make([]ProjectDeveloperRef, 0)
 				if err := d.Arr(func(d *jx.Decoder) error {
@@ -7929,8 +7900,8 @@ func (s *Project) Decode(d *jx.Decoder) error {
 	for i, mask := range [4]uint8{
 		0b10011111,
 		0b00001100,
-		0b11110000,
 		0b01111000,
+		0b00111100,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -9957,8 +9928,6 @@ func (s *ProjectStatus) Decode(d *jx.Decoder) error {
 	}
 	// Try to use constant string.
 	switch ProjectStatus(v) {
-	case ProjectStatusDealing:
-		*s = ProjectStatusDealing
 	case ProjectStatusQuoting:
 		*s = ProjectStatusQuoting
 	case ProjectStatusDeveloping:

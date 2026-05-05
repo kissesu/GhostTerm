@@ -91,14 +91,18 @@ func setupProjectEnv(t *testing.T) *projectTestEnv {
 }
 
 // validCreateInput 返回一个可通过 validate 的输入，用于构造测试项目。
-func validCreateInput(_ *projectTestEnv, name string) services.CreateProjectInput {
+//
+// 注（2026-05-04）：删 dealing 状态后 E0 直接进 quoting/dev，holder_user 取 first dev，
+// validateCreateInput 强制 DeveloperUserIDs 至少 1 个；env.devID 即 first dev。
+func validCreateInput(env *projectTestEnv, name string) services.CreateProjectInput {
 	zero, _ := progressdb.MoneyFromString("0")
 	return services.CreateProjectInput{
-		Name:          name,
-		CustomerLabel: "TestCustomer",
-		Description:   "测试项目描述",
-		Deadline:      time.Now().Add(30 * 24 * time.Hour),
-		OriginalQuote: zero,
+		Name:             name,
+		CustomerLabel:    "TestCustomer",
+		Description:      "测试项目描述",
+		Deadline:         time.Now().Add(30 * 24 * time.Hour),
+		OriginalQuote:    zero,
+		DeveloperUserIDs: []int64{env.devID},
 	}
 }
 
@@ -116,19 +120,20 @@ func TestProject_Create_Success(t *testing.T) {
 	require.NotNil(t, p)
 
 	// 项目字段
+	// 注（2026-05-04）：删 dealing 状态后 E0 直接进 quoting/dev/firstDev
 	assert.Equal(t, "Demo", p.Name)
-	assert.Equal(t, oas.ProjectStatusDealing, p.Status)
+	assert.Equal(t, oas.ProjectStatusQuoting, p.Status)
 	require.NotNil(t, p.HolderRoleID)
-	assert.Equal(t, statemachine.RoleCS, *p.HolderRoleID)
+	assert.Equal(t, statemachine.RoleDev, *p.HolderRoleID)
 	require.NotNil(t, p.HolderUserID)
-	assert.Equal(t, env.csID, *p.HolderUserID)
+	assert.Equal(t, env.devID, *p.HolderUserID)
 
-	// project_members 自动加入：creator + admin viewer + 全 dev
+	// project_members 自动加入：creator + admin viewer + 指派 dev（2026-05-04 后只加指派 dev）
 	var memberCount int
 	require.NoError(t, env.pool.QueryRow(ctx,
 		`SELECT COUNT(*) FROM project_members WHERE project_id = $1`, p.ID).Scan(&memberCount))
-	// admin(1) + cs(creator=1) + 2个 dev = 4
-	assert.GreaterOrEqual(t, memberCount, 4, "至少应有 creator + admin + 2 dev 加入 members")
+	// admin(1) + cs(creator=1) + 指派 dev(1, validCreateInput 仅传 env.devID) = 3
+	assert.GreaterOrEqual(t, memberCount, 3, "至少应有 creator + admin + 1 指派 dev 加入 members")
 
 	// status_change_logs E0 记录
 	var logCount int
@@ -137,12 +142,13 @@ func TestProject_Create_Success(t *testing.T) {
 		p.ID).Scan(&logCount))
 	assert.Equal(t, 1, logCount, "E0 创建日志应有 1 条")
 
-	// 通知发给 creator
-	var notifCount int
+	// 2026-05-04 简化：E0 通知改发给指派开发（不再发给创建者本人 ball_passed）
+	// 通知 type 由 dispatchEventNotifications 按事件模板决定，验证 dev 收到 1 条 E0 相关通知
+	var devNotifCount int
 	require.NoError(t, env.pool.QueryRow(ctx,
-		`SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND project_id = $2 AND type='ball_passed'`,
-		env.csID, p.ID).Scan(&notifCount))
-	assert.Equal(t, 1, notifCount, "creator 应收到 ball_passed 通知")
+		`SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND project_id = $2`,
+		env.devID, p.ID).Scan(&devNotifCount))
+	assert.GreaterOrEqual(t, devNotifCount, 1, "指派 dev 应收到 E0 创建通知")
 }
 
 // ============================================================
@@ -201,13 +207,12 @@ func TestProject_E12_CancelSnapshotsFromState(t *testing.T) {
 	p, err := env.svc.Create(ctx, env.csID, statemachine.RoleCS, validCreateInput(env, "ToCancel"))
 	require.NoError(t, err)
 
-	// E1: dealing/cs → quoting/dev（指定 dev 作为新 holder）
-	_, err = env.svc.TriggerEvent(ctx, env.csID, statemachine.RoleCS, p.ID,
-		oas.EventCodeE1, "提交报价", &env.devID)
-	require.NoError(t, err)
+	// 注（2026-05-04）：删 dealing 状态后 E0 直接进 quoting/dev/firstDev；
+	// 不再需要先走 E1 转交。直接 E12 取消验证 from_* 快照。
 
 	// 现在状态：quoting，holder=dev
-	// E12 取消（cs 触发；dev 不是 cs 但 admin/cs 角色都允许）
+	// E12 取消（cs 触发；service 层有 progress:project:cancel 权限校验，但 TriggerEvent
+	// 直接调用绕过 handler 权限层；状态机层只校验 from + holder，admin/cs 兜底放行）
 	cancelled, err := env.svc.TriggerEvent(ctx, env.csID, statemachine.RoleCS, p.ID,
 		oas.EventCodeE12, "客户跑单了", nil)
 	require.NoError(t, err)
@@ -241,26 +246,15 @@ func TestProject_E12_CancelSnapshotsFromState(t *testing.T) {
 
 func TestProject_E13_RestoreToExactPriorState(t *testing.T) {
 	cases := []struct {
-		name       string
+		name string
 		// driveTo 把项目通过状态机推到目标 (status, holder)
 		driveTo func(env *projectTestEnv, projectID int64) (oas.ProjectStatus, *int64, *int64)
 	}{
+		// 注（2026-05-04）：删 dealing 状态后 E0 直接进 quoting/dev/firstDev，
+		// 旧 "from dealing/cs" + "from quoting/dev (after E1)" 合并为初始态用例
 		{
-			name: "from dealing/cs",
+			name: "from quoting/dev (initial after E0)",
 			driveTo: func(env *projectTestEnv, _ int64) (oas.ProjectStatus, *int64, *int64) {
-				roleCS := statemachine.RoleCS
-				return oas.ProjectStatusDealing, &roleCS, &env.csID
-			},
-		},
-		{
-			name: "from quoting/dev",
-			driveTo: func(env *projectTestEnv, projectID int64) (oas.ProjectStatus, *int64, *int64) {
-				ctx := context.Background()
-				_, err := env.svc.TriggerEvent(ctx, env.csID, statemachine.RoleCS, projectID,
-					oas.EventCodeE1, "报价", &env.devID)
-				if err != nil {
-					panic(err)
-				}
 				roleDev := statemachine.RoleDev
 				return oas.ProjectStatusQuoting, &roleDev, &env.devID
 			},
@@ -269,12 +263,7 @@ func TestProject_E13_RestoreToExactPriorState(t *testing.T) {
 			name: "from quoting/cs (after E2)",
 			driveTo: func(env *projectTestEnv, projectID int64) (oas.ProjectStatus, *int64, *int64) {
 				ctx := context.Background()
-				_, err := env.svc.TriggerEvent(ctx, env.csID, statemachine.RoleCS, projectID,
-					oas.EventCodeE1, "报价", &env.devID)
-				if err != nil {
-					panic(err)
-				}
-				_, err = env.svc.TriggerEvent(ctx, env.devID, statemachine.RoleDev, projectID,
+				_, err := env.svc.TriggerEvent(ctx, env.devID, statemachine.RoleDev, projectID,
 					oas.EventCodeE2, "评估完成", &env.csID)
 				if err != nil {
 					panic(err)
@@ -284,15 +273,10 @@ func TestProject_E13_RestoreToExactPriorState(t *testing.T) {
 			},
 		},
 		{
-			name: "from developing/dev (after E1+E2+E4)",
+			name: "from developing/dev (after E2+E4)",
 			driveTo: func(env *projectTestEnv, projectID int64) (oas.ProjectStatus, *int64, *int64) {
 				ctx := context.Background()
-				_, err := env.svc.TriggerEvent(ctx, env.csID, statemachine.RoleCS, projectID,
-					oas.EventCodeE1, "报价", &env.devID)
-				if err != nil {
-					panic(err)
-				}
-				_, err = env.svc.TriggerEvent(ctx, env.devID, statemachine.RoleDev, projectID,
+				_, err := env.svc.TriggerEvent(ctx, env.devID, statemachine.RoleDev, projectID,
 					oas.EventCodeE2, "完成", &env.csID)
 				if err != nil {
 					panic(err)
@@ -374,14 +358,11 @@ func TestProject_StatusEnterTimestamps(t *testing.T) {
 	p, err := env.svc.Create(ctx, env.csID, statemachine.RoleCS, validCreateInput(env, "EnterTS"))
 	require.NoError(t, err)
 
-	// E1: → quoting, quoting_at 应被设置
-	q, err := env.svc.TriggerEvent(ctx, env.csID, statemachine.RoleCS, p.ID,
-		oas.EventCodeE1, "报价", &env.devID)
-	require.NoError(t, err)
-	assert.Equal(t, oas.ProjectStatusQuoting, q.Status)
-	require.NotNil(t, q.QuotingAt, "quoting_at 应在 E1 后非 NULL")
+	// 注（2026-05-04）：删 dealing 后 E0 已直接进 quoting/dev，quoting_at 在创建时即设置
+	assert.Equal(t, oas.ProjectStatusQuoting, p.Status)
+	require.NotNil(t, p.QuotingAt, "quoting_at 应在 E0 创建后非 NULL")
 
-	// E2: dev → cs，再次 quoting（覆盖 quoting_at）
+	// E2: dev → cs，仍是 quoting（覆盖 quoting_at）
 	_, err = env.svc.TriggerEvent(ctx, env.devID, statemachine.RoleDev, p.ID,
 		oas.EventCodeE2, "完成", &env.csID)
 	require.NoError(t, err)
@@ -463,21 +444,22 @@ func TestProject_ListStatusChanges(t *testing.T) {
 	p, err := env.svc.Create(ctx, env.csID, statemachine.RoleCS, validCreateInput(env, "Logs"))
 	require.NoError(t, err)
 
-	_, err = env.svc.TriggerEvent(ctx, env.csID, statemachine.RoleCS, p.ID,
-		oas.EventCodeE1, "报价", &env.devID)
+	// 注（2026-05-04）：删 dealing + E1 后 E0 直接进 quoting/dev，第一条业务事件改为 E2（dev→cs）
+	_, err = env.svc.TriggerEvent(ctx, env.devID, statemachine.RoleDev, p.ID,
+		oas.EventCodeE2, "提交报价", &env.csID)
 	require.NoError(t, err)
 
 	logs, err := env.svc.ListStatusChanges(ctx, env.csID, statemachine.RoleCS, p.ID)
 	require.NoError(t, err)
-	assert.GreaterOrEqual(t, len(logs), 2, "至少应有 E0 + E1 两条日志")
+	assert.GreaterOrEqual(t, len(logs), 2, "至少应有 E0 + E2 两条日志")
 	// 第一条应为 E0
 	assert.Equal(t, "E0", logs[0].EventCode)
-	assert.Equal(t, "E1", logs[1].EventCode)
-	// E1 from/to holder 应记录
-	assert.Equal(t, oas.ProjectStatusDealing, *logs[1].FromStatus)
+	assert.Equal(t, "E2", logs[1].EventCode)
+	// E2 from/to holder 应记录：dev → cs，from/to status 同为 quoting
+	assert.Equal(t, oas.ProjectStatusQuoting, *logs[1].FromStatus)
 	assert.Equal(t, oas.ProjectStatusQuoting, logs[1].ToStatus)
 	require.NotNil(t, logs[1].FromHolderRoleID)
-	assert.Equal(t, statemachine.RoleCS, *logs[1].FromHolderRoleID)
+	assert.Equal(t, statemachine.RoleDev, *logs[1].FromHolderRoleID)
 	require.NotNil(t, logs[1].ToHolderRoleID)
-	assert.Equal(t, statemachine.RoleDev, *logs[1].ToHolderRoleID)
+	assert.Equal(t, statemachine.RoleCS, *logs[1].ToHolderRoleID)
 }

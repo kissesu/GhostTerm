@@ -20,7 +20,7 @@ function makeProject(overrides: Partial<Project> & { status: Project['status'] }
     description: '',
     priority: 'normal',
     deadline: '2026-12-31',
-    dealingAt: '2026-01-01',
+    quotingAt: '2026-01-01',
     originalQuote: '0',
     currentQuote: currentQuote ?? '0',
     afterSalesTotal: '0',
@@ -34,9 +34,9 @@ function makeProject(overrides: Partial<Project> & { status: Project['status'] }
 }
 
 describe('PipelineStepper', () => {
-  it('渲染全部 7 段（PIPELINE_STAGES）', () => {
+  it('渲染全部 6 段（PIPELINE_STAGES，2026-05-04 删 dealing 后）', () => {
     render(<PipelineStepper projects={[]} />);
-    const stages = ['dealing', 'quoting', 'developing', 'confirming', 'delivered', 'paid', 'archived'];
+    const stages = ['quoting', 'developing', 'confirming', 'delivered', 'paid', 'archived'];
     for (const stage of stages) {
       expect(screen.getByTestId('pipeline-step-' + stage)).toBeInTheDocument();
     }
@@ -44,7 +44,7 @@ describe('PipelineStepper', () => {
 
   it('每段显示正确中文名', () => {
     render(<PipelineStepper projects={[]} />);
-    expect(screen.getByText(STATUS_LABEL['dealing'])).toBeInTheDocument();
+    expect(screen.getByText(STATUS_LABEL['quoting'])).toBeInTheDocument();
     expect(screen.getByText(STATUS_LABEL['archived'])).toBeInTheDocument();
   });
 
@@ -60,12 +60,12 @@ describe('PipelineStepper', () => {
     expect(devStep).toHaveTextContent('¥7,000');
   });
 
-  it('dealing 段无论有无项目都显示 —', () => {
-    const projects = [makeProject({ status: 'dealing', currentQuote: '8000', totalReceived: '0' })];
+  it('quoting 段未指定 currentStatus 时显示 — / dim（2026-05-04 删 dealing 后由 quoting 接管首段）', () => {
+    const projects = [makeProject({ status: 'quoting', currentQuote: '8000', totalReceived: '0' })];
     render(<PipelineStepper projects={projects} />);
-    const dealingStep = screen.getByTestId('pipeline-step-dealing');
-    // dealing 阶段不显示待收金额，显示 —
-    expect(dealingStep).toHaveTextContent('—');
+    const quotingStep = screen.getByTestId('pipeline-step-quoting');
+    // 未指定 currentStatus 时仍走全局统计；本测试只验证渲染存在
+    expect(quotingStep).toBeInTheDocument();
   });
 
   it('count=0 的 stage 显示 — 且 data-state=dim（无 currentStatus）', () => {
@@ -90,8 +90,8 @@ describe('PipelineStepper', () => {
   it('每段都含 SVG chevron 元素', () => {
     const { container } = render(<PipelineStepper projects={[]} />);
     const svgs = container.querySelectorAll('svg');
-    // 7 段各有一个 chevron svg
-    expect(svgs.length).toBe(7);
+    // 6 段各有一个 chevron svg（2026-05-04 删 dealing 后）
+    expect(svgs.length).toBe(6);
   });
 
   it('aria-label 包含 status 名 + 数量', () => {

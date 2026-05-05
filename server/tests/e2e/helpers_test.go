@@ -37,7 +37,7 @@ type projectModel struct {
 	CurrentQuote  string     `json:"currentQuote"`
 	TotalReceived string     `json:"totalReceived"`
 	Deadline      time.Time  `json:"deadline"`
-	DealingAt     time.Time  `json:"dealingAt"`
+	// DealingAt 字段已在 2026-05-04 migration 0020 删除（dealing 状态去除后 quoting_at 替代）
 	CancelledAt   *time.Time `json:"cancelledAt,omitempty"`
 	PaidAt        *time.Time `json:"paidAt,omitempty"`
 	ArchivedAt    *time.Time `json:"archivedAt,omitempty"`
@@ -154,14 +154,18 @@ type errorEnvelope struct {
 //
 // 用户需求修正 2026-04-30：客户从独立资源降级为 customerLabel 字段，
 // e2e 不再走 createCustomer + customerID 二步，直接传 label 字符串。
+//
+// 2026-05-04：OAS 新增 developerUserIds 必填（minItems:1）；e2e 默认绑定 dev1，
+// 让 E0 创建后 holder=dev1，状态 = quoting；后续 dev 触发 E2 推回 cs。
 func createProject(t *testing.T, c *httpClient, customerLabel string, name string, deadline time.Time, originalQuote string) projectModel {
 	t.Helper()
 	resp := c.do(t, http.MethodPost, "/api/projects", map[string]any{
-		"name":          name,
-		"customerLabel": customerLabel,
-		"description":   "e2e flow 测试",
-		"deadline":      deadline.UTC().Format(time.RFC3339),
-		"originalQuote": originalQuote,
+		"name":             name,
+		"customerLabel":    customerLabel,
+		"description":      "e2e flow 测试",
+		"deadline":         deadline.UTC().Format(time.RFC3339),
+		"originalQuote":    originalQuote,
+		"developerUserIds": []int64{e2eEnv.Dev1.ID},
 	}, true)
 	expectStatus(t, resp, http.StatusCreated, "create project "+name)
 	return decodeEnvelope[projectModel](t, resp)

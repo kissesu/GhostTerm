@@ -11,7 +11,7 @@ import type { ProjectStatus } from '../../api/projects';
 import { STATUS_LABEL } from '../../config/nbaConfig';
 
 const ALL_STATUSES: ProjectStatus[] = [
-  'dealing', 'quoting', 'developing', 'confirming', 'delivered',
+  'quoting', 'developing', 'confirming', 'delivered',
   'paid', 'archived', 'after_sales', 'cancelled',
 ];
 

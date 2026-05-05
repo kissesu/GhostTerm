@@ -101,6 +101,15 @@ func setupRBACEnv(t *testing.T) *rbacTestEnv {
 	`, projectID, devID)
 	require.NoError(t, err)
 
+	// 4b. 0017 migration 后 projects.RLS 对 dev 走 project_developers 而非 project_members；
+	//     测试侧补 INSERT 让 dev 在 RLS 下能 SELECT 到该项目
+	_, err = pool.Exec(ctx, `
+		INSERT INTO project_developers (project_id, user_id)
+		VALUES ($1, $2)
+		ON CONFLICT DO NOTHING
+	`, projectID, devID)
+	require.NoError(t, err)
+
 	// 5. RBAC 测试 fixture：补回旧权限码集合
 	//
 	// 业务背景：

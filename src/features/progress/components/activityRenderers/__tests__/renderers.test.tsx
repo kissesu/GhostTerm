@@ -32,8 +32,9 @@ describe('ProjectCreatedRenderer', () => {
       id: 'project_created:1',
       kind: 'project_created',
       payload: {
+        // 2026-05-04 删 dealing 后：项目创建即进入 quoting
         name: 'P1',
-        status: 'dealing',
+        status: 'quoting',
         priority: 'normal',
         deadline: '2026-06-01',
         originalQuote: '8000',
@@ -76,18 +77,19 @@ describe('StatusChangeRenderer', () => {
       id: 'status_change:1',
       kind: 'status_change',
       payload: {
-        eventCode: 'E_QUOTE_SENT',
-        eventName: '发出报价',
-        fromStatus: 'dealing',
-        toStatus: 'quoting',
+        // 2026-05-04 删 dealing 后：典型转换 quoting → developing
+        eventCode: 'E4',
+        eventName: '客户接受报价',
+        fromStatus: 'quoting',
+        toStatus: 'developing',
         remark: '走加急通道',
       },
     };
     render(<StatusChangeRenderer activity={activity} />);
-    // chip 显示 toStatus 对应的流程名 "报价"（用户反馈"状态 tag 应该使用实际的流程名"）
-    expect(screen.getByText('报价')).toBeInTheDocument();
-    expect(screen.getByText(/项目从「洽谈」进入「报价」/)).toBeInTheDocument();
-    expect(screen.getByText(/发出报价 · 走加急通道/)).toBeInTheDocument();
+    // chip 显示 toStatus 对应的流程名 "开发"（用户反馈"状态 tag 应该使用实际的流程名"）
+    expect(screen.getByText('开发')).toBeInTheDocument();
+    expect(screen.getByText(/项目从「报价」进入「开发」/)).toBeInTheDocument();
+    expect(screen.getByText(/客户接受报价 · 走加急通道/)).toBeInTheDocument();
   });
 
   it('fromStatus=null 时回退到 初始', () => {
@@ -96,15 +98,16 @@ describe('StatusChangeRenderer', () => {
       id: 'status_change:2',
       kind: 'status_change',
       payload: {
+        // 2026-05-04 删 dealing 后：项目创建即进入 quoting
         eventCode: 'E_INIT',
         eventName: '建项',
         fromStatus: null,
-        toStatus: 'dealing',
+        toStatus: 'quoting',
         remark: '',
       },
     };
     render(<StatusChangeRenderer activity={activity} />);
-    expect(screen.getByText(/项目从「初始」进入「洽谈」/)).toBeInTheDocument();
+    expect(screen.getByText(/项目从「初始」进入「报价」/)).toBeInTheDocument();
   });
 });
 

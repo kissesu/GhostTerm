@@ -48,9 +48,8 @@ const (
 //
 // 字段语义：
 //   - Event:           事件码
-//   - AllowedRoleIDs:  哪些角色可以触发；admin(1) 默认始终可触发（在 CanFire 单独处理）
 //   - From:            前置 status；空串表示"无状态"（仅 E0 创建用）
-//   - FromHolderRole:  前置持球者角色；nil 表示对持球者无要求
+//   - FromHolderRole:  前置持球者角色；nil 表示对持球者无要求（E0/E12/E13 等创建/取消类事件）
 //   - To:              后置 status
 //   - ToHolderRole:    后置持球者角色；nil 表示"清空持球者"（终态 archived/cancelled）
 //   - EnterTSColumn:   后置状态对应的 *_at 时间戳列名（W9 白名单），
@@ -58,9 +57,15 @@ const (
 //                      空串表示"不更新任何 enter ts"（如 E10/E11 仅 logs，不变状态）
 //   - Description:     中文事件名（写入 status_change_logs.event_name）
 //   - RequiresRemark:  是否要求 remark 必填（spec §6.2 全部为 true）
+//
+// 角色控制（2026-05-04 决策）：
+//   - 不再使用 AllowedRoleIDs 维护"哪些角色可触发"白名单（双层守门冗余）
+//   - 业务流约束统一改为 FromHolderRole 持球者校验（admin 仍兜底放行）
+//   - FromHolderRole=nil 的事件（E0/E12/E13）由 service 层用权限码控制：
+//     · E0 创建项目 → progress:project:create
+//     · E12 取消 / E13 重启 → progress:project:cancel
 type Transition struct {
 	Event          EventCode
-	AllowedRoleIDs []int64
 	From           ProjectStatus
 	FromHolderRole *int64
 	To             ProjectStatus
@@ -75,50 +80,36 @@ func roleIDPtr(v int64) *int64 { return &v }
 
 // Transitions 是全局事件 → transition 的映射表（spec §6.2 + v2 §C4）。
 //
-// 注：
-//   - E10/E11 在 v2 §C4 重新解读为"前向状态机"的常规 transition：
-//     E10 收款 (delivered/cs) → (paid/cs)
-//     E11 归档 (paid/cs) → (archived/—)
+// 注（2026-05-04 简化）：
+//   - 删 dealing 状态：E0 创建项目直接进 quoting(dev)，dev 立即报价
+//   - 删 E1（旧 cs 转交开发动作）+ E6（旧"重新洽谈"指向 dealing）
+//   - E10/E11 仍是常规 transition：E10 (delivered/cs)→(paid/cs)；E11 (paid/cs)→(archived/—)
 //   - E12 的 From="" 表示"任意非终态"，CanFire 内特殊处理（不走通用 From 比对）
 //   - E13 的 From=cancelled，但 To 由 ExecuteEvent 在运行时从 logs 读取（不在表里写死）
 //   - E_AS1 / E_AS3 与售后流程相关（spec §6.3 ping-pong 简化为两个端点切换）
 var Transitions = map[EventCode]Transition{
 	oas.EventCodeE0: {
 		Event:          oas.EventCodeE0,
-		AllowedRoleIDs: []int64{RoleAdmin, RoleCS},
 		From:           "",
 		FromHolderRole: nil,
-		To:             oas.ProjectStatusDealing,
-		ToHolderRole:   roleIDPtr(RoleCS),
-		EnterTSColumn:  "dealing_at",
-		Description:    "创建项目",
-		RequiresRemark: false,
-	},
-	oas.EventCodeE1: {
-		Event:          oas.EventCodeE1,
-		AllowedRoleIDs: []int64{RoleAdmin, RoleCS},
-		From:           oas.ProjectStatusDealing,
-		FromHolderRole: roleIDPtr(RoleCS),
 		To:             oas.ProjectStatusQuoting,
 		ToHolderRole:   roleIDPtr(RoleDev),
 		EnterTSColumn:  "quoting_at",
-		Description:    "提交报价评估",
-		RequiresRemark: true,
+		Description:    "创建项目",
+		RequiresRemark: false,
 	},
 	oas.EventCodeE2: {
 		Event:          oas.EventCodeE2,
-		AllowedRoleIDs: []int64{RoleAdmin, RoleDev},
 		From:           oas.ProjectStatusQuoting,
 		FromHolderRole: roleIDPtr(RoleDev),
 		To:             oas.ProjectStatusQuoting,
 		ToHolderRole:   roleIDPtr(RoleCS),
 		EnterTSColumn:  "quoting_at",
-		Description:    "评估完成回传",
+		Description:    "提交报价",
 		RequiresRemark: true,
 	},
 	oas.EventCodeE3: {
 		Event:          oas.EventCodeE3,
-		AllowedRoleIDs: []int64{RoleAdmin, RoleCS},
 		From:           oas.ProjectStatusQuoting,
 		FromHolderRole: roleIDPtr(RoleCS),
 		To:             oas.ProjectStatusQuoting,
@@ -129,7 +120,6 @@ var Transitions = map[EventCode]Transition{
 	},
 	oas.EventCodeE4: {
 		Event:          oas.EventCodeE4,
-		AllowedRoleIDs: []int64{RoleAdmin, RoleCS},
 		From:           oas.ProjectStatusQuoting,
 		FromHolderRole: roleIDPtr(RoleCS),
 		To:             oas.ProjectStatusDeveloping,
@@ -140,7 +130,6 @@ var Transitions = map[EventCode]Transition{
 	},
 	oas.EventCodeE5: {
 		Event:          oas.EventCodeE5,
-		AllowedRoleIDs: []int64{RoleAdmin, RoleCS},
 		From:           oas.ProjectStatusQuoting,
 		FromHolderRole: roleIDPtr(RoleCS),
 		To:             oas.ProjectStatusCancelled,
@@ -149,20 +138,8 @@ var Transitions = map[EventCode]Transition{
 		Description:    "客户拒绝报价",
 		RequiresRemark: true,
 	},
-	oas.EventCodeE6: {
-		Event:          oas.EventCodeE6,
-		AllowedRoleIDs: []int64{RoleAdmin, RoleCS},
-		From:           oas.ProjectStatusQuoting,
-		FromHolderRole: roleIDPtr(RoleCS),
-		To:             oas.ProjectStatusDealing,
-		ToHolderRole:   roleIDPtr(RoleCS),
-		EnterTSColumn:  "dealing_at",
-		Description:    "重新洽谈",
-		RequiresRemark: true,
-	},
 	oas.EventCodeE7: {
 		Event:          oas.EventCodeE7,
-		AllowedRoleIDs: []int64{RoleAdmin, RoleDev},
 		From:           oas.ProjectStatusDeveloping,
 		FromHolderRole: roleIDPtr(RoleDev),
 		To:             oas.ProjectStatusConfirming,
@@ -173,7 +150,6 @@ var Transitions = map[EventCode]Transition{
 	},
 	oas.EventCodeE8: {
 		Event:          oas.EventCodeE8,
-		AllowedRoleIDs: []int64{RoleAdmin, RoleCS},
 		From:           oas.ProjectStatusConfirming,
 		FromHolderRole: roleIDPtr(RoleCS),
 		To:             oas.ProjectStatusDeveloping,
@@ -184,7 +160,6 @@ var Transitions = map[EventCode]Transition{
 	},
 	oas.EventCodeE9: {
 		Event:          oas.EventCodeE9,
-		AllowedRoleIDs: []int64{RoleAdmin, RoleCS},
 		From:           oas.ProjectStatusConfirming,
 		FromHolderRole: roleIDPtr(RoleCS),
 		To:             oas.ProjectStatusDelivered,
@@ -195,7 +170,6 @@ var Transitions = map[EventCode]Transition{
 	},
 	oas.EventCodeE10: {
 		Event:          oas.EventCodeE10,
-		AllowedRoleIDs: []int64{RoleAdmin, RoleCS},
 		From:           oas.ProjectStatusDelivered,
 		FromHolderRole: roleIDPtr(RoleCS),
 		To:             oas.ProjectStatusPaid,
@@ -206,7 +180,6 @@ var Transitions = map[EventCode]Transition{
 	},
 	oas.EventCodeE11: {
 		Event:          oas.EventCodeE11,
-		AllowedRoleIDs: []int64{RoleAdmin, RoleCS},
 		From:           oas.ProjectStatusPaid,
 		FromHolderRole: roleIDPtr(RoleCS),
 		To:             oas.ProjectStatusArchived,
@@ -215,10 +188,9 @@ var Transitions = map[EventCode]Transition{
 		Description:    "归档",
 		RequiresRemark: true,
 	},
-	// E12: From="" 通配（任意非终态），CanFire 内特殊处理
+	// E12: From="" 通配（任意非终态），CanFire 内特殊处理；权限由 service 层 progress:project:cancel 校验
 	oas.EventCodeE12: {
 		Event:          oas.EventCodeE12,
-		AllowedRoleIDs: []int64{RoleAdmin, RoleCS},
 		From:           "",
 		FromHolderRole: nil,
 		To:             oas.ProjectStatusCancelled,
@@ -227,10 +199,9 @@ var Transitions = map[EventCode]Transition{
 		Description:    "取消",
 		RequiresRemark: true,
 	},
-	// E13: From=cancelled, To 在运行时由快照决定
+	// E13: From=cancelled, To 在运行时由快照决定；权限由 service 层 progress:project:cancel 校验
 	oas.EventCodeE13: {
 		Event:          oas.EventCodeE13,
-		AllowedRoleIDs: []int64{RoleAdmin, RoleCS},
 		From:           oas.ProjectStatusCancelled,
 		FromHolderRole: nil,
 		To:             "", // 由 ExecuteEvent 运行时还原
@@ -241,7 +212,6 @@ var Transitions = map[EventCode]Transition{
 	},
 	oas.EventCodeEAS1: {
 		Event:          oas.EventCodeEAS1,
-		AllowedRoleIDs: []int64{RoleAdmin, RoleCS},
 		From:           oas.ProjectStatusArchived,
 		FromHolderRole: nil,
 		To:             oas.ProjectStatusAfterSales,
@@ -252,7 +222,6 @@ var Transitions = map[EventCode]Transition{
 	},
 	oas.EventCodeEAS3: {
 		Event:          oas.EventCodeEAS3,
-		AllowedRoleIDs: []int64{RoleAdmin, RoleCS},
 		From:           oas.ProjectStatusAfterSales,
 		FromHolderRole: roleIDPtr(RoleCS),
 		To:             oas.ProjectStatusArchived,
@@ -275,8 +244,22 @@ func FindTransition(event EventCode) (Transition, bool) {
 // 即使 Transition.EnterTSColumn 来自硬编码常量，applyStateChange 仍然要做白名单二次校验，
 // 防止"测试代码或 future 代码改坏 transitions 表把恶意列名注入"造成 SQL 注入。
 // 多一层防御不耗资源，被攻破时可救命。
+// cancellableStatuses 是 E12 取消事件允许的源状态白名单（活跃状态）。
+//
+// 业务规则（spec §6.2）：取消必须从"活跃状态"发起；
+// 用白名单（include 活跃）而非黑名单（exclude 终态）的原因：
+// 未来如果新增终态（voided / suspended 等），白名单不包含 = 自动安全；
+// 黑名单则需要每次同步漏改即引入"可被取消已死项目"的回归 bug。
+var cancellableStatuses = map[ProjectStatus]bool{
+	oas.ProjectStatusQuoting:    true,
+	oas.ProjectStatusDeveloping: true,
+	oas.ProjectStatusConfirming: true,
+	oas.ProjectStatusDelivered:  true,
+	oas.ProjectStatusPaid:       true,
+	oas.ProjectStatusAfterSales: true,
+}
+
 var AllowedEnterTSColumns = map[string]bool{
-	"dealing_at":     true,
 	"quoting_at":     true,
 	"dev_started_at": true,
 	"confirming_at":  true,
@@ -295,8 +278,6 @@ var AllowedEnterTSColumns = map[string]bool{
 // 类型受 unmarshal 校验，但显式 switch 让"漏掉新 status"在编译期 / 测试期暴露。
 func EnterTSColumnForStatus(status ProjectStatus) string {
 	switch status {
-	case oas.ProjectStatusDealing:
-		return "dealing_at"
 	case oas.ProjectStatusQuoting:
 		return "quoting_at"
 	case oas.ProjectStatusDeveloping:
@@ -312,6 +293,9 @@ func EnterTSColumnForStatus(status ProjectStatus) string {
 	case oas.ProjectStatusAfterSales:
 		return "after_sales_at"
 	case oas.ProjectStatusCancelled:
+		// 注：实际不可达 — 该函数仅由 E13 还原路径调用读 E12 快照的 from_status；
+		// E12 的 cancellableStatuses 白名单已保证 from_status ≠ cancelled
+		// （cancelled 不能再 cancel）。保留 case 让"漏 case"在编译期/测试期暴露。
 		return "cancelled_at"
 	}
 	return ""

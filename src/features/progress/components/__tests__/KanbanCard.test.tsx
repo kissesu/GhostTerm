@@ -6,9 +6,28 @@
  */
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { KanbanCard } from '../KanbanCard';
 import type { Project } from '../../api/projects';
+import { useGlobalAuthStore } from '../../../../shared/stores/globalAuthStore';
+import { useProgressPermissionStore } from '../../stores/progressPermissionStore';
+
+// 2026-05-04 holder gate：CTA 显示需 user.id===project.holderUserId 或 admin 兜底
+// 测试统一让当前用户为 admin (roleId=1) 简化 fixture，避免每条 fixture 补 holderUserId
+beforeEach(() => {
+  useGlobalAuthStore.setState({
+    user: {
+      id: 99,
+      username: 'admin',
+      displayName: '管理员',
+      roleId: 1, // admin 兜底
+      isActive: true,
+      createdAt: '2026-01-01',
+      permissions: ['*:*'],
+    },
+  });
+  useProgressPermissionStore.getState().set(['*:*']);
+});
 
 function makeProject(overrides: Partial<Project> = {}): Project {
   return {
@@ -19,7 +38,7 @@ function makeProject(overrides: Partial<Project> = {}): Project {
     priority: 'normal',
     status: 'developing',
     deadline: new Date(Date.now() + 20 * 86_400_000).toISOString(), // 20天后
-    dealingAt: '2026-01-01',
+    quotingAt: '2026-01-01',
     originalQuote: '8000',
     currentQuote: '8000',
     afterSalesTotal: '0',

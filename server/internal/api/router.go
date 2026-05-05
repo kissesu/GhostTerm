@@ -507,7 +507,7 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	authHandler := handlers.NewAuthHandler(deps.AuthService, deps.RBACService, effSvc)
 	rbacHandler := handlers.NewRBACHandler(deps.RBACService, deps.Pool)
 	usersHandler := handlers.NewUsersHandler(deps.UserService)
-	projectHandler := handlers.NewProjectHandler(deps.ProjectService)
+	projectHandler := handlers.NewProjectHandler(deps.ProjectService, effSvc)
 	fileHandler := handlers.NewFileHandler(deps.FileService)
 	feedbackHandler, err := handlers.NewFeedbackHandler(deps.FeedbackService, deps.RBACService)
 	if err != nil {

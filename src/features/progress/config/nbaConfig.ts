@@ -39,6 +39,8 @@ export interface ActionMeta {
 /** 单 status 的 NBA 配置 */
 export interface NbaConfig {
   primaryAction: ActionMeta;
+  /** 当 holder_role_id=dev(2) 时改用 devPrimaryAction（仅 quoting 阶段需要） */
+  devPrimaryAction?: ActionMeta;
   secondary: readonly ActionMeta[];
   defaultReason: string;
   /** archived / cancelled 等"非活跃"状态 → NbaPanel 视觉弱化 */
@@ -56,26 +58,9 @@ export interface ReasonContext {
 // ============================================
 
 export const NBA_CONFIG: Record<ProjectStatus, NbaConfig> = {
-  dealing: {
-    defaultReason: '客户已确认论文级别和方向，建议进入报价。',
-    primaryAction: {
-      eventCode: 'E1', label: '提交报价评估', modalTitle: '提交报价评估',
-      transitionTo: 'quoting', meta: '预计 3 分钟', kind: 'primary', permCode: 'event:E1',
-      fields: [
-        { name: 'estimatedAmount', label: '预估金额（¥）', type: 'number', placeholder: '8000', required: true },
-        { name: 'note', label: '评估说明', type: 'textarea', placeholder: '工作量 / 难度 / 周期', required: true },
-      ],
-    },
-    secondary: [
-      {
-        eventCode: 'E12', label: '取消项目', modalTitle: '取消项目',
-        transitionTo: 'cancelled', meta: '预计 1 分钟', kind: 'critical', permCode: 'event:E12',
-        fields: [{ name: 'note', label: '取消原因', type: 'textarea', required: true }],
-      },
-    ],
-  },
   quoting: {
-    defaultReason: '报价已发送，客户回复同意。建议确认进入开发。',
+    // 2026-05-04 删 dealing 后：dev 持球时主推"提交报价"(E2)，cs 持球时主推"客户接受报价"(E4)
+    defaultReason: '当前处于报价阶段。开发持球时由开发提交报价；客服持球时确认客户反馈。',
     primaryAction: {
       eventCode: 'E4', label: '客户接受报价', modalTitle: '客户接受报价',
       transitionTo: 'developing', meta: '预计 1 分钟', kind: 'primary', permCode: 'event:E4',
@@ -84,12 +69,15 @@ export const NBA_CONFIG: Record<ProjectStatus, NbaConfig> = {
         { name: 'note', label: '备注', type: 'textarea' },
       ],
     },
+    devPrimaryAction: {
+      eventCode: 'E2', label: '提交报价', modalTitle: '提交报价',
+      transitionTo: 'quoting', meta: '预计 3 分钟', kind: 'primary', permCode: 'event:E2',
+      fields: [
+        { name: 'estimatedAmount', label: '预估金额（¥）', type: 'number', placeholder: '8000', required: true },
+        { name: 'note', label: '报价说明', type: 'textarea', placeholder: '工作量 / 难度 / 周期', required: true },
+      ],
+    },
     secondary: [
-      {
-        eventCode: 'E2', label: '评估完成回传', modalTitle: '评估完成回传',
-        transitionTo: 'developing', meta: '预计 2 分钟', kind: 'optional', permCode: 'event:E2',
-        fields: [{ name: 'note', label: '回传备注', type: 'textarea', required: true }],
-      },
       {
         eventCode: 'E3', label: '再问开发', modalTitle: '再问开发',
         transitionTo: 'quoting', meta: '预计 1 分钟', kind: 'optional', permCode: 'event:E3',
@@ -99,11 +87,6 @@ export const NBA_CONFIG: Record<ProjectStatus, NbaConfig> = {
         eventCode: 'E5', label: '客户拒绝报价', modalTitle: '客户拒绝报价',
         transitionTo: 'cancelled', meta: '预计 1 分钟', kind: 'critical', permCode: 'event:E5',
         fields: [{ name: 'note', label: '拒绝原因', type: 'textarea', required: true }],
-      },
-      {
-        eventCode: 'E6', label: '重新洽谈', modalTitle: '重新洽谈',
-        transitionTo: 'dealing', meta: '预计 2 分钟', kind: 'optional', permCode: 'event:E6',
-        fields: [{ name: 'note', label: '洽谈备注', type: 'textarea', required: true }],
       },
       {
         eventCode: 'E12', label: '取消项目', modalTitle: '取消项目',
@@ -204,10 +187,11 @@ export const NBA_CONFIG: Record<ProjectStatus, NbaConfig> = {
   },
   cancelled: {
     informational: true,
-    defaultReason: '项目已被取消。如需恢复，可走"重启取消"回到洽谈状态。',
+    defaultReason: '项目已被取消。如需恢复，可走"重启取消"回到 E12 取消前的状态。',
     primaryAction: {
       eventCode: 'E13', label: '重启取消', modalTitle: '重启取消',
-      transitionTo: 'dealing', meta: '预计 1 分钟', kind: 'optional', permCode: 'event:E13',
+      // transitionTo 仅作为 UI 元数据展示，实际目标由后端读 E12 快照精确还原（任意非终态）
+      transitionTo: 'quoting', meta: '预计 1 分钟', kind: 'optional', permCode: 'event:E13',
       fields: [{ name: 'note', label: '重启原因', type: 'textarea', required: true }],
     },
     secondary: [],
@@ -219,13 +203,23 @@ export const NBA_CONFIG: Record<ProjectStatus, NbaConfig> = {
 // ============================================
 
 /**
- * 根据 status 取出 primary action（NbaPanel 主推按钮调用）。
+ * 根据 status + holderRoleId 取出 primary action。
+ *
+ * 业务规则（2026-05-04）：删 dealing 后 quoting 阶段 holder 在 dev/cs 间循环切换；
+ * dev 持球 → 主推"提交报价"(E2)；cs 持球 → 主推"客户接受报价"(E4)。
+ *
+ * holderRoleId 缺省走 primaryAction（兼容仅 status 入参的旧调用，如看板列头）。
+ *
  * status 不在 NBA_CONFIG 中即抛——视为契约破裂，禁止静默 fallback。
  */
-export function getPrimaryAction(status: ProjectStatus): ActionMeta {
+export function getPrimaryAction(status: ProjectStatus, holderRoleId?: number | null): ActionMeta {
   const cfg = NBA_CONFIG[status];
   if (!cfg) {
     throw new Error(`getPrimaryAction: 未知 status "${status}"`);
+  }
+  // role_id=2 即 dev（与后端 statemachine.RoleDev 对齐）
+  if (holderRoleId === 2 && cfg.devPrimaryAction) {
+    return cfg.devPrimaryAction;
   }
   return cfg.primaryAction;
 }
@@ -239,6 +233,7 @@ export function getPrimaryAction(status: ProjectStatus): ActionMeta {
 export function findActionMeta(eventCode: EventCode): ActionMeta | null {
   for (const cfg of Object.values(NBA_CONFIG)) {
     if (cfg.primaryAction.eventCode === eventCode) return cfg.primaryAction;
+    if (cfg.devPrimaryAction && cfg.devPrimaryAction.eventCode === eventCode) return cfg.devPrimaryAction;
     const sec = cfg.secondary.find((s) => s.eventCode === eventCode);
     if (sec) return sec;
   }
@@ -276,15 +271,14 @@ export function deriveReason(status: ProjectStatus, ctx: ReasonContext): string 
 // 视图常量
 // ============================================
 
-/** 看板列固定 5 stage（设计稿决策；其余 4 个 status 通过详情页/list 视图访问） */
-export const KANBAN_STAGES: ProjectStatus[] = ['dealing', 'quoting', 'developing', 'confirming', 'delivered'];
+/** 看板列固定 4 stage（2026-05-04 删 dealing 后；其余 4 个 status 通过详情页/list 视图访问） */
+export const KANBAN_STAGES: ProjectStatus[] = ['quoting', 'developing', 'confirming', 'delivered'];
 
-/** Pipeline 7 段（设计稿 line 573；不含 after_sales / cancelled 旁路） */
-export const PIPELINE_STAGES: ProjectStatus[] = ['dealing', 'quoting', 'developing', 'confirming', 'delivered', 'paid', 'archived'];
+/** Pipeline 6 段（2026-05-04 删 dealing 后；不含 after_sales / cancelled 旁路） */
+export const PIPELINE_STAGES: ProjectStatus[] = ['quoting', 'developing', 'confirming', 'delivered', 'paid', 'archived'];
 
-/** 中文 stage label（设计稿 line 569-572） */
+/** 中文 stage label */
 export const STATUS_LABEL: Record<ProjectStatus, string> = {
-  dealing: '洽谈',
   quoting: '报价',
   developing: '开发',
   confirming: '验收',

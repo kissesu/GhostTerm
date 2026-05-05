@@ -38,8 +38,7 @@ func TestFlow07_PaymentSettlementEarnings(t *testing.T) {
 
 	project := createProject(t, cs, "earnings-customer", "earnings-project",
 		time.Now().Add(20*24*time.Hour), "5000.00")
-	// 推到 delivered
-	project = triggerEvent(t, cs, project.ID, "E1", "评估", nil)
+	// 推到 delivered（2026-05-04 简化：E0 直接进 quoting/dev1，省去 E1）
 	project = triggerEvent(t, dev1, project.ID, "E2", "评估完成", nil)
 	project = triggerEvent(t, cs, project.ID, "E4", "客户接受", nil)
 	project = triggerEvent(t, dev1, project.ID, "E7", "开发完成", nil)

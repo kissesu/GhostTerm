@@ -38,7 +38,6 @@ export const PROJECT_PRIORITY_LABEL: Record<string, string> = {
  *  用户反馈 2026-05-03"文案描述不要加'中'这个字符"——4 处进行中态去"中"，
  *  与 nbaConfig.STATUS_LABEL（PipelineStepper 用）保持文案一致。 */
 export const PROJECT_STATUS_LABEL: Record<string, string> = {
-  dealing: '洽谈',
   quoting: '报价',
   developing: '开发',
   confirming: '验收',

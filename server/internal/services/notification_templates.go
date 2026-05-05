@@ -1,6 +1,6 @@
 /*
 @file notification_templates.go
-@description 16 事件通知文案模板表（业务需求 2026-05-03）。
+@description 14 事件通知文案模板表（2026-05-04 删 E1/E6 后；业务需求 2026-05-03）。
 
 	   业务背景（用户原话 2026-05-03）：
 	   - 通知中心展示"球到你了"等通用占位文案，缺乏业务语义
@@ -10,14 +10,14 @@
 	     · 接受报价 → "项目 X 接受 ¥Y 报价, 截止 ..., 开发请及时推进项目开发"
 
 	设计取舍：
-	1. 中心化模板：所有 16 个事件（E0/E1..E13/E_AS1/E_AS3）的 title/body 文案
+	1. 中心化模板：14 个事件（E0/E2-E5/E7-E13/E_AS1/E_AS3）的 title/body 文案
 	   集中维护在本文件，避免散落在 service 层多处硬编码（旧实现：project_service.go
 	   两处硬编码 "球在你这里" / "项目状态进入 X（事件 Y）"）。
 	2. 接收者函数化：Recipients 是函数而非静态列表，因为不同事件的"应通知人"
 	   依赖 project 实时快照（创建者 / 持球者 / 全体开发等）；函数签名统一接受
 	   NotifyContext 让 caller 一次性传入项目当前状态 + 触发者 + 新持球者等。
 	3. 接收者去触发者本人：用户刚做完操作不需要再被自己通知；通用过滤在 Recipients 内做。
-	4. 不扩 NotificationType：所有 16 事件一律用 ball_passed（通知本质 = 流程推进），
+	4. 不扩 NotificationType：所有 14 事件一律用 ball_passed（通知本质 = 流程推进），
 	   业务语义靠 title/body 文本承载。新加 type 需要同步 DB enum / OAS / 白名单
 	   三处（feedback_db_check_enum_sync_three_places），权衡后不值。
 
@@ -140,17 +140,7 @@ var EventTemplates = map[oas.EventCode]NotifyTemplate{
 			return c.DeveloperUserIDs
 		},
 	},
-	oas.EventCodeE1: {
-		Title: func(c NotifyContext) string { return "已转开发评估" },
-		Body: func(c NotifyContext) string {
-			return fmt.Sprintf("客服 %s 已将项目「%s」转交开发评估报价，请及时跟进",
-				c.ActorDisplayName, c.ProjectName)
-		},
-		Recipients: func(c NotifyContext) []int64 {
-			// 球转给开发：通知全体对接开发
-			return c.DeveloperUserIDs
-		},
-	},
+	// E1 已删除（2026-05-04）：dealing 状态去除后无 cs 转交动作
 	oas.EventCodeE2: {
 		Title: func(c NotifyContext) string { return "开发已报价" },
 		Body: func(c NotifyContext) string {
@@ -196,17 +186,7 @@ var EventTemplates = map[oas.EventCode]NotifyTemplate{
 			return c.DeveloperUserIDs
 		},
 	},
-	oas.EventCodeE6: {
-		Title: func(c NotifyContext) string { return "回到洽谈" },
-		Body: func(c NotifyContext) string {
-			return fmt.Sprintf("项目「%s」回到洽谈阶段，客服请重新与客户沟通",
-				c.ProjectName)
-		},
-		Recipients: func(c NotifyContext) []int64 {
-			// 球切回客服创建者
-			return []int64{c.CreatorUserID}
-		},
-	},
+	// E6 已删除（2026-05-04）：dealing 状态去除后无"重新洽谈"目标
 	oas.EventCodeE7: {
 		Title: func(c NotifyContext) string { return "开发已完成" },
 		Body: func(c NotifyContext) string {

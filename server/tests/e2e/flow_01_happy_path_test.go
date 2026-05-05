@@ -2,10 +2,9 @@
 @file flow_01_happy_path_test.go
 @description e2e flow #1：完整正向状态机闭环。
 
-             覆盖 spec §6.2 主线 transition：
-                E0 创建 → dealing
-                E1 提交评估 → quoting (dev)
-                E2 评估完成回传 → quoting (cs)
+             覆盖 spec §6.2 主线 transition（2026-05-04 简化后）：
+                E0 创建 → quoting (dev) [删 dealing 状态后 dev 直接接单报价]
+                E2 dev 提交报价 → quoting (cs)
                 E4 客户接受报价 → developing (dev)
                 E7 开发完成 → confirming (cs)
                 E9 客户验收 → delivered (cs)
@@ -15,7 +14,7 @@
              业务断言：
               1. 每一步事件返回的 project.status 与持球者 holder 正确
               2. 收款后 totalReceived 累加生效
-              3. status_change_logs 累计 8 条（E0 + E1..E11，不含 E12/E13）
+              3. status_change_logs 累计 7 条（E0 + E2/E4/E7/E9/E10/E11，不含 E12/E13）
               4. 最终 archived_at / paid_at 已写入
 
 @author Atlas.oi
@@ -40,25 +39,17 @@ func TestFlow01_HappyPath(t *testing.T) {
 	cs.loginAs(t, e2eEnv.CS)
 
 	// ============================================================
-	// 第一步：创建项目（CS 身份）
+	// 第一步：创建项目（CS 身份），2026-05-04 简化后直接进 quoting/dev
 	// 用户需求修正 2026-04-30：客户从独立资源降级为 customerLabel 字段
 	// ============================================================
 	project := createProject(t, cs, "happy-path-customer", "happy-path-project",
 		time.Now().Add(30*24*time.Hour), "1000.00")
-	require.Equal(t, "dealing", project.Status)
+	require.Equal(t, "quoting", project.Status)
 	require.NotNil(t, project.HolderRoleID)
-	require.Equal(t, roleCS, *project.HolderRoleID, "刚创建的 holder 应为 CS")
+	require.Equal(t, roleDev, *project.HolderRoleID, "E0 创建后 holder 应为 first dev")
 
 	// ============================================================
-	// 第二步：E1 CS 提交评估 → quoting (dev)
-	// ============================================================
-	project = triggerEvent(t, cs, project.ID, "E1", "提交评估", nil)
-	assert.Equal(t, "quoting", project.Status)
-	require.NotNil(t, project.HolderRoleID)
-	assert.Equal(t, roleDev, *project.HolderRoleID, "E1 后 holder 应为 dev")
-
-	// ============================================================
-	// 第三步：E2 dev 评估完成回传 → quoting (cs)
+	// 第二步：E2 dev 提交报价 → quoting (cs)
 	// dev 必须登录新 client（角色权限路径校验）
 	// ============================================================
 	dev := newClient(e2eEnv.BaseURL)
@@ -114,16 +105,16 @@ func TestFlow01_HappyPath(t *testing.T) {
 	// 第九步：校验 status_change_logs
 	// ============================================================
 	logs := listStatusChanges(t, cs, project.ID)
-	// 期望 7 条 transition 日志（E1, E2, E4, E7, E9, E10, E11）
-	// E0（创建）也写一条
-	assert.GreaterOrEqual(t, len(logs), 7, "至少应有 E1..E11 共 7 条 transition")
+	// 期望 7 条日志：E0 创建 + E2/E4/E7/E9/E10/E11 共 6 条 transition
+	// 2026-05-04 简化后 E1 已删除
+	assert.GreaterOrEqual(t, len(logs), 7, "至少应有 E0+E2..E11 共 7 条日志")
 
 	// 收集事件码集合
 	codes := map[string]bool{}
 	for _, l := range logs {
 		codes[l.EventCode] = true
 	}
-	for _, want := range []string{"E1", "E2", "E4", "E7", "E9", "E10", "E11"} {
+	for _, want := range []string{"E0", "E2", "E4", "E7", "E9", "E10", "E11"} {
 		assert.Truef(t, codes[want], "status_change_logs 缺少事件 %s", want)
 	}
 

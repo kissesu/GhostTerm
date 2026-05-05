@@ -15,6 +15,9 @@ import styles from '../progress.module.css';
 import { type Project, THESIS_LEVEL_LABEL } from '../api/projects';
 import { getPrimaryAction, type ActionMeta } from '../config/nbaConfig';
 import { daysToDeadline, formatDeadline, deadlineClass } from '../utils/deadlineCountdown';
+import { canTriggerEvent } from '../utils/eventGate';
+import { useGlobalAuthStore } from '../../../shared/stores/globalAuthStore';
+import { useProgressPermissionStore } from '../stores/progressPermissionStore';
 
 interface KanbanCardProps {
   project: Project;
@@ -26,7 +29,15 @@ export function KanbanCard({ project, onOpenDetail, onTriggerCta }: KanbanCardPr
   const days = daysToDeadline(project.deadline);
   const ddCls = deadlineClass(days);
   const ddText = formatDeadline(days);
-  const primary = getPrimaryAction(project.status);
+  // 按 holder 切主推（dev 持球时 E2 / cs 持球时 E4）
+  const primary = getPrimaryAction(project.status, project.holderRoleId);
+
+  // holder gate：仅持球者 / admin / cancel 权限者看 cardCta
+  const user = useGlobalAuthStore((s) => s.user);
+  const hasCancelPerm = useProgressPermissionStore((s) => s.has('progress:project:cancel'));
+  const hasAfterSalesPerm = useProgressPermissionStore((s) => s.has('progress:project:after_sales'));
+  const currentUser = user ? { id: user.id, roleId: user.roleId } : null;
+  const showCta = canTriggerEvent(primary.eventCode, project, currentUser, hasCancelPerm, hasAfterSalesPerm);
 
   // 根据截止日颜色级别拼接 CSS class（deadlineHot/deadlineWarm/无附加 class）
   const ddClassName =
@@ -54,20 +65,22 @@ export function KanbanCard({ project, onOpenDetail, onTriggerCta }: KanbanCardPr
         <span className={ddClassName}>{ddText}</span>
       </div>
 
-      {/* CTA 全宽按钮：触发 NBA 主推事件，stopPropagation 阻止冒泡进详情 */}
-      <button
-        type="button"
-        className={styles.cardCta}
-        onClick={(e) => {
-          e.stopPropagation();
-          onTriggerCta(project, primary);
-        }}
-      >
-        <span>{primary.label}</span>
-        <svg width="12" height="12" viewBox="0 0 20 20" aria-hidden="true">
-          <path d="M7 4l6 6-6 6" stroke="currentColor" strokeWidth={2} fill="none" />
-        </svg>
-      </button>
+      {/* CTA 全宽按钮：触发 NBA 主推事件；holder gate 后非持球者隐藏 */}
+      {showCta && (
+        <button
+          type="button"
+          className={styles.cardCta}
+          onClick={(e) => {
+            e.stopPropagation();
+            onTriggerCta(project, primary);
+          }}
+        >
+          <span>{primary.label}</span>
+          <svg width="12" height="12" viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M7 4l6 6-6 6" stroke="currentColor" strokeWidth={2} fill="none" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }

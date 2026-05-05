@@ -7,7 +7,7 @@
 import { create } from 'zustand';
 
 export type ProgressView = 'kanban' | 'list' | 'gantt' | 'notifications' | 'earnings';
-export type ProjectStatusFilter = 'all' | 'dealing' | 'quoting' | 'developing' | 'confirming' | 'delivered' | 'paid' | 'archived' | 'after_sales' | 'cancelled';
+export type ProjectStatusFilter = 'all' | 'quoting' | 'developing' | 'confirming' | 'delivered' | 'paid' | 'archived' | 'after_sales' | 'cancelled';
 
 interface ProgressUiState {
   currentView: ProgressView;

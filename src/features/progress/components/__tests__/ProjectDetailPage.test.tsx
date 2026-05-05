@@ -9,6 +9,8 @@ import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ProjectDetailPage } from '../ProjectDetailPage';
 import type { Project } from '../../api/projects';
+import { useGlobalAuthStore } from '../../../../shared/stores/globalAuthStore';
+import { useProgressPermissionStore } from '../../stores/progressPermissionStore';
 
 // mock PermissionGate 直渲 children
 vi.mock('../PermissionGate', () => ({
@@ -78,7 +80,7 @@ const baseProject: Project = {
   priority: 'normal',
   status: 'developing',
   deadline: new Date(Date.now() + 30 * 86_400_000).toISOString(),
-  dealingAt: '2026-01-01',
+  quotingAt: '2026-01-01',
   originalQuote: '8000',
   currentQuote: '8000',
   afterSalesTotal: '0',
@@ -152,6 +154,19 @@ vi.mock('../../stores/activitiesStore', () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // 2026-05-04 holder gate：admin 兜底让 NbaPanel CTA 可见
+  useGlobalAuthStore.setState({
+    user: {
+      id: 99,
+      username: 'admin',
+      displayName: '管理员',
+      roleId: 1,
+      isActive: true,
+      createdAt: '2026-01-01',
+      permissions: ['*:*'],
+    },
+  });
+  useProgressPermissionStore.getState().set(['*:*']);
 });
 
 describe('ProjectDetailPage', () => {

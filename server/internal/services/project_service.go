@@ -47,6 +47,9 @@ var (
 	ErrProjectPermissionDenied = errors.New("project: permission denied")
 	// ErrProjectInvalidInput 入参缺失 / 非法
 	ErrProjectInvalidInput = errors.New("project: invalid input")
+	// ErrCancelPermissionDenied 用户无 progress:project:cancel 权限（拦截 E12/E13）
+	// 业务背景（2026-05-04）：cancel 是破坏性操作，dev 默认无权
+	ErrCancelPermissionDenied = errors.New("project: cancel permission denied")
 )
 
 // ============================================================
@@ -116,8 +119,7 @@ type ProjectModel struct {
 	HolderRoleID    *int64
 	HolderUserID    *int64
 	Deadline        time.Time
-	DealingAt       time.Time
-	QuotingAt       *time.Time
+	QuotingAt       time.Time
 	DevStartedAt    *time.Time
 	ConfirmingAt    *time.Time
 	DeliveredAt     *time.Time
@@ -194,11 +196,13 @@ func NewProjectService(deps ProjectServiceDeps) (*ProjectServiceImpl, error) {
 // 业务流程（C3 全部在同一事务内）：
 //  1. 角色校验：仅 admin / cs 能创建（HasPermission 已在 handler 校；这里二次防御）
 //  2. SetSessionContext：让 RLS / SECURITY DEFINER 函数读到当前身份
-//  3. INSERT projects（status='dealing', holder='cs', dealing_at=NOW(), original_quote=$.original）
-//  4. INSERT project_members：owner=creator + 全量 admin viewer + 全量 dev
-//  5. statemachine.Execute(E0)：写 status_change_logs（dealing_at 已在 step 3 设置，
+//  3. INSERT projects（status='quoting', holder=dev/firstDev, quoting_at=NOW(), original_quote=$.original）
+//     2026-05-04 简化：删 dealing 状态后 E0 直接进 quoting；holder_user 取 in.DeveloperUserIDs[0]
+//     让 first dev 直接接单报价；validateCreateInput 已强制 dev 至少 1 个
+//  4. INSERT project_members：owner=creator + 全量 admin viewer + 指派 dev
+//  5. statemachine.Execute(E0)：写 status_change_logs（quoting_at 已在 step 3 设置，
 //     E0 对 enter ts 是幂等不变更）
-//  6. INSERT notifications：球在创建者那里
+//  6. INSERT notifications：球在 first dev 那里
 //
 // 任一步骤失败 → tx 回滚 → 0 残留。
 func (s *ProjectServiceImpl) Create(
@@ -245,9 +249,13 @@ func (s *ProjectServiceImpl) Create(
 		}
 
 		md, _ := RequestMetadataFrom(ctx)
-		// INSERT projects RETURNING 仅最小必要列（id + dealing_at + status + holder_*）
-		// 给状态机和后续 reload 使用；完整 ProjectModel 在事务尾部用 projectSelectSQL 重新加载
-		// （含 developers jsonb 聚合）。
+		// INSERT projects RETURNING 最小必要列；2026-05-04 删 dealing 状态后直接进 quoting：
+		// holder_user_id 取 first dev (validateCreateInput 已保证 >=1)，让 first dev 接单报价
+		// 紧贴使用点二次防御 OOB（防止未来重排校验顺序时引入 panic）
+		if len(in.DeveloperUserIDs) == 0 {
+			return fmt.Errorf("%w: developerUserIds is required", ErrProjectInvalidInput)
+		}
+		firstDevUserID := in.DeveloperUserIDs[0]
 		var (
 			pID           int64
 			pStatus       oas.ProjectStatus
@@ -265,7 +273,7 @@ func (s *ProjectServiceImpl) Create(
 				client_ip, user_agent
 			) VALUES (
 				$1, $2, $3, $4, $5, $6,
-				'dealing', $7, $8,
+				'quoting', $7, $8,
 				$9,
 				$10, $10,
 				$11, $12,
@@ -275,7 +283,7 @@ func (s *ProjectServiceImpl) Create(
 			RETURNING id, status, holder_role_id, holder_user_id
 		`,
 			in.Name, in.CustomerLabel, in.Description, string(priority), thesisLevel, subject,
-			statemachine.RoleCS, creatorUserID,
+			statemachine.RoleDev, firstDevUserID,
 			in.Deadline,
 			in.OriginalQuote,
 			openingDocID, assignmentDocID,
@@ -327,12 +335,12 @@ func (s *ProjectServiceImpl) Create(
 		}
 
 		// 4) statemachine.Execute(E0)：写 status_change_logs
-		// 注：dealing_at 已在 INSERT projects 时由 DB DEFAULT NOW() 设置；
-		// applyStateChange 再写一次 dealing_at=NOW() 是幂等的（同一事务内时间一致）
+		// 注：2026-05-04 简化后 INSERT 直接 status='quoting' + holder=(dev,firstDev)；
+		// applyStateChange 再写一次 quoting_at=NOW() 是幂等的（同一事务内时间一致）
 		_, err = statemachine.Execute(ctx, tx, statemachine.ExecuteParams{
 			Project: statemachine.ProjectSnapshot{
 				ID:           pID,
-				Status:       pStatus, // dealing
+				Status:       pStatus, // quoting
 				HolderRoleID: pHolderRoleID,
 				HolderUserID: pHolderUserID,
 			},
@@ -574,7 +582,7 @@ func (s *ProjectServiceImpl) Update(
 				id, name, customer_label, description, priority, thesis_level, subject,
 				status, holder_role_id, holder_user_id,
 				deadline,
-				dealing_at, quoting_at, dev_started_at, confirming_at,
+				quoting_at, dev_started_at, confirming_at,
 				delivered_at, paid_at, archived_at, after_sales_at, cancelled_at,
 				original_quote, current_quote, after_sales_total, total_received,
 				opening_doc_id, assignment_doc_id, format_spec_doc_id,
@@ -760,7 +768,7 @@ const projectSelectSQL = `
 		p.id, p.name, p.customer_label, p.description, p.priority, p.thesis_level, p.subject,
 		p.status, p.holder_role_id, p.holder_user_id,
 		p.deadline,
-		p.dealing_at, p.quoting_at, p.dev_started_at, p.confirming_at,
+		p.quoting_at, p.dev_started_at, p.confirming_at,
 		p.delivered_at, p.paid_at, p.archived_at, p.after_sales_at, p.cancelled_at,
 		p.original_quote, p.current_quote, p.after_sales_total, p.total_received,
 		p.opening_doc_id, p.assignment_doc_id, p.format_spec_doc_id,
@@ -788,7 +796,7 @@ func scanProject(s rowScanner) (*ProjectModel, error) {
 		&p.Priority, &p.ThesisLevel, &p.Subject,
 		&p.Status, &p.HolderRoleID, &p.HolderUserID,
 		&p.Deadline,
-		&p.DealingAt, &p.QuotingAt, &p.DevStartedAt, &p.ConfirmingAt,
+		&p.QuotingAt, &p.DevStartedAt, &p.ConfirmingAt,
 		&p.DeliveredAt, &p.PaidAt, &p.ArchivedAt, &p.AfterSalesAt, &p.CancelledAt,
 		&p.OriginalQuote, &p.CurrentQuote, &p.AfterSalesTotal, &p.TotalReceived,
 		&p.OpeningDocID, &p.AssignmentDocID, &p.FormatSpecDocID,

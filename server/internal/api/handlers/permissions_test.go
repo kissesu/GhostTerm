@@ -127,8 +127,9 @@ func TestPermissions_ListPermissions_OK(t *testing.T) {
 
 	listResp, ok := res.(*oas.PermissionListResponse)
 	require.True(t, ok, "200 应返回 *PermissionListResponse；实际 %T", res)
-	// 0007 migration 种了 23 个权限（nav 3 + progress 14 + users 4 + permissions 2）
-	assert.Len(t, listResp.Data, 23, "permissions 字典应有 23 条")
+	// 0007 migration 种 23 条 + 0020 新增 progress:project:cancel + progress:project:after_sales = 25 条
+	// （nav 3 + progress 14 + users 4 + permissions 2 + cancel 1 + after_sales 1）
+	assert.Len(t, listResp.Data, 25, "permissions 字典应有 25 条（0020 新增 cancel + after_sales）")
 
 	// 校验 3 段 code 拼装正确：随便挑一条
 	for _, p := range listResp.Data {

@@ -34,11 +34,11 @@ describe('projectsStore', () => {
 
   it('triggerEvent 后更新对应项目', async () => {
     useProjectsStore.setState({
-      projects: new Map([[1, { id: 1, status: 'dealing' } as any]]),
+      projects: new Map([[1, { id: 1, status: 'quoting' } as any]]),
     });
-    vi.mocked(triggerProjectEvent).mockResolvedValue({ id: 1, status: 'quoting' } as any);
-    await useProjectsStore.getState().triggerEvent(1, { event: 'E1', remark: 'x', newHolderUserId: null });
-    expect(useProjectsStore.getState().projects.get(1)?.status).toBe('quoting');
+    vi.mocked(triggerProjectEvent).mockResolvedValue({ id: 1, status: 'developing' } as any);
+    await useProjectsStore.getState().triggerEvent(1, { event: 'E2', remark: 'x', newHolderUserId: null });
+    expect(useProjectsStore.getState().projects.get(1)?.status).toBe('developing');
   });
 
   it('loadAll 失败后 loadError 设值且 loading=false', async () => {
@@ -63,7 +63,7 @@ describe('projectsStore', () => {
     await p2; // 第二个已经完成
 
     // 现在让第一个 resolve（旧结果）
-    resolveFirst([{ id: 1, status: 'dealing' } as any]);
+    resolveFirst([{ id: 1, status: 'developing' } as any]);
     await p1;
 
     // 第一个被 seq guard 拒绝，map 应保留第二个的结果
@@ -74,20 +74,20 @@ describe('projectsStore', () => {
   });
 
   it('triggerEvent 失败后 triggerErrorByProject 有值且原 Map 不变', async () => {
-    const original = { id: 1, status: 'dealing' } as any;
+    const original = { id: 1, status: 'quoting' } as any;
     useProjectsStore.setState({
       projects: new Map([[1, original]]),
     });
     vi.mocked(triggerProjectEvent).mockRejectedValue(new Error('forbidden'));
 
     await expect(
-      useProjectsStore.getState().triggerEvent(1, { event: 'E1', remark: '', newHolderUserId: null })
+      useProjectsStore.getState().triggerEvent(1, { event: 'E2', remark: '', newHolderUserId: null })
     ).rejects.toThrow('forbidden');
 
     const s = useProjectsStore.getState();
     expect(s.triggerErrorByProject.get(1)).toBe('forbidden');
     // 原 map 仍保留旧状态，没被覆盖
-    expect(s.projects.get(1)?.status).toBe('dealing');
+    expect(s.projects.get(1)?.status).toBe('quoting');
   });
 
   it('clearTriggerError 清掉对应项目的错误', async () => {
@@ -100,10 +100,10 @@ describe('projectsStore', () => {
 
   it('loadOne 更新单个项目', async () => {
     useProjectsStore.setState({
-      projects: new Map([[1, { id: 1, status: 'dealing' } as any]]),
+      projects: new Map([[1, { id: 1, status: 'quoting' } as any]]),
     });
-    vi.mocked(getProject).mockResolvedValue({ id: 1, status: 'quoting' } as any);
+    vi.mocked(getProject).mockResolvedValue({ id: 1, status: 'developing' } as any);
     await useProjectsStore.getState().loadOne(1);
-    expect(useProjectsStore.getState().projects.get(1)?.status).toBe('quoting');
+    expect(useProjectsStore.getState().projects.get(1)?.status).toBe('developing');
   });
 });

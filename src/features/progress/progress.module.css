@@ -207,10 +207,12 @@
     inset 0 1px 0 rgba(255,255,255,0.04);
 }
 
-/* ============ Kanban ============ (设计稿 line 138-224) */
+/* ============ Kanban ============ (设计稿 line 138-224)
+ * 2026-05-04 删 dealing 后从 5 列改为 4 列（quoting/developing/confirming/delivered）
+ */
 .kanban {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 12px;
 }
 

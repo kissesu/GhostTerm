@@ -37,8 +37,6 @@ import (
 var (
 	// ErrUnknownEvent: 事件码不在 Transitions 表中
 	ErrUnknownEvent = errors.New("statemachine: unknown event")
-	// ErrPermissionDenied: 当前 role 不在 AllowedRoleIDs 内（admin 已兜底放行）
-	ErrPermissionDenied = errors.New("statemachine: role not allowed for event")
 	// ErrInvalidStateTransition: 当前 status 不匹配 transition.From
 	ErrInvalidStateTransition = errors.New("statemachine: invalid state transition")
 	// ErrInvalidHolder: 当前 holder_role 不匹配 transition.FromHolderRole
@@ -68,17 +66,17 @@ type ProjectSnapshot struct {
 
 // CanFire 校验 (project, event, userRole) 三元组是否合法。
 //
-// 业务流程：
+// 业务流程（2026-05-04 简化）：
 //  1. 找 transition；不存在 → ErrUnknownEvent
-//  2. 角色校验：
-//     - admin (RoleAdmin) 兜底放行（spec §6.2 备注）
-//     - 否则 userRole 必须 ∈ AllowedRoleIDs
-//  3. From 校验：
+//  2. From 校验：
 //     - transition.From == ""（E0 创建 / E12 通配） → 跳过 status 比对
 //     - 否则 project.Status 必须等于 transition.From
-//  4. FromHolderRole 校验：
-//     - transition.FromHolderRole == nil → 跳过
-//     - 否则 project.HolderRoleID 必须等于（admin 兜底已在 2 处理）
+//  3. FromHolderRole 校验：
+//     - transition.FromHolderRole == nil → 跳过（E0/E12/E13 等创建/取消类）
+//     - 否则 project.HolderRoleID 必须等于；admin 兜底放行
+//
+// 角色控制由 service 层用权限码做（progress:project:create / progress:project:cancel 等），
+// 状态机本身只做"业务流可达性"校验（status + holder）。
 //
 // 设计取舍：
 //   - 不校验 remark 是否为空 —— 那是 service 层的职责（service 在调 Execute 前 validate 入参）
@@ -89,20 +87,6 @@ func CanFire(project ProjectSnapshot, event EventCode, userRole int64) error {
 		return fmt.Errorf("%w: %s", ErrUnknownEvent, event)
 	}
 
-	// 角色：admin 兜底放行
-	if userRole != RoleAdmin {
-		allowed := false
-		for _, r := range t.AllowedRoleIDs {
-			if r == userRole {
-				allowed = true
-				break
-			}
-		}
-		if !allowed {
-			return fmt.Errorf("%w: role=%d event=%s", ErrPermissionDenied, userRole, event)
-		}
-	}
-
 	// From status：空串 = 通配（E0 创建 / E12 通配任意非终态）
 	if t.From != "" {
 		if project.Status != t.From {
@@ -110,10 +94,11 @@ func CanFire(project ProjectSnapshot, event EventCode, userRole int64) error {
 				ErrInvalidStateTransition, project.Status, t.From, event)
 		}
 	} else if event == oas.EventCodeE12 {
-		// E12 特殊：From="" 但禁止从 cancelled / archived 再取消
-		// 业务规则（spec §6.2）："任意非终态"才能取消
-		if project.Status == oas.ProjectStatusCancelled || project.Status == oas.ProjectStatusArchived {
-			return fmt.Errorf("%w: cannot cancel from terminal status %s",
+		// E12 特殊：From="" 但仅允许从"活跃状态"取消（白名单防御）
+		// 业务规则（spec §6.2）："任意非终态"才能取消；显式列举活跃状态而非排除终态，
+		// 避免未来新增终态（如 voided）漏挡 → 仍可被取消的回归 bug
+		if !cancellableStatuses[project.Status] {
+			return fmt.Errorf("%w: cannot cancel from non-active status %s",
 				ErrInvalidStateTransition, project.Status)
 		}
 	}
@@ -351,8 +336,6 @@ func applyStateChange(
 	// 9 个显式 case；每条 SQL 的列名都是常量字面量（grep-friendly + audit-friendly）
 	var query string
 	switch enterTSColumn {
-	case "dealing_at":
-		query = `UPDATE projects SET status=$1, holder_role_id=$2, holder_user_id=$3, dealing_at=NOW(), updated_at=NOW() WHERE id=$4`
 	case "quoting_at":
 		query = `UPDATE projects SET status=$1, holder_role_id=$2, holder_user_id=$3, quoting_at=NOW(), updated_at=NOW() WHERE id=$4`
 	case "dev_started_at":

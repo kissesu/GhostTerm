@@ -632,8 +632,6 @@ func (s EventCode) Validate() error {
 	switch s {
 	case "E0":
 		return nil
-	case "E1":
-		return nil
 	case "E2":
 		return nil
 	case "E3":
@@ -641,8 +639,6 @@ func (s EventCode) Validate() error {
 	case "E4":
 		return nil
 	case "E5":
-		return nil
-	case "E6":
 		return nil
 	case "E7":
 		return nil
@@ -1876,8 +1872,6 @@ func (s *ProjectResponse) Validate() error {
 
 func (s ProjectStatus) Validate() error {
 	switch s {
-	case "dealing":
-		return nil
 	case "quoting":
 		return nil
 	case "developing":

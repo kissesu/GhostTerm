@@ -6,14 +6,33 @@
  */
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NbaPanel } from '../NbaPanel';
 import type { Project } from '../../api/projects';
+import { useGlobalAuthStore } from '../../../../shared/stores/globalAuthStore';
+import { useProgressPermissionStore } from '../../stores/progressPermissionStore';
 
 // mock PermissionGate 直渲 children，屏蔽 progressPermissionStore 权限状态干扰
 vi.mock('../PermissionGate', () => ({
   PermissionGate: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
+
+// 2026-05-04 holder gate：CTA 显示需要 user.id===project.holderUserId（或 admin）
+// 把当前用户设为 admin (roleId=1) 让所有事件兜底放行，避免每个 case 都补 holderUserId
+beforeEach(() => {
+  useGlobalAuthStore.setState({
+    user: {
+      id: 99,
+      username: 'admin',
+      displayName: '管理员',
+      roleId: 1, // admin 兜底
+      isActive: true,
+      createdAt: '2026-01-01',
+      permissions: ['*:*'],
+    },
+  });
+  useProgressPermissionStore.getState().set(['*:*']);
+});
 
 // 最小化 Project mock
 function makeProject(overrides: Partial<Project> & { status: Project['status'] }): Project {
@@ -26,7 +45,7 @@ function makeProject(overrides: Partial<Project> & { status: Project['status'] }
     priority: 'normal',
     status,
     deadline: '2026-12-31',
-    dealingAt: '2026-01-01',
+    quotingAt: '2026-01-01',
     originalQuote: '0',
     currentQuote: '0',
     afterSalesTotal: '0',
@@ -99,7 +118,7 @@ describe('NbaPanel', () => {
 
   it('未知 status → 渲染 fallback data-testid="nba-panel-fallback" + "未知状态" 文字', () => {
     // 强制传入不存在的 status
-    const project = makeProject({ status: 'dealing' });
+    const project = makeProject({ status: 'developing' });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (project as any).status = 'unknown_status';
     render(<NbaPanel project={project} onTriggerAction={vi.fn()} />);

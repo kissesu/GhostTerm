@@ -8,6 +8,8 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { KanbanView } from '../KanbanView';
+import { useGlobalAuthStore } from '../../../../shared/stores/globalAuthStore';
+import { useProgressPermissionStore } from '../../stores/progressPermissionStore';
 
 // mock EventTriggerDialog 简化测试（避免 store 依赖）
 vi.mock('../EventTriggerDialog', () => ({
@@ -60,12 +62,24 @@ vi.mock('../../stores/progressUiStore', () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // 2026-05-04 holder gate：admin 兜底让 cardCta 可见
+  useGlobalAuthStore.setState({
+    user: {
+      id: 99,
+      username: 'admin',
+      displayName: '管理员',
+      roleId: 1,
+      isActive: true,
+      createdAt: '2026-01-01',
+      permissions: ['*:*'],
+    },
+  });
+  useProgressPermissionStore.getState().set(['*:*']);
 });
 
 describe('KanbanView', () => {
-  it('渲染 5 个固定列（即使某列为空也要显示 col-head）', () => {
+  it('渲染 4 个固定列（2026-05-04 删 dealing 后；即使某列为空也要显示 col-head）', () => {
     render(<KanbanView />);
-    expect(screen.getByText('洽谈')).toBeInTheDocument();
     expect(screen.getByText('报价')).toBeInTheDocument();
     expect(screen.getByText('开发')).toBeInTheDocument();
     expect(screen.getByText('验收')).toBeInTheDocument();

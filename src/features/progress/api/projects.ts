@@ -28,9 +28,8 @@ import { apiFetch } from './client';
 // 枚举
 // ============================================
 
-/** 与后端 OAS components.schemas.ProjectStatus 严格对齐（spec §6.1 9 状态） */
+/** 与后端 OAS components.schemas.ProjectStatus 严格对齐（2026-05-04 删 dealing 后 8 状态） */
 export const ProjectStatusEnum = z.enum([
-  'dealing',
   'quoting',
   'developing',
   'confirming',
@@ -58,10 +57,10 @@ export const THESIS_LEVEL_LABEL: Record<ThesisLevel, string> = {
 };
 
 /**
- * spec §6.2 16 事件
+ * spec §6.2 14 事件（2026-05-04 删 E1/E6 后）
  *
  * 前端触发分类（与 src/features/progress/api/__tests__/event-coverage.test.ts 同步）：
- * - 前端 UI 可触发（15 个）：E1-E13 + E_AS1 + E_AS3
+ * - 前端 UI 可触发（13 个）：E2-E5 + E7-E13 + E_AS1 + E_AS3
  *   → 通过 NbaPanel / EventTriggerDialog 触发，配置见 src/features/progress/config/nbaConfig.ts
  * - 后端独占（1 个）：E0 创建项目
  *   → 由 ProjectCreateDialog 调 POST /api/projects 创建项目时后端自动 fire，前端不暴露 NBA 按钮
@@ -69,7 +68,7 @@ export const THESIS_LEVEL_LABEL: Record<ThesisLevel, string> = {
  * 任何新增 event code 必须更新 event-coverage.test.ts 的两个清单之一。
  */
 export const EventCodeEnum = z.enum([
-  'E0', 'E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7',
+  'E0', 'E2', 'E3', 'E4', 'E5', 'E7',
   'E8', 'E9', 'E10', 'E11', 'E12', 'E13',
   'E_AS1', 'E_AS3',
 ]);
@@ -108,8 +107,7 @@ export const ProjectSchema = z.object({
   holderRoleId: z.number().int().nullable().optional(),
   holderUserId: z.number().int().nullable().optional(),
   deadline: z.string(),
-  dealingAt: z.string(),
-  quotingAt: z.string().nullable().optional(),
+  quotingAt: z.string(),
   devStartedAt: z.string().nullable().optional(),
   confirmingAt: z.string().nullable().optional(),
   deliveredAt: z.string().nullable().optional(),

@@ -114,7 +114,7 @@ type Handler interface {
 	ProjectsAttachFile(ctx context.Context, req *ProjectsAttachFileReq, params ProjectsAttachFileParams) (*ProjectFileResponse, error)
 	// ProjectsCreate implements projectsCreate operation.
 	//
-	// 创建项目（默认进入 dealing 状态）.
+	// 创建项目（直接进入 quoting 状态由 first dev 报价）.
 	//
 	// POST /api/projects
 	ProjectsCreate(ctx context.Context, req *ProjectCreateRequest) (ProjectsCreateRes, error)

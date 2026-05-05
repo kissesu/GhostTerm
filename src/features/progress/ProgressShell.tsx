@@ -76,11 +76,10 @@ export default function ProgressShell(): ReactElement {
         // 同 stage 多次进入（如售后回流）取**最早**那次：DESC 数组中后遍历的是更早的
         map[a.payload.toStatus] = a.occurredAt;
       } else if (a.kind === 'project_created') {
-        // dealing 阶段进入时间 = project_created 的 occurredAt
-        // migration 0012 view 过滤了 E0 status_change（与 project_created 语义重复）
-        // 必须从 project_created 兜底拿 dealing 时间，否则 PipelineStepper 显示"洽谈 -"
-        // （用户反馈 2026-05-03"新建项目进度就应该是流程的洽谈了, 需要同步更新洽谈的时间"）
-        map['dealing'] = a.occurredAt;
+        // 2026-05-04 删 dealing 后：项目创建即进入 quoting；
+        // migration 0012 view 过滤了 E0 status_change（与 project_created 语义重复），
+        // 必须从 project_created 兜底拿 quoting 进入时间避免 PipelineStepper 显示"报价 -"
+        map['quoting'] = a.occurredAt;
       }
     }
     return map;

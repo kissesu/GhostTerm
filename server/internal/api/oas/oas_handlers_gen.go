@@ -3053,7 +3053,7 @@ func (s *Server) handleProjectsAttachFileRequest(args [1]string, argsEscaped boo
 
 // handleProjectsCreateRequest handles projectsCreate operation.
 //
-// 创建项目（默认进入 dealing 状态）.
+// 创建项目（直接进入 quoting 状态由 first dev 报价）.
 //
 // POST /api/projects
 func (s *Server) handleProjectsCreateRequest(args [0]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -3194,7 +3194,7 @@ func (s *Server) handleProjectsCreateRequest(args [0]string, argsEscaped bool, w
 		mreq := middleware.Request{
 			Context:          ctx,
 			OperationName:    ProjectsCreateOperation,
-			OperationSummary: "创建项目（默认进入 dealing 状态）",
+			OperationSummary: "创建项目（直接进入 quoting 状态由 first dev 报价）",
 			OperationID:      "projectsCreate",
 			Body:             request,
 			RawBody:          rawBody,

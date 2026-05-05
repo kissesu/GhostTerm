@@ -1,7 +1,7 @@
 /**
  * @file KanbanView.tsx
  * @description 看板视图 - 1:1 复刻设计稿 line 139-169 + 701-753
- *              固定 5 列 (dealing/quoting/developing/confirming/delivered)
+ *              固定 4 列 (quoting/developing/confirming/delivered，2026-05-04 删 dealing 后)
  *              col-head: name + count
  *              卡片用 KanbanCard 组件；点卡进详情；点 cardCta 弹 EventTriggerDialog
  *

@@ -19,7 +19,7 @@ function makeProject(id: number, name: string): Project {
     priority: 'normal',
     status: 'developing',
     deadline: new Date(Date.now() + 20 * 86_400_000).toISOString(),
-    dealingAt: '2026-01-01',
+    quotingAt: '2026-01-01',
     originalQuote: '0',
     currentQuote: '0',
     afterSalesTotal: '0',

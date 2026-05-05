@@ -38,20 +38,27 @@ func TestValidateCreateInput(t *testing.T) {
 		in      CreateProjectInput
 		wantErr bool
 	}{
+		// 注（2026-05-04）：删 dealing 状态后 E0 直接进 quoting/dev，DeveloperUserIDs 必填非空
+		// 才能取 firstDevUserID 作为初始 holder；这里 valid 用例必须带 DeveloperUserIDs
 		{"valid 全字段", CreateProjectInput{
 			Name: "demo", CustomerLabel: "测试客户", Description: "desc", Deadline: deadline,
+			DeveloperUserIDs: []int64{42},
 		}, false},
 		{"name 空", CreateProjectInput{
 			Name: "", CustomerLabel: "测试客户", Description: "desc", Deadline: deadline,
+			DeveloperUserIDs: []int64{42},
 		}, true},
 		{"customerLabel 空", CreateProjectInput{
 			Name: "demo", CustomerLabel: "", Description: "desc", Deadline: deadline,
+			DeveloperUserIDs: []int64{42},
 		}, true},
 		{"description 空", CreateProjectInput{
 			Name: "demo", CustomerLabel: "测试客户", Description: "", Deadline: deadline,
+			DeveloperUserIDs: []int64{42},
 		}, true},
 		{"deadline zero", CreateProjectInput{
 			Name: "demo", CustomerLabel: "测试客户", Description: "desc", Deadline: time.Time{},
+			DeveloperUserIDs: []int64{42},
 		}, true},
 	}
 	for _, c := range cases {
@@ -95,6 +102,7 @@ func TestCreate_RolePermissionDefense(t *testing.T) {
 		2,   // dev role
 		CreateProjectInput{
 			Name: "x", CustomerLabel: "测试客户", Description: "y", Deadline: deadline,
+			DeveloperUserIDs: []int64{42},
 		},
 	)
 	if !errors.Is(err, ErrProjectPermissionDenied) {
@@ -107,6 +115,7 @@ func TestCreate_InvalidInputDefense(t *testing.T) {
 	_, err := svc.Create(context.Background(), 100, 3 /* cs */, CreateProjectInput{
 		// name 空
 		Name: "", CustomerLabel: "测试客户", Description: "y", Deadline: time.Now().Add(time.Hour),
+		DeveloperUserIDs: []int64{42},
 	})
 	if !errors.Is(err, ErrProjectInvalidInput) {
 		t.Errorf("err = %v；应返回 ErrProjectInvalidInput", err)
@@ -146,12 +155,12 @@ func TestProjectModel_MoneyFieldType(t *testing.T) {
 }
 
 // ============================================================
-// ProjectStatus enum 一致性：spec 9 状态对齐 oas
+// ProjectStatus enum 一致性：8 状态对齐 oas（2026-05-04 删 dealing 后）
 // ============================================================
 
 func TestProjectStatusEnumConsistency(t *testing.T) {
 	want := []oas.ProjectStatus{
-		oas.ProjectStatusDealing, oas.ProjectStatusQuoting,
+		oas.ProjectStatusQuoting,
 		oas.ProjectStatusDeveloping, oas.ProjectStatusConfirming,
 		oas.ProjectStatusDelivered, oas.ProjectStatusPaid,
 		oas.ProjectStatusArchived, oas.ProjectStatusAfterSales,

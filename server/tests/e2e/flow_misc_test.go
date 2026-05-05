@@ -70,7 +70,7 @@ func TestFlow11_LogoutInvalidatesToken(t *testing.T) {
 
 // TestFlow12_InvalidTransition ：状态机拒绝非法事件。
 //
-// 业务规则：dealing 状态下触发 E7（要求 from=developing）→ 409 conflict
+// 业务规则（2026-05-04 简化后）：quoting 状态下触发 E7（要求 from=developing）→ 409 conflict
 // （projects.go handler 把 ErrInvalidTransition 映射为 409 ErrorEnvelope）
 func TestFlow12_InvalidTransition(t *testing.T) {
 	require.NotNil(t, e2eEnv)
@@ -79,9 +79,9 @@ func TestFlow12_InvalidTransition(t *testing.T) {
 
 	project := createProject(t, cs, "invalid-transition-customer", "invalid-transition-project",
 		time.Now().Add(15*24*time.Hour), "1000.00")
-	require.Equal(t, "dealing", project.Status)
+	require.Equal(t, "quoting", project.Status)
 
-	// dealing 直接 E7（developing → confirming）非法
+	// quoting 直接 E7（developing → confirming）非法
 	resp := cs.do(t, http.MethodPost,
 		urlf("/api/projects/%d/events", project.ID),
 		map[string]any{"event": "E7", "remark": "非法尝试"}, true)
@@ -90,24 +90,24 @@ func TestFlow12_InvalidTransition(t *testing.T) {
 	// 接口返回 409 / 422 都可（具体取决于 handler 错误映射）；不放过 200
 }
 
-// TestFlow13_ConcurrentEventTrigger ：两个 client 并发触发 E1 / E12，
-// 一个成功，另一个得到明确错误（不能是 500 internal）。
+// TestFlow13_ConcurrentEventTrigger ：两个 client 并发触发 E2 / E12，
+// 至少一个成功，不允许 500 internal。
 //
 // 业务背景：
 // - 状态机入口在 service 层用 `SELECT ... FOR UPDATE` 锁项目行
 // - 所以并发触发严格串行：第二个事务等第一个 commit 后再 SELECT，会发现状态已变
 // - 第二个事务要么成功（事件依然合法）要么 409 ErrInvalidTransition
 //
-// 用例：CS 启动 E1（dealing→quoting），并发同 CS 启动 E12（任意非终态→cancelled）
-// 必须：一个 200，一个非 200（不能两个都 200）
+// 用例（2026-05-04 简化后）：dev 触发 E2（quoting/dev → quoting/cs），并发 cs 触发 E12（非终态 → cancelled）
+// E2 与 E12 都可能在 quoting 状态合法，但顺序决定结果；并发模式下至少一个 200，无 500
 func TestFlow13_ConcurrentEventTrigger(t *testing.T) {
 	require.NotNil(t, e2eEnv)
-	cs1 := newClient(e2eEnv.BaseURL)
-	cs1.loginAs(t, e2eEnv.CS)
-	cs2 := newClient(e2eEnv.BaseURL)
-	cs2.loginAs(t, e2eEnv.CS)
+	dev := newClient(e2eEnv.BaseURL)
+	dev.loginAs(t, e2eEnv.Dev1)
+	cs := newClient(e2eEnv.BaseURL)
+	cs.loginAs(t, e2eEnv.CS)
 
-	project := createProject(t, cs1, "concurrent-customer", "concurrent-project",
+	project := createProject(t, cs, "concurrent-customer", "concurrent-project",
 		time.Now().Add(10*24*time.Hour), "1000.00")
 
 	var wg sync.WaitGroup
@@ -116,14 +116,14 @@ func TestFlow13_ConcurrentEventTrigger(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		r := cs1.do(t, http.MethodPost,
+		r := dev.do(t, http.MethodPost,
 			urlf("/api/projects/%d/events", project.ID),
-			map[string]any{"event": "E1", "remark": "并发 E1"}, true)
+			map[string]any{"event": "E2", "remark": "并发 E2"}, true)
 		results[0] = r.statusCode
 	}()
 	go func() {
 		defer wg.Done()
-		r := cs2.do(t, http.MethodPost,
+		r := cs.do(t, http.MethodPost,
 			urlf("/api/projects/%d/events", project.ID),
 			map[string]any{"event": "E12", "remark": "并发 E12"}, true)
 		results[1] = r.statusCode

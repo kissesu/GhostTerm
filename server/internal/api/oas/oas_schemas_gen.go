@@ -1106,12 +1106,10 @@ type EventCode string
 
 const (
 	EventCodeE0   EventCode = "E0"
-	EventCodeE1   EventCode = "E1"
 	EventCodeE2   EventCode = "E2"
 	EventCodeE3   EventCode = "E3"
 	EventCodeE4   EventCode = "E4"
 	EventCodeE5   EventCode = "E5"
-	EventCodeE6   EventCode = "E6"
 	EventCodeE7   EventCode = "E7"
 	EventCodeE8   EventCode = "E8"
 	EventCodeE9   EventCode = "E9"
@@ -1127,12 +1125,10 @@ const (
 func (EventCode) AllValues() []EventCode {
 	return []EventCode{
 		EventCodeE0,
-		EventCodeE1,
 		EventCodeE2,
 		EventCodeE3,
 		EventCodeE4,
 		EventCodeE5,
-		EventCodeE6,
 		EventCodeE7,
 		EventCodeE8,
 		EventCodeE9,
@@ -1150,8 +1146,6 @@ func (s EventCode) MarshalText() ([]byte, error) {
 	switch s {
 	case EventCodeE0:
 		return []byte(s), nil
-	case EventCodeE1:
-		return []byte(s), nil
 	case EventCodeE2:
 		return []byte(s), nil
 	case EventCodeE3:
@@ -1159,8 +1153,6 @@ func (s EventCode) MarshalText() ([]byte, error) {
 	case EventCodeE4:
 		return []byte(s), nil
 	case EventCodeE5:
-		return []byte(s), nil
-	case EventCodeE6:
 		return []byte(s), nil
 	case EventCodeE7:
 		return []byte(s), nil
@@ -1191,9 +1183,6 @@ func (s *EventCode) UnmarshalText(data []byte) error {
 	case EventCodeE0:
 		*s = EventCodeE0
 		return nil
-	case EventCodeE1:
-		*s = EventCodeE1
-		return nil
 	case EventCodeE2:
 		*s = EventCodeE2
 		return nil
@@ -1205,9 +1194,6 @@ func (s *EventCode) UnmarshalText(data []byte) error {
 		return nil
 	case EventCodeE5:
 		*s = EventCodeE5
-		return nil
-	case EventCodeE6:
-		*s = EventCodeE6
 		return nil
 	case EventCodeE7:
 		*s = EventCodeE7
@@ -3657,8 +3643,7 @@ type Project struct {
 	HolderRoleId    OptNilInt64       `json:"holderRoleId"`
 	HolderUserId    OptNilInt64       `json:"holderUserId"`
 	Deadline        time.Time         `json:"deadline"`
-	DealingAt       time.Time         `json:"dealingAt"`
-	QuotingAt       OptNilDateTime    `json:"quotingAt"`
+	QuotingAt       time.Time         `json:"quotingAt"`
 	DevStartedAt    OptNilDateTime    `json:"devStartedAt"`
 	ConfirmingAt    OptNilDateTime    `json:"confirmingAt"`
 	DeliveredAt     OptNilDateTime    `json:"deliveredAt"`
@@ -3735,13 +3720,8 @@ func (s *Project) GetDeadline() time.Time {
 	return s.Deadline
 }
 
-// GetDealingAt returns the value of DealingAt.
-func (s *Project) GetDealingAt() time.Time {
-	return s.DealingAt
-}
-
 // GetQuotingAt returns the value of QuotingAt.
-func (s *Project) GetQuotingAt() OptNilDateTime {
+func (s *Project) GetQuotingAt() time.Time {
 	return s.QuotingAt
 }
 
@@ -3890,13 +3870,8 @@ func (s *Project) SetDeadline(val time.Time) {
 	s.Deadline = val
 }
 
-// SetDealingAt sets the value of DealingAt.
-func (s *Project) SetDealingAt(val time.Time) {
-	s.DealingAt = val
-}
-
 // SetQuotingAt sets the value of QuotingAt.
-func (s *Project) SetQuotingAt(val OptNilDateTime) {
+func (s *Project) SetQuotingAt(val time.Time) {
 	s.QuotingAt = val
 }
 
@@ -4694,7 +4669,6 @@ func (*ProjectResponse) projectsUpdateRes()       {}
 type ProjectStatus string
 
 const (
-	ProjectStatusDealing    ProjectStatus = "dealing"
 	ProjectStatusQuoting    ProjectStatus = "quoting"
 	ProjectStatusDeveloping ProjectStatus = "developing"
 	ProjectStatusConfirming ProjectStatus = "confirming"
@@ -4708,7 +4682,6 @@ const (
 // AllValues returns all ProjectStatus values.
 func (ProjectStatus) AllValues() []ProjectStatus {
 	return []ProjectStatus{
-		ProjectStatusDealing,
 		ProjectStatusQuoting,
 		ProjectStatusDeveloping,
 		ProjectStatusConfirming,
@@ -4723,8 +4696,6 @@ func (ProjectStatus) AllValues() []ProjectStatus {
 // MarshalText implements encoding.TextMarshaler.
 func (s ProjectStatus) MarshalText() ([]byte, error) {
 	switch s {
-	case ProjectStatusDealing:
-		return []byte(s), nil
 	case ProjectStatusQuoting:
 		return []byte(s), nil
 	case ProjectStatusDeveloping:
@@ -4749,9 +4720,6 @@ func (s ProjectStatus) MarshalText() ([]byte, error) {
 // UnmarshalText implements encoding.TextUnmarshaler.
 func (s *ProjectStatus) UnmarshalText(data []byte) error {
 	switch ProjectStatus(data) {
-	case ProjectStatusDealing:
-		*s = ProjectStatusDealing
-		return nil
 	case ProjectStatusQuoting:
 		*s = ProjectStatusQuoting
 		return nil

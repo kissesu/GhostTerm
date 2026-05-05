@@ -11,9 +11,11 @@
 import type { ReactElement } from 'react';
 import styles from '../progress.module.css';
 import type { Project } from '../api/projects';
-import { NBA_CONFIG, deriveReason, type ActionMeta, type ReasonContext } from '../config/nbaConfig';
+import { NBA_CONFIG, deriveReason, getPrimaryAction, type ActionMeta, type ReasonContext } from '../config/nbaConfig';
 import { NbaSecondaryActions } from './NbaSecondaryActions';
-import { PermissionGate } from './PermissionGate';
+import { canTriggerEvent } from '../utils/eventGate';
+import { useGlobalAuthStore } from '../../../shared/stores/globalAuthStore';
+import { useProgressPermissionStore } from '../stores/progressPermissionStore';
 
 interface NbaPanelProps {
   project: Project;
@@ -38,7 +40,15 @@ export function NbaPanel({ project, onTriggerAction, reasonContext }: NbaPanelPr
 
   const reason = deriveReason(project.status, reasonContext ?? { daysSinceLastActivity: null });
   const informational = cfg.informational ?? false;
-  const primary = cfg.primaryAction;
+  // 按 holder 切主推：dev 持球时 E2 提交报价 / cs 持球时 E4 客户接受报价
+  const primary = getPrimaryAction(project.status, project.holderRoleId);
+
+  // holder gate（2026-05-04）：admin 兜底；E12/E13 看 progress:project:cancel；其他看 holder
+  const user = useGlobalAuthStore((s) => s.user);
+  const hasCancelPerm = useProgressPermissionStore((s) => s.has('progress:project:cancel'));
+  const hasAfterSalesPerm = useProgressPermissionStore((s) => s.has('progress:project:after_sales'));
+  const currentUser = user ? { id: user.id, roleId: user.roleId } : null;
+  const showPrimary = canTriggerEvent(primary.eventCode, project, currentUser, hasCancelPerm, hasAfterSalesPerm);
 
   return (
     <div
@@ -70,8 +80,8 @@ export function NbaPanel({ project, onTriggerAction, reasonContext }: NbaPanelPr
         {/* reason 提示文本（可动态派生 — 见 deriveReason） */}
         <p className={styles.nbaReason}>{reason}</p>
 
-        {/* 主推 CTA 按钮（受权限门控） */}
-        <PermissionGate perm={primary.permCode}>
+        {/* 主推 CTA 按钮：holder gate（持球者 / admin / cancel 权限者可见） */}
+        {showPrimary && (
           <button
             type="button"
             data-testid="nba-cta"
@@ -83,7 +93,7 @@ export function NbaPanel({ project, onTriggerAction, reasonContext }: NbaPanelPr
               <path d="M7 4l6 6-6 6" stroke="currentColor" strokeWidth={2} fill="none" />
             </svg>
           </button>
-        </PermissionGate>
+        )}
 
         {/* meta 行：预计时长 + 事件码 */}
         <div className={styles.nbaMeta}>
@@ -92,8 +102,12 @@ export function NbaPanel({ project, onTriggerAction, reasonContext }: NbaPanelPr
         </div>
       </div>
 
-      {/* 折叠次级动作面板 */}
-      <NbaSecondaryActions actions={cfg.secondary} onTrigger={onTriggerAction} />
+      {/* 折叠次级动作面板（holder gate 同样按 eventGate 过滤） */}
+      <NbaSecondaryActions
+        actions={cfg.secondary}
+        project={project}
+        onTrigger={onTriggerAction}
+      />
     </div>
   );
 }

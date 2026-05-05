@@ -99,6 +99,10 @@ func insertUserPerm(t *testing.T, ctx context.Context, pool *pgxpool.Pool, userI
 //   - resource='progress' 且 NOT delete            → 13 条
 //   - users AND action='list'                       → 1 条 (users:list:all)
 // 合计 16 条，已排序便于断言。
+//
+// 注（2026-05-04 deprecation）：`progress:event:trigger` 自 0020 删 AllowedRoleIDs 双层守门后
+// 已是事实死权限 — 无任何 handler/service 读取。保留在 DB 仅为兼容 0007 既有 seed；
+// 下次大清理 PR 时可删（连带 0007 migration 该行 + 本测试 list -1 条 + permissions_test 数量 -1）。
 func devRoleSeedCodes() []string {
 	return []string{
 		"nav:view:progress",

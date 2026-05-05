@@ -38,10 +38,11 @@ func TestFlow09_DeadlineWarning(t *testing.T) {
 	cs.loginAs(t, e2eEnv.CS)
 
 	// 项目 deadline = now + 5 天（落入 <=7 天的 deadline_approaching 阈值）
+	// 2026-05-04 简化：E0 创建后直接进 quoting/dev（删 dealing 状态后）
 	deadline := time.Now().Add(5 * 24 * time.Hour)
 	project := createProject(t, cs, "deadline-customer", "deadline-project",
 		deadline, "800.00")
-	require.Equal(t, "dealing", project.Status)
+	require.Equal(t, "quoting", project.Status)
 
 	// ============================================================
 	// 直接调 cron.CheckDeadlines（绕过 30 分钟周期）
@@ -64,9 +65,11 @@ func TestFlow09_DeadlineWarning(t *testing.T) {
 		"CheckDeadlines 不应 error")
 
 	// ============================================================
-	// 当前 holder 是 CS（创建后 holder=cs creator），应收到 deadline_approaching
+	// 2026-05-04 简化：E0 创建后 holder=first dev（dev1），应收到 deadline_approaching
 	// ============================================================
-	notifs := listNotifications(t, cs)
+	dev1 := newClient(e2eEnv.BaseURL)
+	dev1.loginAs(t, e2eEnv.Dev1)
+	notifs := listNotifications(t, dev1)
 	var found *notificationModel
 	for i := range notifs {
 		if notifs[i].Type == "deadline_approaching" &&
@@ -75,14 +78,14 @@ func TestFlow09_DeadlineWarning(t *testing.T) {
 			break
 		}
 	}
-	require.NotNil(t, found, "CS 应收到 deadline_approaching 通知")
+	require.NotNil(t, found, "dev1 应收到 deadline_approaching 通知")
 	assert.Contains(t, found.Body, "5 天", "通知正文应含剩余天数")
 
 	// ============================================================
 	// 第二次调用：去重应跳过（同一类型 + 同 project 24h 窗口内只发一次）
 	// ============================================================
 	require.NoError(t, checker.CheckDeadlines(context.Background()))
-	notifsAfter := listNotifications(t, cs)
+	notifsAfter := listNotifications(t, dev1)
 	dupCount := 0
 	for _, n := range notifsAfter {
 		if n.Type == "deadline_approaching" && n.ProjectID != nil && *n.ProjectID == project.ID {

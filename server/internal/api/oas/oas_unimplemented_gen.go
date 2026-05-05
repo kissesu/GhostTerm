@@ -170,7 +170,7 @@ func (UnimplementedHandler) ProjectsAttachFile(ctx context.Context, req *Project
 
 // ProjectsCreate implements projectsCreate operation.
 //
-// 创建项目（默认进入 dealing 状态）.
+// 创建项目（直接进入 quoting 状态由 first dev 报价）.
 //
 // POST /api/projects
 func (UnimplementedHandler) ProjectsCreate(ctx context.Context, req *ProjectCreateRequest) (r ProjectsCreateRes, _ error) {
