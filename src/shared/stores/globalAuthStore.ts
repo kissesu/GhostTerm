@@ -52,20 +52,45 @@ import { useProgressPermissionStore } from '../../features/progress/stores/progr
 //  3) 测试环境：setup.ts 已全局 vi.mock '@tauri-apps/api/core' 让 invoke
 //     成为 vi.fn()；测试用例按需 mockResolvedValueOnce 注入 keychain 状态。
 // ============================================
+// 安全 review M5：keychain 失败时的内存兜底
+//
+// 原实现：writeRefresh 失败让 login() 整体抛错 → 用户怎么登都登不进。
+// Linux 场景：
+//   - headless server / 无 GUI session
+//   - libsecret 未安装 / D-Bus session bus 未启动
+//   - keyring crate `set_password` 返 PlatformFailure
+// dmg/msi 当前不发 AppImage，潜伏低风险但 keyring 3 deps 暗示后续可能给 Linux。
+//
+// 修法：keychain 失败时 fallback 到模块级 memory（仍比 localStorage 安全 ——
+// 关闭 app 即清；用户须每次重启重登），并 console.warn 提示"本次会话不持久"。
+// 不让 login() 整体失败，保留可用性。
+let memoryRefreshFallback: string | null = null;
+
 async function readRefresh(): Promise<string | null> {
   try {
-    return (await invoke<string | null>('get_refresh_token_cmd')) ?? null;
+    const fromKeychain = (await invoke<string | null>('get_refresh_token_cmd')) ?? null;
+    // keychain 优先；keychain 返 null 时检查内存兜底（同一进程 lifetime）
+    return fromKeychain ?? memoryRefreshFallback;
   } catch (e) {
-    console.error('[auth] read refresh from keychain failed:', e);
-    return null;
+    console.error('[auth] read refresh from keychain failed (fallback to memory):', e);
+    return memoryRefreshFallback;
   }
 }
 
 async function writeRefresh(token: string | null): Promise<void> {
   if (token) {
-    // 写入失败抛出 —— 登录路径必须感知，不能静默丢凭证
-    await invoke('set_refresh_token_cmd', { token });
+    try {
+      await invoke('set_refresh_token_cmd', { token });
+      // 写 keychain 成功也同步 memory，让本进程后续 read 一致（单一信源）
+      memoryRefreshFallback = token;
+    } catch (e) {
+      // 安全 review M5：keychain 写失败时不抛，回退到 memory
+      // 让用户能登录但当前会话不持久（关 app 即清）；console.warn 让用户感知
+      console.warn('[auth] keychain write failed, using in-memory fallback (session not persisted across app restart):', e);
+      memoryRefreshFallback = token;
+    }
   } else {
+    memoryRefreshFallback = null;
     try {
       await invoke('delete_refresh_token_cmd');
     } catch (e) {
@@ -78,6 +103,11 @@ async function writeRefresh(token: string | null): Promise<void> {
 // ============================================
 // refresh 单飞守卫（module 级）—— 关键：refresh_tokens 表是 single-use rotation
 // （migration 0002 rotate_refresh_token NC2），同一 token 第二次消费返 401。
+// hydrate 单飞 inflight Promise — 防 StrictMode 双 mount 让 hydrate() 并发跑两次
+// 导致两个 readRefresh await 后竞争 set() 覆盖（review M6）。
+// 与下方 refreshInflight 同模式，但保护 hydrate 读路径。
+let hydrateInflight: Promise<void> | null = null;
+
 // React StrictMode 双 mount 让 AppLayout verify() 并发调 refresh 两次时，
 // 第二个请求会被后端误判重放 → 401 → 清掉刚成功的 user，让超管刷新页面后
 // 看到 NoPermissionFallback。所有 refresh 路径共享此 inflight。
@@ -137,8 +167,29 @@ export const useGlobalAuthStore = create<GlobalAuthState>((set, get) => ({
   async hydrate() {
     // 已经 hydrate 过（refreshToken 已在内存）跳过；hydrating=false 视为已完成
     if (!get().hydrating) return;
-    const token = await readRefresh();
-    set({ refreshToken: token, hydrating: false });
+    // 安全 review M6：单飞 inflight 防 StrictMode 双 mount 并发竞争
+    //
+    // 原实现仅 `if (!hydrating) return` 守门，但 readRefresh 是 await，
+    // 两个 mount 各自 enter "hydrating=true" 检查后并发 readRefresh，回来
+    // 两次 set() 都跑。极端场景：用户在 hydrate 期间已 logout (set refreshToken=null)，
+    // 第二次 hydrate 回来用 keychain 旧值覆盖 → 已登出用户复活拿到旧 refreshToken。
+    //
+    // 修法：模块级 hydrateInflight Promise 单飞；多次 hydrate() 并发只跑一次。
+    // 完成后清 inflight 让后续幂等调用仍直接 if(!hydrating) return 跳过。
+    if (hydrateInflight) {
+      return hydrateInflight;
+    }
+    hydrateInflight = (async () => {
+      try {
+        const token = await readRefresh();
+        // 重新检查 hydrating，防止 hydrate 期间 logout 已清除 refreshToken
+        if (!get().hydrating) return;
+        set({ refreshToken: token, hydrating: false });
+      } finally {
+        hydrateInflight = null;
+      }
+    })();
+    return hydrateInflight;
   },
 
   // ----------------------------------------------------------
