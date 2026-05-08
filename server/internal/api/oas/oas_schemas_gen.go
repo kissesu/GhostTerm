@@ -2898,6 +2898,52 @@ func (o OptNilThesisLevel) Or(d ThesisLevel) ThesisLevel {
 	return d
 }
 
+// NewOptPositiveMoney returns new OptPositiveMoney with value set to v.
+func NewOptPositiveMoney(v PositiveMoney) OptPositiveMoney {
+	return OptPositiveMoney{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptPositiveMoney is optional PositiveMoney.
+type OptPositiveMoney struct {
+	Value PositiveMoney
+	Set   bool
+}
+
+// IsSet returns true if OptPositiveMoney was set.
+func (o OptPositiveMoney) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptPositiveMoney) Reset() {
+	var v PositiveMoney
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptPositiveMoney) SetTo(v PositiveMoney) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptPositiveMoney) Get() (v PositiveMoney, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptPositiveMoney) Or(d PositiveMoney) PositiveMoney {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptProjectPriority returns new OptProjectPriority with value set to v.
 func NewOptProjectPriority(v ProjectPriority) OptProjectPriority {
 	return OptProjectPriority{
@@ -3628,6 +3674,8 @@ func (s *PermissionListResponse) SetData(val []Permission) {
 
 func (*PermissionListResponse) permissionsListRes()     {}
 func (*PermissionListResponse) rolesGetPermissionsRes() {}
+
+type PositiveMoney string
 
 // Ref: #/components/schemas/Project
 type Project struct {
@@ -4997,7 +5045,7 @@ type QuoteChange struct {
 	ID         int64           `json:"id"`
 	ProjectId  int64           `json:"projectId"`
 	ChangeType QuoteChangeType `json:"changeType"`
-	Delta      Money           `json:"delta"`
+	Delta      SignedMoney     `json:"delta"`
 	OldQuote   Money           `json:"oldQuote"`
 	NewQuote   Money           `json:"newQuote"`
 	Reason     string          `json:"reason"`
@@ -5022,7 +5070,7 @@ func (s *QuoteChange) GetChangeType() QuoteChangeType {
 }
 
 // GetDelta returns the value of Delta.
-func (s *QuoteChange) GetDelta() Money {
+func (s *QuoteChange) GetDelta() SignedMoney {
 	return s.Delta
 }
 
@@ -5072,7 +5120,7 @@ func (s *QuoteChange) SetChangeType(val QuoteChangeType) {
 }
 
 // SetDelta sets the value of Delta.
-func (s *QuoteChange) SetDelta(val Money) {
+func (s *QuoteChange) SetDelta(val SignedMoney) {
 	s.Delta = val
 }
 
@@ -5109,7 +5157,7 @@ func (s *QuoteChange) SetChangedAt(val time.Time) {
 // Ref: #/components/schemas/QuoteChangeActivityPayload
 type QuoteChangeActivityPayload struct {
 	ChangeType QuoteChangeType `json:"changeType"`
-	Delta      Money           `json:"delta"`
+	Delta      SignedMoney     `json:"delta"`
 	OldQuote   Money           `json:"oldQuote"`
 	NewQuote   Money           `json:"newQuote"`
 	Reason     string          `json:"reason"`
@@ -5122,7 +5170,7 @@ func (s *QuoteChangeActivityPayload) GetChangeType() QuoteChangeType {
 }
 
 // GetDelta returns the value of Delta.
-func (s *QuoteChangeActivityPayload) GetDelta() Money {
+func (s *QuoteChangeActivityPayload) GetDelta() SignedMoney {
 	return s.Delta
 }
 
@@ -5152,7 +5200,7 @@ func (s *QuoteChangeActivityPayload) SetChangeType(val QuoteChangeType) {
 }
 
 // SetDelta sets the value of Delta.
-func (s *QuoteChangeActivityPayload) SetDelta(val Money) {
+func (s *QuoteChangeActivityPayload) SetDelta(val SignedMoney) {
 	s.Delta = val
 }
 
@@ -5193,10 +5241,10 @@ func (s *QuoteChangeListResponse) SetData(val []QuoteChange) {
 
 // Ref: #/components/schemas/QuoteChangeRequest
 type QuoteChangeRequest struct {
-	ChangeType QuoteChangeType `json:"changeType"`
-	Delta      OptMoney        `json:"delta"`
-	NewQuote   OptMoney        `json:"newQuote"`
-	Reason     string          `json:"reason"`
+	ChangeType QuoteChangeType  `json:"changeType"`
+	Delta      OptPositiveMoney `json:"delta"`
+	NewQuote   OptMoney         `json:"newQuote"`
+	Reason     string           `json:"reason"`
 }
 
 // GetChangeType returns the value of ChangeType.
@@ -5205,7 +5253,7 @@ func (s *QuoteChangeRequest) GetChangeType() QuoteChangeType {
 }
 
 // GetDelta returns the value of Delta.
-func (s *QuoteChangeRequest) GetDelta() OptMoney {
+func (s *QuoteChangeRequest) GetDelta() OptPositiveMoney {
 	return s.Delta
 }
 
@@ -5225,7 +5273,7 @@ func (s *QuoteChangeRequest) SetChangeType(val QuoteChangeType) {
 }
 
 // SetDelta sets the value of Delta.
-func (s *QuoteChangeRequest) SetDelta(val OptMoney) {
+func (s *QuoteChangeRequest) SetDelta(val OptPositiveMoney) {
 	s.Delta = val
 }
 
@@ -5663,6 +5711,8 @@ func (*RolesUpdatePermissionsUnauthorized) rolesUpdatePermissionsRes() {}
 type RolesUpdatePermissionsUnprocessableEntity ErrorEnvelope
 
 func (*RolesUpdatePermissionsUnprocessableEntity) rolesUpdatePermissionsRes() {}
+
+type SignedMoney string
 
 // Ref: #/components/schemas/StatusChangeActivityPayload
 type StatusChangeActivityPayload struct {

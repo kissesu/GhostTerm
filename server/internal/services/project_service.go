@@ -438,6 +438,10 @@ func validateCreateInput(in CreateProjectInput) error {
 	if len(in.DeveloperUserIDs) == 0 {
 		return fmt.Errorf("%w: developerUserIds is required (at least 1)", ErrProjectInvalidInput)
 	}
+	// finding #9：原始报价不能为负数（DB CHECK 兜底，但 service 层早拦避免事务失败信息泄漏）
+	if in.OriginalQuote.Sign() < 0 {
+		return fmt.Errorf("%w: originalQuote 不能为负数", ErrProjectInvalidInput)
+	}
 	return nil
 }
 

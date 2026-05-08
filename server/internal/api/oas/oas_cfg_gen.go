@@ -18,7 +18,9 @@ import (
 )
 
 var regexMap = map[string]ogenregex.Regexp{
+	"^(?:[1-9]\\d*\\.\\d{2}|0\\.(?:0[1-9]|[1-9]\\d))$": ogenregex.MustCompile("^(?:[1-9]\\d*\\.\\d{2}|0\\.(?:0[1-9]|[1-9]\\d))$"),
 	"^-?\\d+\\.\\d{2}$": ogenregex.MustCompile("^-?\\d+\\.\\d{2}$"),
+	"^\\d+\\.\\d{2}$":   ogenregex.MustCompile("^\\d+\\.\\d{2}$"),
 }
 var (
 	// Allocate option closure once.
