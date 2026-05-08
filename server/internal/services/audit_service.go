@@ -27,9 +27,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// auditWriteTimeout 是审计 INSERT 的最大等待。
+//
+// 选 5 秒理由：远长于正常 INSERT 耗时（~ms 级）防误超时；
+// 短于 systemd 默认 stop timeout（90s）不阻塞 graceful shutdown。
+const auditWriteTimeout = 5 * time.Second
 
 // AuditEventType 是 security_audit_log.event_type 的合法值。
 //
@@ -101,18 +108,34 @@ func NewAuditService(db *pgxpool.Pool) (*AuditService, error) {
 //
 // 业务流程：
 //  1. nil 短路：测试场景 service 未注入时静默返回（不阻断业务）
-//  2. Metadata 序列化：nil → []byte("{}")；JSON marshal 失败立即返 error
-//  3. INSERT security_audit_log：ClientIP 用 NULLIF($N,”)::INET 转空串为 SQL NULL
+//  2. ctx 解耦：用 WithoutCancel + WithTimeout 把 caller ctx 转 detached
+//  3. Metadata 序列化：nil → []byte("{}")；JSON marshal 失败立即返 error
+//  4. INSERT security_audit_log：ClientIP 用 NULLIF($N,'')::INET 转空串为 SQL NULL
 //
 // 设计取舍：
 //   - 用 NULLIF 而不是 services.NullableIP：让 SQL 自带 NULL 转换，调用方不必每次包 helper
 //   - UserAgent 空串直接入库：TEXT 列可空串，不需要转 NULL（与 0008 migration 既有列对齐）
 //   - 不在事务里：security_audit_log 是独立资源，不参与业务表的 ACID 边界
+//
+// 安全 review C4 — caller ctx 解耦：
+//
+//	原实现直接用 caller ctx 调 Exec。当 caller ctx 被 cancel（client 断连 /
+//	HTTP timeout / parent goroutine cancel）后 Exec 立即返 ctx.Err() 失败，
+//	审计写入静默丢失。
+//	攻击场景：登录路径中攻击者把 TCP 连接故意拖到 bcrypt 完成时刚好 timeout，
+//	让 LoginFailed 审计永远没机会写入；多次撞库不留 trace。
+//	修复：用 context.WithoutCancel 切断 cancel/deadline 链（保留 values 不丢
+//	tracing/request id），再叠 5s 超时让审计独立完成。
 func (s *AuditService) Log(ctx context.Context, e AuditEvent) error {
 	// nil 短路：测试 fixture 不注入 audit service 时跳过写入
 	if s == nil {
 		return nil
 	}
+
+	// 安全 review C4：审计写入必须独立于 caller ctx
+	// WithoutCancel 保留 ctx values（trace/request id 仍可读）但断开 cancel/deadline
+	detached, cancel := context.WithTimeout(context.WithoutCancel(ctx), auditWriteTimeout)
+	defer cancel()
 
 	var metadataJSON []byte
 	if e.Metadata == nil {
@@ -125,7 +148,7 @@ func (s *AuditService) Log(ctx context.Context, e AuditEvent) error {
 		metadataJSON = b
 	}
 
-	_, err := s.db.Exec(ctx, `
+	_, err := s.db.Exec(detached, `
 		INSERT INTO security_audit_log
 			(event_type, user_id, target_user_id, client_ip, user_agent, metadata)
 		VALUES

@@ -195,6 +195,45 @@ func TestAuditService_NilServiceShortCircuit(t *testing.T) {
 	}))
 }
 
+// TestAuditService_LogSurvivesCallerCtxCancel 验证：
+// caller ctx 已被 cancel 仍能完成审计写入（C4 ctx 解耦防静默丢失）。
+//
+// 攻击场景（C4）：登录路径 attacker 在 bcrypt 完成时把 TCP 拖到
+// HTTP timeout 触发 ctx.Cancel → 原实现 audit.Log 立即返 ctx.Err() 失败
+// 没机会写入 → LoginFailed 审计静默丢失 → 多次撞库不留 trace。
+//
+// 修复：audit_service.Log 内 context.WithoutCancel + 5s timeout 解耦
+// caller ctx，写入独立完成。
+func TestAuditService_LogSurvivesCallerCtxCancel(t *testing.T) {
+	pool, cleanup := testutil.StartPostgres(t)
+	defer cleanup()
+
+	svc, err := services.NewAuditService(pool)
+	require.NoError(t, err)
+
+	// caller ctx 立即 cancel —— 模拟 client 断连后的内部 goroutine
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	require.Error(t, ctx.Err(), "ctx 必须已 cancel 才能验证解耦行为")
+
+	// 即便 caller ctx 已死，审计写入仍必须成功
+	userID := int64(1)
+	require.NoError(t, svc.Log(ctx, services.AuditEvent{
+		EventType: services.AuditEventLoginFailed,
+		UserID:    &userID,
+		ClientIP:  "9.9.9.9",
+		UserAgent: "ctx-cancel-test",
+		Metadata:  map[string]any{"reason": "ctx_cancel_regression"},
+	}), "caller ctx 已 cancel 时 audit.Log 必须仍能完成（C4 解耦）")
+
+	// 验证记录已落库
+	var count int
+	require.NoError(t, pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM security_audit_log
+		 WHERE event_type='login_failed' AND user_agent='ctx-cancel-test'`).Scan(&count))
+	require.Equal(t, 1, count, "审计记录必须已写入 DB")
+}
+
 func TestAuditService_RejectsNilPool(t *testing.T) {
 	_, err := services.NewAuditService(nil)
 	require.Error(t, err)
