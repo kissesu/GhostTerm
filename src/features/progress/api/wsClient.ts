@@ -2,7 +2,10 @@
  * @file wsClient.ts
  * @description 通知 WebSocket 客户端（Phase 12）。
  *
- *              连接流程：
+ *              **当前状态：未启用 / 0 callsite**（grep "connectNotificationsWS" 返空）。
+ *              代码保留作为 Phase 12 通知功能的 reference 实现，但未接入 UI。
+ *
+ *              连接流程（设计但未启用）：
  *               1. POST /api/ws/ticket（带 access token）→ 拿 30s 短期 ticket
  *               2. 打开 ws://host/api/ws/notifications?ticket=<ticket>
  *               3. onmessage：解析 JSON → 调 notificationsStore.pushNotification
@@ -15,6 +18,16 @@
  *              不做的事：
  *               - 不做心跳：服务端有 60s read deadline + ping/pong；浏览器 WS 自动响应 ping
  *               - 不做"消息缓冲队列"：离线时通知保留在 DB，下次 connect 时调 listNotifications 一次性拉
+ *
+ * **安全 review M4：启用前必须解决证书 pinning 问题**
+ *               - finding #11 reqwest cert pinning 仅覆盖 Tauri Rust 层 HTTP 调用
+ *               - 浏览器原生 WebSocket('wss://atlas:38080/...') 走 WebView (WKWebView/WebView2)
+ *                 OS trust store 校验，不信任 atlas 自签 IP 证书 → ERR_CERT_AUTHORITY_INVALID 必失败
+ *               - 启用 WS 通知前必须二选一：
+ *                 (a) Rust 层用 tokio_tungstenite + native-tls 注入 atlas cert 给前端通过 invoke pull
+ *                 (b) 部署 DNS + Let's Encrypt 公信 cert 让 WebView OS trust store 自然信任
+ *                 (c) 客户端用 invoke long-poll notifications 替代 WebSocket（最简）
+ *               - 直接 new WebSocket(...) 不接 cert pinning 是不可接受的 supply chain 攻击面
  *
  * @author Atlas.oi
  * @date 2026-04-29
