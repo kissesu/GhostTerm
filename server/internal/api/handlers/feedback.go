@@ -10,12 +10,16 @@
                router.go 将通过 oasHandler 嵌入 *FeedbackHandler 字段并 forward 来覆盖默认实现
                （router 层接线由 Lead 完成；本 handler 仅提供方法实现，不直接修改 router.go）
 
-             权限校验：
-             - List / Create 需要 feedback:read / feedback:create（0001 migration 已为
-               admin/客服/开发三角色绑定）
-             - UpdateStatus 在 v1 落到 feedback:create —— migration 仅为反馈预置 read/create 两组权限，
-               未引入 feedback:update。"标记已处理" 业务上属于反馈写入家族，沿用 create
-               避免新增权限码导致跨语言常量不一致（feedback 教训：跨层常量单一来源）
+             权限校验（finding #16 修复 / 2026-05-08）：
+             - 改走 EffectivePermissionsService.Compute 链路（ctx 已由 oasSecurityHandler
+               预填 effective perms），与 PermissionsHandler.checkPerm 同 pattern；
+               legacy RBACService.HasPermission 用的是 2 段 code（resource:action），
+               不读 user_permissions 表，超管 deny 某用户的 feedback:create 不生效
+             - 3 个 endpoint 校验码：
+                 List   → progress:feedback:list
+                 Create → progress:feedback:create
+                 Update → progress:feedback:update（0024 migration 新增）
+             - super_admin 通过 EffectivePermissionsService 返回的 *:* 哨兵自动放行
 
              错误映射：
              - ErrFeedbackContentEmpty / ErrFeedbackInvalidSource / ErrFeedbackInvalidStatus
@@ -23,7 +27,7 @@
              - ErrFeedbackNotFound → 404 not_found
              - 其它 → 500（由 router.errorEnvelopeHandler 兜底）
 @author Atlas.oi
-@date 2026-04-29
+@date 2026-04-29 (2026-05-08 finding #16 修复：切到 EffectivePermissionsService)
 */
 
 package handlers
@@ -38,57 +42,73 @@ import (
 	"github.com/ghostterm/progress-server/internal/services"
 )
 
-// 权限码常量。统一在本文件维护避免散落；与 0001 migration permissions 表对齐。
+// 权限码常量。3 段格式 resource:action:scope，与 0007/0024 migration permissions 表对齐。
+//
+// 与 EffectivePermissionsService 输出格式一致；MatchPermission 在 *:* / resource:action:* /
+// resource:*:* / exact 四档优先级匹配，super_admin 通过 *:* 哨兵自动放行。
 const (
-	permFeedbackRead   = "feedback:read"
-	permFeedbackCreate = "feedback:create"
-	// permFeedbackUpdate 在 v1 等价于 permFeedbackCreate（migration 未引入独立 update 权限）。
-	// 留作命名占位，便于未来加入 feedback:update 权限时一处替换即可。
-	permFeedbackUpdate = "feedback:create"
+	permFeedbackList   = "progress:feedback:list"
+	permFeedbackCreate = "progress:feedback:create"
+	permFeedbackUpdate = "progress:feedback:update"
 )
 
 // FeedbackHandler 实现 ogen 生成 oas.Handler 中与 feedback 相关的 3 个方法。
+//
+// finding #16 修复后字段：
+//   - Svc：FeedbackService 业务实现（不变）
+//   - RBAC：保留 RBACService 引用以兼容老接口（CanTriggerEvent 等暂未迁移路径），
+//          但权限码校验不再走它，改走 effectivePerms（读 user_permissions 覆写表）
+//   - effectivePerms：用于在测试 / 兼容场景手动算 effective perms；
+//                    生产路径走 ctx 中已预填的 perms（oasSecurityHandler 在鉴权时填好）
 type FeedbackHandler struct {
-	Svc  services.FeedbackService
-	RBAC services.RBACService
+	Svc            services.FeedbackService
+	RBAC           services.RBACService
+	effectivePerms services.EffectivePermissionsService
 }
 
 // NewFeedbackHandler 构造 FeedbackHandler。
 //
-// 业务背景：rbac 必填 —— 三个 endpoint 都做权限码校验。缺失时返回 error，
-// 让 router 启动时立即暴露配置漂移，而不是运行时 nil deref。
-func NewFeedbackHandler(svc services.FeedbackService, rbac services.RBACService) (*FeedbackHandler, error) {
+// 业务背景：三个依赖必填 —— svc 业务、rbac 兼容老路径、effectivePerms 是 finding #16
+// 修复后真正的权限校验源。缺失时返回 error，让 router 启动时立即暴露配置漂移，
+// 而不是运行时 nil deref。
+func NewFeedbackHandler(svc services.FeedbackService, rbac services.RBACService, effectivePerms services.EffectivePermissionsService) (*FeedbackHandler, error) {
 	if svc == nil {
 		return nil, errors.New("feedback handler: svc is required")
 	}
 	if rbac == nil {
 		return nil, errors.New("feedback handler: rbac is required")
 	}
-	return &FeedbackHandler{Svc: svc, RBAC: rbac}, nil
+	if effectivePerms == nil {
+		return nil, errors.New("feedback handler: effectivePerms is required")
+	}
+	return &FeedbackHandler{Svc: svc, RBAC: rbac, effectivePerms: effectivePerms}, nil
 }
 
 // ============================================================
 // 共享 helper：取 AuthContext + 校验权限码
 // ============================================================
 
-// requirePerm 从 ctx 取 AuthContext 并校验 perm；缺登录或缺权返回 nil 视图，
-// 调用方据 ok 决定是否短路。
+// requirePerm 从 ctx 取 AuthContext + effective perms，并按四档优先级判定 perm。
 //
-// 设计取舍：
-//   - 把 AuthContextFrom + RBAC.HasPermission 收敛到一个函数，
-//     避免每个 handler 方法重复 4 行模板
-//   - 三个 endpoint 的错误响应 *Type 各不相同（ogen 生成），所以本函数只返回
-//     "通过/未通过" 两态，调用方各自构造对应类型的错误响应
+// finding #16 修复后实现：
+//   - perms 由 oasSecurityHandler 在鉴权同时调 EffectivePermissionsService.Compute 注入
+//     到 ctx，不再每次调 RBACService.HasPermission（不读 user_permissions 覆写表）
+//   - 当 ctx 没挂 effective perms（理论上不可能；保留是兜底）退化为"无权"
+//   - super_admin 通过 perms = ["*:*"] 哨兵自动放行（MatchPermission 内部已实现）
+//
+// 三个 endpoint 的错误响应 *Type 各不相同（ogen 生成），所以本函数只返回
+// "通过/未通过" 两态，调用方各自构造对应类型的错误响应。
 func (h *FeedbackHandler) requirePerm(ctx context.Context, perm string) (services.AuthContext, bool, error) {
 	ac, ok := middleware.AuthContextFrom(ctx)
 	if !ok {
 		return services.AuthContext{}, false, nil
 	}
-	allowed, err := h.RBAC.HasPermission(ctx, ac.UserID, ac.RoleID, perm)
-	if err != nil {
-		return ac, false, fmt.Errorf("feedback handler: check perm %s: %w", perm, err)
+	perms, ok := middleware.EffectivePermsFrom(ctx)
+	if !ok {
+		// 没经 oasSecurityHandler 注入；按 fail-closed 原则当无权处理
+		return ac, false, nil
 	}
-	return ac, allowed, nil
+	return ac, middleware.MatchPermission(perms, perm), nil
 }
 
 // ============================================================
@@ -101,7 +121,7 @@ func (h *FeedbackHandler) requirePerm(ctx context.Context, perm string) (service
 // 鉴权失败由 ogen SecurityHandler / errorEnvelopeHandler 在外层兜底返回 401。
 // 这里 list 拿不到权限就退化为空列表（RLS 也会自然过滤为空），保持与无权时的语义一致。
 func (h *FeedbackHandler) ProjectsListFeedbacks(ctx context.Context, params oas.ProjectsListFeedbacksParams) (*oas.FeedbackListResponse, error) {
-	ac, allowed, err := h.requirePerm(ctx, permFeedbackRead)
+	ac, allowed, err := h.requirePerm(ctx, permFeedbackList)
 	if err != nil {
 		return nil, err
 	}

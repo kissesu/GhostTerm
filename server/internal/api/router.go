@@ -580,7 +580,9 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	usersHandler := handlers.NewUsersHandler(deps.UserService)
 	projectHandler := handlers.NewProjectHandler(deps.ProjectService, effSvc)
 	fileHandler := handlers.NewFileHandler(deps.FileService)
-	feedbackHandler, err := handlers.NewFeedbackHandler(deps.FeedbackService, deps.RBACService)
+	// finding #16 修复：feedback handler 改走 EffectivePermissionsService（与 PermissionsHandler
+	// 同链路），让 user_permissions 表的 grant/deny 覆写对 3 个 feedback endpoint 真正生效
+	feedbackHandler, err := handlers.NewFeedbackHandler(deps.FeedbackService, deps.RBACService, effSvc)
 	if err != nil {
 		return nil, err
 	}
