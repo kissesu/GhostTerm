@@ -54,7 +54,11 @@ func TestFlow08_WSNotification(t *testing.T) {
 	// ============================================================
 	wsURL := buildWSURL(e2eEnv.BaseURL, "/api/ws/notifications", ticket.Ticket)
 	dialer := websocket.Dialer{HandshakeTimeout: 5 * time.Second}
-	conn, resp, err := dialer.Dial(wsURL, nil)
+	// finding #15：CheckOrigin 严格白名单后 e2e 必须显式带 Origin（真实 Tauri/浏览器
+	// 客户端总是带 Origin；空 Origin 被新版 WSCheckOrigin 拒）
+	wsHeader := http.Header{}
+	wsHeader.Set("Origin", "tauri://localhost")
+	conn, resp, err := dialer.Dial(wsURL, wsHeader)
 	require.NoErrorf(t, err, "ws dial: %v body=%s", err, debugBody(resp))
 	defer conn.Close()
 	if resp != nil {

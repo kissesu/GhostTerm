@@ -31,6 +31,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -38,6 +39,52 @@ import (
 
 	"github.com/ghostterm/progress-server/internal/services"
 )
+
+// allowedWSHosts 是 WebSocket 升级允许的精确 Host 集合（finding #15）。
+//
+// 业务背景：旧版用 strings.HasPrefix(origin, "http://localhost") 校验
+// 可被 http://localhost.evil.com / http://localhost-evil.com 等前缀绕过攻击。
+// 改为 url.Parse 后比对 Hostname()，精确白名单：
+//   - localhost：dev vite + 本地 curl
+//   - 127.0.0.1：等价 localhost
+//   - tauri.localhost：Tauri Windows 默认 webview scheme
+//
+// Tauri WKWebView (tauri://localhost) 的 Origin 头由 WebView 自动写为
+// "tauri://localhost"，url.Parse 也走 host=localhost 分支，命中白名单。
+var allowedWSHosts = map[string]struct{}{
+	"localhost":       {},
+	"127.0.0.1":       {},
+	"tauri.localhost": {},
+}
+
+// WSCheckOrigin 校验 WebSocket 升级请求的 Origin 头（finding #15）。
+//
+// 业务流程：
+//  1. 取 Origin 头；空 origin（同源 / 桌面 webview 不发 Origin）→ false
+//     注：旧版"空 origin 放行"被合并到此处一并收紧；同源浏览器请求其实是会发 Origin 的，
+//     真正不发 Origin 的场景有限（Tauri WKWebView / curl --header）。Tauri 升级走自
+//     带 ticket，CheckOrigin 拒空 origin 不影响真实客户端
+//  2. url.Parse；解析失败 → false
+//  3. u.Hostname() 在 allowedWSHosts map 内 → true
+//
+// 输入示例：
+//   - "http://localhost:1420"        → host=localhost  → true
+//   - "tauri://localhost"            → host=localhost  → true
+//   - "http://127.0.0.1"             → host=127.0.0.1  → true
+//   - "http://localhost.evil.com"    → host=localhost.evil.com → false（前缀绕过失败）
+//   - "https://evil.com"             → host=evil.com   → false
+func WSCheckOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return false
+	}
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	_, ok := allowedWSHosts[u.Hostname()]
+	return ok
+}
 
 // wsReadDeadline 单次 read 超时；超过即认为客户端僵死，触发 deregister。
 //
@@ -48,7 +95,7 @@ const wsReadDeadline = 60 * time.Second
 // wsPongWait 收到 pong 后将 deadline 后延的时长。
 const wsPongWait = 60 * time.Second
 
-// wsUpgrader 全局复用；CheckOrigin 内联白名单。
+// wsUpgrader 全局复用；CheckOrigin 走 WSCheckOrigin 严格白名单（finding #15）。
 //
 // 设计取舍：
 //   - 全局变量 vs 每次构造：upgrader 是 zero-value safe，全局复用避免 GC 压力
@@ -56,21 +103,7 @@ const wsPongWait = 60 * time.Second
 var wsUpgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
-	CheckOrigin: func(r *http.Request) bool {
-		origin := r.Header.Get("Origin")
-		// 空 origin（同源 / 桌面 webview）放行
-		if origin == "" {
-			return true
-		}
-		// 白名单：本机开发 + Tauri 桌面壳
-		if strings.HasPrefix(origin, "http://localhost") ||
-			strings.HasPrefix(origin, "https://localhost") ||
-			strings.HasPrefix(origin, "http://127.0.0.1") ||
-			origin == "tauri://localhost" {
-			return true
-		}
-		return false
-	},
+	CheckOrigin:     WSCheckOrigin,
 }
 
 // NewWSHandler 构造 WS 升级 handler；返回 chi/net 兼容的 http.HandlerFunc。
