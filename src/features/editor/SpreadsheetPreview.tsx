@@ -41,6 +41,20 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;');
 }
 
+// 安全 review M3：ExcelJS 渲染上限防 zip-bomb / max-row DoS
+//
+// 攻击场景：
+//   - .xlsx 真实大小 1MB（高压缩 SharedStrings.xml）解压后 1GB → webview 渲染 OOM 崩溃
+//   - cell 范围 A1:ZZZ1000000 → 数百万 row 遍历占内存爆栈
+//   - 用户每次打开攻击者植入的 .xlsx 都崩 → 项目文件树 preview 受阻
+//
+// 上限选择：
+//   - MAX_RENDER_ROWS=10000：5 人内部 Excel 通常 < 1000 行；10K 给余量足够
+//   - MAX_RENDER_CELLS_PER_ROW=200：限单行宽度防 ZZZ... 列范围
+//   - 超限直接截断渲染 + 显示警告（不抛错让 UI 仍可见前 10K 行）
+const MAX_RENDER_ROWS = 10000;
+const MAX_RENDER_CELLS_PER_ROW = 200;
+
 /**
  * 把 ExcelJS Worksheet 渲染成 HTML table 字符串
  *
@@ -50,19 +64,41 @@ function escapeHtml(s: string): string {
  * 3. 对 cell 文本做 escapeHtml（防原始字符注入）
  * 4. 拼成 <table><tr><td>...</td></tr></table>
  * 5. 调用方需用 sanitizeUserHtml 再过一遍（双层防御）
+ *
+ * 安全 review M3：超过 MAX_RENDER_ROWS 行 / MAX_RENDER_CELLS_PER_ROW 列后截断；
+ * 在尾部追加截断提示 row 让用户感知，不抛错让 UI 仍可见前 N 行内容。
  */
 function worksheetToHtml(ws: ExcelJS.Worksheet): string {
   const rows: string[] = [];
+  let rowCount = 0;
+  let truncated = false;
+
   ws.eachRow({ includeEmpty: false }, (row) => {
+    if (rowCount >= MAX_RENDER_ROWS) {
+      truncated = true;
+      return;
+    }
     const cells: string[] = [];
+    let cellCount = 0;
     row.eachCell({ includeEmpty: true }, (cell) => {
+      if (cellCount >= MAX_RENDER_CELLS_PER_ROW) {
+        return;
+      }
       // cell.text: ExcelJS 内部 formula 求值后的字符串展示
       // null/undefined 兜底空串
       const text = cell.text ?? '';
       cells.push(`<td>${escapeHtml(String(text))}</td>`);
+      cellCount++;
     });
     rows.push(`<tr>${cells.join('')}</tr>`);
+    rowCount++;
   });
+
+  if (truncated) {
+    rows.push(
+      `<tr><td colspan="${MAX_RENDER_CELLS_PER_ROW}" style="background:#fff3cd;color:#856404;padding:8px;font-style:italic">已截断显示前 ${MAX_RENDER_ROWS} 行（防 webview OOM）</td></tr>`
+    );
+  }
   return `<table>${rows.join('')}</table>`;
 }
 
