@@ -274,3 +274,26 @@ func TestAuth_InactiveUserRejected(t *testing.T) {
 	_, _, _, err = env.svc.Login(context.Background(), env.username, env.password)
 	assert.ErrorIs(t, err, services.ErrUserInactive)
 }
+
+// ------------------------------------------------------------
+// finding #18: password_hash IS NULL 表示"尚未设置密码"，Login 必须拒登
+//              并返回 ErrPasswordNotSet，前端据此引导首次设置流程。
+//              0021 migration 把 0001 默认 admin 的 hash 置 NULL，
+//              防止公开仓库默认密码 admin/admin123 在生产部署被遗忘改密。
+// ------------------------------------------------------------
+
+func TestAuth_LoginRejectsNullPasswordHash(t *testing.T) {
+	env := setupAuthEnv(t)
+	defer env.cleanup()
+
+	// 把 seed 用户的 password_hash 置 NULL，模拟 0021 migration 后的 admin
+	_, err := env.pool.Exec(context.Background(),
+		`UPDATE users SET password_hash = NULL WHERE id = $1`, env.userID)
+	require.NoError(t, err)
+
+	// Login 必须返 ErrPasswordNotSet 而非 ErrInvalidCredentials
+	// 区分意义：前端拿到 password_not_set code 才能展示"请联系管理员首次设置"提示
+	_, _, _, err = env.svc.Login(context.Background(), env.username, "anything")
+	assert.ErrorIs(t, err, services.ErrPasswordNotSet,
+		"NULL password_hash 必须返 ErrPasswordNotSet，让前端识别首次设置场景")
+}

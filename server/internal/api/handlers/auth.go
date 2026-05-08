@@ -67,10 +67,20 @@ func NewAuthHandler(
 // 错误映射：
 //   - ErrInvalidCredentials → 401 unauthorized
 //   - ErrUserInactive       → 401 unauthorized（不暴露 active 状态防 enumeration）
+//   - ErrPasswordNotSet     → 401 unauthorized + 特定 message（finding #18 / 0021 migration）
+//                            前端按 message 中"首次设置"关键字识别并展示对应引导
 //   - 其它                  → 500 internal（由 ogen 默认 ErrorHandler 包裹）
+//
+// 注：password_not_set 没有走专用 ErrorEnvelopeErrorCode 是为了避免本 task 触发
+// OAS contract 扩展 + ogen regen + 前端 zod 同步。前端识别用 message 关键字即可。
 func (h *AuthHandler) AuthLogin(ctx context.Context, req *oas.AuthLoginRequest) (oas.AuthLoginRes, error) {
 	access, refresh, raw, err := h.Svc.Login(ctx, req.Username, req.Password)
 	if err != nil {
+		if errors.Is(err, services.ErrPasswordNotSet) {
+			// 用户存在但密码未设置（0021 migration 后的默认 admin）
+			// 前端识别"首次设置"关键字 → 展示"请联系运维 reseed 密码"
+			return unauthorizedLoginRes("管理员需要首次设置密码，请联系系统管理员"), nil
+		}
 		if errors.Is(err, services.ErrInvalidCredentials) || errors.Is(err, services.ErrUserInactive) {
 			return unauthorizedLoginRes("用户名或密码错误"), nil
 		}

@@ -103,9 +103,11 @@ func TestRouter_HandleBearerAuth_PermsDBErrorReturnsUnavailableSentinel(t *testi
 	defer tdb.Close()
 
 	authSvc := newTestAuthService(t, tdb.Pool)
-	// admin 用户已由 0001 migration 预置；用 admin/admin123 登录拿 access token
+	// admin 用户已由 0001 migration 预置；0021 把默认密码 hash 置 NULL，
+	// 测试侧需要 reseed 一个临时密码才能 Login 拿 token
 	const adminUsername = "admin"
-	const adminPassword = "admin123"
+	const adminPassword = "admin-test-pwd-123"
+	reseedAdminPassword(t, ctx, tdb.Pool, adminPassword)
 	access, _, _, err := authSvc.Login(ctx, adminUsername, adminPassword)
 	require.NoError(t, err)
 
@@ -131,7 +133,9 @@ func TestRouter_HandleBearerAuth_DeletedUserMapsToInvalidToken(t *testing.T) {
 	defer tdb.Close()
 
 	authSvc := newTestAuthService(t, tdb.Pool)
-	access, _, _, err := authSvc.Login(ctx, "admin", "admin123")
+	// 0021 把 0001 默认 admin 的 password_hash 置 NULL；测试需要 reseed 才能 Login
+	reseedAdminPassword(t, ctx, tdb.Pool, "admin-test-pwd-123")
+	access, _, _, err := authSvc.Login(ctx, "admin", "admin-test-pwd-123")
 	require.NoError(t, err)
 
 	// 模拟 token 校验后用户被删的竞态：eff.Compute 返 ErrUserNotFound
@@ -272,6 +276,23 @@ func buildC2TestRouter(t *testing.T, pool *pgxpool.Pool) http.Handler {
 	})
 	require.NoError(t, err)
 	return router
+}
+
+// reseedAdminPassword 把 0001 init 的 admin（其 password_hash 已被 0021 置 NULL）
+// 重新设置成传入的明文密码。仅供测试 setup 用。
+//
+// 业务背景：finding #18 / 0021 migration 把默认 admin/admin123 hash 置 NULL，
+// 所有依赖"用 admin 登录拿 token"的测试都需要先通过本 helper 重置。
+func reseedAdminPassword(t *testing.T, ctx context.Context, pool *pgxpool.Pool, password string) {
+	t.Helper()
+	hash, err := auth.HashPassword(password, bcrypt.MinCost)
+	require.NoError(t, err)
+	tag, err := pool.Exec(ctx, `
+		UPDATE users SET password_hash = $1, updated_at = NOW()
+		WHERE username = 'admin'
+	`, hash)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), tag.RowsAffected(), "admin 行未命中（0001 init 应已 seed）")
 }
 
 // loginAndGetAccess 走 POST /api/auth/login 拿 access token；调用方负责传入 username/password。
