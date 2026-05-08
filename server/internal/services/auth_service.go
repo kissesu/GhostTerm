@@ -138,8 +138,22 @@ var ErrInvalidCredentials = errors.New("invalid_credentials")
 // ErrUserInactive 用户被禁用，不允许登录。
 var ErrUserInactive = errors.New("user_inactive")
 
-// ErrInvalidRefreshToken refresh token 签名错 / 已过期 / 已被 rotate / 已被撤销。
+// ErrInvalidRefreshToken refresh token 签名错 / 完全无效（DB 中从未存在过）。
+//
+// 业务背景（finding #8 之后语义收窄）：
+//   - 仅用于 JWT 签名失败 / hash 在 DB 中从未入库的场景
+//   - "已被 rotate / 已被撤销"路径走 ErrRefreshTokenReused（详见下方）
 var ErrInvalidRefreshToken = errors.New("invalid_refresh_token")
+
+// ErrRefreshTokenReused refresh token 重用攻击检测（finding #8）。
+//
+// 业务背景：
+//   - 标准 refresh-token-rotation 设计：旧 token 第二次使用 = 已被偷
+//   - 触发后 0022 migration 的 rotate_refresh_token 会撤销该 user 全部
+//     refresh_tokens + bump users.token_version，让所有会话立即失效
+//   - handler 层翻译为 401 + refresh_token_reuse_detected message，
+//     前端识别后展示"安全告警 + 请重新登录"提示
+var ErrRefreshTokenReused = errors.New("refresh_token_reused")
 
 // ErrInvalidAccessToken access token 签名错 / 过期 / token_version 不匹配。
 var ErrInvalidAccessToken = errors.New("invalid_access_token")
@@ -265,6 +279,10 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (string,
 	}
 
 	// rotate_refresh_token(p_old_hash, p_new_hash, p_ttl) 返回 user_id 或 NULL
+	// NULL 有两种语义（finding #8 后由 0022 函数行为升级）：
+	//   1. active 命中失败 + 历史命中成功 = reuse 攻击：函数已撤销该 user 全部 token + bump token_version
+	//   2. 完全无效 hash（从未入库）：JWT 校验通过但 DB 无记录
+	// service 层用 isHistoricalToken 单独查询区分两种 NULL 场景
 	var rotatedUserID *int64
 	row := s.pool.QueryRow(ctx, `SELECT rotate_refresh_token($1, $2, $3)`,
 		oldHash, newHash, s.refreshTTL)
@@ -272,7 +290,10 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (string,
 		return "", "", fmt.Errorf("auth_service: rotate refresh: %w", err)
 	}
 	if rotatedUserID == nil {
-		// 旧 hash 已被 rotate / revoke / 不存在 → 重放或非法
+		// 区分 reuse 与 invalid：查 hash 是否在历史中存在过
+		if s.isHistoricalToken(ctx, oldHash) {
+			return "", "", ErrRefreshTokenReused
+		}
 		return "", "", ErrInvalidRefreshToken
 	}
 	if *rotatedUserID != claims.UserID {
@@ -292,6 +313,29 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (string,
 		return "", "", fmt.Errorf("auth_service: issue access: %w", err)
 	}
 	return access, newRefresh, nil
+}
+
+// isHistoricalToken 检查 hash 是否在 refresh_tokens 表中存在过任何记录（含 revoked / 过期）。
+//
+// 业务背景（finding #8）：
+//   - 0022 migration 的 rotate_refresh_token 在 reuse 检测路径返 NULL（同 invalid 路径）
+//   - service 层需要区分"已 rotate/revoke 的 token 重放"vs"完全没记录的 token"
+//   - 前者必须返 ErrRefreshTokenReused 让 handler 翻译成安全告警 message；
+//     后者返 ErrInvalidRefreshToken 是普通无效凭证
+//
+// 设计取舍：
+//   - 用 EXISTS 而不是 SELECT count(*) —— EXISTS 在命中第一行即返回，开销最小
+//   - 查询失败时返 false 让上游兜底走 invalid 路径（不阻塞用户登录）；
+//     真实 reuse 场景下 rotate 函数已完成全会话撤销，本查询失败不影响安全闭环
+func (s *authService) isHistoricalToken(ctx context.Context, hash []byte) bool {
+	var exists bool
+	err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM refresh_tokens WHERE token_hash = $1)`,
+		hash).Scan(&exists)
+	if err != nil {
+		return false
+	}
+	return exists
 }
 
 // ============================================================

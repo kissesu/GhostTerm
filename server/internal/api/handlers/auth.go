@@ -18,6 +18,8 @@ import (
 	"context"
 	"errors"
 
+	"github.com/go-faster/jx"
+
 	"github.com/ghostterm/progress-server/internal/api/middleware"
 	"github.com/ghostterm/progress-server/internal/api/oas"
 	"github.com/ghostterm/progress-server/internal/services"
@@ -107,11 +109,22 @@ func (h *AuthHandler) AuthLogin(ctx context.Context, req *oas.AuthLoginRequest) 
 // AuthRefresh 实现 POST /api/auth/refresh。
 //
 // 错误映射：
-//   - ErrInvalidRefreshToken → 401 unauthorized
+//   - ErrRefreshTokenReused  → 401 unauthorized + message 标记 reuse_detected（finding #8）
+//     此时后端已撤销该 user 全部 refresh_tokens + bump token_version；
+//     前端识别 reuse_detected 标记后展示"安全告警 + 请重新登录"提示
+//   - ErrInvalidRefreshToken → 401 unauthorized（普通无效凭证）
 //   - 其它                   → 500 internal
+//
+// 设计取舍：
+//   - 不新增 ErrorEnvelope.code 枚举（避免 OAS schema 抖动 + 重新生成 ogen）
+//   - 在 message 加固定前缀 + 用 details["reason"]="refresh_token_reused" 双通道传信号
+//     前端 fetcher 拦截 401 时优先看 details.reason，messsage 仅作 fallback 文案
 func (h *AuthHandler) AuthRefresh(ctx context.Context, req *oas.AuthRefreshRequest) (oas.AuthRefreshRes, error) {
 	access, newRefresh, err := h.Svc.Refresh(ctx, req.RefreshToken)
 	if err != nil {
+		if errors.Is(err, services.ErrRefreshTokenReused) {
+			return refreshTokenReusedEnvelope(), nil
+		}
 		if errors.Is(err, services.ErrInvalidRefreshToken) {
 			return unauthorizedErrorEnvelope("refresh token 无效或已过期"), nil
 		}
@@ -362,6 +375,26 @@ func unauthorizedLoginRes(msg string) *oas.AuthLoginUnauthorized {
 // unauthorizedErrorEnvelope 构造通用 401 ErrorEnvelope（通用 res 类型，用于 refresh/logout/getMe）。
 func unauthorizedErrorEnvelope(msg string) *oas.ErrorEnvelope {
 	e := newErrorEnvelope(oas.ErrorEnvelopeErrorCodeUnauthorized, msg)
+	return &e
+}
+
+// refreshTokenReusedEnvelope 构造 refresh token reuse 检测专用 401 envelope（finding #8）。
+//
+// 业务背景：
+//   - 此时后端 rotate_refresh_token 已撤销该 user 全部 refresh_tokens + bump token_version
+//   - 前端识别 details.reason="refresh_token_reused" 后必须强制重登 + 展示安全告警
+//   - code 仍走 unauthorized（OAS 枚举）保持向后兼容；reason 通过 details 双通道下发
+func refreshTokenReusedEnvelope() *oas.ErrorEnvelope {
+	details := oas.ErrorEnvelopeErrorDetails{
+		"reason": jx.Raw(`"refresh_token_reused"`),
+	}
+	e := oas.ErrorEnvelope{
+		Error: oas.ErrorEnvelopeError{
+			Code:    oas.ErrorEnvelopeErrorCodeUnauthorized,
+			Message: "检测到 refresh token 重用，已撤销全部会话，请重新登录",
+			Details: oas.NewOptNilErrorEnvelopeErrorDetails(details),
+		},
+	}
 	return &e
 }
 
