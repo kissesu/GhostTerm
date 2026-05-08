@@ -107,12 +107,16 @@ type UserService interface {
 type userService struct {
 	pool       *pgxpool.Pool
 	bcryptCost int
+	// audit 记录创建用户 / 角色变更 / 禁用用户三类敏感写；nil-safe（测试可省）
+	audit *AuditService
 }
 
 // UserServiceDeps 依赖注入。
 type UserServiceDeps struct {
 	Pool       *pgxpool.Pool
 	BcryptCost int
+	// Audit (可选) 安全审计服务，注入后 Create / Update(role变更/disable) 写 security_audit_log
+	Audit *AuditService
 }
 
 // 编译时校验
@@ -126,7 +130,7 @@ func NewUserService(deps UserServiceDeps) (UserService, error) {
 	if deps.BcryptCost < 4 {
 		return nil, errors.New("user_service: bcrypt cost too low (min 4)")
 	}
-	return &userService{pool: deps.Pool, bcryptCost: deps.BcryptCost}, nil
+	return &userService{pool: deps.Pool, bcryptCost: deps.BcryptCost, audit: deps.Audit}, nil
 }
 
 // ----------------------------------------------------------
@@ -200,6 +204,26 @@ func (s *userService) Create(ctx context.Context, in UserCreateInput) (UserView,
 		}
 		return UserView{}, fmt.Errorf("user_service: insert user: %w", err)
 	}
+
+	// 审计：用户创建（actor 是当前会话超管，target 是新用户）
+	md, _ := RequestMetadataFrom(ctx)
+	var actorID *int64
+	if ac, ok := AuthContextFrom(ctx); ok {
+		uid := ac.UserID
+		actorID = &uid
+	}
+	targetID := u.ID
+	_ = s.audit.Log(ctx, AuditEvent{
+		EventType:    AuditEventUserCreated,
+		UserID:       actorID,
+		TargetUserID: &targetID,
+		ClientIP:     md.ClientIP,
+		UserAgent:    md.UserAgent,
+		Metadata: map[string]any{
+			"username": u.Username,
+			"role_id":  u.RoleID,
+		},
+	})
 	return u, nil
 }
 
@@ -326,6 +350,40 @@ func (s *userService) Update(ctx context.Context, id int64, in UserUpdateInput) 
 	if err := tx.Commit(ctx); err != nil {
 		return UserView{}, fmt.Errorf("user_service: commit: %w", err)
 	}
+
+	// 审计：commit 后写入；失败 commit 不应记录"已生效"事件
+	// 仅在敏感字段实际变更时写审计：role 变更 / 禁用账号
+	md, _ := RequestMetadataFrom(ctx)
+	var actorID *int64
+	if ac, ok := AuthContextFrom(ctx); ok {
+		uid := ac.UserID
+		actorID = &uid
+	}
+	targetID := updated.ID
+	if in.RoleID != nil && *in.RoleID != existing.RoleID {
+		_ = s.audit.Log(ctx, AuditEvent{
+			EventType:    AuditEventRoleChanged,
+			UserID:       actorID,
+			TargetUserID: &targetID,
+			ClientIP:     md.ClientIP,
+			UserAgent:    md.UserAgent,
+			Metadata: map[string]any{
+				"old_role_id": existing.RoleID,
+				"new_role_id": updated.RoleID,
+				"username":    updated.Username,
+			},
+		})
+	}
+	if in.IsActive != nil && !*in.IsActive && existing.IsActive {
+		_ = s.audit.Log(ctx, AuditEvent{
+			EventType:    AuditEventUserDisabled,
+			UserID:       actorID,
+			TargetUserID: &targetID,
+			ClientIP:     md.ClientIP,
+			UserAgent:    md.UserAgent,
+			Metadata:     map[string]any{"username": updated.Username},
+		})
+	}
 	return updated, nil
 }
 
@@ -367,6 +425,23 @@ func (s *userService) Delete(ctx context.Context, id int64) error {
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("user_service: commit delete: %w", err)
 	}
+
+	// 审计：软删除 = 禁用账号；与 Update(is_active=false) 路径同事件类型
+	md, _ := RequestMetadataFrom(ctx)
+	var actorID *int64
+	if ac, ok := AuthContextFrom(ctx); ok {
+		uid := ac.UserID
+		actorID = &uid
+	}
+	targetID := id
+	_ = s.audit.Log(ctx, AuditEvent{
+		EventType:    AuditEventUserDisabled,
+		UserID:       actorID,
+		TargetUserID: &targetID,
+		ClientIP:     md.ClientIP,
+		UserAgent:    md.UserAgent,
+		Metadata:     map[string]any{"via": "soft_delete"},
+	})
 	return nil
 }
 

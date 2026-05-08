@@ -455,6 +455,13 @@ type RouterDeps struct {
 	// payload；router 装配 ActivityService 时把 cipher forward 进去。
 	// 缺失即启动期 error，避免运行时 nil deref。
 	Cipher *services.CipherService
+
+	// Audit 是安全审计 service（finding #20）。
+	//
+	// 业务背景：router 把 audit forward 给 PermissionsService（super_admin_action
+	// 事件写入需要）；其它 service 已在 main.go 通过 deps 注入。
+	// 缺失即启动期 error，避免审计 trail 不完整。
+	Audit *services.AuditService
 }
 
 // NewRouter 装配 chi 基础中间件 + ogen 生成的 OpenAPI server。
@@ -500,6 +507,9 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	}
 	if deps.Cipher == nil {
 		return nil, errors.New("router: Cipher is required")
+	}
+	if deps.Audit == nil {
+		return nil, errors.New("router: Audit is required")
 	}
 	r := chi.NewRouter()
 
@@ -582,7 +592,8 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	// 装配 worker A-F 的 handler
 	// ============================================================
 	// Task 7/8 effSvc 提前构造，让 AuthHandler 也能注入（替代旧 RBAC.LoadUserPermissions）
-	permsSvc := services.NewPermissionsService(deps.Pool)
+	// finding #20：用 NewPermissionsServiceWithAudit 让 super_admin_action 事件写审计
+	permsSvc := services.NewPermissionsServiceWithAudit(deps.Pool, deps.Audit)
 	effSvc := services.NewEffectivePermissionsService(deps.Pool)
 
 	authHandler := handlers.NewAuthHandler(deps.AuthService, deps.RBACService, effSvc)

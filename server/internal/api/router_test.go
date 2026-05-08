@@ -259,6 +259,8 @@ func buildC2TestRouter(t *testing.T, pool *pgxpool.Pool, allowedOrigins ...strin
 	require.NoError(t, err)
 	cipher, err := services.NewCipherService(pool, []byte(testutil.TestCipherKey))
 	require.NoError(t, err)
+	auditSvc, err := services.NewAuditService(pool)
+	require.NoError(t, err)
 	feedbackSvc, err := services.NewFeedbackService(services.FeedbackServiceDeps{Pool: pool, NotificationService: notifSvc, Cipher: cipher})
 	require.NoError(t, err)
 	quoteSvc, err := services.NewQuoteService(pool)
@@ -280,6 +282,7 @@ func buildC2TestRouter(t *testing.T, pool *pgxpool.Pool, allowedOrigins ...strin
 		WSHub:               wsHub,
 		AllowedOrigins:      allowedOrigins,
 		Cipher:              cipher,
+		Audit:               auditSvc,
 	})
 	require.NoError(t, err)
 	return router

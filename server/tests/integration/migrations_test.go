@@ -46,8 +46,8 @@ func TestMigrations_FunctionsCount(t *testing.T) {
 		  )
 	`).Scan(&count)
 	require.NoError(t, err)
-	assert.Equal(t, 11, count,
-		"应有 4 个 RLS 辅助 + 3 个 SECURITY DEFINER + 3 个 0007 super_admin trigger + 0019 issue_refresh_token = 11 函数")
+	assert.Equal(t, 12, count,
+		"应有 4 个 RLS 辅助 + 3 个 SECURITY DEFINER + 3 个 0007 super_admin trigger + 0019 issue_refresh_token + 0027 audit append-only trigger = 12 函数")
 }
 
 func TestMigrations_SystemRolesSeeded(t *testing.T) {

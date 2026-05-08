@@ -235,6 +235,9 @@ type FileServiceDeps struct {
 	Pool         *pgxpool.Pool
 	StoragePath  string // 绝对路径根目录；启动时 MkdirAll 确保存在
 	MaxSizeBytes int64  // 单文件大小上限（字节）
+	// Audit (可选) 安全审计服务，注入后 Download 路径写 security_audit_log；
+	// 测试 fixture 可省略，AuditService.Log 自带 nil 短路。
+	Audit *AuditService
 }
 
 // fileService 是 FileService 的具体实现。
@@ -242,6 +245,7 @@ type fileService struct {
 	pool         *pgxpool.Pool
 	storageRoot  string // 已规范化（filepath.Abs + Clean）
 	maxSizeBytes int64
+	audit        *AuditService
 }
 
 // 编译时校验
@@ -275,6 +279,7 @@ func NewFileService(deps FileServiceDeps) (FileService, error) {
 		pool:         deps.Pool,
 		storageRoot:  abs,
 		maxSizeBytes: deps.MaxSizeBytes,
+		audit:        deps.Audit,
 	}, nil
 }
 
@@ -627,6 +632,22 @@ func (s *fileService) Download(
 		}
 		return "", "", 0, nil, fmt.Errorf("file_service: open file: %w", err)
 	}
+
+	// 审计：文件下载（鉴权 + RLS 已通过）；记录下载者 + file_id + filename
+	// 便于事后追溯"谁下载了什么文件"，配合 client_ip / user_agent 识别异常下载行为
+	md, _ := RequestMetadataFrom(ctx)
+	uid := ac.UserID
+	_ = s.audit.Log(ctx, AuditEvent{
+		EventType: AuditEventFileDownloaded,
+		UserID:    &uid,
+		ClientIP:  md.ClientIP,
+		UserAgent: md.UserAgent,
+		Metadata: map[string]any{
+			"file_id":    view.ID,
+			"filename":   view.Filename,
+			"size_bytes": view.SizeBytes,
+		},
+	})
 	return view.Filename, view.MimeType, view.SizeBytes, f, nil
 }
 

@@ -118,15 +118,27 @@ type PermissionsService interface {
 
 // permissionsService 是 PermissionsService 的具体实现。
 type permissionsService struct {
-	pool *pgxpool.Pool
+	pool  *pgxpool.Pool
+	audit *AuditService
 }
 
 // 编译时校验
 var _ PermissionsService = (*permissionsService)(nil)
 
-// NewPermissionsService 构造 PermissionsService。
+// NewPermissionsService 构造 PermissionsService（兼容旧 API，audit 可后注入）。
+//
+// 为不破坏现有调用方（router 已在用 NewPermissionsService(pool)），保留单参数构造；
+// 生产由 main.go 调 NewPermissionsServiceWithAudit 注入审计 service。
 func NewPermissionsService(pool *pgxpool.Pool) PermissionsService {
 	return &permissionsService{pool: pool}
+}
+
+// NewPermissionsServiceWithAudit 构造带审计的 PermissionsService。
+//
+// 业务背景（finding #20）：role/user 权限变更是高敏感操作，
+// 注入 audit 后 UpdateRolePermissions / UpdateUserOverrides 写 super_admin_action 事件。
+func NewPermissionsServiceWithAudit(pool *pgxpool.Pool, audit *AuditService) PermissionsService {
+	return &permissionsService{pool: pool, audit: audit}
 }
 
 // ----------------------------------------------------------
@@ -181,7 +193,7 @@ func (s *permissionsService) UpdateRolePermissions(ctx context.Context, roleID i
 	}
 
 	// 3. 事务：DELETE 旧 + INSERT 新 + bump token_version
-	return progressdb.InTx(ctx, s.pool, func(tx pgx.Tx) error {
+	if err := progressdb.InTx(ctx, s.pool, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `DELETE FROM role_permissions WHERE role_id = $1`, roleID); err != nil {
 			return fmt.Errorf("permissions: delete role permissions: %w", err)
 		}
@@ -213,7 +225,26 @@ func (s *permissionsService) UpdateRolePermissions(ctx context.Context, roleID i
 			return fmt.Errorf("permissions: bump token_version for role users: %w", err)
 		}
 		return nil
+	}); err != nil {
+		return err
+	}
+
+	// 审计：role 权限批量替换是超管动作（高敏感），actorID 来自 caller（router 已校验超管身份）
+	md, _ := RequestMetadataFrom(ctx)
+	actor := actorID
+	_ = s.audit.Log(ctx, AuditEvent{
+		EventType: AuditEventSuperAdminAction,
+		UserID:    &actor,
+		ClientIP:  md.ClientIP,
+		UserAgent: md.UserAgent,
+		Metadata: map[string]any{
+			"action":             "update_role_permissions",
+			"role_id":            roleID,
+			"permission_count":   len(permissionIDs),
+			"new_permission_ids": permissionIDs,
+		},
 	})
+	return nil
 }
 
 // ----------------------------------------------------------
@@ -284,7 +315,7 @@ func (s *permissionsService) UpdateUserOverrides(ctx context.Context, userID int
 	}
 
 	// 4. 事务：DELETE 旧 + INSERT 新 + bump token_version
-	return progressdb.InTx(ctx, s.pool, func(tx pgx.Tx) error {
+	if err := progressdb.InTx(ctx, s.pool, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `DELETE FROM user_permissions WHERE user_id = $1`, userID); err != nil {
 			return fmt.Errorf("permissions: delete user overrides: %w", err)
 		}
@@ -316,5 +347,25 @@ func (s *permissionsService) UpdateUserOverrides(ctx context.Context, userID int
 			return fmt.Errorf("permissions: bump token_version for user: %w", err)
 		}
 		return nil
+	}); err != nil {
+		return err
+	}
+
+	// 审计：user 权限覆写是超管动作；actor / target / overrides 全记录便于追溯
+	md, _ := RequestMetadataFrom(ctx)
+	actor := actorID
+	target := userID
+	_ = s.audit.Log(ctx, AuditEvent{
+		EventType:    AuditEventSuperAdminAction,
+		UserID:       &actor,
+		TargetUserID: &target,
+		ClientIP:     md.ClientIP,
+		UserAgent:    md.UserAgent,
+		Metadata: map[string]any{
+			"action":         "update_user_overrides",
+			"target_user_id": userID,
+			"override_count": len(overrides),
+		},
 	})
+	return nil
 }

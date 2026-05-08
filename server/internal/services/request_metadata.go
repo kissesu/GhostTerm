@@ -70,3 +70,42 @@ func NullableIP(ip string) any {
 	}
 	return ip
 }
+
+// ============================================================
+// AuthContext ctx 注入 / 读取 helper（finding #20 audit 需要在 service 层读 actor）
+// ============================================================
+//
+// 业务背景：原本 AuthContext 的 ctx key 维护在 middleware 包内部（authCtxKey），
+// 但 user_service / file_service 审计写入需要 actor 的 UserID / RoleID，
+// 不能反向 import middleware（middleware 已 import services 单向依赖）。
+// 解决：把 ctx key 移到 services 包，middleware 写入时调 services.WithAuthContext。
+//
+// 与 middleware.UserIDKey / RoleIDKey 的关系：那两个是单值便利 key 给 chi handler
+// 直接读 user_id / role_id 用，仍保留在 middleware 包；本 key 是结构体级 AuthContext。
+
+// authContextKey 是私有 ctx key 类型。unexported struct{} 保证跨包零冲突。
+type authContextKey struct{}
+
+// AuthContextFrom 从 ctx 取出 AuthContext；不存在返回零值 + false。
+//
+// 业务用法：
+//
+//	if ac, ok := services.AuthContextFrom(ctx); ok {
+//	    audit.Log(ctx, AuditEvent{UserID: &ac.UserID, ...})
+//	}
+func AuthContextFrom(ctx context.Context) (AuthContext, bool) {
+	v := ctx.Value(authContextKey{})
+	if v == nil {
+		return AuthContext{}, false
+	}
+	ac, ok := v.(AuthContext)
+	return ac, ok
+}
+
+// WithAuthContext 把 AuthContext 写入 ctx；中间件 + 测试统一调用此函数。
+//
+// middleware.WithAuthContext 内部 forward 调用本函数 + 自己再写
+// UserIDKey / RoleIDKey 两个便利 key（兼容现有 chi handler 调用）。
+func WithAuthContext(ctx context.Context, ac AuthContext) context.Context {
+	return context.WithValue(ctx, authContextKey{}, ac)
+}
