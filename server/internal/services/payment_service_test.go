@@ -244,8 +244,8 @@ func TestPaymentService_List_RejectsInvalidSessionContext(t *testing.T) {
 
 func TestMoney_SignBoundary(t *testing.T) {
 	cases := []struct {
-		s         string
-		wantSign  int // -1, 0, 1
+		s        string
+		wantSign int // -1, 0, 1
 	}{
 		{"0", 0},
 		{"0.00", 0},

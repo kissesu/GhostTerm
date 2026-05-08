@@ -37,14 +37,14 @@ import (
 
 // paymentTestEnv 装配 payment 集成测试所需资源。
 type paymentTestEnv struct {
-	pool       *pgxpool.Pool
-	cleanup    func()
-	svc        services.PaymentService
-	adminID    int64
-	dev1ID     int64
-	dev2ID     int64
-	csID       int64
-	projectID  int64
+	pool      *pgxpool.Pool
+	cleanup   func()
+	svc       services.PaymentService
+	adminID   int64
+	dev1ID    int64
+	dev2ID    int64
+	csID      int64
+	projectID int64
 	// 一个 dummy file 行，给 dev_settlement 的 screenshot_id 引用（DB 有 FK 到 files）
 	screenshotFileID int64
 }

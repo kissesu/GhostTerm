@@ -28,14 +28,14 @@ import (
 // AuthHandler 实现 ogen 生成的 oas.Handler 中与 auth 相关的 5 个方法。
 //
 // 业务背景：
-// - ogen 把所有 endpoint 都收敛到一个 Handler 接口；其它 phase 的 worker 也会
-//   往同一个 oasHandler 上挂方法。本 struct 单独负责 auth 部分，由 router.go
-//   的 oasHandler "组合"（嵌入）进来
+//   - ogen 把所有 endpoint 都收敛到一个 Handler 接口；其它 phase 的 worker 也会
+//     往同一个 oasHandler 上挂方法。本 struct 单独负责 auth 部分，由 router.go
+//     的 oasHandler "组合"（嵌入）进来
 //
 // 字段：
-// - Svc：认证 service
-// - RBAC：权限 service（Phase 3 加入），AuthGetMe 拉用户时附带 permission 码列表
-//   返回前端，用于 PermissionGate 的 UI 守卫
+//   - Svc：认证 service
+//   - RBAC：权限 service（Phase 3 加入），AuthGetMe 拉用户时附带 permission 码列表
+//     返回前端，用于 PermissionGate 的 UI 守卫
 type AuthHandler struct {
 	Svc  services.AuthService
 	RBAC services.RBACService
@@ -70,7 +70,7 @@ func NewAuthHandler(
 //   - ErrInvalidCredentials → 401 unauthorized
 //   - ErrUserInactive       → 401 unauthorized（不暴露 active 状态防 enumeration）
 //   - ErrPasswordNotSet     → 401 unauthorized + 特定 message（finding #18 / 0021 migration）
-//                            前端按 message 中"首次设置"关键字识别并展示对应引导
+//     前端按 message 中"首次设置"关键字识别并展示对应引导
 //   - 其它                  → 500 internal（由 ogen 默认 ErrorHandler 包裹）
 //
 // 注：password_not_set 没有走专用 ErrorEnvelopeErrorCode 是为了避免本 task 触发
@@ -406,4 +406,3 @@ func newErrorEnvelope(code oas.ErrorEnvelopeErrorCode, msg string) oas.ErrorEnve
 		},
 	}
 }
-

@@ -158,7 +158,7 @@ type ExecuteResult struct {
 //  3. 计算新 (status, holder_role, holder_user)：
 //     - 大多数事件直接取 transition.To / ToHolderRole
 //     - 新 holder_user_id：caller 传 NewHolderUserID 优先；否则保留 project.HolderUserID
-//       （E12 终态强制清空；E13 由快照决定）
+//     （E12 终态强制清空；E13 由快照决定）
 //     - E13 特殊：从 status_change_logs 读最近一次 E12 的 from_* 还原
 //  4. applyStateChange：W9 白名单 + 9 个显式 case 动态选 SQL
 //  5. INSERT status_change_logs（含完整 from_* / to_* 快照，C4 要求）

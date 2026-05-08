@@ -309,4 +309,3 @@ func rolesGetPermsNotFound(msg string) *oas.RolesGetPermissionsNotFound {
 	res := oas.RolesGetPermissionsNotFound(e)
 	return &res
 }
-

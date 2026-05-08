@@ -98,6 +98,7 @@ func insertUserPerm(t *testing.T, ctx context.Context, pool *pgxpool.Pool, userI
 //   - nav AND scope IN ('work','progress')          → 2 条 (nav:view:work, nav:view:progress)
 //   - resource='progress' 且 NOT delete            → 13 条
 //   - users AND action='list'                       → 1 条 (users:list:all)
+//
 // 0024_feedback_perm_update 又给 dev 新增 progress:feedback:update 1 条 → 合计 17 条。
 //
 // 注（2026-05-04 deprecation）：`progress:event:trigger` 自 0020 删 AllowedRoleIDs 双层守门后

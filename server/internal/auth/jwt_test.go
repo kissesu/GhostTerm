@@ -93,7 +93,7 @@ func TestVerifyAccess_TamperedSignature(t *testing.T) {
 // 防算法混淆：哪怕 secret 配对正确，alg=none 也必须拒绝。
 func TestVerifyAccess_RejectAlgNone(t *testing.T) {
 	claims := &AccessClaims{
-		UserID:       1,
+		UserID: 1,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   "1",
 			Issuer:    Issuer,

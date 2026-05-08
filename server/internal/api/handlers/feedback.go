@@ -57,9 +57,9 @@ const (
 // finding #16 修复后字段：
 //   - Svc：FeedbackService 业务实现（不变）
 //   - RBAC：保留 RBACService 引用以兼容老接口（CanTriggerEvent 等暂未迁移路径），
-//          但权限码校验不再走它，改走 effectivePerms（读 user_permissions 覆写表）
+//     但权限码校验不再走它，改走 effectivePerms（读 user_permissions 覆写表）
 //   - effectivePerms：用于在测试 / 兼容场景手动算 effective perms；
-//                    生产路径走 ctx 中已预填的 perms（oasSecurityHandler 在鉴权时填好）
+//     生产路径走 ctx 中已预填的 perms（oasSecurityHandler 在鉴权时填好）
 type FeedbackHandler struct {
 	Svc            services.FeedbackService
 	RBAC           services.RBACService

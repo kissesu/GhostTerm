@@ -43,17 +43,17 @@ const minJWTSecretLen = 32
 //     - FileMaxSizeMB：100（spec §6.6 单文件 100MB 上限）
 type Config struct {
 	// Required —— 启动期 fail-fast
-	DBURL             string
-	JWTAccessSecret   []byte
-	JWTRefreshSecret  []byte
+	DBURL            string
+	JWTAccessSecret  []byte
+	JWTRefreshSecret []byte
 
 	// Optional with defaults
-	HTTPAddr         string
-	JWTAccessTTL     time.Duration
-	JWTRefreshTTL    time.Duration
-	BcryptCost       int
-	FileStoragePath  string
-	FileMaxSizeMB    int
+	HTTPAddr        string
+	JWTAccessTTL    time.Duration
+	JWTRefreshTTL   time.Duration
+	BcryptCost      int
+	FileStoragePath string
+	FileMaxSizeMB   int
 
 	// 速率限制（v2 安全审计 finding #7：5 人自用 username 高度可枚举，
 	// 公网 8080 任意人无限调登录，bcrypt cost 12 仍可被分布式 botnet 暴破）。

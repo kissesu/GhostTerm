@@ -393,7 +393,7 @@ func (s *feedbackService) Create(ctx context.Context, sc SessionContext, project
 //  1. 校验 sc + status 在白名单
 //  2. 事务内 SET LOCAL GUC + UPDATE feedbacks SET status=$1 WHERE id=$2 RETURNING 全字段
 //     —— RLS 策略 feedbacks_all 的 USING + WITH CHECK 双重把关，
-//        非成员的 UPDATE 既找不到行也写不进去
+//     非成员的 UPDATE 既找不到行也写不进去
 //  3. 若 RETURNING 0 行 → 反馈不存在或无权 → ErrFeedbackNotFound
 //  4. 重新 SELECT 附件拼装返回（保持输出一致）
 //

@@ -105,10 +105,10 @@ func TestUpdateStatus_InvalidStatus(t *testing.T) {
 
 	cases := []string{
 		"",
-		"open",        // 不存在的旧枚举
-		"closed",      // 不存在
-		"PENDING",     // 大小写敏感
-		"done; DROP",  // 注入
+		"open",       // 不存在的旧枚举
+		"closed",     // 不存在
+		"PENDING",    // 大小写敏感
+		"done; DROP", // 注入
 	}
 	for _, st := range cases {
 		_, err := svc.UpdateStatus(context.Background(),

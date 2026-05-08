@@ -47,22 +47,22 @@ import (
 //   - NewHolderUserID 来自 statemachine 计算结果（事件后的持球者）
 //   - Remark 来自 caller（事件备注，部分事件文案会引用）
 type NotifyContext struct {
-	ProjectID         int64
-	ProjectName       string
-	ProjectDeadline   time.Time
-	OriginalQuote     progressdb.Money
-	CurrentQuote      progressdb.Money
-	AfterSalesTotal   progressdb.Money
-	TotalReceived     progressdb.Money
-	ActorUserID       int64
-	ActorDisplayName  string
-	ActorRoleID       int64
-	CreatorUserID     int64        // project.created_by；恒为客服
-	CreatorName       string       // 创建者 display_name（用于"客服 X"文案）
-	DeveloperUserIDs  []int64      // 项目对接的全体开发 user_id
-	HolderUserID      *int64       // 当前（事件前）持球者
-	NewHolderUserID   *int64       // 事件后持球者（statemachine.Execute 返回）
-	Remark            string
+	ProjectID        int64
+	ProjectName      string
+	ProjectDeadline  time.Time
+	OriginalQuote    progressdb.Money
+	CurrentQuote     progressdb.Money
+	AfterSalesTotal  progressdb.Money
+	TotalReceived    progressdb.Money
+	ActorUserID      int64
+	ActorDisplayName string
+	ActorRoleID      int64
+	CreatorUserID    int64   // project.created_by；恒为客服
+	CreatorName      string  // 创建者 display_name（用于"客服 X"文案）
+	DeveloperUserIDs []int64 // 项目对接的全体开发 user_id
+	HolderUserID     *int64  // 当前（事件前）持球者
+	NewHolderUserID  *int64  // 事件后持球者（statemachine.Execute 返回）
+	Remark           string
 }
 
 // NotifyTemplate 描述一个事件的通知文案 + 接收者计算策略。
@@ -348,7 +348,7 @@ var _ = roleLabel
 // 业务背景：
 //   - statemachine 不持有项目业务字段（金额/截止日/创建者）
 //   - 通知模板需要 project.name / deadline / current_quote / created_by
-//     + 创建者 display_name + 触发者 display_name + 全体对接开发 user_ids
+//   - 创建者 display_name + 触发者 display_name + 全体对接开发 user_ids
 //   - 一次 SQL 拿全（用 jsonb_agg 聚合 developer_ids），减少 round-trip
 //
 // 返回 NotifyContext 已填充除 NewHolderUserID 外的全部字段。

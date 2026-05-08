@@ -53,8 +53,8 @@ const (
 //   - To:              后置 status
 //   - ToHolderRole:    后置持球者角色；nil 表示"清空持球者"（终态 archived/cancelled）
 //   - EnterTSColumn:   后置状态对应的 *_at 时间戳列名（W9 白名单），
-//                      用于 applyStateChange 选择哪条静态 SQL；
-//                      空串表示"不更新任何 enter ts"（如 E10/E11 仅 logs，不变状态）
+//     用于 applyStateChange 选择哪条静态 SQL；
+//     空串表示"不更新任何 enter ts"（如 E10/E11 仅 logs，不变状态）
 //   - Description:     中文事件名（写入 status_change_logs.event_name）
 //   - RequiresRemark:  是否要求 remark 必填（spec §6.2 全部为 true）
 //

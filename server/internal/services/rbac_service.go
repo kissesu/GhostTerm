@@ -351,4 +351,3 @@ func (s *rbacService) LoadUserPermissions(ctx context.Context, roleID int64) (ma
 	}
 	return out, nil
 }
-

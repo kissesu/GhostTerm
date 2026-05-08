@@ -265,9 +265,9 @@ type QuoteChangeService interface {
 // PaymentService 收款与开发结算记录。
 //
 // 实现要点（spec §4.1 + v2 part2 §W3）：
-// - direction=customer_in：累加 projects.total_received
-// - direction=dev_settlement：必须 related_user_id + screenshot_id（DB CHECK 约束已保护）
-//   commit 后给 related_user 发 settlement_received 通知
+//   - direction=customer_in：累加 projects.total_received
+//   - direction=dev_settlement：必须 related_user_id + screenshot_id（DB CHECK 约束已保护）
+//     commit 后给 related_user 发 settlement_received 通知
 type PaymentService interface {
 	List(ctx context.Context, sc SessionContext, projectID int64) ([]any, error)
 	Create(ctx context.Context, sc SessionContext, projectID int64, input any) (any, error)
@@ -283,11 +283,11 @@ type PaymentService interface {
 // NotificationService 通知 outbox 事务化写入 + 异步推送。
 //
 // 实现要点（v2 part2 §W3）：
-// - Create 接受 tx 参数，与业务操作同事务（避免业务成功但通知丢失）
-//   tx 内调 insert_notification_secure SECURITY DEFINER 函数（migration 0002 §insert_notification_secure），
-//   不允许业务层 raw INSERT 绕过权限校验
-// - Outbox worker 周期扫描 delivered_at IS NULL 的记录，调用 WSHub.Broadcast 推送
-// - 推送成功后 UPDATE delivered_at；用户离线时通知保留待下次连接拉取
+//   - Create 接受 tx 参数，与业务操作同事务（避免业务成功但通知丢失）
+//     tx 内调 insert_notification_secure SECURITY DEFINER 函数（migration 0002 §insert_notification_secure），
+//     不允许业务层 raw INSERT 绕过权限校验
+//   - Outbox worker 周期扫描 delivered_at IS NULL 的记录，调用 WSHub.Broadcast 推送
+//   - 推送成功后 UPDATE delivered_at；用户离线时通知保留待下次连接拉取
 type NotificationService interface {
 	// Create 同事务写入通知；调用 insert_notification_secure SECURITY DEFINER 函数。
 	// projectID 可为 nil（系统级通知，如 settlement_received 不必关联 project）。
@@ -321,8 +321,8 @@ type NotificationService interface {
 type Notification struct {
 	ID          int64
 	UserID      int64
-	Type        string  // notification_type enum 字符串
-	ProjectID   *int64  // 可为 nil
+	Type        string // notification_type enum 字符串
+	ProjectID   *int64 // 可为 nil
 	Title       string
 	Body        string
 	IsRead      bool

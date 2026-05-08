@@ -333,4 +333,3 @@ func validateQuoteInput(in *QuoteChangeInput) error {
 	}
 	return nil
 }
-

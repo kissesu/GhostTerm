@@ -31,9 +31,9 @@ import (
 // AuthContext 是中间件解析 access token 后注入到 request context 的会话信息。
 //
 // 业务背景：
-// - 后续 RBAC / 业务 service 都从 context 拿这个结构判断身份
-// - TokenVersion 不出现在这里 —— 一旦中间件校验通过，token 已与 DB 一致；
-//   service 层不需要再次比对
+//   - 后续 RBAC / 业务 service 都从 context 拿这个结构判断身份
+//   - TokenVersion 不出现在这里 —— 一旦中间件校验通过，token 已与 DB 一致；
+//     service 层不需要再次比对
 type AuthContext struct {
 	UserID int64
 	RoleID int64
@@ -83,13 +83,13 @@ type authService struct {
 // 业务背景：拒绝在构造器里硬塞 *config.Config，因为 services 包语义上只关心
 // "我需要哪些配置"，不关心 config 怎么读取的；这样后续替换 config 源（vault / consul）零侵入。
 type AuthServiceDeps struct {
-	Pool             *pgxpool.Pool
-	AccessSecret     []byte
-	RefreshSecret    []byte
-	AccessTTL        time.Duration
-	RefreshTTL       time.Duration
-	BcryptCost       int
-	WSTicketTTL      time.Duration // 默认 30s（spec §3.5），调用方不传时本文件兜底
+	Pool          *pgxpool.Pool
+	AccessSecret  []byte
+	RefreshSecret []byte
+	AccessTTL     time.Duration
+	RefreshTTL    time.Duration
+	BcryptCost    int
+	WSTicketTTL   time.Duration // 默认 30s（spec §3.5），调用方不传时本文件兜底
 }
 
 // 编译时校验：authService 必须满足 AuthService interface
@@ -263,7 +263,8 @@ func (s *authService) Login(ctx context.Context, username, password string) (str
 //
 // 此前 v1 版本只返 access 不返 refresh，导致 client 二次 refresh 必失败
 // （root cause: 浏览器刷新 + StrictMode 双 mount 让 verify() 并发调 refresh 二次，
-//  第二次用已 revoked 的旧 token → 401 → 用户被误展 NoPermissionFallback）
+//
+//	第二次用已 revoked 的旧 token → 401 → 用户被误展 NoPermissionFallback）
 func (s *authService) Refresh(ctx context.Context, refreshToken string) (string, string, error) {
 	claims, err := auth.VerifyRefreshToken(refreshToken, s.refreshSec)
 	if err != nil {

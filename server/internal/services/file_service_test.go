@@ -27,11 +27,11 @@ import (
 
 func TestSanitizeFilename_HappyPath(t *testing.T) {
 	cases := map[string]string{
-		"report.pdf":              "report.pdf",
-		"中文文件名.docx":              "中文文件名.docx",
-		"v2 final.zip":            "v2 final.zip",
-		"a-b_c.tar.gz":            "a-b_c.tar.gz",
-		"thesis-v3 (final).docx":  "thesis-v3 (final).docx",
+		"report.pdf":             "report.pdf",
+		"中文文件名.docx":             "中文文件名.docx",
+		"v2 final.zip":           "v2 final.zip",
+		"a-b_c.tar.gz":           "a-b_c.tar.gz",
+		"thesis-v3 (final).docx": "thesis-v3 (final).docx",
 	}
 	for in, want := range cases {
 		got, err := SanitizeFilename(in)

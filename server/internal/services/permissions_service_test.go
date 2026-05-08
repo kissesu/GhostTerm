@@ -396,4 +396,3 @@ func TestPermissions_UpdateRolePermissions_TransactionalRollback(t *testing.T) {
 	afterVer := getTokenVersion(t, ctx, tdb.Pool, dev)
 	assert.Equal(t, beforeVer, afterVer, "事务回滚后 token_version 也不应 bump")
 }
-

@@ -58,13 +58,13 @@ import (
 // 集中存放避免每个 flow 自带状态。所有读取都在 setup 完成后，
 // TestMain return 前由 cleanup 清理；测试函数中只读不写。
 type e2eEnvironment struct {
-	BaseURL     string
-	Pool        *pgxpool.Pool
-	StorageDir  string
-	SuperAdmin  testUser
-	CS          testUser
-	Dev1        testUser
-	Dev2        testUser
+	BaseURL    string
+	Pool       *pgxpool.Pool
+	StorageDir string
+	SuperAdmin testUser
+	CS         testUser
+	Dev1       testUser
+	Dev2       testUser
 }
 
 // e2eEnv 是包级全局环境（仅 TestMain 写一次，flow 测试只读）。
@@ -89,9 +89,9 @@ const (
 // TestMain 是 e2e 包的入口，setup → run → teardown。
 //
 // 业务流程：
-//   1. setup() 启动 postgres / server / seed users
-//   2. m.Run() 跑全部 flow 测试
-//   3. teardown() 关闭 server / 清容器 / 删存储目录
+//  1. setup() 启动 postgres / server / seed users
+//  2. m.Run() 跑全部 flow 测试
+//  3. teardown() 关闭 server / 清容器 / 删存储目录
 //
 // 任何 setup 阶段错误都通过 fmt.Println + os.Exit(1)（TestMain 不能 t.Fatal）。
 func TestMain(m *testing.M) {

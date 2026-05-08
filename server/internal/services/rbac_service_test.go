@@ -25,18 +25,18 @@ import (
 
 func TestSplitPerm(t *testing.T) {
 	cases := []struct {
-		in       string
-		wantRes  string
-		wantAct  string
+		in      string
+		wantRes string
+		wantAct string
 	}{
 		{"project:read", "project", "read"},
 		{"event:E10", "event", "E10"},
 		{"customer:create", "customer", "create"},
-		{":read", "", "read"},                // resource 空
-		{"project:", "project", ""},          // action 空
-		{"noColon", "", ""},                  // 缺冒号
-		{"", "", ""},                         // 空字符串
-		{"a:b:c", "a", "b:c"},                // 多冒号：以第一个冒号分割
+		{":read", "", "read"},       // resource 空
+		{"project:", "project", ""}, // action 空
+		{"noColon", "", ""},         // 缺冒号
+		{"", "", ""},                // 空字符串
+		{"a:b:c", "a", "b:c"},       // 多冒号：以第一个冒号分割
 	}
 	for _, c := range cases {
 		gotRes, gotAct := splitPerm(c.in)
@@ -80,16 +80,16 @@ func TestHasPermission_Wildcard(t *testing.T) {
 
 func TestHasPermission_ExactMatch(t *testing.T) {
 	svc := makeStubService(t, 3, map[string]bool{
-		"project:read":   true,
+		"project:read":    true,
 		"customer:create": true,
 	})
 
 	cases := map[string]bool{
-		"project:read":     true,  // 命中
-		"customer:create":  true,  // 命中
-		"customer:delete":  false, // resource 命中但 action 未授权
-		"project:write":    false, // 未授权
-		"event:E10":        false, // 未授权
+		"project:read":    true,  // 命中
+		"customer:create": true,  // 命中
+		"customer:delete": false, // resource 命中但 action 未授权
+		"project:write":   false, // 未授权
+		"event:E10":       false, // 未授权
 	}
 	for perm, want := range cases {
 		got, err := svc.HasPermission(nil, 7, 3, perm)
