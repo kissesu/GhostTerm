@@ -76,6 +76,10 @@ type authService struct {
 	refreshTTL  time.Duration
 	wsTicketTTL time.Duration
 	bcryptCost  int
+	// dummyHash 是与 bcryptCost 相同 cost 算出的固定 hash，用于让"密码未设置"
+	// 路径与"正常 verify"路径耗时近似（review M2 timing oracle 防御）。
+	// 构造期一次性算好，避免每次登录失败都重算 ~250ms。
+	dummyHash []byte
 	// audit 在生产由 main.go 注入；测试 fixture 可为 nil（AuditService.Log 自带 nil 短路）
 	audit *AuditService
 }
@@ -122,6 +126,12 @@ func NewAuthService(deps AuthServiceDeps) (AuthService, error) {
 	if wsTTL <= 0 {
 		wsTTL = 30 * time.Second
 	}
+	// 安全 review M2：构造期预算 dummy hash 用于 timing oracle 防御
+	// （NULL password 路径与正常 bcrypt verify 路径耗时对齐）
+	dummyHash, err := auth.HashPassword("dummy-for-timing-equalization", deps.BcryptCost)
+	if err != nil {
+		return nil, fmt.Errorf("auth_service: precompute dummy hash: %w", err)
+	}
 	return &authService{
 		pool:        deps.Pool,
 		accessSec:   deps.AccessSecret,
@@ -130,6 +140,7 @@ func NewAuthService(deps AuthServiceDeps) (AuthService, error) {
 		refreshTTL:  deps.RefreshTTL,
 		wsTicketTTL: wsTTL,
 		bcryptCost:  deps.BcryptCost,
+		dummyHash:   []byte(dummyHash),
 		audit:       deps.Audit,
 	}, nil
 }
@@ -234,6 +245,12 @@ func (s *authService) Login(ctx context.Context, username, password string) (str
 	if passHash == nil {
 		// 用户存在但密码未设置（0021 migration 后的默认 admin / 或新建账号尚未完成首次设置）
 		// 必须先于 is_active 检查 —— 即使账号是 active 也无密码可校验
+		//
+		// 安全 review M2：跑一次 dummy bcrypt 让本路径耗时与正常 verify 路径
+		// 对齐，防 timing oracle 让远程探测哪些用户处于"已创建但未设密码"状态。
+		// dummyHash 是构造期预算的固定 cost-N hash；CompareHashAndPassword 永远
+		// 返 mismatch（dummy 与 password 不同）但耗时与真实 bcrypt 一致。
+		_ = auth.VerifyPassword(password, string(s.dummyHash))
 		_ = s.audit.Log(ctx, AuditEvent{
 			EventType: AuditEventLoginFailed,
 			UserID:    &user.ID,
