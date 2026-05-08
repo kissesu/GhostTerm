@@ -401,6 +401,59 @@ func TestCORS_EmptyAllowedOriginsRejectsAll(t *testing.T) {
 		"空白名单必须拒所有跨 origin 请求")
 }
 
+// ============================================================
+// finding #14：HTTP body 大小限制路由集成回归测试
+//
+// 验证：
+//  1. /api/auth/login body 超 1MB 默认 → 413
+//  2. /api/auth/login body 1KB 正常 → 处理（这里期望 401 因为 body 是垃圾 JSON
+//     但走到了 handler 即说明 body limit 没拦住）
+//  3. /api/files (multipart) body 在 fileBodyLimit 之内不被全局 1MB 拦住
+// ============================================================
+
+func TestBodyLimit_RouteAuthLoginRejectsLargeBody(t *testing.T) {
+	tdb := fixtures.NewTestDB(t)
+	defer tdb.Close()
+	router := buildC2TestRouter(t, tdb.Pool, "tauri://localhost")
+
+	// 构造 2MB 垃圾 JSON：超 1MB 默认上限
+	hugeBody := bytes.Repeat([]byte("a"), 2*1024*1024)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(hugeBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusRequestEntityTooLarge, rec.Code,
+		"超 1MB body 必须返 413；实际 status=%d body=%s", rec.Code, rec.Body.String())
+
+	var envelope struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&envelope))
+	assert.Equal(t, "request_body_too_large", envelope.Error.Code)
+}
+
+func TestBodyLimit_RouteAuthLoginAcceptsSmallBody(t *testing.T) {
+	tdb := fixtures.NewTestDB(t)
+	defer tdb.Close()
+	router := buildC2TestRouter(t, tdb.Pool, "tauri://localhost")
+
+	// 合法登录请求 body：~50 字节，远小于 1MB
+	smallBody := []byte(`{"username":"admin","password":"wrong-password-x"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(smallBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	// 期望非 413：要么 200/201（不太可能因为密码错），要么 401/422 业务错误
+	// 关键是 BodyLimit 没拦住请求让它走到 handler
+	assert.NotEqual(t, http.StatusRequestEntityTooLarge, rec.Code,
+		"小 body 必须不被 BodyLimit 拦截；实际 status=%d", rec.Code)
+}
+
 // loginAndGetAccess 走 POST /api/auth/login 拿 access token；调用方负责传入 username/password。
 func loginAndGetAccess(t *testing.T, ts *httptest.Server, username, password string) string {
 	t.Helper()

@@ -180,6 +180,10 @@ func main() {
 		},
 		TrustedProxies: trustedProxies,
 		AllowedOrigins: allowedOrigins,
+		// finding #14：multipart 文件上传专用 body 上限 = 单文件上限 + 10MB 余量
+		// （余量给 boundary / form 字段 / Base64 膨胀；超量直接拒，不让 oas
+		// 解码侧 ParseMultipartForm 写满临时盘）
+		FileUploadBodyLimitBytes: int64(cfg.FileMaxSizeMB)*1024*1024 + 10*1024*1024,
 	})
 	if err != nil {
 		log.Fatalf("init router: %v", err)
@@ -189,10 +193,22 @@ func main() {
 	mux.HandleFunc("/healthz", healthzHandler(pool))
 	mux.Handle("/", handler)
 
+	// finding #14：HTTP server 超时收紧。
+	//
+	// 业务背景：
+	//  - 旧版只设 ReadHeaderTimeout，慢连接 body 阶段可挂任意时长耗 worker
+	//  - WriteTimeout 5min 给文件下载流式留足时间（100MB / 1Mbps ~13min；
+	//    实际本机 / 局域网部署足够 5min；公网慢用户可能 timeout 但属于可接受退化）
+	//  - IdleTimeout 120s：keep-alive 连接闲置上限，比默认无限好
+	//  - MaxHeaderBytes 1MB：防巨型 header 攻击
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       60 * time.Second,
+		WriteTimeout:      5 * time.Minute,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20,
 	}
 
 	// ============================================

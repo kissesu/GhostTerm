@@ -36,6 +36,19 @@ import (
 	"github.com/ghostterm/progress-server/internal/services"
 )
 
+// 业务侧 HTTP body 上限常量（finding #14）。
+//
+//   - defaultBodyLimit          1MB：普通 JSON / form 端点足够（最大请求是 NotificationList
+//     之类的小 payload；登录 body 也只有 ~200B）
+//   - defaultFileUploadBodyLimit 110MB：cfg.FileMaxSizeMB(默认 100) + 10MB multipart 余量
+//     用于 RouterDeps.FileUploadBodyLimitBytes 缺失时的兜底
+//   - fileBodyOverhead          10MB：multipart boundary / form 字段 / Base64 膨胀的余量
+const (
+	defaultBodyLimit           int64 = 1 * 1024 * 1024
+	defaultFileUploadBodyLimit int64 = 110 * 1024 * 1024
+	fileBodyOverhead           int64 = 10 * 1024 * 1024
+)
+
 // ErrNotImplementedYet 是 skeleton 阶段所有未实现 endpoint 的统一错误。
 //
 // v2 part3 §AB1 明确要求：router 不允许 panic("TODO")。
@@ -428,6 +441,13 @@ type RouterDeps struct {
 	// 测试一般直接构造 []string{"tauri://localhost", "http://localhost:1420"}。
 	// 空切片 = 拒绝所有跨 origin 请求（同源浏览器请求不走 CORS 不受影响）。
 	AllowedOrigins []string
+
+	// FileUploadBodyLimitBytes 是 POST /api/files 路径专用的 HTTP body 上限（finding #14）。
+	//
+	// 业务背景：multipart 上传需要给 cfg.FileMaxSizeMB 留 10MB 余量
+	// （boundary / form 字段 / 编码膨胀）。其它端点全局走 1MB 默认。
+	// 0 = 用 defaultFileUploadBodyLimit 兜底（保护配置漏传时仍能开服务）。
+	FileUploadBodyLimitBytes int64
 }
 
 // NewRouter 装配 chi 基础中间件 + ogen 生成的 OpenAPI server。
@@ -635,10 +655,34 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 		rlCfg = *deps.RateLimit
 	}
 	rateLimiter := apimw.NewLoginRateLimiter(rlCfg)
-	r.With(rateLimiter.LoginMiddleware).Method(http.MethodPost, "/api/auth/login", oasServer)
-	r.With(rateLimiter.RefreshMiddleware).Method(http.MethodPost, "/api/auth/refresh", oasServer)
 
-	r.Mount("/", oasServer)
+	// finding #14：HTTP body 大小限制接入
+	//
+	// 业务背景：
+	//  - 旧版无全局 body 上限，oas multipart 解码用 ParseMultipartForm(32MB) 把超 32MB
+	//    部分写 os.TempDir，攻击者可 POST 10GB multipart 写满磁盘
+	//  - 现策略：路径分流，POST /api/files 给文件上限 + 10MB 余量；其它端点 1MB 默认
+	//
+	// 实现取舍：因 chi 要求 r.Use 必须在所有路由注册之前，无法用全局 Use 套 1MB 后
+	// 再为单个路径"放大"上限（外层 1MB 包内层 largeFile 的话 1MB 仍是瓶颈）。
+	// 改为：所有路由都用 r.With() 显式带 BodyLimit；POST /api/files 单独大上限路由
+	// 在 Mount 之前注册，让 chi 优先匹配。
+	fileBodyLimit := deps.FileUploadBodyLimitBytes
+	if fileBodyLimit <= 0 {
+		fileBodyLimit = defaultFileUploadBodyLimit
+	}
+
+	// 文件上传路由：在 Mount 之前显式注册，仅挂大上限 + 鉴权由 ogen SecurityHandler 内置完成
+	r.With(apimw.BodyLimit(fileBodyLimit)).Method(http.MethodPost, "/api/files", oasServer)
+
+	// 登录与 refresh 路由：rate limiter + 1MB body limit（登录 body ~200B 远小于 1MB）
+	r.With(rateLimiter.LoginMiddleware, apimw.BodyLimit(defaultBodyLimit)).
+		Method(http.MethodPost, "/api/auth/login", oasServer)
+	r.With(rateLimiter.RefreshMiddleware, apimw.BodyLimit(defaultBodyLimit)).
+		Method(http.MethodPost, "/api/auth/refresh", oasServer)
+
+	// 其它所有端点走 1MB 默认 body 上限
+	r.With(apimw.BodyLimit(defaultBodyLimit)).Mount("/", oasServer)
 	return r, nil
 }
 
@@ -663,6 +707,15 @@ func errorEnvelopeHandler(_ context.Context, w http.ResponseWriter, r *http.Requ
 		status = http.StatusUnauthorized
 		code = string(oas.ErrorEnvelopeErrorCodeUnauthorized)
 		msg = "未登录或会话已失效"
+	}
+
+	// finding #14：BodyLimit 超限时 *http.MaxBytesError → 413 Payload Too Large
+	// ogen 解码层可能把它包成 ogenerrors.DecodeRequestError 但 errors.As 仍能透出
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		status = http.StatusRequestEntityTooLarge
+		code = string(oas.ErrorEnvelopeErrorCodeRequestBodyTooLarge)
+		msg = "请求体超出大小限制"
 	}
 
 	switch {
