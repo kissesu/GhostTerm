@@ -55,6 +55,14 @@ func TrustedProxyRealIP(trusted []net.IPNet) func(http.Handler) http.Handler {
 				return
 			}
 			// 仅在 trusted 路径上信任代理头
+			//
+			// 安全 review L2：r.RemoteAddr 改写为 bare IP（不含 :port），与 Go 标准
+			// `net.SplitHostPort` 期望的 "host:port" 格式不一致。下游消费者
+			// （ratelimit.clientIP / metadata.InjectRequestMetadata）已 fallback：
+			// SplitHostPort 错时把整串当 host。这是兼容妥协；任何新代码用
+			// strict 解析必须先 net.ParseIP 校验是否已经是 bare IP，否则会拿到
+			// 带 IPv6 zone 之类畸形结果。生产场景仅 X-Forwarded-For 第一段，
+			// 永远是 bare IP（参见 extractForwardedClientIP）。
 			if newAddr := extractForwardedClientIP(r); newAddr != "" {
 				r.RemoteAddr = newAddr
 			}
