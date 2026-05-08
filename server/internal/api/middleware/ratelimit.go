@@ -219,13 +219,31 @@ func writeRateLimit(w http.ResponseWriter) {
 	_, _ = w.Write([]byte(rateLimitErrorBody))
 }
 
+// oversizedBodyErrorBody 是 413 的 ErrorEnvelope JSON。
+//
+// code 与 super_admin_invariants.writeRequestEntityTooLarge / BodyLimit
+// middleware 翻译路径保持一致；客户端按 "request_body_too_large" 统一处理。
+const oversizedBodyErrorBody = `{"error":{"code":"request_body_too_large","message":"请求体过大"}}`
+
+// writeBodyTooLarge 写 413 响应。
+//
+// 安全 review C5：login body 超 64KiB 由本函数直接返 413，不进 user 桶不调
+// next.ServeHTTP。这与 BodyLimit middleware 的 1MB 拒绝行为语义一致，避免
+// "替换 r.Body 为空 reader 让 ogen decoder 误报 500"的回归。
+func writeBodyTooLarge(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusRequestEntityTooLarge)
+	_, _ = w.Write([]byte(oversizedBodyErrorBody))
+}
+
 // LoginMiddleware 登录端点速率限制：IP + username 双维度。
 //
 // 业务流程：
 //  1. 先查 IP 桶（清廉客户端的快速路径）
 //  2. peek body 拿 username（必须 restore body 让 next handler 可读）
-//  3. 查 username 桶（防多 IP 撞同一账号）
-//  4. 任一桶 Allow 失败 → 429 + Retry-After
+//  3. body 超 cap → 直接 413（C5 fail-closed，不进 user 桶不进 handler）
+//  4. 查 username 桶（防多 IP 撞同一账号）
+//  5. 任一桶 Allow 失败 → 429 + Retry-After
 //
 // 设计取舍：先 IP 后 user 顺序——IP 维度命中即直接拒，避免恶意客户端用花式 username
 // 触发反复 JSON 解析浪费 CPU。
@@ -238,6 +256,11 @@ func (rl *LoginRateLimiter) LoginMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		username := extractUsername(r)
+		// 安全 review C5：oversized body 直接 413，不绕弯走 user 桶
+		if username == rateLimitOversizedSentinel {
+			writeBodyTooLarge(w)
+			return
+		}
 		if username != "" {
 			userBucket := rl.getOrCreateBucket(&rl.userMu, rl.userBuckets, username, rl.cfg.LoginPerMinPerUser)
 			if !userBucket.Allow() {

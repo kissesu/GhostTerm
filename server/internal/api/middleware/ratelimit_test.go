@@ -128,50 +128,45 @@ func TestLoginRateLimit_DifferentIPsIndependent(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec2.Code)
 }
 
-// TestLoginRateLimit_OversizedBodyHitsSentinelBucket 验证：
-// body > 64KiB 不再绕过 user 维度限速（C5 fail-closed sentinel）。
+// TestLoginRateLimit_OversizedBodyReturns413 验证：
+// body > 64KiB 直接 413 拒绝（C5 fail-closed），不进 user 桶不进 handler。
 //
 // 攻击场景（C5）：
 //
 //	{ "username":"admin", "password":"x", "_padding":"<5KB junk>" }
 //
-// 原实现 ReadAll(MaxBytes=4KB) 失败 → 返 "" → user 桶跳过。多 IP botnet
-// 单账号撞库恢复可行。
+// 原实现 ReadAll(MaxBytes=4KB) 失败 → 返 "" → user 桶跳过 → 走完 handler。
+// 多 IP botnet 单账号撞库恢复可行。
 //
-// 修复后：所有 oversized body 共用 sentinel "__rl_oversized_login_body__"
-// 命中 user 桶（与真实 username 互不干扰），命中后续触发 429。
-func TestLoginRateLimit_OversizedBodyHitsSentinelBucket(t *testing.T) {
+// 修复后：oversized body 直接返 413 + code "request_body_too_large"，与
+// BodyLimit middleware 1MB 拒绝行为一致语义。攻击者每次都被拒，没机会撞库。
+func TestLoginRateLimit_OversizedBodyReturns413(t *testing.T) {
 	rl := middleware.NewLoginRateLimiter(middleware.RateLimitConfig{
-		LoginPerMinPerIP:   1000, // IP 维度故意宽松，确保拒绝由 user 维度触发
-		LoginPerMinPerUser: 2,    // user 严格
+		LoginPerMinPerIP:   1000, // IP 维度故意宽松，避免 IP 桶先拒干扰
+		LoginPerMinPerUser: 100,
 		RefreshPerMinPerIP: 30,
 		TTL:                time.Minute,
 	})
 	defer rl.Stop()
 
+	handlerCalled := false
 	handler := rl.LoginMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		handlerCalled = true
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	// 构造 100KiB body（> 64KiB cap），触发 sentinel 路径
+	// 构造 100KiB body（> 64KiB cap），触发 oversized 路径
 	oversized := strings.Repeat("x", 100*1024)
-
-	// 不同 IP 的 oversized body 共享同一个 sentinel user 桶
-	// 前 2 次过，第 3 次必拒（user 桶 perMin=2）
-	for i := 0; i < 2; i++ {
-		req := httptest.NewRequest("POST", "/", strings.NewReader(oversized))
-		req.RemoteAddr = fmt.Sprintf("8.8.8.%d:80", i+1) // 不同 IP 避开 IP 桶限制
-		rec := httptest.NewRecorder()
-		handler.ServeHTTP(rec, req)
-		require.Equal(t, http.StatusOK, rec.Code, "oversized request %d should pass user bucket", i+1)
-	}
-	// 第 3 次 oversized：sentinel 桶用尽 → 429
 	req := httptest.NewRequest("POST", "/", strings.NewReader(oversized))
-	req.RemoteAddr = "8.8.8.99:80" // 全新 IP 仍走 sentinel user 桶
+	req.RemoteAddr = "8.8.8.1:80"
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
-	require.Equal(t, http.StatusTooManyRequests, rec.Code,
-		"oversized body 必须走 sentinel user 桶（防 C5 撞库绕过）")
+
+	require.Equal(t, http.StatusRequestEntityTooLarge, rec.Code,
+		"oversized body 必须直接 413（C5 fail-closed）")
+	require.Contains(t, rec.Body.String(), "request_body_too_large",
+		"413 envelope 必须用 code request_body_too_large 与 BodyLimit middleware 一致")
+	require.False(t, handlerCalled, "oversized 必须不进入 next handler")
 }
 
 // TestRefreshRateLimit_OnlyIPDimension 验证：refresh 仅 IP 维度限速，独立桶不与 login 共享。
