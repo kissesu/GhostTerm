@@ -1,14 +1,24 @@
 /**
  * @file SpreadsheetPreview.tsx
- * @description Excel 表格预览组件，使用 SheetJS 将 .xlsx/.xls 渲染为 HTML 表格
+ * @description Excel 表格预览组件，使用 ExcelJS 将 .xlsx/.xlsm 渲染为 HTML 表格
  *              通过 read_image_bytes_cmd 读取文件字节，支持多工作表切换
+ *
+ *              安全说明（PR-1 finding #3）：
+ *              原使用 xlsx@0.18.5 (SheetJS CE)，存在 GHSA-4r6h-8v6p-xvw6 (Prototype Pollution)
+ *              和 CVE-2024-22363 (ReDoS)，且包已脱离 npm 维护永无补丁。迁移到 ExcelJS。
+ *
+ *              三层 XSS 防御：
+ *              1. cell.text 拿"已求值"文本（不解析单元格内的标签）
+ *              2. escapeHtml 转义原始字符（&<>"'）
+ *              3. sanitizeUserHtml (DOMPurify) 兜底过滤
+ *
  * @author Atlas.oi
- * @date 2026-04-16
+ * @date 2026-05-08
  */
 
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { sanitizeUserHtml } from '../../shared/lib/sanitize';
 
 /** 将 base64 字符串转换为 Uint8Array */
@@ -21,6 +31,41 @@ function base64ToUint8Array(base64: string): Uint8Array {
   return bytes;
 }
 
+/** HTML 转义，防止 cell 内的 < > & " ' 直接写进 innerHTML 触发标签解析 */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * 把 ExcelJS Worksheet 渲染成 HTML table 字符串
+ *
+ * 业务流程：
+ * 1. 遍历 worksheet.eachRow 收集所有行（包含空 cell 以保表格结构）
+ * 2. 每个 cell 取 .text 属性（ExcelJS 默认对 formula 求值，返回字符串）
+ * 3. 对 cell 文本做 escapeHtml（防原始字符注入）
+ * 4. 拼成 <table><tr><td>...</td></tr></table>
+ * 5. 调用方需用 sanitizeUserHtml 再过一遍（双层防御）
+ */
+function worksheetToHtml(ws: ExcelJS.Worksheet): string {
+  const rows: string[] = [];
+  ws.eachRow({ includeEmpty: false }, (row) => {
+    const cells: string[] = [];
+    row.eachCell({ includeEmpty: true }, (cell) => {
+      // cell.text: ExcelJS 内部 formula 求值后的字符串展示
+      // null/undefined 兜底空串
+      const text = cell.text ?? '';
+      cells.push(`<td>${escapeHtml(String(text))}</td>`);
+    });
+    rows.push(`<tr>${cells.join('')}</tr>`);
+  });
+  return `<table>${rows.join('')}</table>`;
+}
+
 interface SpreadsheetPreviewProps {
   path: string;
 }
@@ -30,8 +75,8 @@ interface SpreadsheetPreviewProps {
  *
  * 业务逻辑：
  * 1. 通过 read_image_bytes_cmd 读取文件字节（Base64）
- * 2. SheetJS 解析工作簿，获取所有工作表名称
- * 3. 将当前选中工作表转换为 HTML 字符串，通过 dangerouslySetInnerHTML 渲染
+ * 2. ExcelJS 解析工作簿，获取所有工作表名称
+ * 3. 将当前选中工作表转换为 HTML 字符串，过 sanitize 后通过 dangerouslySetInnerHTML 渲染
  * 4. 提供工作表切换 Tab
  */
 export function SpreadsheetPreview({ path }: SpreadsheetPreviewProps) {
@@ -41,38 +86,56 @@ export function SpreadsheetPreview({ path }: SpreadsheetPreviewProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // 缓存工作簿，切换工作表时无需重新读取文件
-  const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null);
+  const [workbook, setWorkbook] = useState<ExcelJS.Workbook | null>(null);
 
   // 初始加载：读取文件并解析工作簿
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     setError(null);
     setWorkbook(null);
 
     invoke<string>('read_image_bytes_cmd', { path })
-      .then((base64) => {
+      .then(async (base64) => {
         const bytes = base64ToUint8Array(base64);
-        const wb = XLSX.read(bytes, { type: 'array' });
+        // ExcelJS 需要 ArrayBuffer，Uint8Array.buffer 直接拿
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(bytes.buffer as ArrayBuffer);
+
+        if (cancelled) return;
+
+        // 收集所有 worksheet 名称（ExcelJS 用 wb.worksheets 数组）
+        const names = wb.worksheets.map((ws) => ws.name);
         setWorkbook(wb);
-        setSheetNames(wb.SheetNames);
-        const firstSheet = wb.SheetNames[0] ?? '';
+        setSheetNames(names);
+        const firstSheet = names[0] ?? '';
         setActiveSheet(firstSheet);
         if (firstSheet) {
-          setHtml(XLSX.utils.sheet_to_html(wb.Sheets[firstSheet]));
+          const ws = wb.getWorksheet(firstSheet);
+          if (ws) {
+            setHtml(worksheetToHtml(ws));
+          }
         }
         setLoading(false);
       })
       .catch((e) => {
+        if (cancelled) return;
         setLoading(false);
         setError(String(e));
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [path]);
 
   // 切换工作表：从缓存工作簿重新生成 HTML，无需重新读取文件
   function switchSheet(name: string) {
     if (!workbook) return;
+    const ws = workbook.getWorksheet(name);
+    if (!ws) return;
     setActiveSheet(name);
-    setHtml(XLSX.utils.sheet_to_html(workbook.Sheets[name]));
+    setHtml(worksheetToHtml(ws));
   }
 
   if (error) {
@@ -176,8 +239,8 @@ export function SpreadsheetPreview({ path }: SpreadsheetPreviewProps) {
         `}</style>
         <div
           className="ghostterm-sheet"
-          // SheetJS 输出的 HTML 包含用户文件单元格内容（含 HTML），过 DOMPurify 防 XSS
-          // 与 CSP script-src 'self' 双层防御：CSP 拦 inline script，DOMPurify 拦 attribute trigger
+          // ExcelJS 输出的 HTML 已 escapeHtml 过 cell 文本，再过 DOMPurify 防 XSS
+          // 与 CSP script-src 'self' 三层防御：CSP 拦 inline script，DOMPurify 拦 attribute trigger，escapeHtml 拦原始标签
           dangerouslySetInnerHTML={{ __html: sanitizeUserHtml(html) }}
         />
       </div>
