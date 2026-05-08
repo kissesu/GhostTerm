@@ -147,6 +147,12 @@ func main() {
 	// ============================================
 	// 第四步：装配 router + healthz（含 DB ping）
 	// ============================================
+	// finding #10：解析受信反代白名单。空串 = 直连模式不信任任何代理头；
+	// 非法 CIDR 立即 fail-fast 不让 server 起来带病运行
+	trustedProxies, err := apimiddleware.ParseTrustedProxiesEnv(cfg.TrustedProxies)
+	if err != nil {
+		log.Fatalf("config: TRUSTED_PROXIES invalid CIDR: %v", err)
+	}
 	handler, err := api.NewRouter(api.RouterDeps{
 		Pool:                pool,
 		AuthService:         authSvc,
@@ -167,6 +173,7 @@ func main() {
 			RefreshPerMinPerIP: cfg.RateLimitRefreshPerMinPerIP,
 			TTL:                10 * time.Minute,
 		},
+		TrustedProxies: trustedProxies,
 	})
 	if err != nil {
 		log.Fatalf("init router: %v", err)

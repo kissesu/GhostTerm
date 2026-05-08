@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"time"
 
@@ -407,12 +408,21 @@ type RouterDeps struct {
 	// RateLimit 可选：nil 时使用 sane default（5/10/30 per min）。
 	// 测试场景一般留空走默认；生产由 Config 注入便于通过 env 调参。
 	RateLimit *apimw.RateLimitConfig
+
+	// TrustedProxies 是受信反代 CIDR 白名单，仅来自这些 CIDR 的请求会被信任 X-Forwarded-For。
+	//
+	// 业务背景（finding #10）：
+	//   - nil / 空 = fail-safe，任何代理头都被忽略，audit IP = TCP RemoteAddr 不可被伪造
+	//   - Caddy 同机反代场景由 main.go 解析 TRUSTED_PROXIES env (例 "127.0.0.1/32,::1/128")
+	//     传入；非法 CIDR 在 main.go fail-fast，不会到达这里
+	//   - 测试一般留空，所有 RemoteAddr 走原始值
+	TrustedProxies []net.IPNet
 }
 
 // NewRouter 装配 chi 基础中间件 + ogen 生成的 OpenAPI server。
 //
 // 业务流程：
-//  1. 注册 chi 基础中间件（RequestID / RealIP / Logger / Recoverer）
+//  1. 注册 chi 基础中间件（RequestID / TrustedProxyRealIP / Logger / Recoverer）
 //  2. 暴露 /healthz（main.go 还会再覆盖一份带 DB ping 的）
 //  3. 用 ogen NewServer 装配 oasHandler + oasSecurityHandler
 //  4. 自定义 ErrorHandler：把 service sentinel error 映射为对应 HTTP 状态 + ErrorEnvelope
@@ -453,7 +463,10 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	r := chi.NewRouter()
 
 	r.Use(chimw.RequestID)
-	r.Use(chimw.RealIP)
+	// finding #10：替代 chimw.RealIP（无条件信任 X-Forwarded-For 让审计 IP 可被伪造）。
+	// 仅当 r.RemoteAddr 在 deps.TrustedProxies CIDR 内才采纳代理头；空白名单 = 全拒。
+	// 必须在 InjectRequestMetadata 之前，让后者拿到的是已校正的 RemoteAddr。
+	r.Use(apimw.TrustedProxyRealIP(deps.TrustedProxies))
 	r.Use(chimw.Logger)
 	r.Use(chimw.Recoverer)
 	// 注入 client IP / User-Agent 到 ctx，供 7 个 service Create 路径写入

@@ -61,6 +61,13 @@ type Config struct {
 	RateLimitLoginPerMinPerIP   int
 	RateLimitLoginPerMinPerUser int
 	RateLimitRefreshPerMinPerIP int
+
+	// TrustedProxies 是受信反代 CIDR 白名单（v2 安全审计 finding #10）。
+	// env 形式：逗号分隔的 CIDR 列表，例 "127.0.0.1/32,::1/128"。
+	// 默认空 = 直连模式不信任任何代理头，audit IP 不可被伪造。
+	// Caddy 同机反代部署应设 "127.0.0.1/32,::1/128" 让 Caddy 注入的 X-Forwarded-For
+	// 被采纳；非法 CIDR 在启动期 fail-fast。
+	TrustedProxies string
 }
 
 // Load 从环境变量构建 Config，调用前可选地加载 .env 文件（仅开发便利）。
@@ -153,6 +160,11 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// finding #10：受信反代 CIDR 列表。空串视为「不信任任何代理头」（直连模式 fail-safe）。
+	// 实际 CIDR 解析在 api/middleware.ParseTrustedProxiesEnv（main.go 启动期）做，
+	// 这里只搬字符串，避免 config 包反向依赖 api/middleware。
+	cfg.TrustedProxies = getenvDefault("TRUSTED_PROXIES", "")
 
 	return cfg, nil
 }
