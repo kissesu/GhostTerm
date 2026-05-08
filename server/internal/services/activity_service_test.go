@@ -29,6 +29,17 @@ import (
 	"github.com/ghostterm/progress-server/tests/fixtures"
 )
 
+// mustNewActivityService 注入 fixtures cipher 后构造 ActivityService。
+//
+// finding #4：ActivityService 构造期 cipher 必填；测试统一从 fixtures.NewTestCipher
+// 拿，与 SeedFeedback/SeedPayment 加密侧用同 testutil.TestCipherKey 一致。
+func mustNewActivityService(t *testing.T, tdb *fixtures.TestDB) services.ActivityService {
+	t.Helper()
+	svc, err := services.NewActivityService(tdb.Pool, fixtures.NewTestCipher(t, tdb.Pool))
+	require.NoError(t, err)
+	return svc
+}
+
 // ============================================================
 // Task 5: feedback kind baseline
 // ============================================================
@@ -38,7 +49,7 @@ func TestActivityService_List_Feedback(t *testing.T) {
 	tdb := fixtures.NewTestDB(t)
 	defer tdb.Close()
 
-	svc := services.NewActivityService(tdb.Pool)
+	svc := mustNewActivityService(t, tdb)
 	auth := fixtures.SeedAdminAuthContext(t, ctx, tdb.Pool)
 	pid := fixtures.SeedProject(t, ctx, tdb.Pool, auth.UserID)
 
@@ -73,7 +84,7 @@ func TestActivityService_List_ProjectCreated(t *testing.T) {
 	tdb := fixtures.NewTestDB(t)
 	defer tdb.Close()
 
-	svc := services.NewActivityService(tdb.Pool)
+	svc := mustNewActivityService(t, tdb)
 	auth := fixtures.SeedAdminAuthContext(t, ctx, tdb.Pool)
 	pid := fixtures.SeedProject(t, ctx, tdb.Pool, auth.UserID)
 
@@ -101,7 +112,7 @@ func TestActivityService_List_StatusChange(t *testing.T) {
 	tdb := fixtures.NewTestDB(t)
 	defer tdb.Close()
 
-	svc := services.NewActivityService(tdb.Pool)
+	svc := mustNewActivityService(t, tdb)
 	auth := fixtures.SeedAdminAuthContext(t, ctx, tdb.Pool)
 	pid := fixtures.SeedProject(t, ctx, tdb.Pool, auth.UserID)
 
@@ -134,7 +145,7 @@ func TestActivityService_List_QuoteChange_MoneyAsString(t *testing.T) {
 	tdb := fixtures.NewTestDB(t)
 	defer tdb.Close()
 
-	svc := services.NewActivityService(tdb.Pool)
+	svc := mustNewActivityService(t, tdb)
 	auth := fixtures.SeedAdminAuthContext(t, ctx, tdb.Pool)
 	pid := fixtures.SeedProject(t, ctx, tdb.Pool, auth.UserID)
 
@@ -167,7 +178,7 @@ func TestActivityService_List_Payment_CustomerInVisible(t *testing.T) {
 	tdb := fixtures.NewTestDB(t)
 	defer tdb.Close()
 
-	svc := services.NewActivityService(tdb.Pool)
+	svc := mustNewActivityService(t, tdb)
 	auth := fixtures.SeedAdminAuthContext(t, ctx, tdb.Pool)
 	pid := fixtures.SeedProject(t, ctx, tdb.Pool, auth.UserID)
 
@@ -193,7 +204,7 @@ func TestActivityService_List_ThesisVersion(t *testing.T) {
 	tdb := fixtures.NewTestDB(t)
 	defer tdb.Close()
 
-	svc := services.NewActivityService(tdb.Pool)
+	svc := mustNewActivityService(t, tdb)
 	auth := fixtures.SeedAdminAuthContext(t, ctx, tdb.Pool)
 	pid := fixtures.SeedProject(t, ctx, tdb.Pool, auth.UserID)
 	fid := fixtures.SeedFile(t, ctx, tdb.Pool, auth.UserID, "thesis.pdf", "application/pdf")
@@ -223,7 +234,7 @@ func TestActivityService_List_ProjectFileAdded(t *testing.T) {
 	tdb := fixtures.NewTestDB(t)
 	defer tdb.Close()
 
-	svc := services.NewActivityService(tdb.Pool)
+	svc := mustNewActivityService(t, tdb)
 	auth := fixtures.SeedAdminAuthContext(t, ctx, tdb.Pool)
 	pid := fixtures.SeedProject(t, ctx, tdb.Pool, auth.UserID)
 	fid := fixtures.SeedFile(t, ctx, tdb.Pool, auth.UserID, "ref.docx",
@@ -255,7 +266,7 @@ func TestActivityService_List_RLSDenial(t *testing.T) {
 	tdb := fixtures.NewTestDB(t)
 	defer tdb.Close()
 
-	svc := services.NewActivityService(tdb.Pool)
+	svc := mustNewActivityService(t, tdb)
 	owner := fixtures.SeedAdminAuthContext(t, ctx, tdb.Pool)
 	pid := fixtures.SeedProject(t, ctx, tdb.Pool, owner.UserID)
 
@@ -271,7 +282,7 @@ func TestActivityService_List_CursorBoundary_SameOccurredAt(t *testing.T) {
 	tdb := fixtures.NewTestDB(t)
 	defer tdb.Close()
 
-	svc := services.NewActivityService(tdb.Pool)
+	svc := mustNewActivityService(t, tdb)
 	auth := fixtures.SeedAdminAuthContext(t, ctx, tdb.Pool)
 	pid := fixtures.SeedProject(t, ctx, tdb.Pool, auth.UserID)
 
@@ -314,7 +325,7 @@ func TestActivityService_List_InvalidCursor(t *testing.T) {
 	tdb := fixtures.NewTestDB(t)
 	defer tdb.Close()
 
-	svc := services.NewActivityService(tdb.Pool)
+	svc := mustNewActivityService(t, tdb)
 	auth := fixtures.SeedAdminAuthContext(t, ctx, tdb.Pool)
 	pid := fixtures.SeedProject(t, ctx, tdb.Pool, auth.UserID)
 
@@ -327,7 +338,7 @@ func TestActivityService_List_LimitClamp(t *testing.T) {
 	tdb := fixtures.NewTestDB(t)
 	defer tdb.Close()
 
-	svc := services.NewActivityService(tdb.Pool)
+	svc := mustNewActivityService(t, tdb)
 	auth := fixtures.SeedAdminAuthContext(t, ctx, tdb.Pool)
 	pid := fixtures.SeedProject(t, ctx, tdb.Pool, auth.UserID)
 

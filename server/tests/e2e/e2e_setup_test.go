@@ -82,6 +82,7 @@ const (
 	e2eRefreshTTL     = "24h"
 	e2eAccessSecret   = "e2e-access-secret-with-32-bytes!" // 32 bytes
 	e2eRefreshSecret  = "e2e-refresh-secret-32bytes-min!!"
+	e2eDataKey        = "e2e-data-key-with-32-bytes-aaaa!" // 32 bytes，列级加密主密钥（finding #4）
 	e2eHealthzTimeout = 30 * time.Second
 	e2eShutdownGrace  = 5 * time.Second
 )
@@ -247,6 +248,7 @@ func setup() (func(), error) {
 		"HTTP_ADDR="+addr,
 		"JWT_ACCESS_SECRET="+e2eAccessSecret,
 		"JWT_REFRESH_SECRET="+e2eRefreshSecret,
+		"GT_DATA_KEY="+e2eDataKey,
 		"JWT_ACCESS_TTL="+e2eAccessTTL,
 		"JWT_REFRESH_TTL="+e2eRefreshTTL,
 		fmt.Sprintf("BCRYPT_COST=%d", e2eBcryptCost),

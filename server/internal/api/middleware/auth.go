@@ -25,21 +25,14 @@ import (
 	"github.com/ghostterm/progress-server/internal/services"
 )
 
-// ctxKey 是一个独立的私有类型，避免 context.Value 的 key 与其它包冲突。
-//
-// Go 标准库推荐：context.WithValue 的 key 必须是 unexported 自定义类型，
-// 这样外部包想访问也只能通过本包暴露的 helper（如 AuthContextFrom）。
-type ctxKey int
-
-const (
-	// authCtxKey 存放 services.AuthContext（含 UserID / RoleID）
-	authCtxKey ctxKey = iota
-)
-
 // UserIDKey / RoleIDKey 是给业务代码读取上下文身份的辅助 key。
 //
 // 业务背景：本项目目前仅 AuthContext 一种身份类型，但留出独立 key 便于
 // 后续抽到 RBAC service 后业务侧只关心 user_id / role_id 两个原子值。
+//
+// 注：AuthContext 整体的 ctx key 已迁移到 services 包（services.WithAuthContext /
+// services.AuthContextFrom），让 user_service / file_service 等业务层能反向读 actor
+// 而不需要 import middleware（破循环依赖）。本包仅保留单值便利 key。
 type userIDKey struct{}
 type roleIDKey struct{}
 
@@ -78,8 +71,9 @@ func RequireAuth(svc services.AuthService) func(http.Handler) http.Handler {
 				return
 			}
 
-			// 注入到 ctx：单一 AuthContext key + 两个独立 user_id/role_id key（双重便利）
-			ctx := context.WithValue(r.Context(), authCtxKey, ac)
+			// 注入到 ctx：services.WithAuthContext 写主 key（service 层共享）
+			// + 两个独立 user_id/role_id 便利 key（chi handler 直接读单值用）
+			ctx := services.WithAuthContext(r.Context(), ac)
 			ctx = context.WithValue(ctx, UserIDKey, ac.UserID)
 			ctx = context.WithValue(ctx, RoleIDKey, ac.RoleID)
 			next.ServeHTTP(w, r.WithContext(ctx))
@@ -88,20 +82,19 @@ func RequireAuth(svc services.AuthService) func(http.Handler) http.Handler {
 }
 
 // AuthContextFrom 从 ctx 取出 AuthContext；handler 入口必备。
+//
+// 实现 forward 到 services.AuthContextFrom（主 key 已迁移到 services 包），
+// 保留本函数让现有 handler / 测试调用零改动。
 func AuthContextFrom(ctx context.Context) (services.AuthContext, bool) {
-	v := ctx.Value(authCtxKey)
-	if v == nil {
-		return services.AuthContext{}, false
-	}
-	ac, ok := v.(services.AuthContext)
-	return ac, ok
+	return services.AuthContextFrom(ctx)
 }
 
 // WithAuthContext 仅供测试 / 内部使用：把 AuthContext 写入 ctx。
 //
 // 业务背景：集成测试想直接调 handler 而绕过中间件时用本函数构造 ctx。
+// 写入主 key（services.WithAuthContext）+ 两个便利单值 key 与生产中间件路径完全一致。
 func WithAuthContext(ctx context.Context, ac services.AuthContext) context.Context {
-	ctx = context.WithValue(ctx, authCtxKey, ac)
+	ctx = services.WithAuthContext(ctx, ac)
 	ctx = context.WithValue(ctx, UserIDKey, ac.UserID)
 	ctx = context.WithValue(ctx, RoleIDKey, ac.RoleID)
 	return ctx

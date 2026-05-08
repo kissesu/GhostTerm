@@ -44,7 +44,8 @@ func newActivityHandler(t *testing.T) (*handlers.ActivityHandler, *fixtures.Test
 	tdb := fixtures.NewTestDB(t)
 	t.Cleanup(tdb.Close)
 
-	svc := services.NewActivityService(tdb.Pool)
+	svc, err := services.NewActivityService(tdb.Pool, fixtures.NewTestCipher(t, tdb.Pool))
+	require.NoError(t, err)
 	h, err := handlers.NewActivityHandler(svc)
 	require.NoError(t, err)
 

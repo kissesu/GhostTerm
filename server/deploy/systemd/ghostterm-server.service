@@ -1,0 +1,61 @@
+[Unit]
+Description=GhostTerm Atlas Progress Server
+Documentation=https://github.com/kissesu/GhostTerm
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=ghostterm
+Group=ghostterm
+
+# secrets 走 LoadCredentialEncrypted（finding #5）
+# systemd-creds encrypt 预先加密 .cred 文件（host TPM 派生密钥）
+# 仅 boot 时 systemd 解密注入到 $CREDENTIALS_DIRECTORY/* (tmpfs)，
+# 仅当前 boot 周期可用；磁盘快照拿到 .cred 文件无法解密。
+LoadCredentialEncrypted=jwt_access:/etc/ghostterm/credentials/jwt_access.cred
+LoadCredentialEncrypted=jwt_refresh:/etc/ghostterm/credentials/jwt_refresh.cred
+LoadCredentialEncrypted=database_url:/etc/ghostterm/credentials/database_url.cred
+LoadCredentialEncrypted=data_key:/etc/ghostterm/credentials/data_key.cred
+
+# 非敏感配置走 EnvironmentFile（明文 OK）
+# HTTP_ADDR / JWT_*_TTL / BCRYPT_COST / FILE_* / RATE_LIMIT_* / TRUSTED_PROXIES /
+# ALLOWED_ORIGINS 等
+EnvironmentFile=/etc/ghostterm/server.env
+
+ExecStart=/usr/local/bin/ghostterm-server
+
+# ============================================
+# 安全加固（systemd sandboxing）
+# ============================================
+# 文件系统隔离：除显式 ReadWritePaths 外整个文件系统只读
+ProtectSystem=strict
+# /home /root /run/user 不可访问
+ProtectHome=true
+# 进程私有 /tmp /var/tmp，避免 tmp race
+PrivateTmp=true
+# 禁止通过 setuid/file caps 提权
+NoNewPrivileges=true
+# 禁止修改 /proc/sys 内核参数
+ProtectKernelTunables=true
+# 禁止加载/卸载内核模块
+ProtectKernelModules=true
+# /sys/fs/cgroup 只读
+ProtectControlGroups=true
+# 禁止 personality(2) 设置（破 ASLR / 模拟旧 ABI）
+LockPersonality=true
+# 禁止实时调度（防 DoS 内核）
+RestrictRealtime=true
+# 禁止用户/挂载/网络等 namespace 操作（防容器逃逸链路）
+RestrictNamespaces=true
+# 禁止非本机 CPU 架构的 syscall（防多架构 exploit gadget）
+SystemCallArchitectures=native
+
+# 业务读写目录白名单（其他位置在 ProtectSystem=strict 下只读）
+ReadWritePaths=/var/lib/ghostterm /var/log/ghostterm
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -27,6 +27,13 @@ import (
 	progressdb "github.com/ghostterm/progress-server/internal/db"
 )
 
+// TestCipherKey 测试用主密钥（32 字节 ASCII）。
+//
+// 业务背景：testutil 给 fixture / integration test 注入 CipherService 时统一用此常量；
+// 与 application 层 cipher_service_test 用的 "test-master-key-32-bytes-aaaaa!!" 一致，
+// 确保 fixture 写入的密文能被 service 层用同主密钥解密。
+const TestCipherKey = "test-master-key-32-bytes-aaaaa!!"
+
 // StartPostgres 启动 postgres:16-alpine 容器、跑迁移、返回连接池 + cleanup。
 //
 // 业务流程：

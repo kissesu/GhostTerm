@@ -324,11 +324,14 @@ func buildPermissionTestRouter(t *testing.T, pool *pgxpool.Pool) http.Handler {
 	wsHub := services.NewWSHub()
 	notifSvc, err := services.NewNotificationService(services.NotificationServiceDeps{Pool: pool, Hub: wsHub})
 	require.NoError(t, err)
-	feedbackSvc, err := services.NewFeedbackService(services.FeedbackServiceDeps{Pool: pool, NotificationService: notifSvc})
+	cipher := fixtures.NewTestCipher(t, pool)
+	auditSvc, err := services.NewAuditService(pool)
+	require.NoError(t, err)
+	feedbackSvc, err := services.NewFeedbackService(services.FeedbackServiceDeps{Pool: pool, NotificationService: notifSvc, Cipher: cipher})
 	require.NoError(t, err)
 	quoteSvc, err := services.NewQuoteService(pool)
 	require.NoError(t, err)
-	paymentSvc, err := services.NewPaymentService(services.PaymentServiceDeps{Pool: pool, NotificationService: notifSvc})
+	paymentSvc, err := services.NewPaymentService(services.PaymentServiceDeps{Pool: pool, NotificationService: notifSvc, Cipher: cipher})
 	require.NoError(t, err)
 
 	router, err := api.NewRouter(api.RouterDeps{
@@ -343,6 +346,8 @@ func buildPermissionTestRouter(t *testing.T, pool *pgxpool.Pool) http.Handler {
 		PaymentService:      paymentSvc,
 		NotificationService: notifSvc,
 		WSHub:               wsHub,
+		Cipher:              cipher,
+		Audit:               auditSvc,
 	})
 	require.NoError(t, err)
 	return router

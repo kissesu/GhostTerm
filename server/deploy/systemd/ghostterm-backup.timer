@@ -1,0 +1,13 @@
+[Unit]
+Description=GhostTerm Daily Backup Timer
+Documentation=https://github.com/kissesu/GhostTerm/blob/main/server/deploy/backup.sh
+
+[Timer]
+# 每天 02:00 + 0-15 分钟随机延迟（防多服务同时触发抖动）
+OnCalendar=*-*-* 02:00:00
+RandomizedDelaySec=15min
+Persistent=true
+Unit=ghostterm-backup.service
+
+[Install]
+WantedBy=timers.target

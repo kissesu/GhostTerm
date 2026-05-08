@@ -1,0 +1,26 @@
+[Unit]
+Description=GhostTerm Daily Backup
+Documentation=https://github.com/kissesu/GhostTerm/blob/main/server/deploy/backup.sh
+After=postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=oneshot
+User=ghostterm
+Group=ghostterm
+EnvironmentFile=-/etc/ghostterm/server.env
+
+ExecStart=/usr/local/bin/ghostterm-backup.sh
+
+# 安全加固
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/backups/ghostterm
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictRealtime=true
+SystemCallArchitectures=native

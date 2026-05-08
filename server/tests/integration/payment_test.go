@@ -53,7 +53,9 @@ func setupPaymentEnv(t *testing.T) *paymentTestEnv {
 	t.Helper()
 	pool, cleanup := testutil.StartPostgres(t)
 
-	svc, err := services.NewPaymentService(services.PaymentServiceDeps{Pool: pool})
+	cipher, err := services.NewCipherService(pool, []byte(testutil.TestCipherKey))
+	require.NoError(t, err)
+	svc, err := services.NewPaymentService(services.PaymentServiceDeps{Pool: pool, Cipher: cipher})
 	require.NoError(t, err)
 
 	hash, err := auth.HashPassword("password", bcrypt.MinCost)

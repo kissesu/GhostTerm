@@ -71,6 +71,18 @@ func NewTestDB(t *testing.T) *TestDB {
 	return &TestDB{Pool: pool, cleanup: cleanup}
 }
 
+// NewTestCipher 用 testutil.TestCipherKey 构造测试 CipherService。
+//
+// 业务背景：feedback / payment / activity service 构造函数 finding #4 后必填 cipher，
+// 集成测试统一从此 helper 拿（与 fixture 用同主密钥派生子密钥，确保密文跨 fixture/service
+// 一致）。
+func NewTestCipher(t *testing.T, pool *pgxpool.Pool) *services.CipherService {
+	t.Helper()
+	cs, err := services.NewCipherService(pool, []byte(testutil.TestCipherKey))
+	require.NoError(t, err)
+	return cs
+}
+
 // ============================================================
 // 用户 / 项目 / 文件 helper
 // ============================================================
@@ -164,14 +176,22 @@ func SeedFile(t *testing.T, ctx context.Context, pool *pgxpool.Pool, uploaderUse
 // ============================================================
 
 // SeedFeedback 插入一条 feedback 并返回 id。
+//
+// finding #4：feedbacks.content 是 BYTEA pgcrypto 密文。fixture 用 testutil.TestCipherKey
+// 派生 feedbacks_content 子密钥加密后再 INSERT，确保 view 解码 + service 解密后能拿回原始 content。
 func SeedFeedback(t *testing.T, ctx context.Context, pool *pgxpool.Pool, projectID, userID int64, content string, recordedAt time.Time) int64 {
 	t.Helper()
+	cs, err := services.NewCipherService(pool, []byte(testutil.TestCipherKey))
+	require.NoError(t, err)
+	encrypted, err := cs.Encrypt(ctx, "feedbacks_content", content)
+	require.NoError(t, err)
+
 	var id int64
-	err := pool.QueryRow(ctx, `
+	err = pool.QueryRow(ctx, `
 		INSERT INTO feedbacks (project_id, content, source, status, recorded_by, recorded_at)
 		VALUES ($1, $2, 'wechat', 'pending', $3, $4)
 		RETURNING id
-	`, projectID, content, userID, recordedAt).Scan(&id)
+	`, projectID, encrypted, userID, recordedAt).Scan(&id)
 	require.NoError(t, err)
 	return id
 }
@@ -210,6 +230,9 @@ func SeedQuoteChange(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 //
 // direction = "customer_in" 时 relatedUserID/screenshotID 可为 0；
 // direction = "dev_settlement" 时必须传非零值（CHECK 约束 chk_settlement_required_fields）。
+//
+// finding #4：payments.remark 是 BYTEA pgcrypto 密文。fixture 用 testutil.TestCipherKey
+// 派生 payments_remark 子密钥加密后再 INSERT。
 func SeedPayment(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	projectID, userID int64, direction, amount, remark string, paidAt time.Time,
 	relatedUserID, screenshotID int64) int64 {
@@ -221,13 +244,19 @@ func SeedPayment(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	if screenshotID > 0 {
 		screenshot = screenshotID
 	}
+
+	cs, err := services.NewCipherService(pool, []byte(testutil.TestCipherKey))
+	require.NoError(t, err)
+	encryptedRemark, err := cs.Encrypt(ctx, "payments_remark", remark)
+	require.NoError(t, err)
+
 	var id int64
-	err := pool.QueryRow(ctx, `
+	err = pool.QueryRow(ctx, `
 		INSERT INTO payments
 			(project_id, direction, amount, paid_at, related_user_id, screenshot_id, remark, recorded_by, recorded_at)
 		VALUES ($1, $2::payment_direction, $3::numeric, $4, $5, $6, $7, $8, NOW())
 		RETURNING id
-	`, projectID, direction, amount, paidAt, related, screenshot, remark, userID).Scan(&id)
+	`, projectID, direction, amount, paidAt, related, screenshot, encryptedRemark, userID).Scan(&id)
 	require.NoError(t, err)
 	return id
 }

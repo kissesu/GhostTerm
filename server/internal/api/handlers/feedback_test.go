@@ -87,8 +87,9 @@ func setupFeedbackHandlerEnv(t *testing.T) *feedbackHandlerEnv {
 		Pool: tdb.Pool, Hub: services.NewWSHub(),
 	})
 	require.NoError(t, err)
+	cipher := fixtures.NewTestCipher(t, tdb.Pool)
 	fbSvc, err := services.NewFeedbackService(services.FeedbackServiceDeps{
-		Pool: tdb.Pool, NotificationService: notifSvc,
+		Pool: tdb.Pool, NotificationService: notifSvc, Cipher: cipher,
 	})
 	require.NoError(t, err)
 	rbacSvc, err := services.NewRBACService(services.RBACServiceDeps{Pool: tdb.Pool})
@@ -186,6 +187,7 @@ func TestFeedbackHandler_UserPermDenyBlocksList(t *testing.T) {
 			})
 			return ns
 		}(),
+		Cipher: fixtures.NewTestCipher(t, env.tdb.Pool),
 	})
 	_, err := fbSvc.Create(ctx,
 		services.AuthContext{UserID: env.adminID, RoleID: 1},
@@ -251,6 +253,7 @@ func TestFeedbackHandler_UserPermDenyBlocksUpdate(t *testing.T) {
 	})
 	fbSvc, _ := services.NewFeedbackService(services.FeedbackServiceDeps{
 		Pool: env.tdb.Pool, NotificationService: notifSvc,
+		Cipher: fixtures.NewTestCipher(t, env.tdb.Pool),
 	})
 	rawF, err := fbSvc.Create(ctx,
 		services.AuthContext{UserID: env.adminID, RoleID: 1},

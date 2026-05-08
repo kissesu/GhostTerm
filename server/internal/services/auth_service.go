@@ -76,6 +76,8 @@ type authService struct {
 	refreshTTL  time.Duration
 	wsTicketTTL time.Duration
 	bcryptCost  int
+	// audit 在生产由 main.go 注入；测试 fixture 可为 nil（AuditService.Log 自带 nil 短路）
+	audit *AuditService
 }
 
 // AuthServiceDeps 装配 authService 所需的全部依赖。
@@ -90,6 +92,9 @@ type AuthServiceDeps struct {
 	RefreshTTL    time.Duration
 	BcryptCost    int
 	WSTicketTTL   time.Duration // 默认 30s（spec §3.5），调用方不传时本文件兜底
+	// Audit (可选) 安全审计服务，注入后 Login/Logout/ChangePassword/refresh reuse 五个路径
+	// 写入 security_audit_log；测试 fixture 可省略，service 内部用 nil 短路。
+	Audit *AuditService
 }
 
 // 编译时校验：authService 必须满足 AuthService interface
@@ -125,6 +130,7 @@ func NewAuthService(deps AuthServiceDeps) (AuthService, error) {
 		refreshTTL:  deps.RefreshTTL,
 		wsTicketTTL: wsTTL,
 		bcryptCost:  deps.BcryptCost,
+		audit:       deps.Audit,
 	}, nil
 }
 
@@ -195,6 +201,9 @@ var ErrPasswordNotSet = errors.New("password_not_set")
 //     NULL hash 不能复用 ErrInvalidCredentials —— 后者用来防 user enumeration，
 //     而 password_not_set 是明确的状态信号，前端需要区分展示
 func (s *authService) Login(ctx context.Context, username, password string) (string, string, any, error) {
+	// 从 ctx 取审计 metadata（中间件 InjectRequestMetadata 已注入）
+	md, _ := RequestMetadataFrom(ctx)
+
 	var (
 		user     AuthUser
 		passHash *string
@@ -211,6 +220,13 @@ func (s *authService) Login(ctx context.Context, username, password string) (str
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			// 审计：未知用户名尝试登录（防 user enumeration → 不暴露具体原因，仅记 username_attempted）
+			_ = s.audit.Log(ctx, AuditEvent{
+				EventType: AuditEventLoginFailed,
+				ClientIP:  md.ClientIP,
+				UserAgent: md.UserAgent,
+				Metadata:  map[string]any{"username_attempted": username, "reason": "user_not_found"},
+			})
 			return "", "", nil, ErrInvalidCredentials
 		}
 		return "", "", nil, fmt.Errorf("auth_service: query user: %w", err)
@@ -218,12 +234,33 @@ func (s *authService) Login(ctx context.Context, username, password string) (str
 	if passHash == nil {
 		// 用户存在但密码未设置（0021 migration 后的默认 admin / 或新建账号尚未完成首次设置）
 		// 必须先于 is_active 检查 —— 即使账号是 active 也无密码可校验
+		_ = s.audit.Log(ctx, AuditEvent{
+			EventType: AuditEventLoginFailed,
+			UserID:    &user.ID,
+			ClientIP:  md.ClientIP,
+			UserAgent: md.UserAgent,
+			Metadata:  map[string]any{"username_attempted": username, "reason": "password_not_set"},
+		})
 		return "", "", nil, ErrPasswordNotSet
 	}
 	if !auth.VerifyPassword(password, *passHash) {
+		_ = s.audit.Log(ctx, AuditEvent{
+			EventType: AuditEventLoginFailed,
+			UserID:    &user.ID,
+			ClientIP:  md.ClientIP,
+			UserAgent: md.UserAgent,
+			Metadata:  map[string]any{"username_attempted": username, "reason": "wrong_password"},
+		})
 		return "", "", nil, ErrInvalidCredentials
 	}
 	if !user.IsActive {
+		_ = s.audit.Log(ctx, AuditEvent{
+			EventType: AuditEventLoginFailed,
+			UserID:    &user.ID,
+			ClientIP:  md.ClientIP,
+			UserAgent: md.UserAgent,
+			Metadata:  map[string]any{"username_attempted": username, "reason": "user_inactive"},
+		})
 		return "", "", nil, ErrUserInactive
 	}
 
@@ -245,6 +282,15 @@ func (s *authService) Login(ctx context.Context, username, password string) (str
 	`, user.ID, refreshHash, expiresAt); err != nil {
 		return "", "", nil, fmt.Errorf("auth_service: persist refresh: %w", err)
 	}
+
+	// 审计成功登录：记录 user / role / IP / UA，便于事后追溯异常会话起点
+	_ = s.audit.Log(ctx, AuditEvent{
+		EventType: AuditEventLoginSuccess,
+		UserID:    &user.ID,
+		ClientIP:  md.ClientIP,
+		UserAgent: md.UserAgent,
+		Metadata:  map[string]any{"role_id": user.RoleID, "username": user.Username},
+	})
 
 	return access, refresh, user, nil
 }
@@ -293,6 +339,18 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (string,
 	if rotatedUserID == nil {
 		// 区分 reuse 与 invalid：查 hash 是否在历史中存在过
 		if s.isHistoricalToken(ctx, oldHash) {
+			// 审计：refresh token 重用攻击检测（高优先级安全事件）
+			// rotate_refresh_token 函数已撤销该 user 全部 token + bump token_version；
+			// 这里仅记录审计 trail 让运维事后追溯被劫持账号
+			md, _ := RequestMetadataFrom(ctx)
+			uid := claims.UserID
+			_ = s.audit.Log(ctx, AuditEvent{
+				EventType: AuditEventRefreshTokenReuseDetected,
+				UserID:    &uid,
+				ClientIP:  md.ClientIP,
+				UserAgent: md.UserAgent,
+				Metadata:  map[string]any{"reason": "rotated_token_replayed"},
+			})
 			return "", "", ErrRefreshTokenReused
 		}
 		return "", "", ErrInvalidRefreshToken
@@ -381,6 +439,16 @@ func (s *authService) Logout(ctx context.Context, sc SessionContext) error {
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("auth_service: commit logout: %w", err)
 	}
+
+	// 审计登出（事务 commit 后；commit 失败不应记录"成功登出"）
+	md, _ := RequestMetadataFrom(ctx)
+	uid := ac.UserID
+	_ = s.audit.Log(ctx, AuditEvent{
+		EventType: AuditEventLogoutSuccess,
+		UserID:    &uid,
+		ClientIP:  md.ClientIP,
+		UserAgent: md.UserAgent,
+	})
 	return nil
 }
 
@@ -555,6 +623,17 @@ func (s *authService) ChangePassword(ctx context.Context, sc SessionContext, old
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("auth_service: commit change-password: %w", err)
 	}
+
+	// 审计密码变更（commit 后）—— 修改密码是高敏感操作，便于事后排查"是否本人改的"
+	md, _ := RequestMetadataFrom(ctx)
+	uid := ac.UserID
+	_ = s.audit.Log(ctx, AuditEvent{
+		EventType: AuditEventPasswordChanged,
+		UserID:    &uid,
+		ClientIP:  md.ClientIP,
+		UserAgent: md.UserAgent,
+		Metadata:  map[string]any{"self_service": true},
+	})
 	return nil
 }
 

@@ -55,6 +55,13 @@ func main() {
 	// 第三步：装配 services
 	// Phase 2 AuthService / Phase 3 RBACService / Phase 4-9 worker A-F services
 	// ============================================
+	// finding #20：安全审计 service —— auth/user/file/permissions 全部敏感路径共用，
+	// 必须先于其它 service 构造让它们能在构造期注入；缺失即启动期 fail-fast
+	auditSvc, err := services.NewAuditService(pool)
+	if err != nil {
+		log.Fatalf("init audit service: %v", err)
+	}
+
 	authSvc, err := services.NewAuthService(services.AuthServiceDeps{
 		Pool:          pool,
 		AccessSecret:  cfg.JWTAccessSecret,
@@ -62,6 +69,7 @@ func main() {
 		AccessTTL:     cfg.JWTAccessTTL,
 		RefreshTTL:    cfg.JWTRefreshTTL,
 		BcryptCost:    cfg.BcryptCost,
+		Audit:         auditSvc,
 	})
 	if err != nil {
 		log.Fatalf("init auth service: %v", err)
@@ -79,6 +87,7 @@ func main() {
 	userSvc, err := services.NewUserService(services.UserServiceDeps{
 		Pool:       pool,
 		BcryptCost: cfg.BcryptCost,
+		Audit:      auditSvc,
 	})
 	if err != nil {
 		log.Fatalf("init user service: %v", err)
@@ -97,12 +106,22 @@ func main() {
 		Pool:         pool,
 		StoragePath:  cfg.FileStoragePath,
 		MaxSizeBytes: int64(cfg.FileMaxSizeMB) * 1024 * 1024,
+		Audit:        auditSvc,
 	})
 	if err != nil {
 		log.Fatalf("init file service: %v", err)
 	}
 
-	feedbackSvc, err := services.NewFeedbackService(services.FeedbackServiceDeps{Pool: pool})
+	// finding #4：列级加密 service —— feedback/payment/activity 三个 service 共用
+	cipherSvc, err := services.NewCipherService(pool, cfg.DataKey)
+	if err != nil {
+		log.Fatalf("init cipher service: %v", err)
+	}
+
+	feedbackSvc, err := services.NewFeedbackService(services.FeedbackServiceDeps{
+		Pool:   pool,
+		Cipher: cipherSvc,
+	})
 	if err != nil {
 		log.Fatalf("init feedback service: %v", err)
 	}
@@ -133,6 +152,7 @@ func main() {
 	feedbackSvc, err = services.NewFeedbackService(services.FeedbackServiceDeps{
 		Pool:                pool,
 		NotificationService: notifSvc,
+		Cipher:              cipherSvc,
 	})
 	if err != nil {
 		log.Fatalf("init feedback service (with notif): %v", err)
@@ -140,6 +160,7 @@ func main() {
 	paymentSvc, err := services.NewPaymentService(services.PaymentServiceDeps{
 		Pool:                pool,
 		NotificationService: notifSvc,
+		Cipher:              cipherSvc,
 	})
 	if err != nil {
 		log.Fatalf("init payment service (with notif): %v", err)
@@ -170,6 +191,8 @@ func main() {
 		PaymentService:      paymentSvc,
 		NotificationService: notifSvc,
 		WSHub:               wsHub,
+		Cipher:              cipherSvc,
+		Audit:               auditSvc,
 		// finding #7：登录与 refresh 速率限制由 env 注入，便于按部署调参；
 		// 缺省值见 router.go 内 rlCfg 默认值（5/10/30 per min）
 		RateLimit: &apimiddleware.RateLimitConfig{
