@@ -227,6 +227,17 @@ func Load() (*Config, error) {
 //
 // 读到的内容自动 trim 尾部 \n（systemd-creds encrypt 写文件常带换行，
 // 直接当 JWT 密钥会让字节数对不上、当 DB URL 会让 pgx 解析失败）。
+//
+// 安全 review Info（攻击面文档化）：
+//   - CREDENTIALS_DIRECTORY env var 由 systemd 自动注入指向 tmpfs 路径
+//     (例：/run/credentials/ghostterm-server.service)；攻击者若能控制
+//     env var (如非特权进程注入)，可让 server 从攻击者写入的目录读 secrets。
+//   - 生产 systemd unit 已用 PrivateTmp=true / ReadWritePaths= 隔离，
+//     非 root 进程无法写入 /run/credentials/* 也无法 setenv 注入到已启动 service。
+//   - dev / docker-compose 场景 CREDENTIALS_DIRECTORY 不会被设置（除非显式 export），
+//     fallback 直接读 env var，行为符合预期。
+//   - 若未来在容器编排中运行（k8s ConfigMap mount 等），需重新评估
+//     attacker write to mounted path 的可能性 → 那时改用 SealedSecrets / Vault。
 func ReadSecretFromCredentials(credName, envKey string) string {
 	credDir := os.Getenv("CREDENTIALS_DIRECTORY")
 	if credDir != "" {

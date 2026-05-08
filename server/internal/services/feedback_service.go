@@ -315,6 +315,14 @@ func (s *feedbackService) Create(ctx context.Context, sc SessionContext, project
 
 	// finding #4：写入前用 cipher 加密 content；cipher 走 pool 不在 tx 内，
 	// 但 plaintext 已落到内存变量 encContent，不影响事务原子性
+	//
+	// 安全 review M6：cipher.Encrypt 必须保留在 InTx 之前调用。
+	// 若未来重构把 cipher 调用移到 InTx callback 内：
+	//   - C3 修复后 v2 路径走 Go AES-GCM 不再占用 pool 连接（OK）
+	//   - 但 v1 fallback 解密路径 (decryptV1Legacy) 仍走 PG QueryRow，
+	//     在 InTx 内会请求第二个 pool 连接 → pool size=1 时 deadlock
+	// 不要在 InTx 内调 cipher.Decrypt 除非确认 pool size ≥ 2；
+	// 当前架构 cipher 调用全部在 tx 之外，符合 reviewer M6 建议。
 	encContent, err := s.cipher.Encrypt(ctx, "feedbacks_content", content)
 	if err != nil {
 		return nil, fmt.Errorf("feedback_service: encrypt content: %w", err)
