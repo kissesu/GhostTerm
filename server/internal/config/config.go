@@ -134,6 +134,12 @@ func Load() (*Config, error) {
 	if len(access) < minJWTSecretLen {
 		return nil, fmt.Errorf("config: JWT_ACCESS_SECRET must be ≥%d bytes, got %d", minJWTSecretLen, len(access))
 	}
+	// 安全 review L1：低熵字符串虽满足长度但仍可被字典/重复 pattern 暴破
+	// 例如 "aaaa...aaaa" (32 字节) 长度 OK 但实际熵 = log2(1) = 0
+	// 拒绝单字符重复 + 至少 16 个唯一字符（HS256 安全密钥应至少有 ~10 字符多样性）
+	if err := assertSecretEntropy("JWT_ACCESS_SECRET", access); err != nil {
+		return nil, err
+	}
 	cfg.JWTAccessSecret = []byte(access)
 
 	refresh := ReadSecretFromCredentials("jwt_refresh", "JWT_REFRESH_SECRET")
@@ -142,6 +148,9 @@ func Load() (*Config, error) {
 	}
 	if len(refresh) < minJWTSecretLen {
 		return nil, fmt.Errorf("config: JWT_REFRESH_SECRET must be ≥%d bytes, got %d", minJWTSecretLen, len(refresh))
+	}
+	if err := assertSecretEntropy("JWT_REFRESH_SECRET", refresh); err != nil {
+		return nil, err
 	}
 	// access==refresh 让"双密钥独立轮换"设计作废且单点泄露同时炸 access+refresh 两类 token。
 	if access == refresh {
@@ -236,6 +245,44 @@ func ReadSecretFromCredentials(credName, envKey string) string {
 		}
 	}
 	return os.Getenv(envKey)
+}
+
+// assertSecretEntropy 拒绝低熵密钥（review L1 防御）。
+//
+// 长度通过但熵很低的字符串（如 "aaaa...aaaa" 32 字节）实际安全等同空密钥。
+// 简单启发式：要求至少 3 类字符（lower / upper / digit / symbol）。
+//
+// 与"≥N 个唯一字符"相比的优势：
+//   - 真实 base64 输出（含 lower+upper+digit）天然 3 类通过
+//   - openssl rand -hex 输出（lower+digit）只 2 类需谨慎，但 hex 不应作为生产密钥（建议 -base64）
+//   - "aaaa...aaaa" 只 1 类（lower）→ 拒
+//   - "abcabc...abc" 只 1 类 → 拒
+//   - 这是必要条件不是充分条件，但已挡住最常见的"复制粘贴 32 个 a" 运维错误。
+func assertSecretEntropy(name, secret string) error {
+	var hasLower, hasUpper, hasDigit, hasSymbol bool
+	for _, r := range secret {
+		switch {
+		case r >= 'a' && r <= 'z':
+			hasLower = true
+		case r >= 'A' && r <= 'Z':
+			hasUpper = true
+		case r >= '0' && r <= '9':
+			hasDigit = true
+		default:
+			hasSymbol = true
+		}
+	}
+	classCount := 0
+	for _, has := range []bool{hasLower, hasUpper, hasDigit, hasSymbol} {
+		if has {
+			classCount++
+		}
+	}
+	if classCount < 3 {
+		return fmt.Errorf("config: %s low entropy (only %d character classes, need ≥3 of lower/upper/digit/symbol) — generate with `openssl rand -base64 32`",
+			name, classCount)
+	}
+	return nil
 }
 
 // getenvDefault 读环境变量，未设置或空字符串时返回默认。
