@@ -8,13 +8,16 @@
  *                - login / refresh / logout / loadMe（getMe）
  *
  *              持久化策略：
- *                - accessToken：仅内存，不落 localStorage（避免 XSS 长期持有）
- *                - refreshToken：写 localStorage('progress_refresh_token')，
- *                  应用启动调 refresh() 换新 access；refresh 失败则清空
+ *                - accessToken：仅内存，不落任何持久化（避免 XSS 长期持有）
+ *                - refreshToken：finding #12 修复后改存系统 keychain（macOS Keychain /
+ *                  Windows Credential Manager / Linux Secret Service）；通过 Tauri IPC
+ *                  set/get/delete_refresh_token_cmd 三个 command 访问；webview JS 即使
+ *                  绕过 CSP + DOMPurify 也无法直接读取 OS keychain。
+ *                  应用启动 hydrate() 从 keychain 拉到内存，再调 refresh() 换新 access。
  *                - user：仅内存（loadMe 后填）
  *
- *              localStorage key 沿用 'progress_refresh_token'：
- *                避免老用户重新登录；命名上保留历史只是 key 本身，store 已是全局。
+ *              旧用户迁移：原 localStorage('progress_refresh_token') 不再读取；
+ *              用户首次启动新版本会被识别为"未登录"重新输入凭证，登录后写入 keychain。
  *
  * @author Atlas.oi
  * @date 2026-04-29
@@ -22,6 +25,7 @@
 
 import { create } from 'zustand';
 import { z } from 'zod';
+import { invoke } from '@tauri-apps/api/core';
 
 import { apiFetch, ProgressApiError } from '../../features/progress/api/client';
 import {
@@ -37,30 +41,37 @@ import { useGlobalPermissionStore } from './globalPermissionStore';
 import { useProgressPermissionStore } from '../../features/progress/stores/progressPermissionStore';
 
 // ============================================
-// localStorage key —— 沿用历史 key，不破坏已有用户登录态
+// keychain 读/写/删 —— 走 Tauri IPC
+//
+// 设计点：
+//  1) 所有函数都是 async：webview 与 Rust 进程之间是异步消息通道，
+//     不能像 localStorage 那样同步返回。
+//  2) read / clear 容错：keychain 不可用 / 用户拒绝授权时不阻断主流程，
+//     吞错并按"无 token / 清理失败"处理；write 不容错—登录后写不进去
+//     就让用户立即看到错误，而不是静默丢凭证。
+//  3) 测试环境：setup.ts 已全局 vi.mock '@tauri-apps/api/core' 让 invoke
+//     成为 vi.fn()；测试用例按需 mockResolvedValueOnce 注入 keychain 状态。
 // ============================================
-const REFRESH_KEY = 'progress_refresh_token';
-
-// ============================================
-// localStorage 读/写 —— 容错：测试环境若被禁用直接吞错
-// ============================================
-function readRefresh(): string | null {
+async function readRefresh(): Promise<string | null> {
   try {
-    return globalThis.localStorage?.getItem(REFRESH_KEY) ?? null;
-  } catch {
+    return (await invoke<string | null>('get_refresh_token_cmd')) ?? null;
+  } catch (e) {
+    console.error('[auth] read refresh from keychain failed:', e);
     return null;
   }
 }
 
-function writeRefresh(token: string | null): void {
-  try {
-    if (token) {
-      globalThis.localStorage?.setItem(REFRESH_KEY, token);
-    } else {
-      globalThis.localStorage?.removeItem(REFRESH_KEY);
+async function writeRefresh(token: string | null): Promise<void> {
+  if (token) {
+    // 写入失败抛出 —— 登录路径必须感知，不能静默丢凭证
+    await invoke('set_refresh_token_cmd', { token });
+  } else {
+    try {
+      await invoke('delete_refresh_token_cmd');
+    } catch (e) {
+      // 清理失败不阻断登出语义（用户视角"我要退出"已达成）
+      console.warn('[auth] clear refresh keychain entry failed (non-fatal):', e);
     }
-  } catch {
-    // 隐身浏览模式 / 测试 jsdom 关闭 localStorage 时静默忽略
   }
 }
 
@@ -85,27 +96,50 @@ interface GlobalAuthState {
   loading: boolean;
   /** 最近一次操作的错误信息（登录失败提示等） */
   error: string | null;
+  /**
+   * 应用启动后是否还在从 keychain 拉 refreshToken。
+   *
+   * 与"未登录"区分：hydrating=true 时不能展示 LoginPage（用户原话 2026-05-02
+   * "页面刷新时会闪现一下登录页面 非常不合理"），AppLayout 改用 splash 等待。
+   * 旧版本同步 readRefresh() 让初始 state 已含 refreshToken；改 keychain 后
+   * 必须异步等待，否则首屏 refreshToken=null 会触发 LoginPage 闪现。
+   */
+  hydrating: boolean;
 
   // ============ actions ============
 
+  /** 应用启动时从系统 keychain 拉 refreshToken 到内存；幂等 */
+  hydrate: () => Promise<void>;
   /** 用户名 + 密码登录 */
   login: (username: string, password: string) => Promise<void>;
   /** 用 refreshToken 换新 accessToken；失败会清空 refresh */
   refresh: () => Promise<void>;
-  /** 登出：调后端 + 清空本地状态 + 清 localStorage */
+  /** 登出：调后端 + 清空本地状态 + 清 keychain */
   logout: () => Promise<void>;
   /** 拉取当前登录用户信息（依赖 accessToken） */
   loadMe: () => Promise<void>;
   /** 清空本地 token / user / error（不调后端） */
-  clearLocal: () => void;
+  clearLocal: () => Promise<void>;
 }
 
 export const useGlobalAuthStore = create<GlobalAuthState>((set, get) => ({
   accessToken: null,
-  refreshToken: readRefresh(),
+  refreshToken: null,
   user: null,
   loading: false,
   error: null,
+  hydrating: true,
+
+  // ----------------------------------------------------------
+  // hydrate: 启动时从 keychain 拉 refreshToken
+  // 幂等：多次调用安全（StrictMode 双 mount / verify effect 重入都 OK）
+  // ----------------------------------------------------------
+  async hydrate() {
+    // 已经 hydrate 过（refreshToken 已在内存）跳过；hydrating=false 视为已完成
+    if (!get().hydrating) return;
+    const token = await readRefresh();
+    set({ refreshToken: token, hydrating: false });
+  },
 
   // ----------------------------------------------------------
   // login: POST /api/auth/login → { accessToken, refreshToken, user }
@@ -122,13 +156,16 @@ export const useGlobalAuthStore = create<GlobalAuthState>((set, get) => ({
         },
         LoginResponseSchema,
       );
-      writeRefresh(data.refreshToken);
+      // 写 keychain 失败必须冒泡 —— 不能登录"成功"却没存住 refresh
+      // hydrating 顺便置 false：登录路径与"启动 hydrate"语义合并到位
+      await writeRefresh(data.refreshToken);
       set({
         accessToken: data.accessToken,
         refreshToken: data.refreshToken,
         user: data.user,
         loading: false,
         error: null,
+        hydrating: false,
       });
       // login 响应的 user 不含 permissions（仅 /api/auth/me 返回）；
       // 立即拉一次 me 让 PermissionGate / usePermission 在登录后第一次渲染就拿到结果
@@ -164,23 +201,26 @@ export const useGlobalAuthStore = create<GlobalAuthState>((set, get) => ({
         if (!current) {
           throw new ProgressApiError(401, 'unauthorized', 'no refresh token');
         }
-        const data = await apiFetch(
-          '/api/auth/refresh',
-          {
-            method: 'POST',
-            anonymous: true, // refresh 不依赖 access token
-            body: JSON.stringify({ refreshToken: current }),
-          },
-          RefreshResponseSchema,
-        ).catch((err) => {
-          // refresh 失败 = refresh token 失效；清空本地 state 避免后续重复尝试
-          writeRefresh(null);
+        let data;
+        try {
+          data = await apiFetch(
+            '/api/auth/refresh',
+            {
+              method: 'POST',
+              anonymous: true, // refresh 不依赖 access token
+              body: JSON.stringify({ refreshToken: current }),
+            },
+            RefreshResponseSchema,
+          );
+        } catch (err) {
+          // refresh 失败 = refresh token 失效；清空 keychain 与本地 state 避免后续重复尝试
+          await writeRefresh(null);
           set({ accessToken: null, refreshToken: null, user: null });
           throw err;
-        });
-        // 后端 rotate 后的新 refreshToken 必须写回 localStorage + state
+        }
+        // 后端 rotate 后的新 refreshToken 必须写回 keychain + state
         // （rotate_refresh_token 单次消费，下次 refresh 必须用新 token）
-        writeRefresh(data.refreshToken);
+        await writeRefresh(data.refreshToken);
         set({ accessToken: data.accessToken, refreshToken: data.refreshToken });
       } finally {
         refreshInflight = null;
@@ -199,7 +239,7 @@ export const useGlobalAuthStore = create<GlobalAuthState>((set, get) => ({
     } catch {
       // 后端失败不阻断本地登出 —— 用户语义就是"我要退出"
     } finally {
-      writeRefresh(null);
+      await writeRefresh(null);
       set({ accessToken: null, refreshToken: null, user: null, error: null });
       useGlobalPermissionStore.getState().clear();
       useProgressPermissionStore.getState().clear();
@@ -221,9 +261,10 @@ export const useGlobalAuthStore = create<GlobalAuthState>((set, get) => ({
 
   // ----------------------------------------------------------
   // clearLocal: 不调后端，只清本地（用于 401 时强制返回登录页）
+  // 改 async：keychain 删除是异步 IPC，调用方必要时可 await 等待清理完成
   // ----------------------------------------------------------
-  clearLocal() {
-    writeRefresh(null);
+  async clearLocal() {
+    await writeRefresh(null);
     set({ accessToken: null, refreshToken: null, user: null, error: null });
     useGlobalPermissionStore.getState().clear();
   },

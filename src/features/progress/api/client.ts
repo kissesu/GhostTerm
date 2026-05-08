@@ -211,7 +211,9 @@ export async function apiFetch<T>(
   // 此时清登录态让 ProgressShell 切回 LoginPage（区别于 access 单纯过期的"伪 401"）
   if (res.status === 401 && !anonymous) {
     const { useGlobalAuthStore } = await import('../../../shared/stores/globalAuthStore');
-    useGlobalAuthStore.getState().clearLocal();
+    // clearLocal 改 async（finding #12 keychain 迁移）；await 让 keychain 删除完成
+    // 后再继续抛错，避免下一次 401 还能读到旧 token 重复尝试
+    await useGlobalAuthStore.getState().clearLocal();
   }
   if (!res.ok) {
     const parsed = ErrorEnvelopeSchema.safeParse(body);

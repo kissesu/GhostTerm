@@ -67,6 +67,10 @@ export default function AppLayout() {
   // 全局认证状态：未登录时整个应用替换为登录页
   const user = useGlobalAuthStore((s) => s.user);
   const refreshToken = useGlobalAuthStore((s) => s.refreshToken);
+  // hydrating: keychain 异步拉 refreshToken 期间为 true（finding #12）；
+  // 期间不能展 LoginPage（避免闪现）也不能展主 UI（user 还没拉到）
+  const hydrating = useGlobalAuthStore((s) => s.hydrating);
+  const hydrate = useGlobalAuthStore((s) => s.hydrate);
   const refresh = useGlobalAuthStore((s) => s.refresh);
   const loadMe = useGlobalAuthStore((s) => s.loadMe);
   const logout = useGlobalAuthStore((s) => s.logout);
@@ -155,8 +159,15 @@ export default function AppLayout() {
         if (!cancelled) setSessionVerified(true);
         return;
       }
+      // finding #12：先从 keychain 拉 refreshToken 到内存（旧版同步 readRefresh，
+      // 新版异步 IPC）。hydrate() 幂等，多次 mount 安全。
+      await hydrate();
+      if (cancelled) return;
+      // hydrate 后从最新 store state 取 refreshToken（不能用闭包 refreshToken 变量
+      // —— 那是 effect 启动时的快照，hydrate 期间已陈旧）
+      const tokenAfterHydrate = useGlobalAuthStore.getState().refreshToken;
       // 有 refreshToken 但无 access：尝试 refresh + loadMe
-      if (refreshToken) {
+      if (tokenAfterHydrate) {
         try {
           await refresh();
           await loadMe();
@@ -260,14 +271,17 @@ export default function AppLayout() {
   }, []);
 
   // ============================================
-  // 全局登录门：分三态避免"刷新闪现登录页"（用户原话 2026-05-02）
-  //   1) verify 进行中 + localStorage 有 refresh token → splash（假设登录中，不展 LoginPage）
-  //   2) verify 进行中 + 无 refresh token → 直接 LoginPage（无 token 不需等异步）
+  // 全局登录门：分多态避免"刷新闪现登录页"（用户原话 2026-05-02）
+  //   0) hydrating（启动从 keychain 拉 refreshToken 中）→ splash（finding #12 新增）
+  //   1) verify 进行中 + 已 hydrate 且有 refreshToken → splash（假设登录中，不展 LoginPage）
+  //   2) verify 进行中 + 已 hydrate 且无 refreshToken → 直接 LoginPage（无 token 不需等异步）
   //   3) verify 完成 + 无 user → LoginPage（确认未登录）
   //   4) verify 完成 + 有 user → 主 UI
-  // refreshToken 来自 globalAuthStore 初始 state，已经从 localStorage 读出，同步可见
+  //
+  // 旧版本 refreshToken 同步可见（localStorage），新版本必须等 hydrate() 完成
+  // 才能判断是否真"无 token"；hydrating 期间一律 splash。
   // ============================================
-  if (!sessionVerified && refreshToken) {
+  if (hydrating || (!sessionVerified && refreshToken)) {
     // 已登录用户刷新页面：异步 verify 期间显示 splash，不闪 LoginPage
     return (
       <div

@@ -4,6 +4,9 @@
  *              登录成功后 progressPermissionStore.has() 对登录返回的 perms 为 true；
  *              登出后 progressPermissionStore.has() 全为 false。
  *
+ *              finding #12 后：refreshToken 走 keychain IPC（set/get/delete_refresh_token_cmd），
+ *              测试用 mockKeychainStore 模拟 keychain 状态；invoke 全局 mock 在 src/test/setup.ts。
+ *
  * @author Atlas.oi
  * @date 2026-05-01
  */
@@ -39,18 +42,49 @@ vi.mock('../globalPermissionStore', () => ({
 import { useGlobalAuthStore } from '../globalAuthStore';
 import { useProgressPermissionStore } from '../../../features/progress/stores/progressPermissionStore';
 import { apiFetch } from '../../../features/progress/api/client';
+import { invoke } from '@tauri-apps/api/core';
 
 // ============================================
-// 测试前把两个 store 都清空，保证隔离
+// keychain 模拟存储 —— 替代 localStorage
+// finding #12：refreshToken 改走系统 keychain IPC，测试用内存 Record 模拟
+// invoke 全局 mock 已在 src/test/setup.ts，这里按 cmd 名分发到该模拟存储
+// ============================================
+const mockKeychainStore: Record<string, string> = {};
+
+function setupKeychainMock(): void {
+  // invoke 的 InvokeArgs 类型联合较宽（含 number[]/Record/...），
+  // 这里只关心 set_refresh_token_cmd 的 { token: string } 形态，按对象处理
+  vi.mocked(invoke).mockImplementation(((cmd: string, args?: unknown) => {
+    if (cmd === 'get_refresh_token_cmd') {
+      return Promise.resolve(mockKeychainStore.refresh_token ?? null);
+    }
+    if (cmd === 'set_refresh_token_cmd') {
+      const token = (args as { token?: string } | undefined)?.token ?? '';
+      mockKeychainStore.refresh_token = String(token);
+      return Promise.resolve();
+    }
+    if (cmd === 'delete_refresh_token_cmd') {
+      delete mockKeychainStore.refresh_token;
+      return Promise.resolve();
+    }
+    return Promise.reject(new Error(`unhandled invoke in test: ${cmd}`));
+  }) as unknown as typeof invoke);
+}
+
+// ============================================
+// 测试前把两个 store + keychain mock 都清空，保证隔离
 // ============================================
 beforeEach(() => {
   vi.resetAllMocks();
+  Object.keys(mockKeychainStore).forEach((k) => delete mockKeychainStore[k]);
+  setupKeychainMock();
   useGlobalAuthStore.setState({
     accessToken: null,
     refreshToken: null,
     user: null,
     loading: false,
     error: null,
+    hydrating: false,
   });
   useProgressPermissionStore.getState().clear();
 });

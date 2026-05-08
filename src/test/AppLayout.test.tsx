@@ -58,12 +58,14 @@ beforeEach(() => {
   useSettingsStore.setState({ appView: 'main', terminal: DEFAULT_TERMINAL_SETTINGS });
   useTerminalStore.setState({ sessions: {}, activeProjectPath: null });
   // 注入已登录态绕过全局登录门
+  // hydrating=false 跳过 keychain 异步 splash（finding #12），让 user 即刻可见
   useGlobalAuthStore.setState({
     accessToken: 'test-token',
     refreshToken: 'test-refresh',
     user: TEST_USER,
     loading: false,
     error: null,
+    hydrating: false,
   });
   // Task 9：AppLayout nav tabs 由 globalPermissionStore.has() 门控；
   // 测试场景需手动 hydrate 三个 nav perms 让布局/工作区按预期渲染。
