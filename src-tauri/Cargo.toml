@@ -86,6 +86,12 @@ tauri-plugin-dialog = "2.7.0"
 # webview JS 即使绕过 CSP + DOMPurify 也无法访问 OS keychain
 keyring = "3"
 
+# URL 解析 - finding #22: clone_repository_cmd 白名单校验，解析 https:// host 字段
+url = "2"
+
+# 错误类型派生 - finding #22: GitUrlError 枚举的 Display/Error 实现
+thiserror = "1"
+
 # macOS 原生 API - 用于 NSWindow 标题栏透明化（消除窗口四周留白）
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"

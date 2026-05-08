@@ -1499,8 +1499,10 @@ dependencies = [
  "tauri-plugin-updater",
  "tauri-plugin-webdriver-automation",
  "tempfile",
+ "thiserror 1.0.69",
  "tokio",
  "tokio-tungstenite",
+ "url",
 ]
 
 [[package]]

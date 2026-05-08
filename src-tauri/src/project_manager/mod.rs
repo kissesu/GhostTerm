@@ -16,6 +16,7 @@ use std::sync::{Mutex, OnceLock};
 use tokio::sync::Mutex as TokioMutex;
 use crate::types::ProjectInfo;
 use crate::fs_backend::watcher::{start_watching, stop_watching};
+use crate::git_url_validator::validate_clone_url;
 use persistence::{load_projects, save_projects};
 use tauri::Manager;
 use session::{EditorSession, get_session, save_session};
@@ -193,6 +194,11 @@ pub fn clone_repository(repository_url: &str, destination_path: &str) -> Result<
     if destination_path.trim().is_empty() {
         return Err("目标目录不能为空".to_string());
     }
+
+    // 安全 finding #22：URL 必过白名单 + 参数注入防御
+    // 即使前端被 XSS 控制，invoke 也无法把 `--upload-pack=evil` 传到 git CLI 触发 RCE
+    validate_clone_url(repository_url.trim())
+        .map_err(|e| format!("仓库地址校验失败: {e}"))?;
 
     if destination.exists() {
         return Err(format!("目标目录已存在: {destination_path}"));

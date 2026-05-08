@@ -16,6 +16,7 @@ pub mod git_backend;
 pub mod project_manager;
 pub mod http_proxy;
 pub mod auth_secret;
+pub mod git_url_validator;
 
 // PBI-1 Commands
 use pty_manager::{spawn_pty_cmd, kill_pty_cmd, resize_pty_cmd, reconnect_pty_cmd, get_default_shell_cmd};
