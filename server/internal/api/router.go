@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
@@ -402,6 +403,10 @@ type RouterDeps struct {
 	PaymentService      services.PaymentService
 	NotificationService services.NotificationService
 	WSHub               services.WSHub
+
+	// RateLimit 可选：nil 时使用 sane default（5/10/30 per min）。
+	// 测试场景一般留空走默认；生产由 Config 注入便于通过 env 调参。
+	RateLimit *apimw.RateLimitConfig
 }
 
 // NewRouter 装配 chi 基础中间件 + ogen 生成的 OpenAPI server。
@@ -561,6 +566,31 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	// 不走 ogen 因为 ogen 不支持 WS 升级；openapi.yaml 中仅声明该 endpoint 元数据
 	// ============================================================
 	r.Get("/api/ws/notifications", handlers.NewWSHandler(deps.AuthService, deps.WSHub))
+
+	// ============================================================
+	// 登录与 refresh 速率限制（v2 安全审计 finding #7）
+	//
+	// 必须在 r.Mount("/", oasServer) 之前注册具体路径，让 chi 优先匹配；
+	// middleware 将 IP/username 维度封顶超额请求拦在 handler 之前，超额返 429。
+	//
+	// 业务背景：5 人自用 username 高度可枚举（admin/dev1/cs1），公网 :8080
+	// 任意人可无限调登录；bcrypt cost 12 (~250-400ms/次) 仍可被分布式 botnet 暴破。
+	//
+	// 接入策略：用 chi r.With(...) 把 middleware 链挂到具体路径，
+	// 内层 handler 直接转发给 oasServer（HTTP-level wrapper，不动 ogen 解码逻辑）。
+	// ============================================================
+	rlCfg := apimw.RateLimitConfig{
+		LoginPerMinPerIP:   5,
+		LoginPerMinPerUser: 10,
+		RefreshPerMinPerIP: 30,
+		TTL:                10 * time.Minute,
+	}
+	if deps.RateLimit != nil {
+		rlCfg = *deps.RateLimit
+	}
+	rateLimiter := apimw.NewLoginRateLimiter(rlCfg)
+	r.With(rateLimiter.LoginMiddleware).Method(http.MethodPost, "/api/auth/login", oasServer)
+	r.With(rateLimiter.RefreshMiddleware).Method(http.MethodPost, "/api/auth/refresh", oasServer)
 
 	r.Mount("/", oasServer)
 	return r, nil

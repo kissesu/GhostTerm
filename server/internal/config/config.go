@@ -54,6 +54,13 @@ type Config struct {
 	BcryptCost       int
 	FileStoragePath  string
 	FileMaxSizeMB    int
+
+	// 速率限制（v2 安全审计 finding #7：5 人自用 username 高度可枚举，
+	// 公网 8080 任意人无限调登录，bcrypt cost 12 仍可被分布式 botnet 暴破）。
+	// 配合 IP + username 双维度桶，超额返 429 + Retry-After。
+	RateLimitLoginPerMinPerIP   int
+	RateLimitLoginPerMinPerUser int
+	RateLimitRefreshPerMinPerIP int
 }
 
 // Load 从环境变量构建 Config，调用前可选地加载 .env 文件（仅开发便利）。
@@ -125,6 +132,24 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	cfg.FileMaxSizeMB, err = parseInt("FILE_MAX_SIZE_MB", 100)
+	if err != nil {
+		return nil, err
+	}
+
+	// 速率限制默认值（finding #7）：
+	//   - 登录 IP 5/min：留足误输次数（用户记错密码 5 次后冷静 60s），同时挡 botnet
+	//   - 登录 user 10/min：多 IP 联合撞同一账号也封死（>2 倍 IP 维度宽容）
+	//   - refresh IP 30/min：access TTL 15min 时单用户每分钟最多 ~1 次刷新，
+	//     30/min 给前端 silent refresh + 偶发抖动留足空间
+	cfg.RateLimitLoginPerMinPerIP, err = parseInt("RATE_LIMIT_LOGIN_PER_MIN_PER_IP", 5)
+	if err != nil {
+		return nil, err
+	}
+	cfg.RateLimitLoginPerMinPerUser, err = parseInt("RATE_LIMIT_LOGIN_PER_MIN_PER_USER", 10)
+	if err != nil {
+		return nil, err
+	}
+	cfg.RateLimitRefreshPerMinPerIP, err = parseInt("RATE_LIMIT_REFRESH_PER_MIN_PER_IP", 30)
 	if err != nil {
 		return nil, err
 	}

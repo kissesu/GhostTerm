@@ -159,6 +159,14 @@ func main() {
 		PaymentService:      paymentSvc,
 		NotificationService: notifSvc,
 		WSHub:               wsHub,
+		// finding #7：登录与 refresh 速率限制由 env 注入，便于按部署调参；
+		// 缺省值见 router.go 内 rlCfg 默认值（5/10/30 per min）
+		RateLimit: &apimiddleware.RateLimitConfig{
+			LoginPerMinPerIP:   cfg.RateLimitLoginPerMinPerIP,
+			LoginPerMinPerUser: cfg.RateLimitLoginPerMinPerUser,
+			RefreshPerMinPerIP: cfg.RateLimitRefreshPerMinPerIP,
+			TTL:                10 * time.Minute,
+		},
 	})
 	if err != nil {
 		log.Fatalf("init router: %v", err)

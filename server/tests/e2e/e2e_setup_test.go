@@ -252,6 +252,13 @@ func setup() (func(), error) {
 		fmt.Sprintf("BCRYPT_COST=%d", e2eBcryptCost),
 		"FILE_STORAGE_PATH="+storageDir,
 		"FILE_MAX_SIZE_MB=10",
+		// e2e 全套 flow 共用 1 个 server 进程，所有请求都来自 127.0.0.1，
+		// 且复用 cs-e2e/dev1-e2e 等少量账号；生产 5/10/30 per min 的默认值
+		// 在 9 个 flow 串行登录时会触发 429。e2e 关注业务流而非限速本身，
+		// 这里用宽松值（10000/min）让限速 middleware 仍跑通但不影响测试。
+		"RATE_LIMIT_LOGIN_PER_MIN_PER_IP=10000",
+		"RATE_LIMIT_LOGIN_PER_MIN_PER_USER=10000",
+		"RATE_LIMIT_REFRESH_PER_MIN_PER_IP=10000",
 	)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
