@@ -23,8 +23,13 @@
     }
 
     header {
-        # HSTS - 1 年强制 HTTPS（IP 直连场景效果有限但仍加，防中间人 HTTP 降级）
-        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        # HSTS - 1 年强制 HTTPS
+        # 安全 review H2：删 includeSubDomains —— 当前 host 是 IP 字面量
+        # (103.236.85.144) 没有"子域"概念，directive 是空 op；但若后续切到 DNS
+        # 域名（如 atlas.example.com），includeSubDomains 会让浏览器把 1 年 HSTS
+        # 应用到所有子域 (mail.example.com / dev.example.com)，且 1 年内不可
+        # 撤销。先删，等切 DNS + 全子域已 HTTPS 准备好再单独评估加回。
+        Strict-Transport-Security "max-age=31536000"
         # 防 MIME sniff
         X-Content-Type-Options nosniff
         # 防点击劫持
