@@ -260,18 +260,18 @@ func (s *paymentService) List(ctx context.Context, sc SessionContext, projectID 
 		// remark 现在是 BYTEA 密文：scan 到 []byte 暂存，rows 关闭后统一解密
 		// （与 feedback_service.List 同模式，避免在游标活跃时再开 query）
 		type encPayment struct {
-			p             Payment
-			remarkCipher  []byte
+			p              Payment
+			remarkCipher   []byte
 			attachmentsRaw []byte
 		}
 		var encs []encPayment
 		for rows.Next() {
 			var (
-				p             Payment
-				directionRaw  string
-				relatedUserID *int64
-				screenshotID  *int64
-				remarkCipher  []byte
+				p              Payment
+				directionRaw   string
+				relatedUserID  *int64
+				screenshotID   *int64
+				remarkCipher   []byte
 				attachmentsRaw []byte // jsonb 走 []byte，service 层手动 unmarshal
 			)
 			if err := rows.Scan(

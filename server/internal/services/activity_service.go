@@ -265,7 +265,7 @@ func (s *activityService) List(
 // 设计取舍：
 //   - 失败必透出（不 silent fallback）：解密失败说明主密钥变更或数据损坏，
 //     返 502/503 让运维介入比"返空字符串假装正常"安全
-//   - 空 base64 字符串（fixture 用 0 字节密文 → encode='' 进 jsonb）→ Decrypt
+//   - 空 base64 字符串（fixture 用 0 字节密文 → encode=” 进 jsonb）→ Decrypt
 //     接受空 []byte 返 ""，不再二次报错
 //   - 其它 5 个 kind 直接 passthrough，不浪费 unmarshal 开销
 func (s *activityService) decryptActivityPayload(ctx context.Context, kind string, payload json.RawMessage) (json.RawMessage, error) {
