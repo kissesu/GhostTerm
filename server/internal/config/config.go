@@ -15,7 +15,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -115,12 +117,15 @@ func Load() (*Config, error) {
 	// ============================================
 	// 第一步：读取必填项 —— 缺一即拒绝启动
 	// ============================================
-	cfg.DBURL = os.Getenv("DATABASE_URL")
+	// finding #5：4 个 secrets 全部走 ReadSecretFromCredentials。
+	// 生产部署 systemd LoadCredentialEncrypted 解密到 $CREDENTIALS_DIRECTORY/<name>，
+	// dev / docker-compose / CI 回落 OS env，行为对开发者透明。
+	cfg.DBURL = ReadSecretFromCredentials("database_url", "DATABASE_URL")
 	if cfg.DBURL == "" {
 		return nil, errors.New("config: DATABASE_URL is required")
 	}
 
-	access := os.Getenv("JWT_ACCESS_SECRET")
+	access := ReadSecretFromCredentials("jwt_access", "JWT_ACCESS_SECRET")
 	if access == "" {
 		return nil, errors.New("config: JWT_ACCESS_SECRET is required and must be non-empty")
 	}
@@ -131,7 +136,7 @@ func Load() (*Config, error) {
 	}
 	cfg.JWTAccessSecret = []byte(access)
 
-	refresh := os.Getenv("JWT_REFRESH_SECRET")
+	refresh := ReadSecretFromCredentials("jwt_refresh", "JWT_REFRESH_SECRET")
 	if refresh == "" {
 		return nil, errors.New("config: JWT_REFRESH_SECRET is required and must be non-empty")
 	}
@@ -145,7 +150,7 @@ func Load() (*Config, error) {
 	cfg.JWTRefreshSecret = []byte(refresh)
 
 	// finding #4：列级加密主密钥校验
-	dataKey := os.Getenv("GT_DATA_KEY")
+	dataKey := ReadSecretFromCredentials("data_key", "GT_DATA_KEY")
 	if dataKey == "" {
 		return nil, errors.New("config: GT_DATA_KEY is required for column-level encryption (finding #4)")
 	}
@@ -206,6 +211,31 @@ func Load() (*Config, error) {
 	cfg.AllowedOrigins = getenvDefault("ALLOWED_ORIGINS", "tauri://localhost,http://localhost:1420,http://tauri.localhost")
 
 	return cfg, nil
+}
+
+// ReadSecretFromCredentials 优先从 systemd LoadCredentialEncrypted 解密的 tmpfs 读 secret，
+// 回退到 OS env（用于 dev / docker-compose / CI 等没有 systemd-creds 的场景）。
+//
+// 业务背景（finding #5）：
+//  1. 生产部署用 systemd 250+ 的 LoadCredentialEncrypted，host TPM 派生密钥解密
+//     /etc/ghostterm/credentials/*.cred 到 $CREDENTIALS_DIRECTORY/<name>（tmpfs，
+//     仅当前 boot 周期可用）；磁盘快照拿到 .cred 文件没有 TPM 无法解密。
+//  2. 之前所有 secrets 都通过 /etc/ghostterm/server.env 明文落盘，云盘快照即拿全部 secrets。
+//     finding #5 修复方案：JWT/DB password/data-key 全部走 systemd-creds，
+//     只剩非敏感配置仍走 server.env。
+//  3. dev / docker-compose / CI 没有 systemd-creds，回落 env 保持开发体验不变。
+//
+// 读到的内容自动 trim 尾部 \n（systemd-creds encrypt 写文件常带换行，
+// 直接当 JWT 密钥会让字节数对不上、当 DB URL 会让 pgx 解析失败）。
+func ReadSecretFromCredentials(credName, envKey string) string {
+	credDir := os.Getenv("CREDENTIALS_DIRECTORY")
+	if credDir != "" {
+		path := filepath.Join(credDir, credName)
+		if b, err := os.ReadFile(path); err == nil {
+			return strings.TrimRight(string(b), "\n")
+		}
+	}
+	return os.Getenv(envKey)
 }
 
 // getenvDefault 读环境变量，未设置或空字符串时返回默认。

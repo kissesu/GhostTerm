@@ -9,6 +9,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -289,5 +291,74 @@ func TestLoad_RejectsShortDataKey(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "GT_DATA_KEY") {
 		t.Errorf("error should mention GT_DATA_KEY, got: %v", err)
+	}
+}
+
+// ============================================
+// finding #5：systemd-creds 优先于 env 读取 secrets
+// ============================================
+//
+// 业务背景：生产部署用 systemd 250+ 的 LoadCredentialEncrypted，
+// host TPM 派生密钥解密到 $CREDENTIALS_DIRECTORY/<name>（tmpfs，仅当前 boot 周期可用）。
+// 磁盘快照拿到 /etc/ghostterm/credentials/*.cred 是密文，无法解密。
+// dev / docker-compose / CI 没有 systemd-creds，必须 fallback env。
+
+// TestReadSecretFromCredentials_PrefersSystemdCreds 验证有 $CREDENTIALS_DIRECTORY/<name> 时
+// 优先读文件，env 被忽略。
+func TestReadSecretFromCredentials_PrefersSystemdCreds(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "jwt_access"), []byte("32-byte-credentials-secret-aaaa\n"), 0600); err != nil {
+		t.Fatalf("write tmp cred: %v", err)
+	}
+
+	t.Setenv("CREDENTIALS_DIRECTORY", tmpDir)
+	t.Setenv("JWT_ACCESS_SECRET", "fallback-env-value-32-bytes-aaa")
+
+	got := ReadSecretFromCredentials("jwt_access", "JWT_ACCESS_SECRET")
+	if got != "32-byte-credentials-secret-aaaa" {
+		t.Errorf("应优先 systemd-creds 而非 env，got %q", got)
+	}
+}
+
+// TestReadSecretFromCredentials_FallsBackToEnv 验证 $CREDENTIALS_DIRECTORY 未设置时回落 env。
+func TestReadSecretFromCredentials_FallsBackToEnv(t *testing.T) {
+	t.Setenv("CREDENTIALS_DIRECTORY", "") // 空 = 视为未设置
+	t.Setenv("JWT_ACCESS_SECRET", "env-fallback-32-bytes-aaaaaaaa")
+
+	got := ReadSecretFromCredentials("jwt_access", "JWT_ACCESS_SECRET")
+	if got != "env-fallback-32-bytes-aaaaaaaa" {
+		t.Errorf("CREDENTIALS_DIRECTORY 空应回落 env，got %q", got)
+	}
+}
+
+// TestReadSecretFromCredentials_FileNotExistFallsBack 验证目录设置但文件不存在时回落 env。
+//
+// 业务场景：部分 secret 走 systemd-creds，部分仍走 env 共存。
+func TestReadSecretFromCredentials_FileNotExistFallsBack(t *testing.T) {
+	tmpDir := t.TempDir()
+	// 目录设了但文件没创建
+	t.Setenv("CREDENTIALS_DIRECTORY", tmpDir)
+	t.Setenv("JWT_ACCESS_SECRET", "env-fallback-32-bytes-aaaaaaaa")
+
+	got := ReadSecretFromCredentials("jwt_access", "JWT_ACCESS_SECRET")
+	if got != "env-fallback-32-bytes-aaaaaaaa" {
+		t.Errorf("文件不存在应回落 env，got %q", got)
+	}
+}
+
+// TestReadSecretFromCredentials_TrimsTrailingNewline 验证 systemd-creds 写出的尾部 \n 被 trim。
+//
+// 业务背景：systemd-creds encrypt 通常以文本写入凭据，末尾可能多一个或多个 \n，
+// 直接拿来当 JWT 密钥/DB URL 会导致字节数对不上、连接串解析错误。
+func TestReadSecretFromCredentials_TrimsTrailingNewline(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "data_key"), []byte("data-key-32-bytes-aaaaaaaaaaaa\n\n"), 0600); err != nil {
+		t.Fatalf("write tmp cred: %v", err)
+	}
+	t.Setenv("CREDENTIALS_DIRECTORY", tmpDir)
+
+	got := ReadSecretFromCredentials("data_key", "GT_DATA_KEY")
+	if got != "data-key-32-bytes-aaaaaaaaaaaa" {
+		t.Errorf("尾部换行应被 trim，got %q", got)
 	}
 }
