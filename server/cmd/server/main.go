@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os/signal"
@@ -50,6 +51,18 @@ func main() {
 		log.Fatalf("db pool: %v", err)
 	}
 	defer pool.Close()
+
+	// 安全 review H1：fail-fast 校验 PG 连接以 progress_app 角色登录
+	//
+	// security_audit_log 的 INSERT-only RULE 与 RLS 策略都依赖 session_user='progress_app'
+	// 才能 RAISE / 拒写。如果 DATABASE_URL 误配为 postgres superuser（运维抢修 / 配置漂移），
+	// 整个 append-only 防护与 RLS 策略静默失效——审计可被擦除、行级权限被绕过。
+	//
+	// 启动期一次 SELECT current_user 是 ~ms 成本的硬墙：发现非 progress_app 立即 panic
+	// 退出，比让生产跑了 8 小时才发现"为啥审计都没了"安全得多。
+	if err := assertProgressAppRole(bootCtx, pool); err != nil {
+		log.Fatalf("db role: %v", err)
+	}
 
 	// ============================================
 	// 第三步：装配 services
@@ -321,4 +334,24 @@ func splitNonEmpty(s, sep string) []string {
 		}
 	}
 	return out
+}
+
+// assertProgressAppRole 校验 PG 连接以非 superuser 的应用专用角色登录。
+//
+// 安全 review H1：security_audit_log 的 INSERT-only RULE / RLS 策略 / payments
+// dev_settlement insert RLS 都假设 session_user='progress_app'。误连 superuser
+// 让所有应用层防护静默失效（superuser BYPASS RLS + 不触发 RULE）。
+//
+// 不直接拼 fmt.Errorf 是为了让运维 grep error 时一眼看出是 H1 触发：
+// "expected role 'progress_app' but DATABASE_URL points to '<actual>'"。
+func assertProgressAppRole(ctx context.Context, pool *pgxpool.Pool) error {
+	const requiredRole = "progress_app"
+	var sessionUser string
+	if err := pool.QueryRow(ctx, "SELECT session_user").Scan(&sessionUser); err != nil {
+		return fmt.Errorf("query session_user: %w", err)
+	}
+	if sessionUser != requiredRole {
+		return fmt.Errorf("expected role %q but DATABASE_URL points to %q (security review H1: superuser bypasses RLS + audit RULE)", requiredRole, sessionUser)
+	}
+	return nil
 }
