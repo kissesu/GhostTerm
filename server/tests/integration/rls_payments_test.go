@@ -32,8 +32,20 @@ import (
 
 	"github.com/ghostterm/progress-server/internal/auth"
 	progressdb "github.com/ghostterm/progress-server/internal/db"
+	"github.com/ghostterm/progress-server/internal/services"
 	"github.com/ghostterm/progress-server/internal/testutil"
 )
+
+// encryptRemark 用 testutil.TestCipherKey 派生 payments_remark 子密钥加密 plaintext。
+// 0026 后 payments.remark 是 BYTEA，raw INSERT 不能直接传 TEXT 字面量。
+func encryptRemark(t *testing.T, ctx context.Context, pool *pgxpool.Pool, plaintext string) []byte {
+	t.Helper()
+	cs, err := services.NewCipherService(pool, []byte(testutil.TestCipherKey))
+	require.NoError(t, err)
+	enc, err := cs.Encrypt(ctx, "payments_remark", plaintext)
+	require.NoError(t, err)
+	return enc
+}
 
 // rlsPaymentsEnv 装配 payments RLS 测试所需的最小用户与项目集合。
 type rlsPaymentsEnv struct {
@@ -145,11 +157,14 @@ func TestPaymentsRLS_NonAdminCannotInsertDevSettlement(t *testing.T) {
 	ctx := context.Background()
 
 	// devA（role 2）伪造 dev_settlement 给 devB
+	// 0026 后 remark 是 BYTEA：用 cipher 加密后 INSERT；本测试关注 RLS 拒绝路径，
+	// remark 字段是否能写入不影响 policy 判定（policy 看 direction + is_admin）
+	encRemark := encryptRemark(t, ctx, env.pool, "虚假结算攻击")
 	err := insertPaymentAsRole(ctx, env.pool, env.devAID, 2, `
 		INSERT INTO payments
 			(project_id, direction, amount, paid_at, related_user_id, screenshot_id, remark, recorded_by)
-		VALUES ($1, 'dev_settlement', 100.00, NOW(), $2, $3, '虚假结算攻击', $4)
-	`, env.projectID, env.devBID, env.screenshotFileID, env.devAID)
+		VALUES ($1, 'dev_settlement', 100.00, NOW(), $2, $3, $4, $5)
+	`, env.projectID, env.devBID, env.screenshotFileID, encRemark, env.devAID)
 
 	require.Error(t, err, "0025 policy 必须拒绝普通成员写 dev_settlement")
 	assert.True(t,
@@ -169,11 +184,12 @@ func TestPaymentsRLS_AdminCanInsertDevSettlement(t *testing.T) {
 	ctx := context.Background()
 
 	// admin（role 1）合法写入 dev_settlement
+	encRemark := encryptRemark(t, ctx, env.pool, "合法结算")
 	err := insertPaymentAsRole(ctx, env.pool, env.adminID, 1, `
 		INSERT INTO payments
 			(project_id, direction, amount, paid_at, related_user_id, screenshot_id, remark, recorded_by)
-		VALUES ($1, 'dev_settlement', 100.00, NOW(), $2, $3, '合法结算', $4)
-	`, env.projectID, env.devAID, env.screenshotFileID, env.adminID)
+		VALUES ($1, 'dev_settlement', 100.00, NOW(), $2, $3, $4, $5)
+	`, env.projectID, env.devAID, env.screenshotFileID, encRemark, env.adminID)
 
 	require.NoError(t, err, "admin 应可写 dev_settlement，实际：%v", err)
 }
@@ -190,11 +206,12 @@ func TestPaymentsRLS_NonAdminCanInsertCustomerIn(t *testing.T) {
 	ctx := context.Background()
 
 	// devA（role 2，is_member）合法写入 customer_in
+	encRemark := encryptRemark(t, ctx, env.pool, "客户回款")
 	err := insertPaymentAsRole(ctx, env.pool, env.devAID, 2, `
 		INSERT INTO payments
 			(project_id, direction, amount, paid_at, remark, recorded_by)
-		VALUES ($1, 'customer_in', 200.00, NOW(), '客户回款', $2)
-	`, env.projectID, env.devAID)
+		VALUES ($1, 'customer_in', 200.00, NOW(), $2, $3)
+	`, env.projectID, encRemark, env.devAID)
 
 	require.NoError(t, err, "普通成员应可写 customer_in，实际：%v", err)
 

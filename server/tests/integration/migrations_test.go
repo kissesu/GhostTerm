@@ -29,11 +29,21 @@ func TestMigrations_FunctionsCount(t *testing.T) {
 	ctx := context.Background()
 
 	// 业务背景：information_schema.routines 的 routine_schema = 'public' 过滤掉
-	// pg_catalog 内置函数；routine_type='FUNCTION' 排除 PROCEDURE（本项目暂不用 procedure）
+	// pg_catalog 内置函数；routine_type='FUNCTION' 排除 PROCEDURE（本项目暂不用 procedure）。
+	// 0026 后 CREATE EXTENSION pgcrypto 会把 ~36 个扩展函数 (pgp_sym_encrypt 等) 也注册
+	// 进 public schema，必须用 pg_depend 反向排除 extension 自带函数，仅统计本项目自定义。
 	var count int
 	err := pool.QueryRow(ctx, `
-		SELECT COUNT(*) FROM information_schema.routines
-		WHERE routine_schema = 'public' AND routine_type = 'FUNCTION'
+		SELECT COUNT(*) FROM information_schema.routines r
+		WHERE r.routine_schema = 'public'
+		  AND r.routine_type = 'FUNCTION'
+		  AND NOT EXISTS (
+		      SELECT 1 FROM pg_depend d
+		      JOIN pg_proc p ON p.oid = d.objid
+		      WHERE d.deptype = 'e'
+		        AND p.proname = r.routine_name
+		        AND p.pronamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public')
+		  )
 	`).Scan(&count)
 	require.NoError(t, err)
 	assert.Equal(t, 11, count,

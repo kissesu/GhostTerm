@@ -169,15 +169,19 @@ type EarningsSummary struct {
 //
 // Phase 12：NotificationService 可选 —— 单元测试可不传，service 不发通知；
 // 生产 main.go 必传以驱动 settlement_received 通知。
+//
+// finding #4：Cipher 必填，写入前加密 remark / 读取后解密。
 type PaymentServiceDeps struct {
 	Pool                *pgxpool.Pool
 	NotificationService NotificationService
+	Cipher              *CipherService
 }
 
 // paymentService 是 PaymentService 的具体实现。
 type paymentService struct {
-	pool  *pgxpool.Pool
-	notif NotificationService // Phase 12：可选；nil 时跳过通知
+	pool   *pgxpool.Pool
+	notif  NotificationService // Phase 12：可选；nil 时跳过通知
+	cipher *CipherService      // finding #4：列级加密 wrapper
 }
 
 // 编译时校验：实现满足 PaymentService 接口契约（interfaces.go 中已声明）
@@ -188,7 +192,14 @@ func NewPaymentService(deps PaymentServiceDeps) (PaymentService, error) {
 	if deps.Pool == nil {
 		return nil, errors.New("payment_service: pool is required")
 	}
-	return &paymentService{pool: deps.Pool, notif: deps.NotificationService}, nil
+	if deps.Cipher == nil {
+		return nil, errors.New("payment_service: cipher is required")
+	}
+	return &paymentService{
+		pool:   deps.Pool,
+		notif:  deps.NotificationService,
+		cipher: deps.Cipher,
+	}, nil
 }
 
 // ============================================================
@@ -246,17 +257,26 @@ func (s *paymentService) List(ctx context.Context, sc SessionContext, projectID 
 		}
 		defer rows.Close()
 
+		// remark 现在是 BYTEA 密文：scan 到 []byte 暂存，rows 关闭后统一解密
+		// （与 feedback_service.List 同模式，避免在游标活跃时再开 query）
+		type encPayment struct {
+			p             Payment
+			remarkCipher  []byte
+			attachmentsRaw []byte
+		}
+		var encs []encPayment
 		for rows.Next() {
 			var (
-				p              Payment
-				directionRaw   string
-				relatedUserID  *int64
-				screenshotID   *int64
+				p             Payment
+				directionRaw  string
+				relatedUserID *int64
+				screenshotID  *int64
+				remarkCipher  []byte
 				attachmentsRaw []byte // jsonb 走 []byte，service 层手动 unmarshal
 			)
 			if err := rows.Scan(
 				&p.ID, &p.ProjectID, &directionRaw, &p.Amount, &p.PaidAt,
-				&relatedUserID, &screenshotID, &p.Remark, &p.RecordedBy, &p.RecordedAt,
+				&relatedUserID, &screenshotID, &remarkCipher, &p.RecordedBy, &p.RecordedAt,
 				&attachmentsRaw,
 			); err != nil {
 				return fmt.Errorf("payment: scan row: %w", err)
@@ -264,14 +284,28 @@ func (s *paymentService) List(ctx context.Context, sc SessionContext, projectID 
 			p.Direction = PaymentDirection(directionRaw)
 			p.RelatedUserID = relatedUserID
 			p.ScreenshotID = screenshotID
-			atts, err := decodePaymentAttachments(attachmentsRaw)
+			encs = append(encs, encPayment{p: p, remarkCipher: remarkCipher, attachmentsRaw: attachmentsRaw})
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		rows.Close()
+
+		// 解密 remark + 解析 attachments
+		for _, e := range encs {
+			plaintext, err := s.cipher.Decrypt(ctx, "payments_remark", e.remarkCipher)
+			if err != nil {
+				return fmt.Errorf("payment: decrypt remark id=%d: %w", e.p.ID, err)
+			}
+			e.p.Remark = plaintext
+			atts, err := decodePaymentAttachments(e.attachmentsRaw)
 			if err != nil {
 				return fmt.Errorf("payment: decode attachments: %w", err)
 			}
-			p.Attachments = atts
-			out = append(out, p)
+			e.p.Attachments = atts
+			out = append(out, e.p)
 		}
-		return rows.Err()
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -364,11 +398,17 @@ func (s *paymentService) Create(ctx context.Context, sc SessionContext, projectI
 		recordedBy = ac.UserID
 	}
 
+	// finding #4：写入前加密 remark；同 feedback_service 的写法保持一致
+	encRemark, err := s.cipher.Encrypt(ctx, "payments_remark", input.Remark)
+	if err != nil {
+		return nil, fmt.Errorf("payment: encrypt remark: %w", err)
+	}
+
 	// ============================================================
 	// 第二步：事务内写入 + 项目金额累加
 	// ============================================================
 	var out Payment
-	err := progressdb.InTx(ctx, s.pool, func(tx pgx.Tx) error {
+	err = progressdb.InTx(ctx, s.pool, func(tx pgx.Tx) error {
 		if err := progressdb.SetSessionContext(ctx, tx, ac.UserID, ac.RoleID); err != nil {
 			return err
 		}
@@ -383,10 +423,13 @@ func (s *paymentService) Create(ctx context.Context, sc SessionContext, projectI
 		}
 
 		// INSERT payments + RETURNING 全字段
+		// remark RETURNING 是 BYTEA 密文 → scan 到占位 []byte 后丢弃，
+		// out.Remark 直接用 plaintext input.Remark（已知值）减一次 round-trip
 		var (
-			directionRaw  string
-			relatedUserID *int64
-			screenshotID  *int64
+			directionRaw     string
+			relatedUserID    *int64
+			screenshotID     *int64
+			returnedRemarkCT []byte
 		)
 		md, _ := RequestMetadataFrom(ctx)
 		err := tx.QueryRow(ctx, `
@@ -400,11 +443,11 @@ func (s *paymentService) Create(ctx context.Context, sc SessionContext, projectI
 			          related_user_id, screenshot_id, remark, recorded_by, recorded_at
 		`,
 			projectID, string(input.Direction), input.Amount, input.PaidAt,
-			input.RelatedUserID, input.ScreenshotID, input.Remark, recordedBy,
+			input.RelatedUserID, input.ScreenshotID, encRemark, recordedBy,
 			NullableIP(md.ClientIP), md.UserAgent,
 		).Scan(
 			&out.ID, &out.ProjectID, &directionRaw, &out.Amount, &out.PaidAt,
-			&relatedUserID, &screenshotID, &out.Remark, &out.RecordedBy, &out.RecordedAt,
+			&relatedUserID, &screenshotID, &returnedRemarkCT, &out.RecordedBy, &out.RecordedAt,
 		)
 		if err != nil {
 			return fmt.Errorf("payment: insert payment: %w", err)
@@ -412,6 +455,8 @@ func (s *paymentService) Create(ctx context.Context, sc SessionContext, projectI
 		out.Direction = PaymentDirection(directionRaw)
 		out.RelatedUserID = relatedUserID
 		out.ScreenshotID = screenshotID
+		out.Remark = input.Remark // 已知 plaintext 直接回填
+		_ = returnedRemarkCT
 		out.Attachments = []PaymentAttachmentRef{}
 
 		// ============================================================

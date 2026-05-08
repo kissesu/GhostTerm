@@ -45,6 +45,7 @@ import (
 	"github.com/ghostterm/progress-server/internal/api/oas"
 	"github.com/ghostterm/progress-server/internal/auth"
 	"github.com/ghostterm/progress-server/internal/services"
+	"github.com/ghostterm/progress-server/internal/testutil"
 	"github.com/ghostterm/progress-server/tests/fixtures"
 )
 
@@ -256,11 +257,13 @@ func buildC2TestRouter(t *testing.T, pool *pgxpool.Pool, allowedOrigins ...strin
 	wsHub := services.NewWSHub()
 	notifSvc, err := services.NewNotificationService(services.NotificationServiceDeps{Pool: pool, Hub: wsHub})
 	require.NoError(t, err)
-	feedbackSvc, err := services.NewFeedbackService(services.FeedbackServiceDeps{Pool: pool, NotificationService: notifSvc})
+	cipher, err := services.NewCipherService(pool, []byte(testutil.TestCipherKey))
+	require.NoError(t, err)
+	feedbackSvc, err := services.NewFeedbackService(services.FeedbackServiceDeps{Pool: pool, NotificationService: notifSvc, Cipher: cipher})
 	require.NoError(t, err)
 	quoteSvc, err := services.NewQuoteService(pool)
 	require.NoError(t, err)
-	paymentSvc, err := services.NewPaymentService(services.PaymentServiceDeps{Pool: pool, NotificationService: notifSvc})
+	paymentSvc, err := services.NewPaymentService(services.PaymentServiceDeps{Pool: pool, NotificationService: notifSvc, Cipher: cipher})
 	require.NoError(t, err)
 
 	router, err := NewRouter(RouterDeps{
@@ -276,6 +279,7 @@ func buildC2TestRouter(t *testing.T, pool *pgxpool.Pool, allowedOrigins ...strin
 		NotificationService: notifSvc,
 		WSHub:               wsHub,
 		AllowedOrigins:      allowedOrigins,
+		Cipher:              cipher,
 	})
 	require.NoError(t, err)
 	return router

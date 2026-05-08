@@ -111,8 +111,9 @@ type CreateFeedbackInput struct {
 
 // feedbackService 是 FeedbackService 的具体实现。
 type feedbackService struct {
-	pool  *pgxpool.Pool
-	notif NotificationService // Phase 12：可选，nil 时跳过通知（向后兼容旧测试）
+	pool   *pgxpool.Pool
+	notif  NotificationService // Phase 12：可选，nil 时跳过通知（向后兼容旧测试）
+	cipher *CipherService      // finding #4：列级加密 wrapper，写入前加密 / 读取后解密 content
 }
 
 // 编译时校验
@@ -122,9 +123,12 @@ var _ FeedbackService = (*feedbackService)(nil)
 //
 // Phase 12：NotificationService 可选 —— 单元测试可不传，service 不发通知；
 // 生产 main.go 必传以驱动 new_feedback 通知。
+//
+// finding #4：Cipher 必填 —— 测试也要走加密路径（与生产一致），nil 视为配置漂移立即拒绝。
 type FeedbackServiceDeps struct {
 	Pool                *pgxpool.Pool
 	NotificationService NotificationService
+	Cipher              *CipherService
 }
 
 // NewFeedbackService 构造 FeedbackService。
@@ -132,7 +136,14 @@ func NewFeedbackService(deps FeedbackServiceDeps) (FeedbackService, error) {
 	if deps.Pool == nil {
 		return nil, errors.New("feedback_service: pool is required")
 	}
-	return &feedbackService{pool: deps.Pool, notif: deps.NotificationService}, nil
+	if deps.Cipher == nil {
+		return nil, errors.New("feedback_service: cipher is required")
+	}
+	return &feedbackService{
+		pool:   deps.Pool,
+		notif:  deps.NotificationService,
+		cipher: deps.Cipher,
+	}, nil
 }
 
 // ============================================================
@@ -197,18 +208,41 @@ func (s *feedbackService) List(ctx context.Context, sc SessionContext, projectID
 		}
 		defer rows.Close()
 
+		// content 现在是 BYTEA 密文：scan 到 []byte 缓存，rows 关闭后统一解密。
+		// 不能在 rows.Next 循环内调 cipher.Decrypt —— 那会在主连接迭代游标时
+		// 再借另一连接出去做 SELECT pgp_sym_decrypt（pool 异步 OK），但保留缓存
+		// 模式让逻辑更清晰且未来若改成 batch decrypt 也容易。
+		type encryptedRow struct {
+			f      Feedback
+			cipher []byte
+		}
+		var encRows []encryptedRow
 		for rows.Next() {
-			var f Feedback
+			var (
+				f      Feedback
+				cipher []byte
+			)
 			if err := rows.Scan(
-				&f.ID, &f.ProjectID, &f.Content, &f.Source, &f.Status,
+				&f.ID, &f.ProjectID, &cipher, &f.Source, &f.Status,
 				&f.RecordedBy, &f.RecordedAt,
 			); err != nil {
 				return fmt.Errorf("feedback_service: scan feedback: %w", err)
 			}
-			feedbacks = append(feedbacks, f)
+			encRows = append(encRows, encryptedRow{f: f, cipher: cipher})
 		}
 		if err := rows.Err(); err != nil {
 			return fmt.Errorf("feedback_service: iterate feedbacks: %w", err)
+		}
+		rows.Close()
+
+		// content 解密（每行一次 pool round-trip；行数通常 0~50 在可接受范围）
+		for _, er := range encRows {
+			plaintext, err := s.cipher.Decrypt(ctx, "feedbacks_content", er.cipher)
+			if err != nil {
+				return fmt.Errorf("feedback_service: decrypt content id=%d: %w", er.f.ID, err)
+			}
+			er.f.Content = plaintext
+			feedbacks = append(feedbacks, er.f)
 		}
 
 		// 二次查附件（同事务，RLS 仍生效）
@@ -279,35 +313,50 @@ func (s *feedbackService) Create(ctx context.Context, sc SessionContext, project
 		return nil, ErrFeedbackInvalidSource
 	}
 
+	// finding #4：写入前用 cipher 加密 content；cipher 走 pool 不在 tx 内，
+	// 但 plaintext 已落到内存变量 encContent，不影响事务原子性
+	encContent, err := s.cipher.Encrypt(ctx, "feedbacks_content", content)
+	if err != nil {
+		return nil, fmt.Errorf("feedback_service: encrypt content: %w", err)
+	}
+
 	var f Feedback
-	err := progressdb.InTx(ctx, s.pool, func(tx pgx.Tx) error {
+	err = progressdb.InTx(ctx, s.pool, func(tx pgx.Tx) error {
 		if err := progressdb.SetSessionContext(ctx, tx, ac.UserID, ac.RoleID); err != nil {
 			return fmt.Errorf("feedback_service: set rls context: %w", err)
 		}
 
 		// INSERT feedbacks：source 空字符串 → 走 DB DEFAULT；非空显式赋值
 		// + 审计字段 client_ip/user_agent（migration 0008）
+		// content 走 BYTEA 密文；RETURNING content 也是 BYTEA（scan 到 []byte 后立刻丢弃，
+		// f.Content 直接用 plaintext 不再走 PG decrypt 减一次 round-trip）
 		md, _ := RequestMetadataFrom(ctx)
-		var row pgx.Row
+		var (
+			row             pgx.Row
+			returnedContent []byte
+		)
 		if in.Source == "" {
 			row = tx.QueryRow(ctx, `
 				INSERT INTO feedbacks (project_id, content, recorded_by, client_ip, user_agent)
 				VALUES ($1, $2, $3, $4, $5)
 				RETURNING id, project_id, content, source::TEXT, status::TEXT, recorded_by, recorded_at
-			`, projectID, content, ac.UserID, NullableIP(md.ClientIP), md.UserAgent)
+			`, projectID, encContent, ac.UserID, NullableIP(md.ClientIP), md.UserAgent)
 		} else {
 			row = tx.QueryRow(ctx, `
 				INSERT INTO feedbacks (project_id, content, source, recorded_by, client_ip, user_agent)
 				VALUES ($1, $2, $3::feedback_source, $4, $5, $6)
 				RETURNING id, project_id, content, source::TEXT, status::TEXT, recorded_by, recorded_at
-			`, projectID, content, in.Source, ac.UserID, NullableIP(md.ClientIP), md.UserAgent)
+			`, projectID, encContent, in.Source, ac.UserID, NullableIP(md.ClientIP), md.UserAgent)
 		}
 		if err := row.Scan(
-			&f.ID, &f.ProjectID, &f.Content, &f.Source, &f.Status,
+			&f.ID, &f.ProjectID, &returnedContent, &f.Source, &f.Status,
 			&f.RecordedBy, &f.RecordedAt,
 		); err != nil {
 			return fmt.Errorf("feedback_service: insert feedback: %w", err)
 		}
+		// 已知 plaintext，直接回填 f.Content；returnedContent 仅用于 scan 占位
+		f.Content = content
+		_ = returnedContent
 
 		// 同事务 INSERT 附件
 		if len(in.AttachmentIDs) > 0 {
@@ -416,6 +465,8 @@ func (s *feedbackService) UpdateStatus(ctx context.Context, sc SessionContext, f
 			return fmt.Errorf("feedback_service: set rls context: %w", err)
 		}
 
+		// content RETURNING 是 BYTEA 密文，scan 到 []byte 后调 cipher.Decrypt 拿明文
+		var encContent []byte
 		row := tx.QueryRow(ctx, `
 			UPDATE feedbacks
 			SET status = $1::feedback_status
@@ -423,7 +474,7 @@ func (s *feedbackService) UpdateStatus(ctx context.Context, sc SessionContext, f
 			RETURNING id, project_id, content, source::TEXT, status::TEXT, recorded_by, recorded_at
 		`, status, feedbackID)
 		if err := row.Scan(
-			&f.ID, &f.ProjectID, &f.Content, &f.Source, &f.Status,
+			&f.ID, &f.ProjectID, &encContent, &f.Source, &f.Status,
 			&f.RecordedBy, &f.RecordedAt,
 		); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -431,6 +482,11 @@ func (s *feedbackService) UpdateStatus(ctx context.Context, sc SessionContext, f
 			}
 			return fmt.Errorf("feedback_service: update status: %w", err)
 		}
+		plaintext, err := s.cipher.Decrypt(ctx, "feedbacks_content", encContent)
+		if err != nil {
+			return fmt.Errorf("feedback_service: decrypt content id=%d: %w", f.ID, err)
+		}
+		f.Content = plaintext
 
 		refs, err := loadAttachmentsWithFilename(ctx, tx, f.ID)
 		if err != nil {

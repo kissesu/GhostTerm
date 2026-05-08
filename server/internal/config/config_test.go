@@ -14,12 +14,15 @@ import (
 	"time"
 )
 
-// setRequiredEnv 给三个必填项填上有效值，便于 case 单独覆盖某一项缺失。
+// setRequiredEnv 给四个必填项填上有效值，便于 case 单独覆盖某一项缺失。
+//
+// finding #4：GT_DATA_KEY 是新增必填项，与 JWT secret 同样 fail-fast at startup。
 func setRequiredEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("DATABASE_URL", "postgres://user:pwd@localhost:5432/test?sslmode=disable")
 	t.Setenv("JWT_ACCESS_SECRET", "access-secret-min-32-chars-xxxxxxxx")
 	t.Setenv("JWT_REFRESH_SECRET", "refresh-secret-min-32-chars-xxxxxxxx")
+	t.Setenv("GT_DATA_KEY", "test-data-key-32-bytes-aaaaaaaaa")
 }
 
 // clearOptionalEnv 把可选项全部清空，验证默认回落
@@ -98,6 +101,7 @@ func TestLoad_MissingDatabaseURL(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
 	t.Setenv("JWT_ACCESS_SECRET", "access-secret")
 	t.Setenv("JWT_REFRESH_SECRET", "refresh-secret")
+	t.Setenv("GT_DATA_KEY", "test-data-key-32-bytes-aaaaaaaaa")
 
 	_, err := Load()
 	if err == nil {
@@ -112,6 +116,7 @@ func TestLoad_MissingAccessSecret(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://...")
 	t.Setenv("JWT_ACCESS_SECRET", "")
 	t.Setenv("JWT_REFRESH_SECRET", "refresh")
+	t.Setenv("GT_DATA_KEY", "test-data-key-32-bytes-aaaaaaaaa")
 
 	_, err := Load()
 	if err == nil {
@@ -127,6 +132,7 @@ func TestLoad_MissingRefreshSecret(t *testing.T) {
 	// access 必须 ≥32 字节才能走到 refresh 检查（Load 顺序：先 access 长度后 refresh 空值）
 	t.Setenv("JWT_ACCESS_SECRET", "access-secret-min-32-chars-xxxxxxxx")
 	t.Setenv("JWT_REFRESH_SECRET", "")
+	t.Setenv("GT_DATA_KEY", "test-data-key-32-bytes-aaaaaaaaa")
 
 	_, err := Load()
 	if err == nil {
@@ -185,6 +191,7 @@ func TestLoad_RejectsShortJWTAccessSecret(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://x:y@localhost:5432/z?sslmode=disable")
 	t.Setenv("JWT_ACCESS_SECRET", "short") // 5 字节，远小于 32
 	t.Setenv("JWT_REFRESH_SECRET", "another-secret-32-bytes-long-aaa")
+	t.Setenv("GT_DATA_KEY", "test-data-key-32-bytes-aaaaaaaaa")
 
 	_, err := Load()
 	if err == nil {
@@ -200,6 +207,7 @@ func TestLoad_RejectsShortJWTRefreshSecret(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://x:y@localhost:5432/z?sslmode=disable")
 	t.Setenv("JWT_ACCESS_SECRET", "this-secret-is-32-bytes-long!aaa")
 	t.Setenv("JWT_REFRESH_SECRET", "tiny") // 4 字节
+	t.Setenv("GT_DATA_KEY", "test-data-key-32-bytes-aaaaaaaaa")
 
 	_, err := Load()
 	if err == nil {
@@ -219,6 +227,7 @@ func TestLoad_RejectsEqualAccessAndRefreshSecrets(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://x:y@localhost:5432/z?sslmode=disable")
 	t.Setenv("JWT_ACCESS_SECRET", same)
 	t.Setenv("JWT_REFRESH_SECRET", same)
+	t.Setenv("GT_DATA_KEY", "test-data-key-32-bytes-aaaaaaaaa")
 
 	_, err := Load()
 	if err == nil {
@@ -234,6 +243,7 @@ func TestLoad_AcceptsValidSecrets(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://x:y@localhost:5432/z?sslmode=disable")
 	t.Setenv("JWT_ACCESS_SECRET", "this-is-a-valid-access-secret-32!")
 	t.Setenv("JWT_REFRESH_SECRET", "this-is-a-valid-refresh-secret-32")
+	t.Setenv("GT_DATA_KEY", "test-data-key-32-bytes-aaaaaaaaa")
 
 	cfg, err := Load()
 	if err != nil {
@@ -244,5 +254,40 @@ func TestLoad_AcceptsValidSecrets(t *testing.T) {
 	}
 	if string(cfg.JWTAccessSecret) != "this-is-a-valid-access-secret-32!" {
 		t.Errorf("JWTAccessSecret content mismatch")
+	}
+}
+
+// TestLoad_RejectsMissingDataKey 验证 GT_DATA_KEY 缺失 fail-fast（finding #4）。
+//
+// 业务背景：feedbacks.content / payments.remark 列级加密必须有主密钥；
+// 缺失启动 = 加密 service 构造失败 = 业务路径全断，必须 startup 期暴露。
+func TestLoad_RejectsMissingDataKey(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://x:y@localhost:5432/z?sslmode=disable")
+	t.Setenv("JWT_ACCESS_SECRET", "this-is-a-valid-access-secret-32!")
+	t.Setenv("JWT_REFRESH_SECRET", "this-is-a-valid-refresh-secret-32")
+	t.Setenv("GT_DATA_KEY", "")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error when GT_DATA_KEY missing")
+	}
+	if !strings.Contains(err.Error(), "GT_DATA_KEY") {
+		t.Errorf("error should mention GT_DATA_KEY, got: %v", err)
+	}
+}
+
+// TestLoad_RejectsShortDataKey 验证 GT_DATA_KEY < 32 字节 fail-fast（finding #4）。
+func TestLoad_RejectsShortDataKey(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://x:y@localhost:5432/z?sslmode=disable")
+	t.Setenv("JWT_ACCESS_SECRET", "this-is-a-valid-access-secret-32!")
+	t.Setenv("JWT_REFRESH_SECRET", "this-is-a-valid-refresh-secret-32")
+	t.Setenv("GT_DATA_KEY", "tiny-key") // 8 字节远小于 32
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error when GT_DATA_KEY shorter than 32 bytes")
+	}
+	if !strings.Contains(err.Error(), "GT_DATA_KEY") {
+		t.Errorf("error should mention GT_DATA_KEY, got: %v", err)
 	}
 }

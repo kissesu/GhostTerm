@@ -25,6 +25,7 @@ package services
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -70,15 +71,26 @@ type ActivityService interface {
 }
 
 type activityService struct {
-	pool *pgxpool.Pool
+	pool   *pgxpool.Pool
+	cipher *CipherService // finding #4：解密 feedback.content / payment.remark 密文 payload
 }
 
 // 编译时校验：activityService 必须满足 ActivityService interface
 var _ ActivityService = (*activityService)(nil)
 
 // NewActivityService 构造 ActivityService 实现。
-func NewActivityService(pool *pgxpool.Pool) ActivityService {
-	return &activityService{pool: pool}
+//
+// finding #4：cipher 必填 —— payload 中 feedback.content / payment.remark 是 BYTEA
+// 经 view encode(bytea, 'base64') 嵌入 jsonb，service 必须解密后才能交给 handler。
+// nil cipher 视为配置漂移立即拒绝。
+func NewActivityService(pool *pgxpool.Pool, cipher *CipherService) (ActivityService, error) {
+	if pool == nil {
+		return nil, errors.New("activity_service: pool is required")
+	}
+	if cipher == nil {
+		return nil, errors.New("activity_service: cipher is required")
+	}
+	return &activityService{pool: pool, cipher: cipher}, nil
 }
 
 // List 返回项目的进度时间线（按 occurred_at DESC, kind DESC, source_id DESC）。
@@ -201,6 +213,18 @@ func (s *activityService) List(
 		if err := rows.Err(); err != nil {
 			return fmt.Errorf("activity_service: iterate: %w", err)
 		}
+		rows.Close()
+
+		// finding #4：feedback / payment 分支 payload 中的 content/remark 字段
+		// 在 view 里被 encode(bytea, 'base64') 嵌成 base64 string，service 解密回明文
+		// 后替换 payload，前端拿到的仍是 string 类型，OAS contract 不变。
+		for i := range items {
+			decoded, err := s.decryptActivityPayload(ctx, items[i].Kind, items[i].Payload)
+			if err != nil {
+				return fmt.Errorf("activity_service: decrypt payload kind=%s id=%d: %w", items[i].Kind, items[i].SourceID, err)
+			}
+			items[i].Payload = decoded
+		}
 
 		// 取出 limit+1 行：超出 limit 即视为还有下一页，用第 limit 个（idx limit-1）
 		// 行的三元组生成 cursor。这样 caller 用此 cursor 拉下一页时严格不重不漏。
@@ -224,6 +248,69 @@ func (s *activityService) List(
 
 	if err != nil {
 		return ListActivitiesResult{}, err
+	}
+	return out, nil
+}
+
+// decryptActivityPayload 对 kind=feedback/payment 的 payload 解密 content/remark 字段。
+//
+// 业务流程（仅 feedback / payment 命中）：
+//  1. unmarshal jsonb 到 map[string]json.RawMessage（保字段顺序无所谓，后端 ogen 自序列化）
+//  2. 取出 fieldName 对应 raw（base64 字符串）
+//  3. base64 decode → []byte 密文
+//  4. cipher.Decrypt(columnName, ciphertext) → 明文 string
+//  5. json.Marshal(string) → 替换 map[fieldName]
+//  6. json.Marshal(map) → 返回新 payload
+//
+// 设计取舍：
+//   - 失败必透出（不 silent fallback）：解密失败说明主密钥变更或数据损坏，
+//     返 502/503 让运维介入比"返空字符串假装正常"安全
+//   - 空 base64 字符串（fixture 用 0 字节密文 → encode='' 进 jsonb）→ Decrypt
+//     接受空 []byte 返 ""，不再二次报错
+//   - 其它 5 个 kind 直接 passthrough，不浪费 unmarshal 开销
+func (s *activityService) decryptActivityPayload(ctx context.Context, kind string, payload json.RawMessage) (json.RawMessage, error) {
+	var fieldName, columnName string
+	switch kind {
+	case "feedback":
+		fieldName, columnName = "content", "feedbacks_content"
+	case "payment":
+		fieldName, columnName = "remark", "payments_remark"
+	default:
+		return payload, nil
+	}
+
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &m); err != nil {
+		return nil, fmt.Errorf("activity payload unmarshal: %w", err)
+	}
+	encField, ok := m[fieldName]
+	if !ok {
+		// 字段不存在视为合法（不应该发生但兜底）
+		return payload, nil
+	}
+	var b64 string
+	if err := json.Unmarshal(encField, &b64); err != nil {
+		return nil, fmt.Errorf("activity payload %s base64 unmarshal: %w", fieldName, err)
+	}
+	if b64 == "" {
+		return payload, nil
+	}
+	ciphertext, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return nil, fmt.Errorf("activity payload %s base64 decode: %w", fieldName, err)
+	}
+	plaintext, err := s.cipher.Decrypt(ctx, columnName, ciphertext)
+	if err != nil {
+		return nil, fmt.Errorf("activity payload %s decrypt: %w", fieldName, err)
+	}
+	plainJSON, err := json.Marshal(plaintext)
+	if err != nil {
+		return nil, fmt.Errorf("activity payload %s remarshal: %w", fieldName, err)
+	}
+	m[fieldName] = plainJSON
+	out, err := json.Marshal(m)
+	if err != nil {
+		return nil, fmt.Errorf("activity payload remarshal: %w", err)
 	}
 	return out, nil
 }

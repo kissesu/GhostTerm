@@ -29,6 +29,12 @@ import (
 // 启动期硬卡住，避免运维不慎在 .env 写下"changeme" 这类弱值。
 const minJWTSecretLen = 32
 
+// minDataKeyLen 是 GT_DATA_KEY 列级加密主密钥的最小字节数（finding #4）。
+//
+// 业务背景：CipherService 用 HKDF-SHA256 派生 32 字节子密钥，主密钥短于 32 字节
+// 让暴破成本远低于子密钥强度。与 minJWTSecretLen 同值，便于运维记忆 "all keys >=32"。
+const minDataKeyLen = 32
+
 // Config 是 progress-server 启动期所需的全部参数集合。
 //
 // 字段分类（业务背景）：
@@ -79,6 +85,14 @@ type Config struct {
 	// 默认覆盖 Tauri WKWebView (tauri://localhost) + dev vite (http://localhost:1420)
 	// + Tauri Windows custom scheme (http://tauri.localhost)。
 	AllowedOrigins string
+
+	// DataKey 是 pgcrypto 列级加密的主密钥（finding #4）。
+	//
+	// 业务背景：feedbacks.content / payments.remark 是 BYTEA 密文，
+	// 应用层 CipherService 用 HKDF 从此主密钥派生每列子密钥后调 pgp_sym_encrypt/decrypt。
+	// env 形式：GT_DATA_KEY 字符串，至少 32 字节（minDataKeyLen）。
+	// 缺失或过短启动期 fail-fast，避免生产部署带病运行。
+	DataKey []byte
 }
 
 // Load 从环境变量构建 Config，调用前可选地加载 .env 文件（仅开发便利）。
@@ -129,6 +143,16 @@ func Load() (*Config, error) {
 		return nil, errors.New("config: JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must differ")
 	}
 	cfg.JWTRefreshSecret = []byte(refresh)
+
+	// finding #4：列级加密主密钥校验
+	dataKey := os.Getenv("GT_DATA_KEY")
+	if dataKey == "" {
+		return nil, errors.New("config: GT_DATA_KEY is required for column-level encryption (finding #4)")
+	}
+	if len(dataKey) < minDataKeyLen {
+		return nil, fmt.Errorf("config: GT_DATA_KEY must be >=%d bytes, got %d", minDataKeyLen, len(dataKey))
+	}
+	cfg.DataKey = []byte(dataKey)
 
 	// ============================================
 	// 第二步：读取可选项 —— 缺失则回落到默认

@@ -53,7 +53,9 @@ func setupFeedbackEnv(t *testing.T) *feedbackTestEnv {
 	t.Helper()
 	pool, cleanup := testutil.StartPostgres(t)
 
-	svc, err := services.NewFeedbackService(services.FeedbackServiceDeps{Pool: pool})
+	cipher, err := services.NewCipherService(pool, []byte(testutil.TestCipherKey))
+	require.NoError(t, err)
+	svc, err := services.NewFeedbackService(services.FeedbackServiceDeps{Pool: pool, Cipher: cipher})
 	require.NoError(t, err)
 
 	hash, err := auth.HashPassword("password", bcrypt.MinCost)

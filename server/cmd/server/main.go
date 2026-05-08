@@ -102,7 +102,16 @@ func main() {
 		log.Fatalf("init file service: %v", err)
 	}
 
-	feedbackSvc, err := services.NewFeedbackService(services.FeedbackServiceDeps{Pool: pool})
+	// finding #4：列级加密 service —— feedback/payment/activity 三个 service 共用
+	cipherSvc, err := services.NewCipherService(pool, cfg.DataKey)
+	if err != nil {
+		log.Fatalf("init cipher service: %v", err)
+	}
+
+	feedbackSvc, err := services.NewFeedbackService(services.FeedbackServiceDeps{
+		Pool:   pool,
+		Cipher: cipherSvc,
+	})
 	if err != nil {
 		log.Fatalf("init feedback service: %v", err)
 	}
@@ -133,6 +142,7 @@ func main() {
 	feedbackSvc, err = services.NewFeedbackService(services.FeedbackServiceDeps{
 		Pool:                pool,
 		NotificationService: notifSvc,
+		Cipher:              cipherSvc,
 	})
 	if err != nil {
 		log.Fatalf("init feedback service (with notif): %v", err)
@@ -140,6 +150,7 @@ func main() {
 	paymentSvc, err := services.NewPaymentService(services.PaymentServiceDeps{
 		Pool:                pool,
 		NotificationService: notifSvc,
+		Cipher:              cipherSvc,
 	})
 	if err != nil {
 		log.Fatalf("init payment service (with notif): %v", err)
@@ -170,6 +181,7 @@ func main() {
 		PaymentService:      paymentSvc,
 		NotificationService: notifSvc,
 		WSHub:               wsHub,
+		Cipher:              cipherSvc,
 		// finding #7：登录与 refresh 速率限制由 env 注入，便于按部署调参；
 		// 缺省值见 router.go 内 rlCfg 默认值（5/10/30 per min）
 		RateLimit: &apimiddleware.RateLimitConfig{
