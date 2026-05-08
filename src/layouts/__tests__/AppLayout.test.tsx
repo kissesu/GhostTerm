@@ -53,6 +53,7 @@ beforeEach(() => {
     user: TEST_USER,
     loading: false,
     error: null,
+    hydrating: false, // finding #12: 跳过 keychain 异步 splash
   });
   // Task 9：AppLayout nav tabs 由 globalPermissionStore.has() 门控；
   // hydrate 三个 nav perms 让布局/快捷键/窗口宽度等行为按预期渲染

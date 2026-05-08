@@ -16,6 +16,7 @@ use std::sync::{Mutex, OnceLock};
 use tokio::sync::Mutex as TokioMutex;
 use crate::types::ProjectInfo;
 use crate::fs_backend::watcher::{start_watching, stop_watching};
+use crate::git_url_validator::validate_clone_url;
 use persistence::{load_projects, save_projects};
 use tauri::Manager;
 use session::{EditorSession, get_session, save_session};
@@ -194,6 +195,18 @@ pub fn clone_repository(repository_url: &str, destination_path: &str) -> Result<
         return Err("目标目录不能为空".to_string());
     }
 
+    // 安全 review C1：destination_path 起 '-' 会被 git CLI 当 flag 解析（如 --upload-pack=...）
+    // 即使前端 XSS 控制 invoke，也不能让 destination 注入 git flag 触发 RCE。
+    // 另一道防线在 Command 调用处加 "--" 终结 flag，这里先 fail-fast 给清晰错误。
+    if destination_path.trim_start().starts_with('-') {
+        return Err("目标目录路径不能以 '-' 开头".to_string());
+    }
+
+    // 安全 finding #22：URL 必过白名单 + 参数注入防御
+    // 即使前端被 XSS 控制，invoke 也无法把 `--upload-pack=evil` 传到 git CLI 触发 RCE
+    validate_clone_url(repository_url.trim())
+        .map_err(|e| format!("仓库地址校验失败: {e}"))?;
+
     if destination.exists() {
         return Err(format!("目标目录已存在: {destination_path}"));
     }
@@ -205,8 +218,12 @@ pub fn clone_repository(repository_url: &str, destination_path: &str) -> Result<
         }
     }
 
+    // 安全 review C1：在 url + destination 之前加 "--"
+    // 终结 git CLI flag 解析；即使 starts_with('-') 检查未来被绕过，
+    // git 也会把 "--" 之后的 token 全部当 positional 不再解释为 flag。
     let output = Command::new("git")
         .arg("clone")
+        .arg("--")
         .arg(repository_url)
         .arg(destination_path)
         .output()
@@ -421,5 +438,29 @@ mod tests {
         assert_eq!(loaded[0].path, project_dir.to_string_lossy());
 
         *CURRENT_PROJECT.lock().unwrap() = None;
+    }
+
+    // ============================================
+    // 安全 review C1：clone_repository destination 不能起 '-'
+    // 防 git CLI flag injection（如 --upload-pack=evil 触发 RCE）
+    // ============================================
+
+    #[test]
+    fn test_clone_repository_rejects_destination_starting_with_dash() {
+        // destination 起 '-' 会被 git CLI 当 flag 解析；必须在 spawn 之前 fail-fast
+        let result = clone_repository("https://github.com/foo/bar.git", "--upload-pack=evil");
+        assert!(result.is_err(), "destination 起 '-' 必须被拒");
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("不能以 '-' 开头"),
+            "错误信息应说明 dash prefix 拒绝原因，实际: {err}"
+        );
+    }
+
+    #[test]
+    fn test_clone_repository_rejects_destination_with_leading_whitespace_then_dash() {
+        // trim_start 后才检查 prefix，防 "  --evil" 之类的伪装
+        let result = clone_repository("https://github.com/foo/bar.git", "   --config=core.sshCommand");
+        assert!(result.is_err(), "去前导空白后起 '-' 也必须拒");
     }
 }

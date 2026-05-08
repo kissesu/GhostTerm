@@ -26,7 +26,7 @@
     ],
     "macOSPrivateApi": true,
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://esm.sh; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: asset: http://asset.localhost; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' ipc: http://ipc.localhost https://103.236.85.144:38080 wss://103.236.85.144:38080 ws://127.0.0.1:* https://github.com https://objects.githubusercontent.com https://esm.sh https://fonts.googleapis.com; frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
     }
   },
   "bundle": {

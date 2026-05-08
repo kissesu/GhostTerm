@@ -1481,6 +1481,7 @@ dependencies = [
  "git2",
  "ignore",
  "infer 0.16.0",
+ "keyring",
  "lazy_static",
  "notify",
  "objc",
@@ -1498,8 +1499,10 @@ dependencies = [
  "tauri-plugin-updater",
  "tauri-plugin-webdriver-automation",
  "tempfile",
+ "thiserror 1.0.69",
  "tokio",
  "tokio-tungstenite",
+ "url",
 ]
 
 [[package]]
@@ -2253,6 +2256,16 @@ dependencies = [
  "bitflags 2.11.0",
  "serde",
  "unicode-segmentation",
+]
+
+[[package]]
+name = "keyring"
+version = "3.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eebcc3aff044e5944a8fbaf69eb277d11986064cba30c468730e8b9909fb551c"
+dependencies = [
+ "log",
+ "zeroize",
 ]
 
 [[package]]

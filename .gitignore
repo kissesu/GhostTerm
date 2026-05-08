@@ -65,6 +65,8 @@ Thumbs.db
 !.env.production
 *.key
 *.pem
+# src-tauri/certs/*.pem 例外：cert pinning 公开证书，build 时 include_bytes! 编进二进制（非私钥）
+!src-tauri/certs/*.pem
 
 # ============================================
 # 杂项

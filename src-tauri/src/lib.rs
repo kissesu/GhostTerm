@@ -15,6 +15,8 @@ pub mod fs_backend;
 pub mod git_backend;
 pub mod project_manager;
 pub mod http_proxy;
+pub mod auth_secret;
+pub mod git_url_validator;
 
 // PBI-1 Commands
 use pty_manager::{spawn_pty_cmd, kill_pty_cmd, resize_pty_cmd, reconnect_pty_cmd, get_default_shell_cmd};
@@ -36,6 +38,9 @@ use git_backend::worktree::{worktree_list_cmd, worktree_add_cmd, worktree_remove
 
 // progress-server HTTP 代理 - 让前端绕过 WebView SSL 限制访问自签证书后端
 use http_proxy::{http_request_cmd, http_request_multipart_cmd};
+
+// finding #12: refreshToken 系统 keychain 存储 - 替代 webview localStorage
+use auth_secret::{set_refresh_token_cmd, get_refresh_token_cmd, delete_refresh_token_cmd};
 
 // ============================================
 // "打开方式"启动时暂存的文件路径队列
@@ -187,6 +192,10 @@ pub fn run() {
             // progress-server HTTP 代理（绕过 WebView 自签证书限制）
             http_request_cmd,
             http_request_multipart_cmd,
+            // finding #12: refreshToken 系统 keychain 存储
+            set_refresh_token_cmd,
+            get_refresh_token_cmd,
+            delete_refresh_token_cmd,
         ])
         // ============================================
         // 改用 build().run() 以便在 RunEvent 回调中处理 macOS"打开方式"事件
