@@ -16,6 +16,7 @@ import (
 	"log"
 	"net/http"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -153,6 +154,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("config: TRUSTED_PROXIES invalid CIDR: %v", err)
 	}
+
+	// finding #13：解析 CORS 白名单（逗号分隔 origin 列表）
+	// 空白条目自动剔除；router 内做精确匹配防前缀绕过
+	allowedOrigins := splitNonEmpty(cfg.AllowedOrigins, ",")
 	handler, err := api.NewRouter(api.RouterDeps{
 		Pool:                pool,
 		AuthService:         authSvc,
@@ -174,6 +179,7 @@ func main() {
 			TTL:                10 * time.Minute,
 		},
 		TrustedProxies: trustedProxies,
+		AllowedOrigins: allowedOrigins,
 	})
 	if err != nil {
 		log.Fatalf("init router: %v", err)
@@ -257,4 +263,23 @@ func healthzHandler(pool *pgxpool.Pool) http.HandlerFunc {
 		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(body)
 	}
+}
+
+// splitNonEmpty 用 sep 切分字符串后剔除空白条目；用于解析逗号分隔的 env 值。
+//
+// 业务背景：env 形如 "tauri://localhost,http://localhost:1420" 需 split 后送给
+// router 的 AllowedOrigins []string；strings.Split 会留下连续逗号产生的空串
+// 让白名单意外包含 ""（精确匹配 origin=="" 的情况），必须显式过滤。
+func splitNonEmpty(s, sep string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, sep)
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }

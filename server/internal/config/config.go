@@ -68,6 +68,17 @@ type Config struct {
 	// Caddy 同机反代部署应设 "127.0.0.1/32,::1/128" 让 Caddy 注入的 X-Forwarded-For
 	// 被采纳；非法 CIDR 在启动期 fail-fast。
 	TrustedProxies string
+
+	// AllowedOrigins 是 CORS 白名单（v2 安全审计 finding #13）。
+	// env 形式：逗号分隔的完整 origin 列表，例 "tauri://localhost,http://localhost:1420"。
+	// 仅当请求 Origin 命中白名单才下发 Access-Control-Allow-* 头；
+	// 非白名单 origin 不写任何 CORS 头让浏览器自行拒绝。
+	//
+	// 业务背景：v0.5 之前把任意 Origin 反射回 ACAO + ACA-Credentials:true，
+	// 等效于把 CSRF 屏障拆掉（任意第三方站点可调登录端点带 cookie）。
+	// 默认覆盖 Tauri WKWebView (tauri://localhost) + dev vite (http://localhost:1420)
+	// + Tauri Windows custom scheme (http://tauri.localhost)。
+	AllowedOrigins string
 }
 
 // Load 从环境变量构建 Config，调用前可选地加载 .env 文件（仅开发便利）。
@@ -165,6 +176,10 @@ func Load() (*Config, error) {
 	// 实际 CIDR 解析在 api/middleware.ParseTrustedProxiesEnv（main.go 启动期）做，
 	// 这里只搬字符串，避免 config 包反向依赖 api/middleware。
 	cfg.TrustedProxies = getenvDefault("TRUSTED_PROXIES", "")
+
+	// finding #13：CORS 白名单。默认覆盖 Tauri WKWebView + dev vite + Tauri Windows scheme。
+	// 任意人调登录端点带 cookie 的 CSRF 攻击面在此被关掉（不在白名单不发 CORS 头）。
+	cfg.AllowedOrigins = getenvDefault("ALLOWED_ORIGINS", "tauri://localhost,http://localhost:1420,http://tauri.localhost")
 
 	return cfg, nil
 }

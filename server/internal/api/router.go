@@ -22,6 +22,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -417,6 +418,16 @@ type RouterDeps struct {
 	//     传入；非法 CIDR 在 main.go fail-fast，不会到达这里
 	//   - 测试一般留空，所有 RemoteAddr 走原始值
 	TrustedProxies []net.IPNet
+
+	// AllowedOrigins 是 CORS 白名单的完整 origin 列表（finding #13）。
+	//
+	// 业务背景：v0.5 之前 CORS handler 把任意 Origin 反射回 ACAO + ACA-Credentials:true，
+	// 等效于把 CSRF 屏障拆掉。改为命中白名单才下发 CORS 头，非白名单不发头让浏览器自行拒。
+	//
+	// 来源：main.go 从 cfg.AllowedOrigins 字符串 split 后传入；
+	// 测试一般直接构造 []string{"tauri://localhost", "http://localhost:1420"}。
+	// 空切片 = 拒绝所有跨 origin 请求（同源浏览器请求不走 CORS 不受影响）。
+	AllowedOrigins []string
 }
 
 // NewRouter 装配 chi 基础中间件 + ogen 生成的 OpenAPI server。
@@ -472,16 +483,38 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	// 注入 client IP / User-Agent 到 ctx，供 7 个 service Create 路径写入
 	// 8 张领域表的 client_ip/user_agent 列（migration 0008，用户审计需求 2026-05-03）
 	r.Use(apimw.InjectRequestMetadata)
-	// CORS：开发环境前端在 Tauri WKWebView (tauri://localhost) 或 vite (http://localhost:1420)
-	// 跨 origin 调用本服务 :8080 必经 preflight；生产部署应改为白名单具体 origin
+	// CORS（finding #13）：从无条件反射改为白名单匹配。
+	//
+	// 业务背景：旧版反射 Origin + Access-Control-Allow-Credentials:true 把 CSRF
+	// 屏障拆掉（任意第三方站点可调登录端点带 cookie）。现在只对白名单内 origin
+	// 下发 ACAO/ACA-Credentials 等头，非白名单不写头让浏览器自行拒绝。
+	//
+	// 同源请求（无 Origin 头）继续放行不写 CORS 头，因为浏览器对同源请求不做 CORS 校验。
+	// 白名单字段值精确比对（不做 prefix/wildcard），防 origin.evil.com 这类前缀绕过。
+	allowedOrigins := make(map[string]struct{}, len(deps.AllowedOrigins))
+	for _, o := range deps.AllowedOrigins {
+		o = strings.TrimSpace(o)
+		if o != "" {
+			allowedOrigins[o] = struct{}{}
+		}
+	}
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			origin := req.Header.Get("Origin")
+			// 同源请求无 Origin 头：直接放行，不写任何 CORS 头
 			if origin == "" {
-				origin = "*"
+				next.ServeHTTP(w, req)
+				return
+			}
+			// Vary: Origin 必须始终下发，让中间缓存按 origin 区分响应
+			w.Header().Set("Vary", "Origin")
+			if _, ok := allowedOrigins[origin]; !ok {
+				// 非白名单：不写 ACAO/ACA-Credentials 等头，浏览器拦下；
+				// preflight 也走 next（ogen 会返 4xx，浏览器仍然会因为缺 ACAO 拒）
+				next.ServeHTTP(w, req)
+				return
 			}
 			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PATCH,PUT,DELETE,OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Authorization,Content-Type,X-Requested-With")
 			w.Header().Set("Access-Control-Allow-Credentials", "true")

@@ -235,7 +235,9 @@ func newTestAuthService(t *testing.T, pool *pgxpool.Pool) services.AuthService {
 
 // buildC2TestRouter 装一个最小可路由的 NewRouter；与 handlers/permissions_test.go
 // buildPermissionTestRouter 同款逻辑，但 helper 本地化避免跨包调用。
-func buildC2TestRouter(t *testing.T, pool *pgxpool.Pool) http.Handler {
+//
+// allowedOrigins 可选；nil/空 = CORS 拒所有跨 origin 请求（同源 / 无 Origin 头继续放行）。
+func buildC2TestRouter(t *testing.T, pool *pgxpool.Pool, allowedOrigins ...string) http.Handler {
 	t.Helper()
 
 	authSvc := newTestAuthService(t, pool)
@@ -273,6 +275,7 @@ func buildC2TestRouter(t *testing.T, pool *pgxpool.Pool) http.Handler {
 		PaymentService:      paymentSvc,
 		NotificationService: notifSvc,
 		WSHub:               wsHub,
+		AllowedOrigins:      allowedOrigins,
 	})
 	require.NoError(t, err)
 	return router
@@ -293,6 +296,109 @@ func reseedAdminPassword(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 	`, hash)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), tag.RowsAffected(), "admin 行未命中（0001 init 应已 seed）")
+}
+
+// ============================================================
+// finding #13：CORS 白名单回归测试
+//
+// 旧版 CORS handler 把任意 Origin 反射回 ACAO + ACA-Credentials:true，
+// 等效拆掉 CSRF 屏障。新版按 AllowedOrigins 精确白名单匹配，非白名单不发头。
+//
+// 用例覆盖 4 类场景：
+//  1. 白名单内 origin → 发完整 CORS 头
+//  2. 非白名单 origin（含前缀绕过 evil.com.localhost / localhost.evil.com）→ 不发头
+//  3. 无 Origin 头（同源 / curl）→ 不发头但放行
+//  4. preflight OPTIONS → 仅白名单 origin 走 204；其余落到 ogen 自处理
+//
+// 不依赖 DB —— 直接装一个最小 router 跑 CORS middleware。
+// ============================================================
+
+func TestCORS_AcceptsWhitelistOrigin(t *testing.T) {
+	tdb := fixtures.NewTestDB(t)
+	defer tdb.Close()
+	router := buildC2TestRouter(t, tdb.Pool, "tauri://localhost", "http://localhost:1420")
+
+	req := httptest.NewRequest(http.MethodOptions, "/api/auth/login", nil)
+	req.Header.Set("Origin", "tauri://localhost")
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	assert.Equal(t, "tauri://localhost", rec.Header().Get("Access-Control-Allow-Origin"))
+	assert.Equal(t, "true", rec.Header().Get("Access-Control-Allow-Credentials"))
+	assert.Equal(t, "Origin", rec.Header().Get("Vary"))
+}
+
+func TestCORS_RejectsNonWhitelistOrigin(t *testing.T) {
+	tdb := fixtures.NewTestDB(t)
+	defer tdb.Close()
+	router := buildC2TestRouter(t, tdb.Pool, "tauri://localhost", "http://localhost:1420")
+
+	req := httptest.NewRequest(http.MethodOptions, "/api/auth/login", nil)
+	req.Header.Set("Origin", "https://evil.com")
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	assert.Empty(t, rec.Header().Get("Access-Control-Allow-Origin"),
+		"非白名单 origin 必须不下发 ACAO 头让浏览器自行拒绝")
+	assert.Empty(t, rec.Header().Get("Access-Control-Allow-Credentials"),
+		"非白名单 origin 必须不下发 ACA-Credentials 头")
+	assert.Equal(t, "Origin", rec.Header().Get("Vary"),
+		"Vary: Origin 必须始终下发让中间缓存按 origin 区分响应")
+}
+
+func TestCORS_RejectsPrefixBypassAttempt(t *testing.T) {
+	tdb := fixtures.NewTestDB(t)
+	defer tdb.Close()
+	router := buildC2TestRouter(t, tdb.Pool, "http://localhost:1420")
+
+	// 经典前缀绕过：localhost.evil.com / evil.com.localhost 不应被白名单认成 localhost
+	for _, evilOrigin := range []string{
+		"http://localhost.evil.com",
+		"http://localhost:1420.evil.com",
+		"http://evil.com/localhost:1420",
+	} {
+		t.Run(evilOrigin, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodOptions, "/api/auth/login", nil)
+			req.Header.Set("Origin", evilOrigin)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			assert.Empty(t, rec.Header().Get("Access-Control-Allow-Origin"),
+				"前缀绕过尝试 %q 必须被拒", evilOrigin)
+		})
+	}
+}
+
+func TestCORS_NoOriginHeaderPassesThrough(t *testing.T) {
+	tdb := fixtures.NewTestDB(t)
+	defer tdb.Close()
+	router := buildC2TestRouter(t, tdb.Pool, "tauri://localhost")
+
+	// 同源 / curl / Tauri reqwest 不带 Origin 头 → 不写 CORS 头但请求继续
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Empty(t, rec.Header().Get("Access-Control-Allow-Origin"))
+	assert.Empty(t, rec.Header().Get("Access-Control-Allow-Credentials"))
+}
+
+func TestCORS_EmptyAllowedOriginsRejectsAll(t *testing.T) {
+	tdb := fixtures.NewTestDB(t)
+	defer tdb.Close()
+	// 不传 allowedOrigins → router 内 allowedOrigins map 为空
+	router := buildC2TestRouter(t, tdb.Pool)
+
+	req := httptest.NewRequest(http.MethodOptions, "/api/auth/login", nil)
+	req.Header.Set("Origin", "tauri://localhost")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	assert.Empty(t, rec.Header().Get("Access-Control-Allow-Origin"),
+		"空白名单必须拒所有跨 origin 请求")
 }
 
 // loginAndGetAccess 走 POST /api/auth/login 拿 access token；调用方负责传入 username/password。
