@@ -98,9 +98,9 @@ var allowedMIME = map[string]bool{
 	// PDF
 	"application/pdf": true,
 	// Office (Word / Excel / PowerPoint)
-	"application/msword":                                                        true,
-	"application/vnd.openxmlformats-officedocument.wordprocessingml.document":   true,
-	"application/vnd.ms-excel":                                                  true,
+	"application/msword": true,
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document": true,
+	"application/vnd.ms-excel": true,
 	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":         true,
 	"application/vnd.ms-powerpoint":                                             true,
 	"application/vnd.openxmlformats-officedocument.presentationml.presentation": true,
@@ -110,11 +110,11 @@ var allowedMIME = map[string]bool{
 	"image/gif":  true,
 	"image/webp": true,
 	// 压缩包（源码 / 论文素材）
-	"application/zip":                  true,
-	"application/x-rar-compressed":     true,
-	"application/x-7z-compressed":      true,
-	"application/x-tar":                true,
-	"application/x-gzip":               true,
+	"application/zip":              true,
+	"application/x-rar-compressed": true,
+	"application/x-7z-compressed":  true,
+	"application/x-tar":            true,
+	"application/x-gzip":           true,
 	// 视频（mp4 sniff 能识别；mov 共用 ftyp box 但 sniff 大概率落 octet-stream 由 ext 兜底）
 	"video/mp4": true,
 }
@@ -138,6 +138,7 @@ var allowedTextPrefix = []string{
 //     若 .pdf 在兜底表里就会被错误放行；spec §C5 明确把这种攻击列为必拒
 //   - 图片视频被改名劫持的风险仅限渲染崩溃，无 RCE 路径，可接受
 //   - 加密 PDF / 损坏 docx 等少数 sniff 失败的合法文档，请用户解密 / 修复后再传
+//
 // oleMagic 是 Microsoft Compound File Binary（OLE）容器的 8 字节魔数，
 // 涵盖 Office 旧版 .doc/.xls/.ppt（97-2003 二进制格式）+ MSI/MSG 等。
 //

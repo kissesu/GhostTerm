@@ -31,9 +31,9 @@ import (
 // AuthContext 是中间件解析 access token 后注入到 request context 的会话信息。
 //
 // 业务背景：
-// - 后续 RBAC / 业务 service 都从 context 拿这个结构判断身份
-// - TokenVersion 不出现在这里 —— 一旦中间件校验通过，token 已与 DB 一致；
-//   service 层不需要再次比对
+//   - 后续 RBAC / 业务 service 都从 context 拿这个结构判断身份
+//   - TokenVersion 不出现在这里 —— 一旦中间件校验通过，token 已与 DB 一致；
+//     service 层不需要再次比对
 type AuthContext struct {
 	UserID int64
 	RoleID int64
@@ -83,13 +83,13 @@ type authService struct {
 // 业务背景：拒绝在构造器里硬塞 *config.Config，因为 services 包语义上只关心
 // "我需要哪些配置"，不关心 config 怎么读取的；这样后续替换 config 源（vault / consul）零侵入。
 type AuthServiceDeps struct {
-	Pool             *pgxpool.Pool
-	AccessSecret     []byte
-	RefreshSecret    []byte
-	AccessTTL        time.Duration
-	RefreshTTL       time.Duration
-	BcryptCost       int
-	WSTicketTTL      time.Duration // 默认 30s（spec §3.5），调用方不传时本文件兜底
+	Pool          *pgxpool.Pool
+	AccessSecret  []byte
+	RefreshSecret []byte
+	AccessTTL     time.Duration
+	RefreshTTL    time.Duration
+	BcryptCost    int
+	WSTicketTTL   time.Duration // 默认 30s（spec §3.5），调用方不传时本文件兜底
 }
 
 // 编译时校验：authService 必须满足 AuthService interface
@@ -138,14 +138,39 @@ var ErrInvalidCredentials = errors.New("invalid_credentials")
 // ErrUserInactive 用户被禁用，不允许登录。
 var ErrUserInactive = errors.New("user_inactive")
 
-// ErrInvalidRefreshToken refresh token 签名错 / 已过期 / 已被 rotate / 已被撤销。
+// ErrInvalidRefreshToken refresh token 签名错 / 完全无效（DB 中从未存在过）。
+//
+// 业务背景（finding #8 之后语义收窄）：
+//   - 仅用于 JWT 签名失败 / hash 在 DB 中从未入库的场景
+//   - "已被 rotate / 已被撤销"路径走 ErrRefreshTokenReused（详见下方）
 var ErrInvalidRefreshToken = errors.New("invalid_refresh_token")
+
+// ErrRefreshTokenReused refresh token 重用攻击检测（finding #8）。
+//
+// 业务背景：
+//   - 标准 refresh-token-rotation 设计：旧 token 第二次使用 = 已被偷
+//   - 触发后 0022 migration 的 rotate_refresh_token 会撤销该 user 全部
+//     refresh_tokens + bump users.token_version，让所有会话立即失效
+//   - handler 层翻译为 401 + refresh_token_reuse_detected message，
+//     前端识别后展示"安全告警 + 请重新登录"提示
+var ErrRefreshTokenReused = errors.New("refresh_token_reused")
 
 // ErrInvalidAccessToken access token 签名错 / 过期 / token_version 不匹配。
 var ErrInvalidAccessToken = errors.New("invalid_access_token")
 
 // ErrInvalidWSTicket ticket 不存在 / 已过期 / 已被使用。
 var ErrInvalidWSTicket = errors.New("invalid_ws_ticket")
+
+// ErrPasswordNotSet 用户存在但 password_hash 为 NULL，需走首次设置流程。
+//
+// 业务背景（finding #18）：
+//   - 0021 migration 把 0001 的默认 admin/admin123 hash 置 NULL，
+//     防止公开仓库默认密码在生产部署被遗忘改密
+//   - Login 检测到 NULL hash 时返本错误，前端识别 password_not_set code
+//     展示"管理员需要首次设置密码"提示，引导走"超管联系运维 reseed"流程
+//   - 不复用 ErrInvalidCredentials —— 那个用来防 user enumeration，
+//     而 password_not_set 是确定的状态信号，需要让前端区分对待
+var ErrPasswordNotSet = errors.New("password_not_set")
 
 // ============================================================
 // Login
@@ -155,21 +180,25 @@ var ErrInvalidWSTicket = errors.New("invalid_ws_ticket")
 //
 // 业务流程：
 //  1. 按 username 取 users 行（含 password_hash / token_version / is_active）
-//  2. bcrypt 校验密码；任何失败统一返回 ErrInvalidCredentials（避免 user enumeration）
-//  3. is_active = false → ErrUserInactive
-//  4. 签 access（带 token_version） + 签 refresh
-//  5. INSERT refresh_tokens (token_hash, expires_at, user_id)
-//  6. 返回 access / refresh / AuthUser
+//  2. password_hash IS NULL → ErrPasswordNotSet（首次设置场景，0021 migration 后的 admin）
+//  3. bcrypt 校验密码；任何失败统一返回 ErrInvalidCredentials（避免 user enumeration）
+//  4. is_active = false → ErrUserInactive
+//  5. 签 access（带 token_version） + 签 refresh
+//  6. INSERT refresh_tokens (token_hash, expires_at, user_id)
+//  7. 返回 access / refresh / AuthUser
 //
 // 设计取舍：
 //   - username 大小写敏感：DB UNIQUE constraint 是 case-sensitive；本层不做规范化
 //   - INSERT refresh_tokens 不在事务里：选 token 与 INSERT 是独立操作，
 //     单条 INSERT 自身就是原子的；rotate 路径才需要事务（因为有 UPDATE+INSERT 两步）
+//   - password_hash 用 *string scan：0021 migration 后该列允许 NULL 表达"未设置"；
+//     NULL hash 不能复用 ErrInvalidCredentials —— 后者用来防 user enumeration，
+//     而 password_not_set 是明确的状态信号，前端需要区分展示
 func (s *authService) Login(ctx context.Context, username, password string) (string, string, any, error) {
 	var (
-		user      AuthUser
-		passHash  string
-		tokenVer  int64
+		user     AuthUser
+		passHash *string
+		tokenVer int64
 	)
 	row := s.pool.QueryRow(ctx, `
 		SELECT id, username, display_name, role_id, is_active, created_at,
@@ -186,7 +215,12 @@ func (s *authService) Login(ctx context.Context, username, password string) (str
 		}
 		return "", "", nil, fmt.Errorf("auth_service: query user: %w", err)
 	}
-	if !auth.VerifyPassword(password, passHash) {
+	if passHash == nil {
+		// 用户存在但密码未设置（0021 migration 后的默认 admin / 或新建账号尚未完成首次设置）
+		// 必须先于 is_active 检查 —— 即使账号是 active 也无密码可校验
+		return "", "", nil, ErrPasswordNotSet
+	}
+	if !auth.VerifyPassword(password, *passHash) {
 		return "", "", nil, ErrInvalidCredentials
 	}
 	if !user.IsActive {
@@ -229,7 +263,8 @@ func (s *authService) Login(ctx context.Context, username, password string) (str
 //
 // 此前 v1 版本只返 access 不返 refresh，导致 client 二次 refresh 必失败
 // （root cause: 浏览器刷新 + StrictMode 双 mount 让 verify() 并发调 refresh 二次，
-//  第二次用已 revoked 的旧 token → 401 → 用户被误展 NoPermissionFallback）
+//
+//	第二次用已 revoked 的旧 token → 401 → 用户被误展 NoPermissionFallback）
 func (s *authService) Refresh(ctx context.Context, refreshToken string) (string, string, error) {
 	claims, err := auth.VerifyRefreshToken(refreshToken, s.refreshSec)
 	if err != nil {
@@ -245,6 +280,10 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (string,
 	}
 
 	// rotate_refresh_token(p_old_hash, p_new_hash, p_ttl) 返回 user_id 或 NULL
+	// NULL 有两种语义（finding #8 后由 0022 函数行为升级）：
+	//   1. active 命中失败 + 历史命中成功 = reuse 攻击：函数已撤销该 user 全部 token + bump token_version
+	//   2. 完全无效 hash（从未入库）：JWT 校验通过但 DB 无记录
+	// service 层用 isHistoricalToken 单独查询区分两种 NULL 场景
 	var rotatedUserID *int64
 	row := s.pool.QueryRow(ctx, `SELECT rotate_refresh_token($1, $2, $3)`,
 		oldHash, newHash, s.refreshTTL)
@@ -252,7 +291,10 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (string,
 		return "", "", fmt.Errorf("auth_service: rotate refresh: %w", err)
 	}
 	if rotatedUserID == nil {
-		// 旧 hash 已被 rotate / revoke / 不存在 → 重放或非法
+		// 区分 reuse 与 invalid：查 hash 是否在历史中存在过
+		if s.isHistoricalToken(ctx, oldHash) {
+			return "", "", ErrRefreshTokenReused
+		}
 		return "", "", ErrInvalidRefreshToken
 	}
 	if *rotatedUserID != claims.UserID {
@@ -272,6 +314,29 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (string,
 		return "", "", fmt.Errorf("auth_service: issue access: %w", err)
 	}
 	return access, newRefresh, nil
+}
+
+// isHistoricalToken 检查 hash 是否在 refresh_tokens 表中存在过任何记录（含 revoked / 过期）。
+//
+// 业务背景（finding #8）：
+//   - 0022 migration 的 rotate_refresh_token 在 reuse 检测路径返 NULL（同 invalid 路径）
+//   - service 层需要区分"已 rotate/revoke 的 token 重放"vs"完全没记录的 token"
+//   - 前者必须返 ErrRefreshTokenReused 让 handler 翻译成安全告警 message；
+//     后者返 ErrInvalidRefreshToken 是普通无效凭证
+//
+// 设计取舍：
+//   - 用 EXISTS 而不是 SELECT count(*) —— EXISTS 在命中第一行即返回，开销最小
+//   - 查询失败时返 false 让上游兜底走 invalid 路径（不阻塞用户登录）；
+//     真实 reuse 场景下 rotate 函数已完成全会话撤销，本查询失败不影响安全闭环
+func (s *authService) isHistoricalToken(ctx context.Context, hash []byte) bool {
+	var exists bool
+	err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM refresh_tokens WHERE token_hash = $1)`,
+		hash).Scan(&exists)
+	if err != nil {
+		return false
+	}
+	return exists
 }
 
 // ============================================================
@@ -429,9 +494,10 @@ func (s *authService) ChangePassword(ctx context.Context, sc SessionContext, old
 	if !ok {
 		return errors.New("auth_service: invalid session context type")
 	}
-	if len(newPassword) < 8 {
-		// 与超管创建用户的 minLength: 8 对齐；防止前端校验被绕过后 bcrypt 形同虚设
-		return fmt.Errorf("%w: 新密码至少 8 位", ErrInvalidUserInput)
+	if len(newPassword) < MinPasswordLen {
+		// 与 user_service.Create / Update 共用 MinPasswordLen 常量；
+		// 防止前端校验被绕过后 bcrypt 形同虚设
+		return fmt.Errorf("%w: 新密码至少 %d 位", ErrInvalidUserInput, MinPasswordLen)
 	}
 	if oldPassword == newPassword {
 		// 业务约束：防止用户"修改"成相同密码（误操作或误以为已改）
@@ -444,7 +510,7 @@ func (s *authService) ChangePassword(ctx context.Context, sc SessionContext, old
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	var passHash string
+	var passHash *string
 	row := tx.QueryRow(ctx, `
 		SELECT password_hash FROM users WHERE id = $1 FOR UPDATE
 	`, ac.UserID)
@@ -455,7 +521,12 @@ func (s *authService) ChangePassword(ctx context.Context, sc SessionContext, old
 		}
 		return fmt.Errorf("auth_service: lock user for change-password: %w", err)
 	}
-	if !auth.VerifyPassword(oldPassword, passHash) {
+	if passHash == nil {
+		// 用户在改密窗口期被运维 SQL 重置为 NULL（0021 之后理论可能）；
+		// 此场景下"旧密码"无可校验 —— 当成无效凭证拒绝，让用户重登走首次设置流程
+		return ErrInvalidCredentials
+	}
+	if !auth.VerifyPassword(oldPassword, *passHash) {
 		// 与登录路径同样合并提示，避免 timing 暴露用户存在性
 		return ErrInvalidCredentials
 	}

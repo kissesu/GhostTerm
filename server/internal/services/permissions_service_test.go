@@ -72,7 +72,7 @@ func listRolePermIDs(t *testing.T, ctx context.Context, pool *pgxpool.Pool, role
 }
 
 // ============================================================
-// 用例 1：dev role 返回 16 条
+// 用例 1：dev role 返回 17 条（0007 种 16 + 0024 新增 progress:feedback:update）
 // ============================================================
 
 func TestPermissions_ListRolePermissions_DevReturns16(t *testing.T) {
@@ -83,8 +83,9 @@ func TestPermissions_ListRolePermissions_DevReturns16(t *testing.T) {
 	svc := services.NewPermissionsService(tdb.Pool)
 	perms, err := svc.ListRolePermissions(ctx, 2)
 	require.NoError(t, err)
-	// 0007 migration 给 role 2 (dev) 种子 16 条（与 EffectivePermissionsService_AdminReturnsRoleGrants 对齐）
-	assert.Len(t, perms, 16, "dev role 应有 16 条种子权限")
+	// 0007 migration 给 role 2 (dev) 种子 16 条 + 0024 新增 progress:feedback:update = 17 条
+	// （与 EffectivePermissionsService_AdminReturnsRoleGrants 对齐）
+	assert.Len(t, perms, 17, "dev role 应有 17 条种子权限")
 	// 抽查：确认返回的 Permission 字段填充完整
 	for _, p := range perms {
 		assert.Greater(t, p.ID, int64(0))
@@ -395,4 +396,3 @@ func TestPermissions_UpdateRolePermissions_TransactionalRollback(t *testing.T) {
 	afterVer := getTokenVersion(t, ctx, tdb.Pool, dev)
 	assert.Equal(t, beforeVer, afterVer, "事务回滚后 token_version 也不应 bump")
 }
-

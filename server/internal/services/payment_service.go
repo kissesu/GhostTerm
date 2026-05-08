@@ -545,10 +545,10 @@ func (s *paymentService) MyEarnings(ctx context.Context, sc SessionContext) (any
 
 		for rows.Next() {
 			var (
-				p          EarningsProject
-				lastPaid   *time.Time
-				perAmount  progressdb.Money
-				perCount   int
+				p         EarningsProject
+				lastPaid  *time.Time
+				perAmount progressdb.Money
+				perCount  int
 			)
 			if err := rows.Scan(&p.ProjectID, &p.ProjectName, &perAmount, &perCount, &lastPaid); err != nil {
 				return fmt.Errorf("payment: scan earnings row: %w", err)

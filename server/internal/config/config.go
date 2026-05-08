@@ -21,6 +21,14 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// minJWTSecretLen 是 JWT 签名密钥的最小字节数。
+//
+// 业务背景：HS256 使用 HMAC-SHA256，安全强度由密钥长度直接决定。
+// RFC 7518 §3.2 要求密钥不短于哈希输出宽度（SHA-256 = 32 字节），
+// 短密钥让攻击者无法借捷径却能借暴力（1 字节密钥分钟级即破）。
+// 启动期硬卡住，避免运维不慎在 .env 写下"changeme" 这类弱值。
+const minJWTSecretLen = 32
+
 // Config 是 progress-server 启动期所需的全部参数集合。
 //
 // 字段分类（业务背景）：
@@ -35,17 +43,42 @@ import (
 //     - FileMaxSizeMB：100（spec §6.6 单文件 100MB 上限）
 type Config struct {
 	// Required —— 启动期 fail-fast
-	DBURL             string
-	JWTAccessSecret   []byte
-	JWTRefreshSecret  []byte
+	DBURL            string
+	JWTAccessSecret  []byte
+	JWTRefreshSecret []byte
 
 	// Optional with defaults
-	HTTPAddr         string
-	JWTAccessTTL     time.Duration
-	JWTRefreshTTL    time.Duration
-	BcryptCost       int
-	FileStoragePath  string
-	FileMaxSizeMB    int
+	HTTPAddr        string
+	JWTAccessTTL    time.Duration
+	JWTRefreshTTL   time.Duration
+	BcryptCost      int
+	FileStoragePath string
+	FileMaxSizeMB   int
+
+	// 速率限制（v2 安全审计 finding #7：5 人自用 username 高度可枚举，
+	// 公网 8080 任意人无限调登录，bcrypt cost 12 仍可被分布式 botnet 暴破）。
+	// 配合 IP + username 双维度桶，超额返 429 + Retry-After。
+	RateLimitLoginPerMinPerIP   int
+	RateLimitLoginPerMinPerUser int
+	RateLimitRefreshPerMinPerIP int
+
+	// TrustedProxies 是受信反代 CIDR 白名单（v2 安全审计 finding #10）。
+	// env 形式：逗号分隔的 CIDR 列表，例 "127.0.0.1/32,::1/128"。
+	// 默认空 = 直连模式不信任任何代理头，audit IP 不可被伪造。
+	// Caddy 同机反代部署应设 "127.0.0.1/32,::1/128" 让 Caddy 注入的 X-Forwarded-For
+	// 被采纳；非法 CIDR 在启动期 fail-fast。
+	TrustedProxies string
+
+	// AllowedOrigins 是 CORS 白名单（v2 安全审计 finding #13）。
+	// env 形式：逗号分隔的完整 origin 列表，例 "tauri://localhost,http://localhost:1420"。
+	// 仅当请求 Origin 命中白名单才下发 Access-Control-Allow-* 头；
+	// 非白名单 origin 不写任何 CORS 头让浏览器自行拒绝。
+	//
+	// 业务背景：v0.5 之前把任意 Origin 反射回 ACAO + ACA-Credentials:true，
+	// 等效于把 CSRF 屏障拆掉（任意第三方站点可调登录端点带 cookie）。
+	// 默认覆盖 Tauri WKWebView (tauri://localhost) + dev vite (http://localhost:1420)
+	// + Tauri Windows custom scheme (http://tauri.localhost)。
+	AllowedOrigins string
 }
 
 // Load 从环境变量构建 Config，调用前可选地加载 .env 文件（仅开发便利）。
@@ -77,11 +110,23 @@ func Load() (*Config, error) {
 	if access == "" {
 		return nil, errors.New("config: JWT_ACCESS_SECRET is required and must be non-empty")
 	}
+	// HS256 最小密钥长度：32 字节（与 SHA-256 输出宽度一致）。
+	// 短密钥可在分钟级离线暴破，必须 fail-fast at startup 而非运行期发现。
+	if len(access) < minJWTSecretLen {
+		return nil, fmt.Errorf("config: JWT_ACCESS_SECRET must be ≥%d bytes, got %d", minJWTSecretLen, len(access))
+	}
 	cfg.JWTAccessSecret = []byte(access)
 
 	refresh := os.Getenv("JWT_REFRESH_SECRET")
 	if refresh == "" {
 		return nil, errors.New("config: JWT_REFRESH_SECRET is required and must be non-empty")
+	}
+	if len(refresh) < minJWTSecretLen {
+		return nil, fmt.Errorf("config: JWT_REFRESH_SECRET must be ≥%d bytes, got %d", minJWTSecretLen, len(refresh))
+	}
+	// access==refresh 让"双密钥独立轮换"设计作废且单点泄露同时炸 access+refresh 两类 token。
+	if access == refresh {
+		return nil, errors.New("config: JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must differ")
 	}
 	cfg.JWTRefreshSecret = []byte(refresh)
 
@@ -108,6 +153,33 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// 速率限制默认值（finding #7）：
+	//   - 登录 IP 5/min：留足误输次数（用户记错密码 5 次后冷静 60s），同时挡 botnet
+	//   - 登录 user 10/min：多 IP 联合撞同一账号也封死（>2 倍 IP 维度宽容）
+	//   - refresh IP 30/min：access TTL 15min 时单用户每分钟最多 ~1 次刷新，
+	//     30/min 给前端 silent refresh + 偶发抖动留足空间
+	cfg.RateLimitLoginPerMinPerIP, err = parseInt("RATE_LIMIT_LOGIN_PER_MIN_PER_IP", 5)
+	if err != nil {
+		return nil, err
+	}
+	cfg.RateLimitLoginPerMinPerUser, err = parseInt("RATE_LIMIT_LOGIN_PER_MIN_PER_USER", 10)
+	if err != nil {
+		return nil, err
+	}
+	cfg.RateLimitRefreshPerMinPerIP, err = parseInt("RATE_LIMIT_REFRESH_PER_MIN_PER_IP", 30)
+	if err != nil {
+		return nil, err
+	}
+
+	// finding #10：受信反代 CIDR 列表。空串视为「不信任任何代理头」（直连模式 fail-safe）。
+	// 实际 CIDR 解析在 api/middleware.ParseTrustedProxiesEnv（main.go 启动期）做，
+	// 这里只搬字符串，避免 config 包反向依赖 api/middleware。
+	cfg.TrustedProxies = getenvDefault("TRUSTED_PROXIES", "")
+
+	// finding #13：CORS 白名单。默认覆盖 Tauri WKWebView + dev vite + Tauri Windows scheme。
+	// 任意人调登录端点带 cookie 的 CSRF 攻击面在此被关掉（不在白名单不发 CORS 头）。
+	cfg.AllowedOrigins = getenvDefault("ALLOWED_ORIGINS", "tauri://localhost,http://localhost:1420,http://tauri.localhost")
 
 	return cfg, nil
 }

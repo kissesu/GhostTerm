@@ -18,6 +18,8 @@ import (
 	"context"
 	"errors"
 
+	"github.com/go-faster/jx"
+
 	"github.com/ghostterm/progress-server/internal/api/middleware"
 	"github.com/ghostterm/progress-server/internal/api/oas"
 	"github.com/ghostterm/progress-server/internal/services"
@@ -26,14 +28,14 @@ import (
 // AuthHandler 实现 ogen 生成的 oas.Handler 中与 auth 相关的 5 个方法。
 //
 // 业务背景：
-// - ogen 把所有 endpoint 都收敛到一个 Handler 接口；其它 phase 的 worker 也会
-//   往同一个 oasHandler 上挂方法。本 struct 单独负责 auth 部分，由 router.go
-//   的 oasHandler "组合"（嵌入）进来
+//   - ogen 把所有 endpoint 都收敛到一个 Handler 接口；其它 phase 的 worker 也会
+//     往同一个 oasHandler 上挂方法。本 struct 单独负责 auth 部分，由 router.go
+//     的 oasHandler "组合"（嵌入）进来
 //
 // 字段：
-// - Svc：认证 service
-// - RBAC：权限 service（Phase 3 加入），AuthGetMe 拉用户时附带 permission 码列表
-//   返回前端，用于 PermissionGate 的 UI 守卫
+//   - Svc：认证 service
+//   - RBAC：权限 service（Phase 3 加入），AuthGetMe 拉用户时附带 permission 码列表
+//     返回前端，用于 PermissionGate 的 UI 守卫
 type AuthHandler struct {
 	Svc  services.AuthService
 	RBAC services.RBACService
@@ -67,10 +69,20 @@ func NewAuthHandler(
 // 错误映射：
 //   - ErrInvalidCredentials → 401 unauthorized
 //   - ErrUserInactive       → 401 unauthorized（不暴露 active 状态防 enumeration）
+//   - ErrPasswordNotSet     → 401 unauthorized + 特定 message（finding #18 / 0021 migration）
+//     前端按 message 中"首次设置"关键字识别并展示对应引导
 //   - 其它                  → 500 internal（由 ogen 默认 ErrorHandler 包裹）
+//
+// 注：password_not_set 没有走专用 ErrorEnvelopeErrorCode 是为了避免本 task 触发
+// OAS contract 扩展 + ogen regen + 前端 zod 同步。前端识别用 message 关键字即可。
 func (h *AuthHandler) AuthLogin(ctx context.Context, req *oas.AuthLoginRequest) (oas.AuthLoginRes, error) {
 	access, refresh, raw, err := h.Svc.Login(ctx, req.Username, req.Password)
 	if err != nil {
+		if errors.Is(err, services.ErrPasswordNotSet) {
+			// 用户存在但密码未设置（0021 migration 后的默认 admin）
+			// 前端识别"首次设置"关键字 → 展示"请联系运维 reseed 密码"
+			return unauthorizedLoginRes("管理员需要首次设置密码，请联系系统管理员"), nil
+		}
 		if errors.Is(err, services.ErrInvalidCredentials) || errors.Is(err, services.ErrUserInactive) {
 			return unauthorizedLoginRes("用户名或密码错误"), nil
 		}
@@ -97,11 +109,22 @@ func (h *AuthHandler) AuthLogin(ctx context.Context, req *oas.AuthLoginRequest) 
 // AuthRefresh 实现 POST /api/auth/refresh。
 //
 // 错误映射：
-//   - ErrInvalidRefreshToken → 401 unauthorized
+//   - ErrRefreshTokenReused  → 401 unauthorized + message 标记 reuse_detected（finding #8）
+//     此时后端已撤销该 user 全部 refresh_tokens + bump token_version；
+//     前端识别 reuse_detected 标记后展示"安全告警 + 请重新登录"提示
+//   - ErrInvalidRefreshToken → 401 unauthorized（普通无效凭证）
 //   - 其它                   → 500 internal
+//
+// 设计取舍：
+//   - 不新增 ErrorEnvelope.code 枚举（避免 OAS schema 抖动 + 重新生成 ogen）
+//   - 在 message 加固定前缀 + 用 details["reason"]="refresh_token_reused" 双通道传信号
+//     前端 fetcher 拦截 401 时优先看 details.reason，messsage 仅作 fallback 文案
 func (h *AuthHandler) AuthRefresh(ctx context.Context, req *oas.AuthRefreshRequest) (oas.AuthRefreshRes, error) {
 	access, newRefresh, err := h.Svc.Refresh(ctx, req.RefreshToken)
 	if err != nil {
+		if errors.Is(err, services.ErrRefreshTokenReused) {
+			return refreshTokenReusedEnvelope(), nil
+		}
 		if errors.Is(err, services.ErrInvalidRefreshToken) {
 			return unauthorizedErrorEnvelope("refresh token 无效或已过期"), nil
 		}
@@ -355,6 +378,26 @@ func unauthorizedErrorEnvelope(msg string) *oas.ErrorEnvelope {
 	return &e
 }
 
+// refreshTokenReusedEnvelope 构造 refresh token reuse 检测专用 401 envelope（finding #8）。
+//
+// 业务背景：
+//   - 此时后端 rotate_refresh_token 已撤销该 user 全部 refresh_tokens + bump token_version
+//   - 前端识别 details.reason="refresh_token_reused" 后必须强制重登 + 展示安全告警
+//   - code 仍走 unauthorized（OAS 枚举）保持向后兼容；reason 通过 details 双通道下发
+func refreshTokenReusedEnvelope() *oas.ErrorEnvelope {
+	details := oas.ErrorEnvelopeErrorDetails{
+		"reason": jx.Raw(`"refresh_token_reused"`),
+	}
+	e := oas.ErrorEnvelope{
+		Error: oas.ErrorEnvelopeError{
+			Code:    oas.ErrorEnvelopeErrorCodeUnauthorized,
+			Message: "检测到 refresh token 重用，已撤销全部会话，请重新登录",
+			Details: oas.NewOptNilErrorEnvelopeErrorDetails(details),
+		},
+	}
+	return &e
+}
+
 func newErrorEnvelope(code oas.ErrorEnvelopeErrorCode, msg string) oas.ErrorEnvelope {
 	return oas.ErrorEnvelope{
 		Error: oas.ErrorEnvelopeError{
@@ -363,4 +406,3 @@ func newErrorEnvelope(code oas.ErrorEnvelopeErrorCode, msg string) oas.ErrorEnve
 		},
 	}
 }
-

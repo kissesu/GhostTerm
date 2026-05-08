@@ -35,13 +35,13 @@ import (
 
 // rbacTestEnv 装配整个测试环境：admin + dev 两个用户、一个项目（dev 不是该项目 member）。
 type rbacTestEnv struct {
-	pool      *pgxpool.Pool
-	cleanup   func()
-	rbacSvc   services.RBACService
-	adminID   int64
-	devID     int64
+	pool       *pgxpool.Pool
+	cleanup    func()
+	rbacSvc    services.RBACService
+	adminID    int64
+	devID      int64
 	otherDevID int64 // 第二个 dev，用于"非 member 也能看到"的反例对照（实际不会被加入 member）
-	projectID int64
+	projectID  int64
 }
 
 func setupRBACEnv(t *testing.T) *rbacTestEnv {

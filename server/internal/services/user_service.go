@@ -36,6 +36,16 @@ var ErrUserNotFound = errors.New("user_not_found")
 // ErrInvalidUserInput 创建/更新时的字段校验失败（弱密码 / 空 username 等）。
 var ErrInvalidUserInput = errors.New("invalid_user_input")
 
+// MinPasswordLen 是用户密码的最小字节数（统一所有创建/重置/改密路径）。
+//
+// 业务背景：
+//   - 历史上 user_service 用 6、auth_service.ChangePassword 用 8，规则反向，
+//     让"超管创建出来的弱密码"无法被同强度门槛校验保护
+//   - finding #18 要求统一为 8（与 auth_service.ChangePassword 已有逻辑对齐）
+//   - 8 字节是 OWASP ASVS V2.1.1 的下限；生产更建议 12+，但 5 人自用 alpha 阶段
+//     先保证一致性，强度阈值后续再升
+const MinPasswordLen = 8
+
 // ============================================================
 // UserService 接口（用户管理后台专用）
 // ============================================================
@@ -162,9 +172,9 @@ func (s *userService) Create(ctx context.Context, in UserCreateInput) (UserView,
 	if strings.TrimSpace(in.Username) == "" {
 		return UserView{}, fmt.Errorf("%w: username 不能为空", ErrInvalidUserInput)
 	}
-	if len(in.Password) < 6 {
-		// 与前端校验对齐；放行短密码会让 bcrypt 形同虚设
-		return UserView{}, fmt.Errorf("%w: 密码至少 6 位", ErrInvalidUserInput)
+	if len(in.Password) < MinPasswordLen {
+		// 与 auth_service.ChangePassword 同阈值；放行短密码会让 bcrypt 形同虚设
+		return UserView{}, fmt.Errorf("%w: 密码至少 %d 位", ErrInvalidUserInput, MinPasswordLen)
 	}
 
 	hash, err := auth.HashPassword(in.Password, s.bcryptCost)
@@ -245,8 +255,8 @@ func (s *userService) Update(ctx context.Context, id int64, in UserUpdateInput) 
 		idx++
 	}
 	if in.Password != nil {
-		if len(*in.Password) < 6 {
-			return UserView{}, fmt.Errorf("%w: 密码至少 6 位", ErrInvalidUserInput)
+		if len(*in.Password) < MinPasswordLen {
+			return UserView{}, fmt.Errorf("%w: 密码至少 %d 位", ErrInvalidUserInput, MinPasswordLen)
 		}
 		hash, err := auth.HashPassword(*in.Password, s.bcryptCost)
 		if err != nil {

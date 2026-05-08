@@ -71,8 +71,8 @@ type CreateProjectInput struct {
 	Deadline      time.Time
 	OriginalQuote progressdb.Money // 默认 0；DB 列 NUMERIC(12,2) NOT NULL DEFAULT 0
 	// 创建时关联的资料文件 ID（先 POST /api/files 上传后带入；nil 表示不关联）：
-	OpeningDocID    *int64  // 开题书 → projects.opening_doc_id
-	AssignmentDocID *int64  // 任务书 → projects.assignment_doc_id
+	OpeningDocID    *int64 // 开题书 → projects.opening_doc_id
+	AssignmentDocID *int64 // 任务书 → projects.assignment_doc_id
 	// 微信聊天记录截图文件 ID 数组；非空时事务内 INSERT N 行 project_files(category='wechat_chat')
 	WechatChatFileIDs []int64
 	// 项目对接的开发人员 user.id 数组（业务需求 2026-05-03）：
@@ -144,19 +144,19 @@ type ProjectModel struct {
 
 // StatusChangeLogModel 是 ListStatusChanges 返回的 DTO。
 type StatusChangeLogModel struct {
-	ID                int64
-	ProjectID         int64
-	EventCode         string
-	EventName         string
-	FromStatus        *oas.ProjectStatus
-	ToStatus          oas.ProjectStatus
-	FromHolderRoleID  *int64
-	ToHolderRoleID    *int64
-	FromHolderUserID  *int64
-	ToHolderUserID    *int64
-	Remark            string
-	TriggeredBy       int64
-	TriggeredAt       time.Time
+	ID               int64
+	ProjectID        int64
+	EventCode        string
+	EventName        string
+	FromStatus       *oas.ProjectStatus
+	ToStatus         oas.ProjectStatus
+	FromHolderRoleID *int64
+	ToHolderRoleID   *int64
+	FromHolderUserID *int64
+	ToHolderUserID   *int64
+	Remark           string
+	TriggeredBy      int64
+	TriggeredAt      time.Time
 }
 
 // ============================================================
@@ -437,6 +437,10 @@ func validateCreateInput(in CreateProjectInput) error {
 	// 业务需求 2026-05-03：必须指派至少 1 个开发对接人
 	if len(in.DeveloperUserIDs) == 0 {
 		return fmt.Errorf("%w: developerUserIds is required (at least 1)", ErrProjectInvalidInput)
+	}
+	// finding #9：原始报价不能为负数（DB CHECK 兜底，但 service 层早拦避免事务失败信息泄漏）
+	if in.OriginalQuote.Sign() < 0 {
+		return fmt.Errorf("%w: originalQuote 不能为负数", ErrProjectInvalidInput)
 	}
 	return nil
 }

@@ -26,21 +26,21 @@ import (
 //
 // 用户需求修正 2026-04-30：customer 从独立资源降级为 customerLabel 字段。
 type projectModel struct {
-	ID            int64      `json:"id"`
-	Name          string     `json:"name"`
-	CustomerLabel string     `json:"customerLabel"`
-	Description   string     `json:"description"`
-	Status        string     `json:"status"`
-	HolderRoleID  *int64     `json:"holderRoleId,omitempty"`
-	HolderUserID  *int64     `json:"holderUserId,omitempty"`
-	OriginalQuote string     `json:"originalQuote"`
-	CurrentQuote  string     `json:"currentQuote"`
-	TotalReceived string     `json:"totalReceived"`
-	Deadline      time.Time  `json:"deadline"`
+	ID            int64     `json:"id"`
+	Name          string    `json:"name"`
+	CustomerLabel string    `json:"customerLabel"`
+	Description   string    `json:"description"`
+	Status        string    `json:"status"`
+	HolderRoleID  *int64    `json:"holderRoleId,omitempty"`
+	HolderUserID  *int64    `json:"holderUserId,omitempty"`
+	OriginalQuote string    `json:"originalQuote"`
+	CurrentQuote  string    `json:"currentQuote"`
+	TotalReceived string    `json:"totalReceived"`
+	Deadline      time.Time `json:"deadline"`
 	// DealingAt 字段已在 2026-05-04 migration 0020 删除（dealing 状态去除后 quoting_at 替代）
-	CancelledAt   *time.Time `json:"cancelledAt,omitempty"`
-	PaidAt        *time.Time `json:"paidAt,omitempty"`
-	ArchivedAt    *time.Time `json:"archivedAt,omitempty"`
+	CancelledAt *time.Time `json:"cancelledAt,omitempty"`
+	PaidAt      *time.Time `json:"paidAt,omitempty"`
+	ArchivedAt  *time.Time `json:"archivedAt,omitempty"`
 }
 
 // statusChangeLogModel e2e 视角的状态变更日志。

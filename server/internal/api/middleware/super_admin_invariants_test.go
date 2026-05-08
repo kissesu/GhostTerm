@@ -296,4 +296,3 @@ func TestSuperAdminInvariants_TrailingSlashRoleDelete(t *testing.T) {
 	rec, called, respBody := runMW(t, mw, http.MethodDelete, "/api/roles/1/", nil)
 	assertSuperAdminImmutable(t, rec, respBody, called)
 }
-

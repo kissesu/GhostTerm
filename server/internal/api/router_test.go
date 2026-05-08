@@ -103,9 +103,11 @@ func TestRouter_HandleBearerAuth_PermsDBErrorReturnsUnavailableSentinel(t *testi
 	defer tdb.Close()
 
 	authSvc := newTestAuthService(t, tdb.Pool)
-	// admin 用户已由 0001 migration 预置；用 admin/admin123 登录拿 access token
+	// admin 用户已由 0001 migration 预置；0021 把默认密码 hash 置 NULL，
+	// 测试侧需要 reseed 一个临时密码才能 Login 拿 token
 	const adminUsername = "admin"
-	const adminPassword = "admin123"
+	const adminPassword = "admin-test-pwd-123"
+	reseedAdminPassword(t, ctx, tdb.Pool, adminPassword)
 	access, _, _, err := authSvc.Login(ctx, adminUsername, adminPassword)
 	require.NoError(t, err)
 
@@ -131,7 +133,9 @@ func TestRouter_HandleBearerAuth_DeletedUserMapsToInvalidToken(t *testing.T) {
 	defer tdb.Close()
 
 	authSvc := newTestAuthService(t, tdb.Pool)
-	access, _, _, err := authSvc.Login(ctx, "admin", "admin123")
+	// 0021 把 0001 默认 admin 的 password_hash 置 NULL；测试需要 reseed 才能 Login
+	reseedAdminPassword(t, ctx, tdb.Pool, "admin-test-pwd-123")
+	access, _, _, err := authSvc.Login(ctx, "admin", "admin-test-pwd-123")
 	require.NoError(t, err)
 
 	// 模拟 token 校验后用户被删的竞态：eff.Compute 返 ErrUserNotFound
@@ -231,7 +235,9 @@ func newTestAuthService(t *testing.T, pool *pgxpool.Pool) services.AuthService {
 
 // buildC2TestRouter 装一个最小可路由的 NewRouter；与 handlers/permissions_test.go
 // buildPermissionTestRouter 同款逻辑，但 helper 本地化避免跨包调用。
-func buildC2TestRouter(t *testing.T, pool *pgxpool.Pool) http.Handler {
+//
+// allowedOrigins 可选；nil/空 = CORS 拒所有跨 origin 请求（同源 / 无 Origin 头继续放行）。
+func buildC2TestRouter(t *testing.T, pool *pgxpool.Pool, allowedOrigins ...string) http.Handler {
 	t.Helper()
 
 	authSvc := newTestAuthService(t, pool)
@@ -269,9 +275,183 @@ func buildC2TestRouter(t *testing.T, pool *pgxpool.Pool) http.Handler {
 		PaymentService:      paymentSvc,
 		NotificationService: notifSvc,
 		WSHub:               wsHub,
+		AllowedOrigins:      allowedOrigins,
 	})
 	require.NoError(t, err)
 	return router
+}
+
+// reseedAdminPassword 把 0001 init 的 admin（其 password_hash 已被 0021 置 NULL）
+// 重新设置成传入的明文密码。仅供测试 setup 用。
+//
+// 业务背景：finding #18 / 0021 migration 把默认 admin/admin123 hash 置 NULL，
+// 所有依赖"用 admin 登录拿 token"的测试都需要先通过本 helper 重置。
+func reseedAdminPassword(t *testing.T, ctx context.Context, pool *pgxpool.Pool, password string) {
+	t.Helper()
+	hash, err := auth.HashPassword(password, bcrypt.MinCost)
+	require.NoError(t, err)
+	tag, err := pool.Exec(ctx, `
+		UPDATE users SET password_hash = $1, updated_at = NOW()
+		WHERE username = 'admin'
+	`, hash)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), tag.RowsAffected(), "admin 行未命中（0001 init 应已 seed）")
+}
+
+// ============================================================
+// finding #13：CORS 白名单回归测试
+//
+// 旧版 CORS handler 把任意 Origin 反射回 ACAO + ACA-Credentials:true，
+// 等效拆掉 CSRF 屏障。新版按 AllowedOrigins 精确白名单匹配，非白名单不发头。
+//
+// 用例覆盖 4 类场景：
+//  1. 白名单内 origin → 发完整 CORS 头
+//  2. 非白名单 origin（含前缀绕过 evil.com.localhost / localhost.evil.com）→ 不发头
+//  3. 无 Origin 头（同源 / curl）→ 不发头但放行
+//  4. preflight OPTIONS → 仅白名单 origin 走 204；其余落到 ogen 自处理
+//
+// 不依赖 DB —— 直接装一个最小 router 跑 CORS middleware。
+// ============================================================
+
+func TestCORS_AcceptsWhitelistOrigin(t *testing.T) {
+	tdb := fixtures.NewTestDB(t)
+	defer tdb.Close()
+	router := buildC2TestRouter(t, tdb.Pool, "tauri://localhost", "http://localhost:1420")
+
+	req := httptest.NewRequest(http.MethodOptions, "/api/auth/login", nil)
+	req.Header.Set("Origin", "tauri://localhost")
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	assert.Equal(t, "tauri://localhost", rec.Header().Get("Access-Control-Allow-Origin"))
+	assert.Equal(t, "true", rec.Header().Get("Access-Control-Allow-Credentials"))
+	assert.Equal(t, "Origin", rec.Header().Get("Vary"))
+}
+
+func TestCORS_RejectsNonWhitelistOrigin(t *testing.T) {
+	tdb := fixtures.NewTestDB(t)
+	defer tdb.Close()
+	router := buildC2TestRouter(t, tdb.Pool, "tauri://localhost", "http://localhost:1420")
+
+	req := httptest.NewRequest(http.MethodOptions, "/api/auth/login", nil)
+	req.Header.Set("Origin", "https://evil.com")
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	assert.Empty(t, rec.Header().Get("Access-Control-Allow-Origin"),
+		"非白名单 origin 必须不下发 ACAO 头让浏览器自行拒绝")
+	assert.Empty(t, rec.Header().Get("Access-Control-Allow-Credentials"),
+		"非白名单 origin 必须不下发 ACA-Credentials 头")
+	assert.Equal(t, "Origin", rec.Header().Get("Vary"),
+		"Vary: Origin 必须始终下发让中间缓存按 origin 区分响应")
+}
+
+func TestCORS_RejectsPrefixBypassAttempt(t *testing.T) {
+	tdb := fixtures.NewTestDB(t)
+	defer tdb.Close()
+	router := buildC2TestRouter(t, tdb.Pool, "http://localhost:1420")
+
+	// 经典前缀绕过：localhost.evil.com / evil.com.localhost 不应被白名单认成 localhost
+	for _, evilOrigin := range []string{
+		"http://localhost.evil.com",
+		"http://localhost:1420.evil.com",
+		"http://evil.com/localhost:1420",
+	} {
+		t.Run(evilOrigin, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodOptions, "/api/auth/login", nil)
+			req.Header.Set("Origin", evilOrigin)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			assert.Empty(t, rec.Header().Get("Access-Control-Allow-Origin"),
+				"前缀绕过尝试 %q 必须被拒", evilOrigin)
+		})
+	}
+}
+
+func TestCORS_NoOriginHeaderPassesThrough(t *testing.T) {
+	tdb := fixtures.NewTestDB(t)
+	defer tdb.Close()
+	router := buildC2TestRouter(t, tdb.Pool, "tauri://localhost")
+
+	// 同源 / curl / Tauri reqwest 不带 Origin 头 → 不写 CORS 头但请求继续
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Empty(t, rec.Header().Get("Access-Control-Allow-Origin"))
+	assert.Empty(t, rec.Header().Get("Access-Control-Allow-Credentials"))
+}
+
+func TestCORS_EmptyAllowedOriginsRejectsAll(t *testing.T) {
+	tdb := fixtures.NewTestDB(t)
+	defer tdb.Close()
+	// 不传 allowedOrigins → router 内 allowedOrigins map 为空
+	router := buildC2TestRouter(t, tdb.Pool)
+
+	req := httptest.NewRequest(http.MethodOptions, "/api/auth/login", nil)
+	req.Header.Set("Origin", "tauri://localhost")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	assert.Empty(t, rec.Header().Get("Access-Control-Allow-Origin"),
+		"空白名单必须拒所有跨 origin 请求")
+}
+
+// ============================================================
+// finding #14：HTTP body 大小限制路由集成回归测试
+//
+// 验证：
+//  1. /api/auth/login body 超 1MB 默认 → 413
+//  2. /api/auth/login body 1KB 正常 → 处理（这里期望 401 因为 body 是垃圾 JSON
+//     但走到了 handler 即说明 body limit 没拦住）
+//  3. /api/files (multipart) body 在 fileBodyLimit 之内不被全局 1MB 拦住
+// ============================================================
+
+func TestBodyLimit_RouteAuthLoginRejectsLargeBody(t *testing.T) {
+	tdb := fixtures.NewTestDB(t)
+	defer tdb.Close()
+	router := buildC2TestRouter(t, tdb.Pool, "tauri://localhost")
+
+	// 构造 2MB 垃圾 JSON：超 1MB 默认上限
+	hugeBody := bytes.Repeat([]byte("a"), 2*1024*1024)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(hugeBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusRequestEntityTooLarge, rec.Code,
+		"超 1MB body 必须返 413；实际 status=%d body=%s", rec.Code, rec.Body.String())
+
+	var envelope struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&envelope))
+	assert.Equal(t, "request_body_too_large", envelope.Error.Code)
+}
+
+func TestBodyLimit_RouteAuthLoginAcceptsSmallBody(t *testing.T) {
+	tdb := fixtures.NewTestDB(t)
+	defer tdb.Close()
+	router := buildC2TestRouter(t, tdb.Pool, "tauri://localhost")
+
+	// 合法登录请求 body：~50 字节，远小于 1MB
+	smallBody := []byte(`{"username":"admin","password":"wrong-password-x"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(smallBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	// 期望非 413：要么 200/201（不太可能因为密码错），要么 401/422 业务错误
+	// 关键是 BodyLimit 没拦住请求让它走到 handler
+	assert.NotEqual(t, http.StatusRequestEntityTooLarge, rec.Code,
+		"小 body 必须不被 BodyLimit 拦截；实际 status=%d", rec.Code)
 }
 
 // loginAndGetAccess 走 POST /api/auth/login 拿 access token；调用方负责传入 username/password。

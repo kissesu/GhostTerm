@@ -122,6 +122,27 @@ func TestCreate_InvalidInputDefense(t *testing.T) {
 	}
 }
 
+// finding #9：Create 拒绝负数 originalQuote
+//
+// 业务背景：OAS Money pattern 历史允许负数；POST /api/projects 时
+// 客户端传 originalQuote=-100 可在 DB 写入负值报价。Service 层拦截。
+func TestCreate_RejectsNegativeOriginalQuote(t *testing.T) {
+	svc := &ProjectServiceImpl{pool: nil}
+	deadline := time.Now().Add(7 * 24 * time.Hour)
+	negQuote, err := progressdb.MoneyFromString("-100.00")
+	if err != nil {
+		t.Fatalf("MoneyFromString -100.00: %v", err)
+	}
+	_, err = svc.Create(context.Background(), 100, 3 /* cs */, CreateProjectInput{
+		Name: "x", CustomerLabel: "测试客户", Description: "y", Deadline: deadline,
+		DeveloperUserIDs: []int64{42},
+		OriginalQuote:    negQuote,
+	})
+	if !errors.Is(err, ErrProjectInvalidInput) {
+		t.Errorf("err = %v；应返回 ErrProjectInvalidInput（拒绝负数报价）", err)
+	}
+}
+
 // ============================================================
 // 单元测试占位：UpdateProjectInput.Subject 区分"不动"和"清空"
 //

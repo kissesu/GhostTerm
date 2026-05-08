@@ -113,6 +113,95 @@ func TestValidateQuoteInput_UnknownType(t *testing.T) {
 	}
 }
 
+// finding #9：append/after_sales 的 delta 必须 > 0
+//
+// 业务背景：OpenAPI Money pattern 历史允许负数（^-?\d+\.\d{2}$），
+// 让 delta=-9999.99 可以让 current_quote 倒减、after_sales_total 倒减；
+// 项目成员就能改对账总账。三层防御中 service 层是第二道：
+//   - 第一层：DB CHECK（兜底）
+//   - 第二层：service 层（本测试覆盖）
+//   - 第三层：OAS schema PositiveMoney pattern（前端拦截）
+func TestValidateQuoteInput_AppendRejectsNonPositiveDelta(t *testing.T) {
+	negDelta := mustMoney(t, "-9999.99")
+	zeroDelta := mustMoney(t, "0")
+	cases := []struct {
+		name  string
+		delta progressdb.Money
+	}{
+		{"negative", negDelta},
+		{"zero", zeroDelta},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := validateQuoteInput(&QuoteChangeInput{
+				ProjectID:  1,
+				ChangeType: QuoteChangeAppend,
+				Delta:      &c.delta,
+				Reason:     "倒扣攻击",
+			})
+			if !errors.Is(err, ErrQuoteValidation) {
+				t.Fatalf("delta=%s expected ErrQuoteValidation, got %v", c.delta.String(), err)
+			}
+		})
+	}
+}
+
+func TestValidateQuoteInput_AfterSalesRejectsNonPositiveDelta(t *testing.T) {
+	negDelta := mustMoney(t, "-1.00")
+	zeroDelta := mustMoney(t, "0.00")
+	cases := []struct {
+		name  string
+		delta progressdb.Money
+	}{
+		{"negative", negDelta},
+		{"zero", zeroDelta},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := validateQuoteInput(&QuoteChangeInput{
+				ProjectID:  1,
+				ChangeType: QuoteChangeAfterSales,
+				Delta:      &c.delta,
+				Reason:     "售后倒扣",
+			})
+			if !errors.Is(err, ErrQuoteValidation) {
+				t.Fatalf("delta=%s expected ErrQuoteValidation, got %v", c.delta.String(), err)
+			}
+		})
+	}
+}
+
+// finding #9：modify 的 newQuote 必须 >= 0（不能把 current_quote 设成负数）
+//
+// 注意：modify 的 delta 由 service 计算 = newQuote - oldQuote，可能为负（让利场景），
+// 因此 modify 不限制 delta 符号，只限制 newQuote >= 0
+func TestValidateQuoteInput_ModifyRejectsNegativeNewQuote(t *testing.T) {
+	negNewQuote := mustMoney(t, "-100.00")
+	err := validateQuoteInput(&QuoteChangeInput{
+		ProjectID:  1,
+		ChangeType: QuoteChangeModify,
+		NewQuote:   &negNewQuote,
+		Reason:     "把报价改成负数",
+	})
+	if !errors.Is(err, ErrQuoteValidation) {
+		t.Fatalf("modify with newQuote=-100 should be ErrQuoteValidation, got %v", err)
+	}
+}
+
+// modify 的 newQuote=0 是合法的（取消项目报价）
+func TestValidateQuoteInput_ModifyAllowsZeroNewQuote(t *testing.T) {
+	zeroNewQuote := mustMoney(t, "0.00")
+	err := validateQuoteInput(&QuoteChangeInput{
+		ProjectID:  1,
+		ChangeType: QuoteChangeModify,
+		NewQuote:   &zeroNewQuote,
+		Reason:     "整单作废",
+	})
+	if err != nil {
+		t.Fatalf("modify with newQuote=0 should be allowed, got %v", err)
+	}
+}
+
 func TestValidateQuoteInput_HappyPaths(t *testing.T) {
 	delta := mustMoney(t, "1500")
 	newQuote := mustMoney(t, "6000")

@@ -146,18 +146,103 @@ func TestAuth_RefreshRotation(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, newAccess1)
 
-	// 重放：用同一个旧 refresh 再 Refresh 应当被 rotate_refresh_token 函数检测
+	// 重放：用同一个旧 refresh 再 Refresh 应当被识别为 reuse（finding #8）
+	// 旧 token 被 rotate 后再次使用 = 攻击者持有偷来的 token；返 ErrRefreshTokenReused
+	// 触发该 user 全部 refresh_tokens 撤销 + token_version bump
 	_, _, err = env.svc.Refresh(context.Background(), refresh)
-	assert.ErrorIs(t, err, services.ErrInvalidRefreshToken,
-		"旧 refresh 在第一次 rotate 后已 revoked，重放必须被拒")
+	assert.ErrorIs(t, err, services.ErrRefreshTokenReused,
+		"旧 refresh 在第一次 rotate 后再次使用 = reuse 攻击，必须触发全会话撤销")
 }
 
 func TestAuth_RefreshInvalidToken(t *testing.T) {
 	env := setupAuthEnv(t)
 	defer env.cleanup()
 
+	// 完全没注册过的 token（JWT 校验直接失败）→ ErrInvalidRefreshToken
+	// 与 ErrRefreshTokenReused 区分：reuse 是历史中存在过；invalid 是从未存在
 	_, _, err := env.svc.Refresh(context.Background(), "totally-not-a-jwt")
 	assert.ErrorIs(t, err, services.ErrInvalidRefreshToken)
+	assert.NotErrorIs(t, err, services.ErrRefreshTokenReused,
+		"完全无效 token 不应触发 reuse 检测路径")
+}
+
+// ------------------------------------------------------------
+// Refresh token reuse 检测（finding #8）
+// 旧 token 第二次使用 → 撤销该 user 全部 refresh_tokens + bump token_version
+// ------------------------------------------------------------
+
+func TestAuth_RefreshReuseRevokesAllUserSessions(t *testing.T) {
+	env := setupAuthEnv(t)
+	defer env.cleanup()
+	ctx := context.Background()
+
+	// user 登录两次拿两个 refresh token（模拟两个设备/会话）
+	_, refresh1, _, err := env.svc.Login(ctx, env.username, env.password)
+	require.NoError(t, err)
+	_, refresh2, _, err := env.svc.Login(ctx, env.username, env.password)
+	require.NoError(t, err)
+	assert.NotEqual(t, refresh1, refresh2)
+
+	// 记录 reuse 前的 token_version
+	var tvBefore int64
+	require.NoError(t, env.pool.QueryRow(ctx,
+		`SELECT token_version FROM users WHERE id=$1`, env.userID).Scan(&tvBefore))
+
+	// refresh1 正常 rotate（第一次使用 OK，受害者拿到新 token）
+	_, newRefresh1, err := env.svc.Refresh(ctx, refresh1)
+	require.NoError(t, err)
+	require.NotEmpty(t, newRefresh1)
+
+	// refresh1 被攻击者偷了再次使用 → 必须触发 reuse 检测
+	_, _, err = env.svc.Refresh(ctx, refresh1)
+	require.ErrorIs(t, err, services.ErrRefreshTokenReused,
+		"旧 token 第二次使用必须触发 reuse 检测")
+
+	// 验证 1：refresh2（无辜会话）应被 reuse-detection 撤销
+	var rt2Revoked bool
+	require.NoError(t, env.pool.QueryRow(ctx,
+		`SELECT revoked_at IS NOT NULL FROM refresh_tokens WHERE token_hash = $1`,
+		auth.HashRefreshToken(refresh2)).Scan(&rt2Revoked))
+	assert.True(t, rt2Revoked, "refresh2 必须被全局撤销")
+
+	// 验证 2：newRefresh1（受害者刚 rotate 拿到的）也应被撤销
+	var newRT1Revoked bool
+	require.NoError(t, env.pool.QueryRow(ctx,
+		`SELECT revoked_at IS NOT NULL FROM refresh_tokens WHERE token_hash = $1`,
+		auth.HashRefreshToken(newRefresh1)).Scan(&newRT1Revoked))
+	assert.True(t, newRT1Revoked, "受害者刚 rotate 拿到的 newRefresh1 也必须被撤销")
+
+	// 验证 3：users.token_version 已 bump（让其它会话的 access token 立即失效）
+	var tvAfter int64
+	require.NoError(t, env.pool.QueryRow(ctx,
+		`SELECT token_version FROM users WHERE id=$1`, env.userID).Scan(&tvAfter))
+	assert.Greater(t, tvAfter, tvBefore, "reuse 检测必须 bump token_version")
+
+	// 验证 4：受害者再用 newRefresh1 也走不通（已被撤销）
+	_, _, err = env.svc.Refresh(ctx, newRefresh1)
+	assert.ErrorIs(t, err, services.ErrRefreshTokenReused,
+		"受害者的 newRefresh1 已撤销，再用必须被识别为 reuse 路径（已是历史 token）")
+}
+
+func TestAuth_RefreshReuseSentinelDistinctFromInvalid(t *testing.T) {
+	env := setupAuthEnv(t)
+	defer env.cleanup()
+	ctx := context.Background()
+
+	// case 1：完全无效 token（JWT 解析失败）→ ErrInvalidRefreshToken
+	_, _, err := env.svc.Refresh(ctx, "garbage-not-a-jwt-xyz")
+	assert.ErrorIs(t, err, services.ErrInvalidRefreshToken)
+	assert.NotErrorIs(t, err, services.ErrRefreshTokenReused)
+
+	// case 2：JWT 合法但 hash 在 DB 没记录（攻击者伪造已过期但签名合法的 token）
+	// 此场景下 JWT verify 通过，但 rotate_refresh_token 找不到任何记录 → ErrInvalidRefreshToken
+	// 这里我们用 IssueRefreshToken 拿一个签名合法的 token 但不 INSERT DB
+	rawToken, _, err := auth.IssueRefreshToken(env.userID, []byte("test-refresh-secret-32-bytes-min!"), 24*time.Hour)
+	require.NoError(t, err)
+	_, _, err = env.svc.Refresh(ctx, rawToken)
+	assert.ErrorIs(t, err, services.ErrInvalidRefreshToken,
+		"JWT 合法但 hash 从未入库 → 完全无效，不是 reuse")
+	assert.NotErrorIs(t, err, services.ErrRefreshTokenReused)
 }
 
 // ------------------------------------------------------------
@@ -186,10 +271,12 @@ func TestAuth_LogoutInvalidatesAccess(t *testing.T) {
 	assert.ErrorIs(t, err, services.ErrInvalidAccessToken,
 		"logout 后旧 access token 因 token_version 不匹配应被拒")
 
-	// 登出后旧 refresh 也应被 rotate_refresh_token 视为 revoked
+	// 登出后旧 refresh 在 DB 中是 revoked 状态 = 历史存在过的 token，
+	// 与 reuse 路径走同一分支（finding #8 之后语义统一）：任何已撤销 token 再用 = 潜在威胁
+	// 这是合理的：用户已主动登出，仍持有旧 token 再使用本就异常
 	_, _, err = env.svc.Refresh(context.Background(), refresh)
-	assert.ErrorIs(t, err, services.ErrInvalidRefreshToken,
-		"logout 后旧 refresh 因已 revoked 应被拒")
+	assert.ErrorIs(t, err, services.ErrRefreshTokenReused,
+		"logout 后旧 refresh 已 revoked，再使用走 reuse 检测路径")
 }
 
 // ------------------------------------------------------------
@@ -273,4 +360,27 @@ func TestAuth_InactiveUserRejected(t *testing.T) {
 	// 再次尝试 Login 也返回 inactive
 	_, _, _, err = env.svc.Login(context.Background(), env.username, env.password)
 	assert.ErrorIs(t, err, services.ErrUserInactive)
+}
+
+// ------------------------------------------------------------
+// finding #18: password_hash IS NULL 表示"尚未设置密码"，Login 必须拒登
+//              并返回 ErrPasswordNotSet，前端据此引导首次设置流程。
+//              0021 migration 把 0001 默认 admin 的 hash 置 NULL，
+//              防止公开仓库默认密码 admin/admin123 在生产部署被遗忘改密。
+// ------------------------------------------------------------
+
+func TestAuth_LoginRejectsNullPasswordHash(t *testing.T) {
+	env := setupAuthEnv(t)
+	defer env.cleanup()
+
+	// 把 seed 用户的 password_hash 置 NULL，模拟 0021 migration 后的 admin
+	_, err := env.pool.Exec(context.Background(),
+		`UPDATE users SET password_hash = NULL WHERE id = $1`, env.userID)
+	require.NoError(t, err)
+
+	// Login 必须返 ErrPasswordNotSet 而非 ErrInvalidCredentials
+	// 区分意义：前端拿到 password_not_set code 才能展示"请联系管理员首次设置"提示
+	_, _, _, err = env.svc.Login(context.Background(), env.username, "anything")
+	assert.ErrorIs(t, err, services.ErrPasswordNotSet,
+		"NULL password_hash 必须返 ErrPasswordNotSet，让前端识别首次设置场景")
 }

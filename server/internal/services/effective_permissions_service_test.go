@@ -92,13 +92,14 @@ func insertUserPerm(t *testing.T, ctx context.Context, pool *pgxpool.Pool, userI
 	require.NoError(t, err)
 }
 
-// devRoleSeedCodes 列出 0007 migration 给 role_id=2 (dev) 种子的全部权限码（共 16 条）。
+// devRoleSeedCodes 列出 0007/0024 migration 给 role_id=2 (dev) 种子的全部权限码（共 17 条）。
 //
 // 业务背景：0007_user_permissions.up.sql 第 145-149 行 SELECT 条件：
 //   - nav AND scope IN ('work','progress')          → 2 条 (nav:view:work, nav:view:progress)
 //   - resource='progress' 且 NOT delete            → 13 条
 //   - users AND action='list'                       → 1 条 (users:list:all)
-// 合计 16 条，已排序便于断言。
+//
+// 0024_feedback_perm_update 又给 dev 新增 progress:feedback:update 1 条 → 合计 17 条。
 //
 // 注（2026-05-04 deprecation）：`progress:event:trigger` 自 0020 删 AllowedRoleIDs 双层守门后
 // 已是事实死权限 — 无任何 handler/service 读取。保留在 DB 仅为兼容 0007 既有 seed；
@@ -110,6 +111,7 @@ func devRoleSeedCodes() []string {
 		"progress:event:trigger",
 		"progress:feedback:create",
 		"progress:feedback:list",
+		"progress:feedback:update",
 		"progress:file:list",
 		"progress:file:upload",
 		"progress:payment:create",
@@ -202,8 +204,8 @@ func TestEffectivePermissions_UserDenyOverridesRoleGrant(t *testing.T) {
 	got, err := svc.Compute(ctx, devID)
 	require.NoError(t, err)
 	assert.NotContains(t, got, "progress:feedback:create", "deny 应让该 perm 从结果消失")
-	// 其它 15 条不受影响
-	assert.Len(t, got, 15)
+	// 其它 16 条不受影响（0024 新增 progress:feedback:update 让 dev 角色种子从 16 → 17）
+	assert.Len(t, got, 16)
 }
 
 // ============================================================

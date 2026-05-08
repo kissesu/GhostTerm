@@ -57,9 +57,9 @@ func EffectivePermsFrom(ctx context.Context) ([]string, bool) {
 // WithEffectivePermissions 把 perms 列表写入 ctx。
 //
 // 调用方：
-//  - 生产：oasSecurityHandler 在 HandleBearerAuth 校验 token 后调 eff.Compute，把结果
-//    写入 ctx；下游 handler 通过 EffectivePermsFrom 读取，0 次 DB 查询完成判权。
-//  - 测试：单测 handler 时不想拉真实 DB 计算 effective perms，直接构造 ctx → request 即可。
+//   - 生产：oasSecurityHandler 在 HandleBearerAuth 校验 token 后调 eff.Compute，把结果
+//     写入 ctx；下游 handler 通过 EffectivePermsFrom 读取，0 次 DB 查询完成判权。
+//   - 测试：单测 handler 时不想拉真实 DB 计算 effective perms，直接构造 ctx → request 即可。
 func WithEffectivePermissions(ctx context.Context, perms []string) context.Context {
 	return context.WithValue(ctx, effectivePermsCtxKey{}, perms)
 }

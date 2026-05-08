@@ -36,11 +36,11 @@ import (
 //   - http:        底层 net/http.Client（默认 10s 超时）
 //   - accessToken: Login 后保存；非空时自动注入 Authorization 头
 type httpClient struct {
-	baseURL     string
-	http        *http.Client
-	accessToken string
+	baseURL      string
+	http         *http.Client
+	accessToken  string
 	refreshToken string
-	user        loginUserResponse
+	user         loginUserResponse
 }
 
 // loginUserResponse 是 /api/auth/login 返回 envelope.user 的字段。
@@ -172,12 +172,13 @@ func (c *httpClient) send(t *testing.T, req *http.Request) httpResult {
 // uploadFile 用 multipart 上传文件（测试 file API）。
 //
 // 为避免 mime/multipart 相关包依赖膨胀，直接拼最简 multipart body：
-//   --BOUNDARY
-//   Content-Disposition: form-data; name="file"; filename="X"
-//   Content-Type: TYPE
 //
-//   <bytes>
-//   --BOUNDARY--
+//	--BOUNDARY
+//	Content-Disposition: form-data; name="file"; filename="X"
+//	Content-Type: TYPE
+//
+//	<bytes>
+//	--BOUNDARY--
 func (c *httpClient) uploadFile(t *testing.T, filename, mime string, content []byte) httpResult {
 	t.Helper()
 	const boundary = "ghostterm-e2e-boundary"

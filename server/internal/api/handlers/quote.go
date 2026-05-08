@@ -168,12 +168,15 @@ func (h *QuoteHandler) ProjectsCreateQuoteChange(
 //
 // Money 字段：service 的 db.Money 通过 StringFixed(2) 落 oas.Money(string)，
 // JSON 序列化保持 "123.45" 形态（与 OpenAPI Money pattern 对齐）。
+//
+// finding #9 后 delta 切到 SignedMoney（modify 让利场景下可能为负）；
+// oldQuote/newQuote 保持 Money（DB CHECK 保证 >=0）。
 func toOASQuoteChange(l services.QuoteChangeLog) oas.QuoteChange {
 	return oas.QuoteChange{
 		ID:         l.ID,
 		ProjectId:  l.ProjectID,
 		ChangeType: oas.QuoteChangeType(l.ChangeType),
-		Delta:      oas.Money(l.Delta.StringFixed(2)),
+		Delta:      oas.SignedMoney(l.Delta.StringFixed(2)),
 		OldQuote:   oas.Money(l.OldQuote.StringFixed(2)),
 		NewQuote:   oas.Money(l.NewQuote.StringFixed(2)),
 		Reason:     l.Reason,

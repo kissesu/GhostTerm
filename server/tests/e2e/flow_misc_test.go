@@ -44,10 +44,10 @@ func TestFlow10_AuthRequired(t *testing.T) {
 // TestFlow11_LogoutInvalidatesToken ：登出后旧 access token 必须 401（token_version 自增）。
 //
 // 业务流程：
-//   1. 登录 → 拿到 access token A
-//   2. 用 A 调 /api/auth/me 应当 200
-//   3. 调 /api/auth/logout（token_version +1）
-//   4. 把 A 塞回 client.accessToken，再调 /api/auth/me 应当 401
+//  1. 登录 → 拿到 access token A
+//  2. 用 A 调 /api/auth/me 应当 200
+//  3. 调 /api/auth/logout（token_version +1）
+//  4. 把 A 塞回 client.accessToken，再调 /api/auth/me 应当 401
 func TestFlow11_LogoutInvalidatesToken(t *testing.T) {
 	require.NotNil(t, e2eEnv)
 	c := newClient(e2eEnv.BaseURL)

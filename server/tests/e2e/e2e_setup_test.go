@@ -58,13 +58,13 @@ import (
 // 集中存放避免每个 flow 自带状态。所有读取都在 setup 完成后，
 // TestMain return 前由 cleanup 清理；测试函数中只读不写。
 type e2eEnvironment struct {
-	BaseURL     string
-	Pool        *pgxpool.Pool
-	StorageDir  string
-	SuperAdmin  testUser
-	CS          testUser
-	Dev1        testUser
-	Dev2        testUser
+	BaseURL    string
+	Pool       *pgxpool.Pool
+	StorageDir string
+	SuperAdmin testUser
+	CS         testUser
+	Dev1       testUser
+	Dev2       testUser
 }
 
 // e2eEnv 是包级全局环境（仅 TestMain 写一次，flow 测试只读）。
@@ -89,9 +89,9 @@ const (
 // TestMain 是 e2e 包的入口，setup → run → teardown。
 //
 // 业务流程：
-//   1. setup() 启动 postgres / server / seed users
-//   2. m.Run() 跑全部 flow 测试
-//   3. teardown() 关闭 server / 清容器 / 删存储目录
+//  1. setup() 启动 postgres / server / seed users
+//  2. m.Run() 跑全部 flow 测试
+//  3. teardown() 关闭 server / 清容器 / 删存储目录
 //
 // 任何 setup 阶段错误都通过 fmt.Println + os.Exit(1)（TestMain 不能 t.Fatal）。
 func TestMain(m *testing.M) {
@@ -252,6 +252,13 @@ func setup() (func(), error) {
 		fmt.Sprintf("BCRYPT_COST=%d", e2eBcryptCost),
 		"FILE_STORAGE_PATH="+storageDir,
 		"FILE_MAX_SIZE_MB=10",
+		// e2e 全套 flow 共用 1 个 server 进程，所有请求都来自 127.0.0.1，
+		// 且复用 cs-e2e/dev1-e2e 等少量账号；生产 5/10/30 per min 的默认值
+		// 在 9 个 flow 串行登录时会触发 429。e2e 关注业务流而非限速本身，
+		// 这里用宽松值（10000/min）让限速 middleware 仍跑通但不影响测试。
+		"RATE_LIMIT_LOGIN_PER_MIN_PER_IP=10000",
+		"RATE_LIMIT_LOGIN_PER_MIN_PER_USER=10000",
+		"RATE_LIMIT_REFRESH_PER_MIN_PER_IP=10000",
 	)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

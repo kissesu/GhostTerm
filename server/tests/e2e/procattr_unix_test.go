@@ -1,3 +1,5 @@
+//go:build !windows
+
 /*
 @file procattr_unix.go
 @description Unix-only SysProcAttr：让 server 子进程脱离当前 process group，
@@ -5,8 +7,6 @@
 @author Atlas.oi
 @date 2026-04-29
 */
-
-//go:build !windows
 
 package e2e
 

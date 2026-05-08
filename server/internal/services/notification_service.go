@@ -228,7 +228,7 @@ func (s *notificationService) List(
 //  1. 事务内 SET LOCAL GUC
 //  2. UPDATE notifications SET is_read=TRUE, read_at=NOW() WHERE id=$1 AND user_id=$2
 //     —— RLS notifications_update 策略 USING/WITH CHECK 双重把关，
-//        非 owner 的 UPDATE 既找不到行也写不进去
+//     非 owner 的 UPDATE 既找不到行也写不进去
 //  3. RowsAffected == 0 → ErrNotificationNotFound
 func (s *notificationService) MarkRead(
 	ctx context.Context,
@@ -297,7 +297,7 @@ func (s *notificationService) MarkAllRead(ctx context.Context, userID int64) err
 //  2. 对每条调用 hub.Broadcast(n)（用户离线返回 ErrNoSubscribers，吞掉）
 //  3. UPDATE delivered_at = NOW() WHERE id = $1 AND delivered_at IS NULL
 //     —— delivered_at IS NULL 子句保证幂等：同一行被两个 worker 同时处理时，
-//        race winner 之外的 worker 拿到 0 行更新，不会重复推送
+//     race winner 之外的 worker 拿到 0 行更新，不会重复推送
 //
 // 设计取舍：
 //   - 用应用层连接池（progress_app）—— notifications 表有 SELECT + UPDATE 权限

@@ -20,7 +20,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
@@ -31,6 +34,19 @@ import (
 	apimw "github.com/ghostterm/progress-server/internal/api/middleware"
 	"github.com/ghostterm/progress-server/internal/api/oas"
 	"github.com/ghostterm/progress-server/internal/services"
+)
+
+// 业务侧 HTTP body 上限常量（finding #14）。
+//
+//   - defaultBodyLimit          1MB：普通 JSON / form 端点足够（最大请求是 NotificationList
+//     之类的小 payload；登录 body 也只有 ~200B）
+//   - defaultFileUploadBodyLimit 110MB：cfg.FileMaxSizeMB(默认 100) + 10MB multipart 余量
+//     用于 RouterDeps.FileUploadBodyLimitBytes 缺失时的兜底
+//   - fileBodyOverhead          10MB：multipart boundary / form 字段 / Base64 膨胀的余量
+const (
+	defaultBodyLimit           int64 = 1 * 1024 * 1024
+	defaultFileUploadBodyLimit int64 = 110 * 1024 * 1024
+	fileBodyOverhead           int64 = 10 * 1024 * 1024
 )
 
 // ErrNotImplementedYet 是 skeleton 阶段所有未实现 endpoint 的统一错误。
@@ -402,12 +418,42 @@ type RouterDeps struct {
 	PaymentService      services.PaymentService
 	NotificationService services.NotificationService
 	WSHub               services.WSHub
+
+	// RateLimit 可选：nil 时使用 sane default（5/10/30 per min）。
+	// 测试场景一般留空走默认；生产由 Config 注入便于通过 env 调参。
+	RateLimit *apimw.RateLimitConfig
+
+	// TrustedProxies 是受信反代 CIDR 白名单，仅来自这些 CIDR 的请求会被信任 X-Forwarded-For。
+	//
+	// 业务背景（finding #10）：
+	//   - nil / 空 = fail-safe，任何代理头都被忽略，audit IP = TCP RemoteAddr 不可被伪造
+	//   - Caddy 同机反代场景由 main.go 解析 TRUSTED_PROXIES env (例 "127.0.0.1/32,::1/128")
+	//     传入；非法 CIDR 在 main.go fail-fast，不会到达这里
+	//   - 测试一般留空，所有 RemoteAddr 走原始值
+	TrustedProxies []net.IPNet
+
+	// AllowedOrigins 是 CORS 白名单的完整 origin 列表（finding #13）。
+	//
+	// 业务背景：v0.5 之前 CORS handler 把任意 Origin 反射回 ACAO + ACA-Credentials:true，
+	// 等效于把 CSRF 屏障拆掉。改为命中白名单才下发 CORS 头，非白名单不发头让浏览器自行拒。
+	//
+	// 来源：main.go 从 cfg.AllowedOrigins 字符串 split 后传入；
+	// 测试一般直接构造 []string{"tauri://localhost", "http://localhost:1420"}。
+	// 空切片 = 拒绝所有跨 origin 请求（同源浏览器请求不走 CORS 不受影响）。
+	AllowedOrigins []string
+
+	// FileUploadBodyLimitBytes 是 POST /api/files 路径专用的 HTTP body 上限（finding #14）。
+	//
+	// 业务背景：multipart 上传需要给 cfg.FileMaxSizeMB 留 10MB 余量
+	// （boundary / form 字段 / 编码膨胀）。其它端点全局走 1MB 默认。
+	// 0 = 用 defaultFileUploadBodyLimit 兜底（保护配置漏传时仍能开服务）。
+	FileUploadBodyLimitBytes int64
 }
 
 // NewRouter 装配 chi 基础中间件 + ogen 生成的 OpenAPI server。
 //
 // 业务流程：
-//  1. 注册 chi 基础中间件（RequestID / RealIP / Logger / Recoverer）
+//  1. 注册 chi 基础中间件（RequestID / TrustedProxyRealIP / Logger / Recoverer）
 //  2. 暴露 /healthz（main.go 还会再覆盖一份带 DB ping 的）
 //  3. 用 ogen NewServer 装配 oasHandler + oasSecurityHandler
 //  4. 自定义 ErrorHandler：把 service sentinel error 映射为对应 HTTP 状态 + ErrorEnvelope
@@ -448,22 +494,47 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	r := chi.NewRouter()
 
 	r.Use(chimw.RequestID)
-	r.Use(chimw.RealIP)
+	// finding #10：替代 chimw.RealIP（无条件信任 X-Forwarded-For 让审计 IP 可被伪造）。
+	// 仅当 r.RemoteAddr 在 deps.TrustedProxies CIDR 内才采纳代理头；空白名单 = 全拒。
+	// 必须在 InjectRequestMetadata 之前，让后者拿到的是已校正的 RemoteAddr。
+	r.Use(apimw.TrustedProxyRealIP(deps.TrustedProxies))
 	r.Use(chimw.Logger)
 	r.Use(chimw.Recoverer)
 	// 注入 client IP / User-Agent 到 ctx，供 7 个 service Create 路径写入
 	// 8 张领域表的 client_ip/user_agent 列（migration 0008，用户审计需求 2026-05-03）
 	r.Use(apimw.InjectRequestMetadata)
-	// CORS：开发环境前端在 Tauri WKWebView (tauri://localhost) 或 vite (http://localhost:1420)
-	// 跨 origin 调用本服务 :8080 必经 preflight；生产部署应改为白名单具体 origin
+	// CORS（finding #13）：从无条件反射改为白名单匹配。
+	//
+	// 业务背景：旧版反射 Origin + Access-Control-Allow-Credentials:true 把 CSRF
+	// 屏障拆掉（任意第三方站点可调登录端点带 cookie）。现在只对白名单内 origin
+	// 下发 ACAO/ACA-Credentials 等头，非白名单不写头让浏览器自行拒绝。
+	//
+	// 同源请求（无 Origin 头）继续放行不写 CORS 头，因为浏览器对同源请求不做 CORS 校验。
+	// 白名单字段值精确比对（不做 prefix/wildcard），防 origin.evil.com 这类前缀绕过。
+	allowedOrigins := make(map[string]struct{}, len(deps.AllowedOrigins))
+	for _, o := range deps.AllowedOrigins {
+		o = strings.TrimSpace(o)
+		if o != "" {
+			allowedOrigins[o] = struct{}{}
+		}
+	}
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			origin := req.Header.Get("Origin")
+			// 同源请求无 Origin 头：直接放行，不写任何 CORS 头
 			if origin == "" {
-				origin = "*"
+				next.ServeHTTP(w, req)
+				return
+			}
+			// Vary: Origin 必须始终下发，让中间缓存按 origin 区分响应
+			w.Header().Set("Vary", "Origin")
+			if _, ok := allowedOrigins[origin]; !ok {
+				// 非白名单：不写 ACAO/ACA-Credentials 等头，浏览器拦下；
+				// preflight 也走 next（ogen 会返 4xx，浏览器仍然会因为缺 ACAO 拒）
+				next.ServeHTTP(w, req)
+				return
 			}
 			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PATCH,PUT,DELETE,OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Authorization,Content-Type,X-Requested-With")
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
@@ -509,7 +580,9 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	usersHandler := handlers.NewUsersHandler(deps.UserService)
 	projectHandler := handlers.NewProjectHandler(deps.ProjectService, effSvc)
 	fileHandler := handlers.NewFileHandler(deps.FileService)
-	feedbackHandler, err := handlers.NewFeedbackHandler(deps.FeedbackService, deps.RBACService)
+	// finding #16 修复：feedback handler 改走 EffectivePermissionsService（与 PermissionsHandler
+	// 同链路），让 user_permissions 表的 grant/deny 覆写对 3 个 feedback endpoint 真正生效
+	feedbackHandler, err := handlers.NewFeedbackHandler(deps.FeedbackService, deps.RBACService, effSvc)
 	if err != nil {
 		return nil, err
 	}
@@ -562,7 +635,56 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	// ============================================================
 	r.Get("/api/ws/notifications", handlers.NewWSHandler(deps.AuthService, deps.WSHub))
 
-	r.Mount("/", oasServer)
+	// ============================================================
+	// 登录与 refresh 速率限制（v2 安全审计 finding #7）
+	//
+	// 必须在 r.Mount("/", oasServer) 之前注册具体路径，让 chi 优先匹配；
+	// middleware 将 IP/username 维度封顶超额请求拦在 handler 之前，超额返 429。
+	//
+	// 业务背景：5 人自用 username 高度可枚举（admin/dev1/cs1），公网 :8080
+	// 任意人可无限调登录；bcrypt cost 12 (~250-400ms/次) 仍可被分布式 botnet 暴破。
+	//
+	// 接入策略：用 chi r.With(...) 把 middleware 链挂到具体路径，
+	// 内层 handler 直接转发给 oasServer（HTTP-level wrapper，不动 ogen 解码逻辑）。
+	// ============================================================
+	rlCfg := apimw.RateLimitConfig{
+		LoginPerMinPerIP:   5,
+		LoginPerMinPerUser: 10,
+		RefreshPerMinPerIP: 30,
+		TTL:                10 * time.Minute,
+	}
+	if deps.RateLimit != nil {
+		rlCfg = *deps.RateLimit
+	}
+	rateLimiter := apimw.NewLoginRateLimiter(rlCfg)
+
+	// finding #14：HTTP body 大小限制接入
+	//
+	// 业务背景：
+	//  - 旧版无全局 body 上限，oas multipart 解码用 ParseMultipartForm(32MB) 把超 32MB
+	//    部分写 os.TempDir，攻击者可 POST 10GB multipart 写满磁盘
+	//  - 现策略：路径分流，POST /api/files 给文件上限 + 10MB 余量；其它端点 1MB 默认
+	//
+	// 实现取舍：因 chi 要求 r.Use 必须在所有路由注册之前，无法用全局 Use 套 1MB 后
+	// 再为单个路径"放大"上限（外层 1MB 包内层 largeFile 的话 1MB 仍是瓶颈）。
+	// 改为：所有路由都用 r.With() 显式带 BodyLimit；POST /api/files 单独大上限路由
+	// 在 Mount 之前注册，让 chi 优先匹配。
+	fileBodyLimit := deps.FileUploadBodyLimitBytes
+	if fileBodyLimit <= 0 {
+		fileBodyLimit = defaultFileUploadBodyLimit
+	}
+
+	// 文件上传路由：在 Mount 之前显式注册，仅挂大上限 + 鉴权由 ogen SecurityHandler 内置完成
+	r.With(apimw.BodyLimit(fileBodyLimit)).Method(http.MethodPost, "/api/files", oasServer)
+
+	// 登录与 refresh 路由：rate limiter + 1MB body limit（登录 body ~200B 远小于 1MB）
+	r.With(rateLimiter.LoginMiddleware, apimw.BodyLimit(defaultBodyLimit)).
+		Method(http.MethodPost, "/api/auth/login", oasServer)
+	r.With(rateLimiter.RefreshMiddleware, apimw.BodyLimit(defaultBodyLimit)).
+		Method(http.MethodPost, "/api/auth/refresh", oasServer)
+
+	// 其它所有端点走 1MB 默认 body 上限
+	r.With(apimw.BodyLimit(defaultBodyLimit)).Mount("/", oasServer)
 	return r, nil
 }
 
@@ -587,6 +709,15 @@ func errorEnvelopeHandler(_ context.Context, w http.ResponseWriter, r *http.Requ
 		status = http.StatusUnauthorized
 		code = string(oas.ErrorEnvelopeErrorCodeUnauthorized)
 		msg = "未登录或会话已失效"
+	}
+
+	// finding #14：BodyLimit 超限时 *http.MaxBytesError → 413 Payload Too Large
+	// ogen 解码层可能把它包成 ogenerrors.DecodeRequestError 但 errors.As 仍能透出
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		status = http.StatusRequestEntityTooLarge
+		code = string(oas.ErrorEnvelopeErrorCodeRequestBodyTooLarge)
+		msg = "请求体超出大小限制"
 	}
 
 	switch {

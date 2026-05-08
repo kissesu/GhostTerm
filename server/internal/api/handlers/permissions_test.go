@@ -127,9 +127,10 @@ func TestPermissions_ListPermissions_OK(t *testing.T) {
 
 	listResp, ok := res.(*oas.PermissionListResponse)
 	require.True(t, ok, "200 应返回 *PermissionListResponse；实际 %T", res)
-	// 0007 migration 种 23 条 + 0020 新增 progress:project:cancel + progress:project:after_sales = 25 条
-	// （nav 3 + progress 14 + users 4 + permissions 2 + cancel 1 + after_sales 1）
-	assert.Len(t, listResp.Data, 25, "permissions 字典应有 25 条（0020 新增 cancel + after_sales）")
+	// 0007 migration 种 23 条 + 0020 新增 progress:project:cancel + progress:project:after_sales
+	// + 0024 新增 progress:feedback:update = 26 条
+	// （nav 3 + progress 15 + users 4 + permissions 2 + cancel 1 + after_sales 1）
+	assert.Len(t, listResp.Data, 26, "permissions 字典应有 26 条（0024 新增 feedback:update）")
 
 	// 校验 3 段 code 拼装正确：随便挑一条
 	for _, p := range listResp.Data {
@@ -175,12 +176,12 @@ func TestPermissions_GetEffectivePermissions_Dev(t *testing.T) {
 	require.True(t, ok)
 
 	assert.False(t, effResp.SuperAdmin, "dev 用户不是 super_admin")
-	// dev role 在 0007 migration seed 拿到 16 条：
+	// dev role 在 0007 migration seed 拿到 16 条 + 0024 新增 progress:feedback:update = 17 条：
 	//   nav (work, progress) = 2
-	//   progress 全部 14 条 - project:delete = 13
+	//   progress 全部 14 条 - project:delete + feedback:update = 14
 	//   users:list:all = 1
-	//   = 16
-	assert.Len(t, effResp.Permissions, 16, "dev 默认 16 条权限")
+	//   = 17
+	assert.Len(t, effResp.Permissions, 17, "dev 默认 17 条权限（0024 新增 feedback:update）")
 
 	// sanity：含 nav:view:work 但不含 progress:project:delete
 	assert.Contains(t, effResp.Permissions, "nav:view:work")
@@ -205,7 +206,7 @@ func TestPermissions_GetRolePermissions_DevReturns16(t *testing.T) {
 	perms, err := svc.ListRolePermissions(ctx, 2)
 	require.NoError(t, err)
 
-	assert.Len(t, perms, 16, "dev role 默认 grant 16 条")
+	assert.Len(t, perms, 17, "dev role 默认 grant 17 条（0024 新增 feedback:update）")
 }
 
 // ============================================================

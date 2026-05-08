@@ -58,8 +58,16 @@ components:
 
     Money:
       type: string
+      pattern: '^\d+\.\d{2}$'
+      description: '非负金额（≥0），最多 12 位整数 + 2 位小数（与 Postgres NUMERIC(12,2) 对齐）。finding #9：默认禁负数防止倒减对账总账。'
+    PositiveMoney:
+      type: string
+      pattern: '^(?:[1-9]\d*\.\d{2}|0\.(?:0[1-9]|[1-9]\d))$'
+      description: '正数金额（>0），用于报价追加（append）等不能为零的场景。finding #9 防御：拒绝 0 与负数。'
+    SignedMoney:
+      type: string
       pattern: '^-?\d+\.\d{2}$'
-      description: '十进制金额，最多 12 位整数 + 2 位小数（与 Postgres NUMERIC(12,2) 对齐，前端用 decimal.js 处理）'
+      description: '允许正负的金额，仅用于响应字段 QuoteChange.delta（modify 让利场景计算的 delta 可能为负）。请求参数禁用此类型。'
 
     # ===== 用户 / 角色 / 权限 =====
     # 用户明确指令覆盖 spec §4：账号字段使用 username 而非 email
@@ -530,7 +538,8 @@ components:
         id: { type: integer, format: int64 }
         projectId: { type: integer, format: int64 }
         changeType: { $ref: '#/components/schemas/QuoteChangeType' }
-        delta: { $ref: '#/components/schemas/Money' }
+        # delta 可能为负：modify 让利场景下 service 计算 delta = newQuote - oldQuote
+        delta: { $ref: '#/components/schemas/SignedMoney' }
         oldQuote: { $ref: '#/components/schemas/Money' }
         newQuote: { $ref: '#/components/schemas/Money' }
         reason: { type: string }
@@ -543,7 +552,9 @@ components:
       required: [changeType, reason]
       properties:
         changeType: { $ref: '#/components/schemas/QuoteChangeType' }
-        delta: { $ref: '#/components/schemas/Money' }
+        # finding #9：append/after_sales 的 delta 必须 >0；前端拦截倒减对账总账
+        delta: { $ref: '#/components/schemas/PositiveMoney' }
+        # modify 用 newQuote（>=0），让利后 newQuote 可低于 oldQuote
         newQuote: { $ref: '#/components/schemas/Money' }
         reason: { type: string, minLength: 1 }
 
@@ -1060,8 +1071,9 @@ components:
       properties:
         changeType:
           $ref: '#/components/schemas/QuoteChangeType'
+        # delta 可能为负（modify 让利场景），与 QuoteChange.delta 保持一致
         delta:
-          $ref: '#/components/schemas/Money'
+          $ref: '#/components/schemas/SignedMoney'
         oldQuote:
           $ref: '#/components/schemas/Money'
         newQuote:

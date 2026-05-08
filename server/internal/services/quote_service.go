@@ -298,8 +298,15 @@ func (s *QuoteService) CreateChange(ctx context.Context, sc AuthContext, in Quot
 //
 // 业务规则：
 //   - reason 必填（trim 后非空）
-//   - append / after_sales 必须填 Delta；modify 必须填 NewQuote
+//   - append / after_sales 必须填 Delta，且 Delta > 0（finding #9 防御）
+//   - modify 必须填 NewQuote，且 NewQuote >= 0（finding #9：不能把报价改成负数）
+//   - modify 的 delta 由 service 计算 = newQuote - oldQuote，可能为负（让利场景），
+//     不在此校验 delta 符号
 //   - 未知 change_type 直接拒绝（避免无声落 DB 后被 enum 拦报内部错误）
+//
+// finding #9 背景：OAS Money pattern 历史允许负数（^-?\d+\.\d{2}$），让攻击者可以
+// 传 delta=-9999.99 让 current_quote 倒减、after_sales_total 倒减，篡改对账总账。
+// 三层防御：DB CHECK（兜底） + service 层（本函数） + OAS PositiveMoney（前端拦）。
 func validateQuoteInput(in *QuoteChangeInput) error {
 	if strings.TrimSpace(in.Reason) == "" {
 		return fmt.Errorf("%w: reason 必填", ErrQuoteValidation)
@@ -309,13 +316,20 @@ func validateQuoteInput(in *QuoteChangeInput) error {
 		if in.Delta == nil {
 			return fmt.Errorf("%w: %s 必须填 delta", ErrQuoteValidation, in.ChangeType)
 		}
+		// finding #9：append/after_sales 必须 delta > 0
+		if in.Delta.Sign() <= 0 {
+			return fmt.Errorf("%w: %s 的 delta 必须大于 0（不允许负数倒减总账）", ErrQuoteValidation, in.ChangeType)
+		}
 	case QuoteChangeModify:
 		if in.NewQuote == nil {
 			return fmt.Errorf("%w: modify 必须填 newQuote", ErrQuoteValidation)
+		}
+		// finding #9：modify 的 newQuote 必须 >= 0
+		if in.NewQuote.Sign() < 0 {
+			return fmt.Errorf("%w: modify 的 newQuote 不能为负数", ErrQuoteValidation)
 		}
 	default:
 		return fmt.Errorf("%w: 未知 change_type %q", ErrQuoteValidation, in.ChangeType)
 	}
 	return nil
 }
-

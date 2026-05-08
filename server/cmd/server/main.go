@@ -16,6 +16,7 @@ import (
 	"log"
 	"net/http"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -147,6 +148,16 @@ func main() {
 	// ============================================
 	// 第四步：装配 router + healthz（含 DB ping）
 	// ============================================
+	// finding #10：解析受信反代白名单。空串 = 直连模式不信任任何代理头；
+	// 非法 CIDR 立即 fail-fast 不让 server 起来带病运行
+	trustedProxies, err := apimiddleware.ParseTrustedProxiesEnv(cfg.TrustedProxies)
+	if err != nil {
+		log.Fatalf("config: TRUSTED_PROXIES invalid CIDR: %v", err)
+	}
+
+	// finding #13：解析 CORS 白名单（逗号分隔 origin 列表）
+	// 空白条目自动剔除；router 内做精确匹配防前缀绕过
+	allowedOrigins := splitNonEmpty(cfg.AllowedOrigins, ",")
 	handler, err := api.NewRouter(api.RouterDeps{
 		Pool:                pool,
 		AuthService:         authSvc,
@@ -159,6 +170,20 @@ func main() {
 		PaymentService:      paymentSvc,
 		NotificationService: notifSvc,
 		WSHub:               wsHub,
+		// finding #7：登录与 refresh 速率限制由 env 注入，便于按部署调参；
+		// 缺省值见 router.go 内 rlCfg 默认值（5/10/30 per min）
+		RateLimit: &apimiddleware.RateLimitConfig{
+			LoginPerMinPerIP:   cfg.RateLimitLoginPerMinPerIP,
+			LoginPerMinPerUser: cfg.RateLimitLoginPerMinPerUser,
+			RefreshPerMinPerIP: cfg.RateLimitRefreshPerMinPerIP,
+			TTL:                10 * time.Minute,
+		},
+		TrustedProxies: trustedProxies,
+		AllowedOrigins: allowedOrigins,
+		// finding #14：multipart 文件上传专用 body 上限 = 单文件上限 + 10MB 余量
+		// （余量给 boundary / form 字段 / Base64 膨胀；超量直接拒，不让 oas
+		// 解码侧 ParseMultipartForm 写满临时盘）
+		FileUploadBodyLimitBytes: int64(cfg.FileMaxSizeMB)*1024*1024 + 10*1024*1024,
 	})
 	if err != nil {
 		log.Fatalf("init router: %v", err)
@@ -168,10 +193,22 @@ func main() {
 	mux.HandleFunc("/healthz", healthzHandler(pool))
 	mux.Handle("/", handler)
 
+	// finding #14：HTTP server 超时收紧。
+	//
+	// 业务背景：
+	//  - 旧版只设 ReadHeaderTimeout，慢连接 body 阶段可挂任意时长耗 worker
+	//  - WriteTimeout 5min 给文件下载流式留足时间（100MB / 1Mbps ~13min；
+	//    实际本机 / 局域网部署足够 5min；公网慢用户可能 timeout 但属于可接受退化）
+	//  - IdleTimeout 120s：keep-alive 连接闲置上限，比默认无限好
+	//  - MaxHeaderBytes 1MB：防巨型 header 攻击
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       60 * time.Second,
+		WriteTimeout:      5 * time.Minute,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20,
 	}
 
 	// ============================================
@@ -242,4 +279,23 @@ func healthzHandler(pool *pgxpool.Pool) http.HandlerFunc {
 		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(body)
 	}
+}
+
+// splitNonEmpty 用 sep 切分字符串后剔除空白条目；用于解析逗号分隔的 env 值。
+//
+// 业务背景：env 形如 "tauri://localhost,http://localhost:1420" 需 split 后送给
+// router 的 AllowedOrigins []string；strings.Split 会留下连续逗号产生的空串
+// 让白名单意外包含 ""（精确匹配 origin=="" 的情况），必须显式过滤。
+func splitNonEmpty(s, sep string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, sep)
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
