@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { renderAsync } from 'docx-preview';
+import { sanitizeUserHtml } from '../../shared/lib/sanitize';
 
 /** 将 base64 字符串转换为 ArrayBuffer */
 function base64ToArrayBuffer(base64: string): ArrayBuffer {
@@ -40,23 +41,37 @@ export function WordPreview({ path }: WordPreviewProps) {
   useEffect(() => {
     setLoading(true);
     setError(null);
+    let cancelled = false;
 
     invoke<string>('read_image_bytes_cmd', { path })
       .then((base64) => {
+        if (cancelled) return;
         const buffer = base64ToArrayBuffer(base64);
-        if (!containerRef.current) return;
-        return renderAsync(buffer, containerRef.current, undefined, {
+        // docx-preview 先渲染到临时离屏容器，渲染完毕再过 DOMPurify 清洗后写入真实容器
+        // 防御 .docx 内文档片段携带的 XSS 向量（<img onerror>, <svg onload> 等）
+        const tempContainer = document.createElement('div');
+        return renderAsync(buffer, tempContainer, undefined, {
           // 保持文档内链接不跳转
           inWrapper: true,
           ignoreWidth: false,
           ignoreHeight: false,
+        }).then(() => {
+          if (cancelled || !containerRef.current) return;
+          containerRef.current.innerHTML = sanitizeUserHtml(tempContainer.innerHTML);
         });
       })
-      .then(() => setLoading(false))
+      .then(() => {
+        if (!cancelled) setLoading(false);
+      })
       .catch((e) => {
+        if (cancelled) return;
         setLoading(false);
         setError(String(e));
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [path]);
 
   if (error) {

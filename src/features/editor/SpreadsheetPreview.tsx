@@ -9,6 +9,7 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import * as XLSX from 'xlsx';
+import { sanitizeUserHtml } from '../../shared/lib/sanitize';
 
 /** 将 base64 字符串转换为 Uint8Array */
 function base64ToUint8Array(base64: string): Uint8Array {
@@ -175,8 +176,9 @@ export function SpreadsheetPreview({ path }: SpreadsheetPreviewProps) {
         `}</style>
         <div
           className="ghostterm-sheet"
-          // SheetJS 生成的 HTML 为静态表格，无脚本，安全渲染
-          dangerouslySetInnerHTML={{ __html: html }}
+          // SheetJS 输出的 HTML 包含用户文件单元格内容（含 HTML），过 DOMPurify 防 XSS
+          // 与 CSP script-src 'self' 双层防御：CSP 拦 inline script，DOMPurify 拦 attribute trigger
+          dangerouslySetInnerHTML={{ __html: sanitizeUserHtml(html) }}
         />
       </div>
     </div>
