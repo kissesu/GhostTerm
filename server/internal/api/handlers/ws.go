@@ -73,6 +73,20 @@ var allowedWSHosts = map[string]struct{}{
 //   - "http://127.0.0.1"             → host=127.0.0.1  → true
 //   - "http://localhost.evil.com"    → host=localhost.evil.com → false（前缀绕过失败）
 //   - "https://evil.com"             → host=evil.com   → false
+// allowedWSSchemes 白名单 Origin scheme（review L4 defense-in-depth）。
+//
+// 业务背景：u.Hostname() 不区分 scheme；`file://localhost/...`、`gopher://localhost`
+// 这类奇异 scheme 同样能命中 hostname 白名单。浏览器 enforce Origin 头，攻击者
+// 不能伪造，故无实际可达性；但浏览器升级 / 新协议引入时 hostname-only 校验
+// 会成为隐患。显式 scheme 白名单是 defense-in-depth。
+var allowedWSSchemes = map[string]bool{
+	"http":  true,
+	"https": true,
+	"ws":    true,
+	"wss":   true,
+	"tauri": true, // Tauri webview 自定义 scheme（生产桌面客户端）
+}
+
 func WSCheckOrigin(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
 	if origin == "" {
@@ -80,6 +94,10 @@ func WSCheckOrigin(r *http.Request) bool {
 	}
 	u, err := url.Parse(origin)
 	if err != nil {
+		return false
+	}
+	// 安全 review L4：scheme 白名单
+	if _, schemeOK := allowedWSSchemes[u.Scheme]; !schemeOK {
 		return false
 	}
 	_, ok := allowedWSHosts[u.Hostname()]

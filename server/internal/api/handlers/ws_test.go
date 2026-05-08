@@ -95,6 +95,26 @@ func TestWSCheckOrigin_RejectsExternalHost(t *testing.T) {
 	}
 }
 
+// TestWSCheckOrigin_RejectsUnsafeScheme 验证 review L4：
+// hostname 即使在白名单内，scheme 不在 allowedWSSchemes 也必须拒。
+//
+// 攻击不可达（浏览器 enforce Origin 头），但 defense-in-depth：
+// 未来浏览器引入新 scheme 或 url.Parse 行为变化时本检查能堵漏。
+func TestWSCheckOrigin_RejectsUnsafeScheme(t *testing.T) {
+	for _, origin := range []string{
+		"file://localhost",
+		"file://localhost/path",
+		"gopher://localhost",
+		"javascript://localhost", // url.Parse 接受但不应放行
+		"data://localhost",
+	} {
+		t.Run(origin, func(t *testing.T) {
+			assert.False(t, handlers.WSCheckOrigin(wsReqWithOrigin(origin)),
+				"hostname=localhost 但 scheme=%q 必须拒（L4 scheme 白名单）", origin)
+		})
+	}
+}
+
 func TestWSCheckOrigin_RejectsEmptyOrigin(t *testing.T) {
 	// 空 Origin 头：旧版放行，新版严格拒
 	// 真实客户端（Tauri / vite / 浏览器）都会发 Origin 头，空 Origin
