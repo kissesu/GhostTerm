@@ -21,6 +21,14 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// minJWTSecretLen 是 JWT 签名密钥的最小字节数。
+//
+// 业务背景：HS256 使用 HMAC-SHA256，安全强度由密钥长度直接决定。
+// RFC 7518 §3.2 要求密钥不短于哈希输出宽度（SHA-256 = 32 字节），
+// 短密钥让攻击者无法借捷径却能借暴力（1 字节密钥分钟级即破）。
+// 启动期硬卡住，避免运维不慎在 .env 写下"changeme" 这类弱值。
+const minJWTSecretLen = 32
+
 // Config 是 progress-server 启动期所需的全部参数集合。
 //
 // 字段分类（业务背景）：
@@ -77,11 +85,23 @@ func Load() (*Config, error) {
 	if access == "" {
 		return nil, errors.New("config: JWT_ACCESS_SECRET is required and must be non-empty")
 	}
+	// HS256 最小密钥长度：32 字节（与 SHA-256 输出宽度一致）。
+	// 短密钥可在分钟级离线暴破，必须 fail-fast at startup 而非运行期发现。
+	if len(access) < minJWTSecretLen {
+		return nil, fmt.Errorf("config: JWT_ACCESS_SECRET must be ≥%d bytes, got %d", minJWTSecretLen, len(access))
+	}
 	cfg.JWTAccessSecret = []byte(access)
 
 	refresh := os.Getenv("JWT_REFRESH_SECRET")
 	if refresh == "" {
 		return nil, errors.New("config: JWT_REFRESH_SECRET is required and must be non-empty")
+	}
+	if len(refresh) < minJWTSecretLen {
+		return nil, fmt.Errorf("config: JWT_REFRESH_SECRET must be ≥%d bytes, got %d", minJWTSecretLen, len(refresh))
+	}
+	// access==refresh 让"双密钥独立轮换"设计作废且单点泄露同时炸 access+refresh 两类 token。
+	if access == refresh {
+		return nil, errors.New("config: JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must differ")
 	}
 	cfg.JWTRefreshSecret = []byte(refresh)
 

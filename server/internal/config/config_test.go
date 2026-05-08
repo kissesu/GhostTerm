@@ -124,7 +124,8 @@ func TestLoad_MissingAccessSecret(t *testing.T) {
 
 func TestLoad_MissingRefreshSecret(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://...")
-	t.Setenv("JWT_ACCESS_SECRET", "access")
+	// access 必须 ≥32 字节才能走到 refresh 检查（Load 顺序：先 access 长度后 refresh 空值）
+	t.Setenv("JWT_ACCESS_SECRET", "access-secret-min-32-chars-xxxxxxxx")
 	t.Setenv("JWT_REFRESH_SECRET", "")
 
 	_, err := Load()
@@ -173,5 +174,75 @@ func TestLoad_SecretsAsBytes(t *testing.T) {
 	}
 	if string(cfg.JWTRefreshSecret) != "refresh-secret-min-32-chars-xxxxxxxx" {
 		t.Errorf("JWTRefreshSecret content mismatch")
+	}
+}
+
+// TestLoad_RejectsShortJWTAccessSecret 验证 access secret < 32 字节 fail-fast。
+//
+// 业务背景：HS256 密钥长度直接决定离线暴破成本，1 字节密钥分钟级即可破解。
+// 32 字节是 HS256 推荐下限（与 SHA-256 输出宽度一致，攻击者无法借更短密钥取捷径）。
+func TestLoad_RejectsShortJWTAccessSecret(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://x:y@localhost:5432/z?sslmode=disable")
+	t.Setenv("JWT_ACCESS_SECRET", "short") // 5 字节，远小于 32
+	t.Setenv("JWT_REFRESH_SECRET", "another-secret-32-bytes-long-aaa")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error when JWT_ACCESS_SECRET shorter than 32 bytes")
+	}
+	if !strings.Contains(err.Error(), "JWT_ACCESS_SECRET") {
+		t.Errorf("error should mention JWT_ACCESS_SECRET, got: %v", err)
+	}
+}
+
+// TestLoad_RejectsShortJWTRefreshSecret 验证 refresh secret < 32 字节 fail-fast。
+func TestLoad_RejectsShortJWTRefreshSecret(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://x:y@localhost:5432/z?sslmode=disable")
+	t.Setenv("JWT_ACCESS_SECRET", "this-secret-is-32-bytes-long!aaa")
+	t.Setenv("JWT_REFRESH_SECRET", "tiny") // 4 字节
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error when JWT_REFRESH_SECRET shorter than 32 bytes")
+	}
+	if !strings.Contains(err.Error(), "JWT_REFRESH_SECRET") {
+		t.Errorf("error should mention JWT_REFRESH_SECRET, got: %v", err)
+	}
+}
+
+// TestLoad_RejectsEqualAccessAndRefreshSecrets 验证 access==refresh 时拒启动。
+//
+// 业务背景：双密钥拆分的核心价值是 access 短期 / refresh 长期独立轮换；
+// 同值 = 设计意图作废 + 单点泄露同时炸两类 token。
+func TestLoad_RejectsEqualAccessAndRefreshSecrets(t *testing.T) {
+	same := "this-secret-is-32-bytes-long!!!!"
+	t.Setenv("DATABASE_URL", "postgres://x:y@localhost:5432/z?sslmode=disable")
+	t.Setenv("JWT_ACCESS_SECRET", same)
+	t.Setenv("JWT_REFRESH_SECRET", same)
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error when access and refresh secrets are identical")
+	}
+	if !strings.Contains(err.Error(), "must differ") {
+		t.Errorf("error should mention 'must differ', got: %v", err)
+	}
+}
+
+// TestLoad_AcceptsValidSecrets 正例：32 字节且互异通过校验。
+func TestLoad_AcceptsValidSecrets(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://x:y@localhost:5432/z?sslmode=disable")
+	t.Setenv("JWT_ACCESS_SECRET", "this-is-a-valid-access-secret-32!")
+	t.Setenv("JWT_REFRESH_SECRET", "this-is-a-valid-refresh-secret-32")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned unexpected error: %v", err)
+	}
+	if cfg == nil {
+		t.Fatal("Load returned nil cfg without error")
+	}
+	if string(cfg.JWTAccessSecret) != "this-is-a-valid-access-secret-32!" {
+		t.Errorf("JWTAccessSecret content mismatch")
 	}
 }
