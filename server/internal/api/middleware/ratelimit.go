@@ -159,20 +159,44 @@ func clientIP(r *http.Request) string {
 	return host
 }
 
+// loginBodyMaxBytes 是 extractUsername 的 body 读取上限。
+//
+// 选 64KiB 的理由：
+//   - 真实 login JSON < 1KB（username + password + 框架 envelope）
+//   - 远高于真实流量但不至于 buffer 爆内存
+//   - 留缓冲应对未来 envelope 字段扩展（device_id / fingerprint 等）
+const loginBodyMaxBytes = 64 * 1024
+
+// rateLimitOversizedSentinel 是 body 超 cap 时的 username sentinel。
+//
+// 安全 review C5：原实现 ReadAll 错时返 ""，让 LoginMiddleware 跳过 user 桶
+// → 攻击者用 5KiB 垃圾 padding（符合多数 BodyLimit 但超 4KiB cap）即可绕过
+// 分布式撞库的 per-user 限流，仅 IP 桶兜底，botnet 多 IP 仍可暴破单账号。
+//
+// 改 fail-closed：所有 oversized body 共用此 sentinel 桶，配 LoginPerMinPerUser
+// (默认 10/min) 让攻击者命中桶而不是绕过。值含双下划线避免与真实 username
+// 冲突（DB users.username 字段虽未禁止该字符但生产环境无此账号）。
+const rateLimitOversizedSentinel = "__rl_oversized_login_body__"
+
 // extractUsername 从 login body 提取 username（小写、trim）。
 //
 // 关键：必须 restore r.Body 让下游 ogen decoder 能再读一次（不然会拿到空 body 报 400）。
-// 用 io.NopCloser + strings.NewReader 包装回去；上限 4096 字节防巨包消耗内存。
+// 用 io.NopCloser + strings.NewReader 包装回去；上限 loginBodyMaxBytes 字节防巨包消耗内存。
 //
-// 解析失败（无 body / 非 JSON / 缺字段）返回空字符串，让上游跳过 user 维度限速。
-// 这是 fail-open 策略：限速失败不该让正常登录请求被拒，IP 维度仍兜底防暴破。
+// 解析路径：
+//   1. body == nil → 返 "" 跳过 user 桶（健康检查类无 body 请求）
+//   2. body > 64KiB → 返 sentinel 让所有超大 body 共用一个桶（C5 fail-closed）
+//   3. body 合法 JSON → 取 username 小写 trim；username 字段缺失返 "" 跳过 user 桶
 func extractUsername(r *http.Request) string {
 	if r.Body == nil {
 		return ""
 	}
-	bodyBytes, err := io.ReadAll(http.MaxBytesReader(nil, r.Body, 4096))
+	bodyBytes, err := io.ReadAll(http.MaxBytesReader(nil, r.Body, loginBodyMaxBytes))
 	if err != nil {
-		return ""
+		// body 超 cap：替换 r.Body 为空 reader，让下游 ogen decoder 报 400
+		// （真实攻击 5KB 垃圾 body 不应进 handler 走 bcrypt）
+		r.Body = io.NopCloser(strings.NewReader(""))
+		return rateLimitOversizedSentinel
 	}
 	r.Body = io.NopCloser(strings.NewReader(string(bodyBytes)))
 	var payload struct {
