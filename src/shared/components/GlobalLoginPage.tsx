@@ -305,16 +305,6 @@ export default function GlobalLoginPage() {
                     />
                     保持本机登录
                   </label>
-                  <button
-                    type="button"
-                    className={styles.textLink}
-                    data-testid="global-login-reset"
-                    onClick={() => {
-                      // 视觉占位：当前 store 无重置流程，未来由超管后台分发新口令
-                    }}
-                  >
-                    重置访问密钥
-                  </button>
                 </div>
 
                 {error ? (
