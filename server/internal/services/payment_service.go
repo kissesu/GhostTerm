@@ -235,7 +235,7 @@ func (s *paymentService) List(ctx context.Context, sc SessionContext, projectID 
 		rows, err := tx.Query(ctx, `
 			SELECT
 				p.id, p.project_id, p.direction, p.amount, p.paid_at,
-				p.related_user_id, p.screenshot_id, p.remark, p.recorded_by, p.recorded_at,
+				p.related_user_id, p.screenshot_id, p.remark, p.remark_key_version, p.recorded_by, p.recorded_at,
 				COALESCE(att.list, '[]'::jsonb) AS attachments
 			FROM payments p
 			LEFT JOIN (
@@ -259,9 +259,11 @@ func (s *paymentService) List(ctx context.Context, sc SessionContext, projectID 
 
 		// remark 现在是 BYTEA 密文：scan 到 []byte 暂存，rows 关闭后统一解密
 		// （与 feedback_service.List 同模式，避免在游标活跃时再开 query）
+		// remark_key_version 一并 scan：finding L7 follow-up 让 Decrypt 按 row 版本路由 master key。
 		type encPayment struct {
 			p              Payment
 			remarkCipher   []byte
+			remarkKeyVer   int16
 			attachmentsRaw []byte
 		}
 		var encs []encPayment
@@ -272,11 +274,12 @@ func (s *paymentService) List(ctx context.Context, sc SessionContext, projectID 
 				relatedUserID  *int64
 				screenshotID   *int64
 				remarkCipher   []byte
+				remarkKeyVer   int16
 				attachmentsRaw []byte // jsonb 走 []byte，service 层手动 unmarshal
 			)
 			if err := rows.Scan(
 				&p.ID, &p.ProjectID, &directionRaw, &p.Amount, &p.PaidAt,
-				&relatedUserID, &screenshotID, &remarkCipher, &p.RecordedBy, &p.RecordedAt,
+				&relatedUserID, &screenshotID, &remarkCipher, &remarkKeyVer, &p.RecordedBy, &p.RecordedAt,
 				&attachmentsRaw,
 			); err != nil {
 				return fmt.Errorf("payment: scan row: %w", err)
@@ -284,7 +287,7 @@ func (s *paymentService) List(ctx context.Context, sc SessionContext, projectID 
 			p.Direction = PaymentDirection(directionRaw)
 			p.RelatedUserID = relatedUserID
 			p.ScreenshotID = screenshotID
-			encs = append(encs, encPayment{p: p, remarkCipher: remarkCipher, attachmentsRaw: attachmentsRaw})
+			encs = append(encs, encPayment{p: p, remarkCipher: remarkCipher, remarkKeyVer: remarkKeyVer, attachmentsRaw: attachmentsRaw})
 		}
 		if err := rows.Err(); err != nil {
 			return err
@@ -293,7 +296,7 @@ func (s *paymentService) List(ctx context.Context, sc SessionContext, projectID 
 
 		// 解密 remark + 解析 attachments
 		for _, e := range encs {
-			plaintext, err := s.cipher.Decrypt(ctx, "payments_remark", e.remarkCipher)
+			plaintext, err := s.cipher.Decrypt(ctx, "payments_remark", e.remarkCipher, e.remarkKeyVer)
 			if err != nil {
 				return fmt.Errorf("payment: decrypt remark id=%d: %w", e.p.ID, err)
 			}
@@ -399,7 +402,8 @@ func (s *paymentService) Create(ctx context.Context, sc SessionContext, projectI
 	}
 
 	// finding #4：写入前加密 remark；同 feedback_service 的写法保持一致
-	encRemark, err := s.cipher.Encrypt(ctx, "payments_remark", input.Remark)
+	// remarkKeyVer 一并取回，与密文同写入 payments.remark_key_version 列（finding L7）
+	encRemark, remarkKeyVer, err := s.cipher.Encrypt(ctx, "payments_remark", input.Remark)
 	if err != nil {
 		return nil, fmt.Errorf("payment: encrypt remark: %w", err)
 	}
@@ -435,15 +439,15 @@ func (s *paymentService) Create(ctx context.Context, sc SessionContext, projectI
 		err := tx.QueryRow(ctx, `
 			INSERT INTO payments (
 				project_id, direction, amount, paid_at,
-				related_user_id, screenshot_id, remark, recorded_by,
+				related_user_id, screenshot_id, remark, remark_key_version, recorded_by,
 				client_ip, user_agent
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 			RETURNING id, project_id, direction, amount, paid_at,
 			          related_user_id, screenshot_id, remark, recorded_by, recorded_at
 		`,
 			projectID, string(input.Direction), input.Amount, input.PaidAt,
-			input.RelatedUserID, input.ScreenshotID, encRemark, recordedBy,
+			input.RelatedUserID, input.ScreenshotID, encRemark, remarkKeyVer, recordedBy,
 			NullableIP(md.ClientIP), md.UserAgent,
 		).Scan(
 			&out.ID, &out.ProjectID, &directionRaw, &out.Amount, &out.PaidAt,

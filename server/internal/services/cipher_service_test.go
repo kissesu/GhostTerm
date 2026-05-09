@@ -38,12 +38,13 @@ func TestCipherService_RoundTrip(t *testing.T) {
 
 	plaintext := "敏感内容含中文 + 表情符号位置 abc 123"
 	ctx := context.Background()
-	encrypted, err := cs.Encrypt(ctx, "feedbacks_content", plaintext)
+	encrypted, keyVer, err := cs.Encrypt(ctx, "feedbacks_content", plaintext)
 	require.NoError(t, err)
 	require.NotEmpty(t, encrypted, "密文不应为空")
 	require.NotEqual(t, plaintext, string(encrypted), "密文不应等于明文")
+	require.Equal(t, services.CurrentKeyVersion, keyVer, "新写数据 keyVersion 必须 = CurrentKeyVersion")
 
-	decrypted, err := cs.Decrypt(ctx, "feedbacks_content", encrypted)
+	decrypted, err := cs.Decrypt(ctx, "feedbacks_content", encrypted, keyVer)
 	require.NoError(t, err)
 	require.Equal(t, plaintext, decrypted, "解密后应得原始明文")
 }
@@ -56,16 +57,17 @@ func TestCipherService_DifferentColumnDifferentKey(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	enc1, err := cs.Encrypt(ctx, "feedbacks_content", "same plaintext")
+	enc1, ver1, err := cs.Encrypt(ctx, "feedbacks_content", "same plaintext")
 	require.NoError(t, err)
-	enc2, err := cs.Encrypt(ctx, "payments_remark", "same plaintext")
+	enc2, ver2, err := cs.Encrypt(ctx, "payments_remark", "same plaintext")
 	require.NoError(t, err)
 
 	require.NotEqual(t, enc1, enc2,
 		"不同列 HKDF info 应派生不同子密钥，得到不同密文（防 feedbacks 泄露连带 payments）")
+	require.Equal(t, ver1, ver2, "同一服务实例 keyVersion 一致")
 
 	// 进一步确认：用 column1 的子密钥解 column2 的密文必失败
-	_, err = cs.Decrypt(ctx, "feedbacks_content", enc2)
+	_, err = cs.Decrypt(ctx, "feedbacks_content", enc2, ver2)
 	assert.Error(t, err, "用 feedbacks_content 子密钥解 payments_remark 密文必失败")
 }
 
@@ -86,11 +88,12 @@ func TestCipherService_EmptyPlaintextReturnsEmpty(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	encrypted, err := cs.Encrypt(ctx, "feedbacks_content", "")
+	encrypted, keyVer, err := cs.Encrypt(ctx, "feedbacks_content", "")
 	require.NoError(t, err)
 	assert.Empty(t, encrypted, "空明文应短路返回空密文，不调 PG")
+	assert.Equal(t, services.CurrentKeyVersion, keyVer, "空明文也要返合法 keyVersion，避免列写入 0 混淆 v=未初始化")
 
-	decrypted, err := cs.Decrypt(ctx, "feedbacks_content", []byte{})
+	decrypted, err := cs.Decrypt(ctx, "feedbacks_content", []byte{}, keyVer)
 	require.NoError(t, err)
 	assert.Equal(t, "", decrypted, "空密文应返回空字符串")
 }
@@ -106,7 +109,7 @@ func TestCipherService_EncryptUsesV2Format(t *testing.T) {
 	cs, err := services.NewCipherService(pool, []byte(testCipherKey))
 	require.NoError(t, err)
 
-	encrypted, err := cs.Encrypt(context.Background(), "feedbacks_content", "C3 修复证明")
+	encrypted, _, err := cs.Encrypt(context.Background(), "feedbacks_content", "C3 修复证明")
 	require.NoError(t, err)
 	require.NotEmpty(t, encrypted)
 	require.Equal(t, byte(0x02), encrypted[0], "v2 密文必须以 0x02 开头（区分 v1 pgcrypto 0xc3）")
@@ -139,16 +142,16 @@ func TestCipherService_DecryptV1LegacyFallback(t *testing.T) {
 	// 字节看是否能正确路由（即便 pgcrypto 解密失败也证明路由生效）。
 
 	// path A：构造 v2 密文经 Decrypt 解密成功（路由到 v2 path）
-	v2Encrypted, err := cs.Encrypt(ctx, "feedbacks_content", plaintext)
+	v2Encrypted, keyVer, err := cs.Encrypt(ctx, "feedbacks_content", plaintext)
 	require.NoError(t, err)
-	dec, err := cs.Decrypt(ctx, "feedbacks_content", v2Encrypted)
+	dec, err := cs.Decrypt(ctx, "feedbacks_content", v2Encrypted, keyVer)
 	require.NoError(t, err)
 	require.Equal(t, plaintext, dec)
 
 	// path B：构造非 v2 prefix（首字节 0xc3）让 Decrypt 路由到 v1 fallback
 	// pgcrypto 拿到无效密文会返 error，但路由本身工作 —— 错误信息含 "v1 fallback"
 	v1Junk := []byte{0xc3, 0x04, 0x00, 0x01, 0x02, 0x03}
-	_, err = cs.Decrypt(ctx, "feedbacks_content", v1Junk)
+	_, err = cs.Decrypt(ctx, "feedbacks_content", v1Junk, services.CurrentKeyVersion)
 	require.Error(t, err, "无效 v1 密文必须返错（证明 fallback 路由生效）")
 	require.Contains(t, err.Error(), "v1 fallback", "错误消息应含 v1 fallback 标识")
 }
@@ -166,15 +169,35 @@ func TestCipherService_NonceUniqueness(t *testing.T) {
 
 	ctx := context.Background()
 	plaintext := "确定性输入"
-	enc1, err := cs.Encrypt(ctx, "feedbacks_content", plaintext)
+	enc1, ver1, err := cs.Encrypt(ctx, "feedbacks_content", plaintext)
 	require.NoError(t, err)
-	enc2, err := cs.Encrypt(ctx, "feedbacks_content", plaintext)
+	enc2, ver2, err := cs.Encrypt(ctx, "feedbacks_content", plaintext)
 	require.NoError(t, err)
 
 	require.NotEqual(t, enc1, enc2, "同明文连续 Encrypt 必须输出不同密文（nonce 随机性）")
 	// 但解密都能回到同一明文
-	dec1, _ := cs.Decrypt(ctx, "feedbacks_content", enc1)
-	dec2, _ := cs.Decrypt(ctx, "feedbacks_content", enc2)
+	dec1, _ := cs.Decrypt(ctx, "feedbacks_content", enc1, ver1)
+	dec2, _ := cs.Decrypt(ctx, "feedbacks_content", enc2, ver2)
 	require.Equal(t, plaintext, dec1)
 	require.Equal(t, plaintext, dec2)
+}
+
+// TestCipherService_DecryptUnknownKeyVersion 验证：未注册的 keyVersion 解密返
+// ErrCipherUnknownKeyVersion 而非默默用错 key 解出乱码（finding L7 配置漏防御）。
+func TestCipherService_DecryptUnknownKeyVersion(t *testing.T) {
+	pool, cleanup := testutil.StartPostgres(t)
+	defer cleanup()
+
+	cs, err := services.NewCipherService(pool, []byte(testCipherKey))
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	encrypted, _, err := cs.Encrypt(ctx, "feedbacks_content", "test data")
+	require.NoError(t, err)
+
+	// 用未注册版本号 v=99 解密
+	_, err = cs.Decrypt(ctx, "feedbacks_content", encrypted, 99)
+	require.Error(t, err)
+	require.ErrorIs(t, err, services.ErrCipherUnknownKeyVersion,
+		"未注册 keyVersion 必须返 ErrCipherUnknownKeyVersion 让运维知道配置漏")
 }

@@ -299,7 +299,11 @@ func (s *activityService) decryptActivityPayload(ctx context.Context, kind strin
 	if err != nil {
 		return nil, fmt.Errorf("activity payload %s base64 decode: %w", fieldName, err)
 	}
-	plaintext, err := s.cipher.Decrypt(ctx, columnName, ciphertext)
+	// finding L7 follow-up：activity view 现暂未把 *_key_version 字段嵌入 payload，
+	// 所有现存数据 v=1；传 0 让 Decrypt 用 currentVer 兜底。未来轮换主密钥引入 v=2 时
+	// 必须先升级 view 把 contentKeyVersion / remarkKeyVersion 嵌进 jsonb，再把这里改为
+	// 从 payload 取真实 row 版本号。
+	plaintext, err := s.cipher.Decrypt(ctx, columnName, ciphertext, 0)
 	if err != nil {
 		return nil, fmt.Errorf("activity payload %s decrypt: %w", fieldName, err)
 	}
