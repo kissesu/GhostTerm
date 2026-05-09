@@ -45,7 +45,7 @@ pub struct HttpResponse {
 // keep-alive 连接池 + TLS session 缓存；首次连接 ~300ms，后续请求 30-100ms（仅 RTT）
 static HTTP_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 
-fn get_or_init_client() -> Result<&'static reqwest::Client, String> {
+pub(crate) fn get_or_init_client() -> Result<&'static reqwest::Client, String> {
     if let Some(c) = HTTP_CLIENT.get() {
         return Ok(c);
     }
