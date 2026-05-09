@@ -63,10 +63,13 @@ jobs:
           workspaces: src-tauri -> target
 
       # pnpm 必须在 setup-node 前安装
+      # 锁 10 不用 latest：pnpm 11 默认拒绝 dependency build scripts
+      # (esbuild/msw postinstall 必须跑)，且 package.json pnpm.onlyBuiltDependencies
+      # 在 pnpm 11 已失效。本地与生产统一 pnpm 10。
       - name: 安装 pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: latest
+          version: 10
 
       - name: 安装 Node.js
         uses: actions/setup-node@v4
