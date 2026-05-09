@@ -88,9 +88,11 @@ sudo journalctl -u ghostterm-backup -n 50 --no-pager
 | 端口 | 用途 | 防火墙 |
 |------|------|--------|
 | 22 | SSH（标准端口，root + ed25519） | 已开 0.0.0.0/0 |
-| 38080 | Caddy HTTPS（公网入口） | 已开 0.0.0.0/0 |
+| 38080 | Caddy HTTPS（业务入口，反代到 ghostterm-server） | 已开 0.0.0.0/0 |
+| 38090 | GlitchTip 错误监控 web/API（明文 http，docker compose 暴露 0.0.0.0:38090→web 容器 8000） | 已开 0.0.0.0/0 |
 | 18080 | ghostterm-server HTTP（内部，仅 127.0.0.1 listen） | 不公开 |
-| 5432 | PostgreSQL（仅 localhost） | 不公开 |
+| 5432 | PostgreSQL（业务库，仅 localhost） | 不公开 |
+| docker 网络 | GlitchTip 内部 postgres + valkey + web + worker（docker compose default network） | 不公开 |
 
 ## 升级 ghostterm-server（Mac → atlas）
 
@@ -107,6 +109,16 @@ ssh atlas 'sudo systemctl stop ghostterm-server && \
            sudo systemctl start ghostterm-server && \
            sleep 2 && \
            curl -sk https://127.0.0.1:38080/healthz'
+```
+
+**runbook 同步点**：每次 GhostTerm release bump（如 v0.7.x → v0.8.0）必须同步更新 `/etc/ghostterm/server.env` 的 `SENTRY_RELEASE=ghostterm-server@<新版本>` 字段并 restart，否则 GlitchTip 上 Issues release 标签停留旧版误导诊断。
+
+```bash
+# 仅 release 字段同步（不需重 build binary 时）
+ssh atlas 'sudo sed -i "s/^SENTRY_RELEASE=.*/SENTRY_RELEASE=ghostterm-server@<新版本>/" /etc/ghostterm/server.env && \
+           sudo systemctl restart ghostterm-server && \
+           sleep 2 && \
+           sudo journalctl -u ghostterm-server -n 5 --no-pager | grep -i sentry'
 ```
 
 ## 应用新 migration
@@ -271,6 +283,8 @@ curl --cacert src-tauri/certs/atlas-ip.pem https://103.236.85.144:38080/healthz
 3. **WebSocket（Phase 12 通知功能）** → 仍走 WebView 原生 WebSocket，wss:// 自签证书同问题；待 Tauri Rust + tokio-tungstenite + tauri::event bridge 实现
 4. **secrets 在 boot 后即解密注入 tmpfs** → `/etc/ghostterm/credentials/*.cred` 是加密文件，磁盘快照拿到无法解密；但 service 重启会重新读 → 备份机制必须保留 Mac 端 `~/Documents/ghostterm-secrets/` 的 age + credentials 明文（未上链）
 5. **systemd LoadCredentialEncrypted 仅当前 boot 周期可用** → 移机 / 换主机时旧 .cred 文件作废，必须用新主机的 systemd-creds 重新加密注入
+6. **GlitchTip 6.x ↔ @sentry/react 版本兼容窗口窄** → 必锁 `@sentry/react@^8`（v8 LTS）；v10 envelope header `event_id` 空字符串触发 GlitchTip pydantic UUID parser 422 拒（详见 memory `feedback_glitchtip_61_incompat_sentry_javascript_v10_must_downgrade_v8_lts`）
+7. **macOS WKWebView ATS 拒明文 http** → GlitchTip envelope 走 `http://103.236.85.144:38090` 在 production 通过 `src-tauri/Info.plist` NSAppTransportSecurity 例外允许；**dev 模式不 embed Info.plist**，开发者本地 dev 跑 sentry 不上报，错误看 cargo stderr / webview console 兜底
 
 ## 关键 Bug 修复记录
 
@@ -280,6 +294,8 @@ curl --cacert src-tauri/certs/atlas-ip.pem https://103.236.85.144:38080/healthz
 | 2026-05-04 | 部分 view 查询触发 PG JIT 反优化（与 0006/0011/0012 progress timeline view 含 `jsonb_agg + RLS` 相关） | `ALTER ROLE progress_app SET jit = off`（角色级配置永久生效） |
 | 2026-05-09 | atlas 自签证书 `basicConstraints=CA:TRUE` 让 reqwest rustls webpki 拒 `InvalidCertificate(CaUsedAsEndEntity)`，所有 v0.6.x client 登录失败 | 重签证书 `CA:FALSE` + `serverAuth` EKU + `digitalSignature,keyEncipherment` keyUsage；编内 `src-tauri/certs/atlas-ip.pem` 同步；Tauri client v0.7.0 强制升级 |
 | 2026-05-09 | 旧 atlas `43.132.191.253` 资源回收，新 IP `103.236.85.144` 上线 | 全仓 IP 替换：`.env.production` / `tauri.conf.json` CSP / `~/.ssh/config` HostName / 本文档；client cert pinning fingerprint 同步 |
+| 2026-05-09 | GlitchTip 6.1 + `@sentry/react` v10 envelope header `event_id=""` 让 GlitchTip pydantic UUID parser 422 拒，"dmg 第一次上报后续不上报" | 降级 `@sentry/react` v10.52→v8.55.2 LTS；GlitchTip 6.x 接 SDK 必锁 v8（详见 memory `feedback_glitchtip_61_incompat_sentry_javascript_v10_must_downgrade_v8_lts`）|
+| 2026-05-09 | GlitchTip 监控接入 v0.7.1 + Tauri Info.plist NSAppTransportSecurity ATS 例外 | 三侧 SDK 接入：前端 `@sentry/react@^8` + Tauri `sentry@^0.48`（rustls features）+ atlas Go `sentry-go v0.46.2`；DSN `http://d37cfb...e@103.236.85.144:38090/1`（atlas Go 用 127.0.0.1 同机 loopback）；ATS 例外仅 production .app bundle 生效，dev 模式 sentry 不上报 |
 
 ## 性能调优 — PG JIT 角色级关闭（部署后必跑）
 
