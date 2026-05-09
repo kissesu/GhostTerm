@@ -91,9 +91,13 @@ function WindowControls() {
   };
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', marginRight: -4 }}>
+    // data-tauri-drag-region="false" 必填：Windows 上 Tauri 在 native 层 (WM_NCHITTEST) 判定拖拽区
+    // React onMouseDown stopPropagation 决策时机晚于 native，无法阻止 OS 把 click 当 caption 拖拽
+    // 子级必须显式 opt-out 才能接收 mousedown/click 事件。macOS 不依赖此属性但保留无副作用。
+    <div data-tauri-drag-region="false" style={{ display: 'flex', alignItems: 'center', marginRight: -4 }}>
       {/* 最小化 */}
       <button
+        data-tauri-drag-region="false"
         style={btnBase}
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => void handleMinimize(e)}
@@ -108,6 +112,7 @@ function WindowControls() {
 
       {/* 最大化 / 还原 */}
       <button
+        data-tauri-drag-region="false"
         style={btnBase}
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => void handleMaximize(e)}
@@ -122,6 +127,7 @@ function WindowControls() {
 
       {/* 关闭 */}
       <button
+        data-tauri-drag-region="false"
         style={btnBase}
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => void handleClose(e)}
@@ -219,6 +225,7 @@ export default function WindowTitleBar({ left, center, right, showBrand = true, 
       >
         {/* 1. 品牌区（左对齐，非拖拽） */}
         <div
+          data-tauri-drag-region="false"
           onMouseDown={stopPropagation}
           onDoubleClick={stopPropagation}
           style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}
@@ -228,6 +235,7 @@ export default function WindowTitleBar({ left, center, right, showBrand = true, 
 
         {/* 2. tabs 区（紧挨品牌右侧，非拖拽）；marginLeft 撑出 brand↔tabs 视觉间距 */}
         <div
+          data-tauri-drag-region="false"
           onMouseDown={stopPropagation}
           onDoubleClick={stopPropagation}
           style={{ display: 'flex', alignItems: 'center', flexShrink: 0, marginLeft: 16 }}
@@ -240,6 +248,7 @@ export default function WindowTitleBar({ left, center, right, showBrand = true, 
 
         {/* 4. 右侧按钮 + Windows 窗口控件（非拖拽） */}
         <div
+          data-tauri-drag-region="false"
           onMouseDown={stopPropagation}
           onDoubleClick={stopPropagation}
           style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}
@@ -264,6 +273,7 @@ export default function WindowTitleBar({ left, center, right, showBrand = true, 
       data-testid="window-titlebar"
     >
       <div
+        data-tauri-drag-region="false"
         onMouseDown={stopPropagation}
         onDoubleClick={stopPropagation}
         style={{ display: 'flex', alignItems: 'center', gap: 8 }}
@@ -284,6 +294,7 @@ export default function WindowTitleBar({ left, center, right, showBrand = true, 
         {center ?? (showBrand ? <GhostTermBrand /> : null)}
       </div>
       <div
+        data-tauri-drag-region="false"
         onMouseDown={stopPropagation}
         onDoubleClick={stopPropagation}
         style={{ display: 'flex', alignItems: 'center', gap: 6 }}
