@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+        GhostTerm macOS Info.plist 增量配置（Tauri 2 build 时与默认合并）
+
+        NSAppTransportSecurity:
+            macOS WKWebView 默认强制 HTTPS（ATS），webview 内 fetch http://
+            会被系统 networking 层拦下报 "App Transport Security policy
+            requires the use of a secure connection"。
+            这里为 GlitchTip 监控 server (103.236.85.144:38090) 加例外允许
+            http；方案 B 明文起步 5 人 alpha 阶段必要妥协；后续切方案 A
+            TLS（Caddy 反代 :38090 + 复用 atlas-cert）后可删此例外。
+    -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSExceptionDomains</key>
+        <dict>
+            <key>103.236.85.144</key>
+            <dict>
+                <key>NSIncludesSubdomains</key>
+                <false/>
+                <key>NSExceptionAllowsInsecureHTTPLoads</key>
+                <true/>
+            </dict>
+        </dict>
+    </dict>
+</dict>
+</plist>

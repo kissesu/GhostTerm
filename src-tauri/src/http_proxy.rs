@@ -117,7 +117,11 @@ pub async fn http_request_cmd(
     let resp = req
         .send()
         .await
-        .map_err(|e| format!("http_proxy: send failed: {e:?}"))?;
+        .map_err(|e| {
+            // 网络/TLS/timeout 类失败上报 GlitchTip；业务 4xx/5xx 不在此分支（resp.status 后处理）
+            sentry::capture_error(&e);
+            format!("http_proxy: send failed: {e:?}")
+        })?;
 
     let status = resp.status().as_u16();
     let resp_headers: HashMap<String, String> = resp
@@ -216,7 +220,10 @@ pub async fn http_request_multipart_cmd(
     let resp = req
         .send()
         .await
-        .map_err(|e| format!("http_proxy: multipart send failed: {e:?}"))?;
+        .map_err(|e| {
+            sentry::capture_error(&e);
+            format!("http_proxy: multipart send failed: {e:?}")
+        })?;
 
     let status = resp.status().as_u16();
     let resp_headers: HashMap<String, String> = resp

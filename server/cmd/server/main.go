@@ -16,11 +16,14 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/signal"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/getsentry/sentry-go"
+	sentryhttp "github.com/getsentry/sentry-go/http"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ghostterm/progress-server/internal/api"
@@ -32,6 +35,30 @@ import (
 )
 
 func main() {
+	// ============================================
+	// 第零步：GlitchTip 错误监控初始化（先于 config 加载，让 config 错误也能上报）
+	// 业务背景：方案 B 明文 http；DSN/Release/Environment 走 systemd EnvironmentFile
+	// SENTRY_DSN 未设时静默跳过监控，不阻塞 server 启动
+	// ============================================
+	if dsn := os.Getenv("SENTRY_DSN"); dsn != "" {
+		if err := sentry.Init(sentry.ClientOptions{
+			Dsn:              dsn,
+			Release:          os.Getenv("SENTRY_RELEASE"),
+			Environment:      os.Getenv("SENTRY_ENVIRONMENT"),
+			SendDefaultPII:   false,
+			SampleRate:       1.0,
+			TracesSampleRate: 0.01,
+			AttachStacktrace: true,
+		}); err != nil {
+			log.Printf("[sentry] init failed: %v (monitoring disabled)", err)
+		} else {
+			defer sentry.Flush(2 * time.Second)
+			log.Printf("[sentry] enabled release=%q env=%q", os.Getenv("SENTRY_RELEASE"), os.Getenv("SENTRY_ENVIRONMENT"))
+		}
+	} else {
+		log.Println("[sentry] SENTRY_DSN not set, monitoring disabled")
+	}
+
 	// ============================================
 	// 第一步：加载配置（必填缺失立即退出）
 	// ============================================
@@ -237,9 +264,17 @@ func main() {
 	//    实际本机 / 局域网部署足够 5min；公网慢用户可能 timeout 但属于可接受退化）
 	//  - IdleTimeout 120s：keep-alive 连接闲置上限，比默认无限好
 	//  - MaxHeaderBytes 1MB：防巨型 header 攻击
+	// sentryhttp 包 mux：自动 capture handler panic + 注入 sentry hub 到 request context
+	// Repanic=true 让 panic 上报后重新抛出，让上层 chi recovery middleware 仍能正常处理（500 响应）
+	sentryHandler := sentryhttp.New(sentryhttp.Options{
+		Repanic:         true,
+		WaitForDelivery: false,
+		Timeout:         2 * time.Second,
+	})
+
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           mux,
+		Handler:           sentryHandler.Handle(mux),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       60 * time.Second,
 		WriteTimeout:      5 * time.Minute,

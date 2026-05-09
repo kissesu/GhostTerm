@@ -1,6 +1,6 @@
 [package]
 name = "ghostterm"
-version = "0.7.0"
+version = "0.7.1"
 description = "GhostTerm - 轻量级代码编辑器 + 终端一体化工具，深度集成 Claude Code"
 authors = ["Atlas.oi"]
 edition = "2021"
@@ -76,6 +76,10 @@ base64 = "0.22"
 # 业务背景：progress-server 用自签 IP 证书，WebView 原生 fetch 不能跳过 cert 验证，
 # 必须通过 reqwest 在 Rust 层做 HTTP 转发；前端 invoke 'http_request_cmd' 调用
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "multipart"] }
+
+# GlitchTip 错误监控 + panic 自动转发；rustls feature 让内部 reqwest 走 rustls 不拉 OpenSSL
+# 业务背景：编内 atlas-cert pinning 走 reqwest，sentry 自带 transport 独立另条 reqwest 链路（DSN 是 http :38090 不需 cert pinning）
+sentry = { version = "0.48", default-features = false, features = ["backtrace", "panic", "contexts", "debug-images", "reqwest", "rustls"] }
 
 # E2E 测试支持 - tauri-webdriver + WebdriverIO 集成（PBI-6 使用）
 tauri-plugin-webdriver-automation = "0.1"

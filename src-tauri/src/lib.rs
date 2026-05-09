@@ -17,6 +17,7 @@ pub mod project_manager;
 pub mod http_proxy;
 pub mod auth_secret;
 pub mod git_url_validator;
+pub mod monitoring;
 
 // PBI-1 Commands
 use pty_manager::{spawn_pty_cmd, kill_pty_cmd, resize_pty_cmd, reconnect_pty_cmd, get_default_shell_cmd};
@@ -60,6 +61,9 @@ fn get_startup_files_cmd(state: tauri::State<PendingFiles>) -> Vec<String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // GlitchTip 监控初始化必须在 Tauri builder 之前；guard 持有到 run() 结束 drop 时 flush
+    let _sentry_guard = monitoring::init();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         // 文件对话框 - 用于项目选择器"打开文件夹"功能
