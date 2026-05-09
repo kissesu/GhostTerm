@@ -67,6 +67,10 @@ function setupKeychainMock(): void {
       delete mockKeychainStore.refresh_token;
       return Promise.resolve();
     }
+    // GlitchTip user scope 同步 cmd —— 测试环境 Sentry 未 init，仅吞调用避免 unhandled noise
+    if (cmd === 'set_sentry_user_cmd' || cmd === 'clear_sentry_user_cmd') {
+      return Promise.resolve();
+    }
     return Promise.reject(new Error(`unhandled invoke in test: ${cmd}`));
   }) as unknown as typeof invoke);
 }

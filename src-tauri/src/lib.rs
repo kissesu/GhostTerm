@@ -43,6 +43,9 @@ use http_proxy::{http_request_cmd, http_request_multipart_cmd};
 // finding #12: refreshToken 系统 keychain 存储 - 替代 webview localStorage
 use auth_secret::{set_refresh_token_cmd, get_refresh_token_cmd, delete_refresh_token_cmd};
 
+// GlitchTip user scope 同步 - 让 Rust 端 panic 上报带账号身份
+use monitoring::{set_sentry_user_cmd, clear_sentry_user_cmd};
+
 // ============================================
 // "打开方式"启动时暂存的文件路径队列
 // 用于解决 Rust 拿到路径时前端 WebView 尚未就绪的时序问题：
@@ -200,6 +203,9 @@ pub fn run() {
             set_refresh_token_cmd,
             get_refresh_token_cmd,
             delete_refresh_token_cmd,
+            // GlitchTip user scope 同步（前端 login/logout 时 invoke）
+            set_sentry_user_cmd,
+            clear_sentry_user_cmd,
         ])
         // ============================================
         // 改用 build().run() 以便在 RunEvent 回调中处理 macOS"打开方式"事件

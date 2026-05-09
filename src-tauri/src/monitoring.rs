@@ -2,6 +2,8 @@
 // @description: GlitchTip (Sentry 协议兼容) 错误监控初始化 + Tauri Rust 端 panic 自动转发
 //               方案 B 明文 http :38090 起步（5 人 alpha）；后续切方案 A TLS 时改 https + 自定义 transport
 //               PII 全关 (send_default_pii=false)；release 字段从 CARGO_PKG_VERSION 编译期注入
+//               set/clear_sentry_user_cmd 让前端 invoke 把当前登录账号同步到 Rust 进程级 scope，
+//               Rust panic 上报也自带账号身份（与前端 webview SDK 一致）
 // @author: Atlas.oi
 // @date: 2026-05-09
 
@@ -32,4 +34,36 @@ pub fn init() -> sentry::ClientInitGuard {
             ..Default::default()
         },
     ))
+}
+
+/// 把当前登录账号身份写入 Sentry/GlitchTip 进程级 scope。
+///
+/// 业务流程：
+/// 1. 前端 webview Sentry SDK 在 login/loadMe 后调 setSentryUser
+/// 2. setSentryUser 同时 invoke 此 command 让 Rust 端 scope 也带上账号
+/// 3. 后续任何 Rust panic / sentry::capture_* 自动带 user
+///
+/// role 作为 tag（user.role）而非 user 自定义字段，方便 GlitchTip 后台
+/// 直接按角色过滤 issue 列表
+#[tauri::command]
+pub fn set_sentry_user_cmd(id: i64, username: String, role: String) {
+    sentry::configure_scope(|scope| {
+        scope.set_user(Some(sentry::User {
+            id: Some(id.to_string()),
+            username: Some(username),
+            ..Default::default()
+        }));
+        scope.set_tag("user.role", role);
+    });
+}
+
+/// 清除 Sentry/GlitchTip user scope（登出 / 401 强退时调）。
+///
+/// 让退出后的报错不再绑老用户身份，避免上报误归属。
+#[tauri::command]
+pub fn clear_sentry_user_cmd() {
+    sentry::configure_scope(|scope| {
+        scope.set_user(None);
+        scope.remove_tag("user.role");
+    });
 }

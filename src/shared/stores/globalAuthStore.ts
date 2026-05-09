@@ -39,6 +39,7 @@ import type {
 } from '../../features/progress/api/schemas';
 import { useGlobalPermissionStore } from './globalPermissionStore';
 import { useProgressPermissionStore } from '../../features/progress/stores/progressPermissionStore';
+import { setSentryUser, clearSentryUser } from '../../sentry';
 
 // ============================================
 // keychain 读/写/删 —— 走 Tauri IPC
@@ -218,6 +219,8 @@ export const useGlobalAuthStore = create<GlobalAuthState>((set, get) => ({
         error: null,
         hydrating: false,
       });
+      // 同步 Sentry/GlitchTip user scope，让后续 captureException 自动带账号身份
+      setSentryUser({ id: data.user.id, username: data.user.username, roleId: data.user.roleId });
       // login 响应的 user 不含 permissions（仅 /api/auth/me 返回）；
       // 立即拉一次 me 让 PermissionGate / usePermission 在登录后第一次渲染就拿到结果
       try {
@@ -294,6 +297,8 @@ export const useGlobalAuthStore = create<GlobalAuthState>((set, get) => ({
       set({ accessToken: null, refreshToken: null, user: null, error: null });
       useGlobalPermissionStore.getState().clear();
       useProgressPermissionStore.getState().clear();
+      // 退出后报错不再绑老用户身份
+      clearSentryUser();
     }
   },
 
@@ -308,6 +313,8 @@ export const useGlobalAuthStore = create<GlobalAuthState>((set, get) => ({
     // 否则刷新走 verify→loadMe 路径时 progress PermissionGate 永远隐藏所有按钮
     // （super_admin 也受影响 - 后端返 ['*:*'] 但 store 不 set 就 has() 都 false）
     useProgressPermissionStore.getState().set(data.permissions);
+    // 与 login 路径对称：刷新走 verify→loadMe 时也要同步 Sentry user scope
+    setSentryUser({ id: data.id, username: data.username, roleId: data.roleId });
   },
 
   // ----------------------------------------------------------
@@ -318,6 +325,8 @@ export const useGlobalAuthStore = create<GlobalAuthState>((set, get) => ({
     await writeRefresh(null);
     set({ accessToken: null, refreshToken: null, user: null, error: null });
     useGlobalPermissionStore.getState().clear();
+    // 401 强退后报错不再绑老用户身份（与 logout 对称）
+    clearSentryUser();
   },
 }));
 

@@ -20,7 +20,10 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
+
+	"github.com/getsentry/sentry-go"
 
 	"github.com/ghostterm/progress-server/internal/services"
 )
@@ -76,6 +79,20 @@ func RequireAuth(svc services.AuthService) func(http.Handler) http.Handler {
 			ctx := services.WithAuthContext(r.Context(), ac)
 			ctx = context.WithValue(ctx, UserIDKey, ac.UserID)
 			ctx = context.WithValue(ctx, RoleIDKey, ac.RoleID)
+
+			// 同步当前账号到 sentry hub scope，让本请求范围内的 panic / capture
+			// 自动带上 user 身份（hub 由外层 sentryhttp middleware 绑定到 ctx）
+			//
+			// JWT claim 仅含 UserID + RoleID，没有 username；要 username 需查 DB
+			// 本次 v1 不查 DB（每请求 query 性能成本不划算），仅上报 id + role_id
+			// GlitchTip 看到 user_id=2 后人工反查 5 行 users 表即可
+			if hub := sentry.GetHubFromContext(r.Context()); hub != nil {
+				hub.Scope().SetUser(sentry.User{
+					ID: strconv.FormatInt(ac.UserID, 10),
+				})
+				hub.Scope().SetTag("user.role_id", strconv.FormatInt(ac.RoleID, 10))
+			}
+
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
