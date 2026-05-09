@@ -238,13 +238,20 @@ func (s *feedbackService) List(ctx context.Context, sc SessionContext, projectID
 		}
 		rows.Close()
 
-		// content 解密（每行一次 pool round-trip；行数通常 0~50 在可接受范围）
-		for _, er := range encRows {
-			plaintext, err := s.cipher.Decrypt(ctx, "feedbacks_content", er.cipher, er.keyVersion)
-			if err != nil {
-				return fmt.Errorf("feedback_service: decrypt content id=%d: %w", er.f.ID, err)
-			}
-			er.f.Content = plaintext
+		// content 批量解密（finding M7）：v2 桶 in-memory N 条共用 deriveKey；
+		// v1 桶用一次 SELECT pgp_sym_decrypt(unnest...) 替代 N 次 round-trip
+		cts := make([][]byte, len(encRows))
+		vers := make([]int16, len(encRows))
+		for i, er := range encRows {
+			cts[i] = er.cipher
+			vers[i] = er.keyVersion
+		}
+		plaintexts, err := s.cipher.DecryptBatch(ctx, "feedbacks_content", cts, vers)
+		if err != nil {
+			return fmt.Errorf("feedback_service: batch decrypt content: %w", err)
+		}
+		for i, er := range encRows {
+			er.f.Content = plaintexts[i]
 			feedbacks = append(feedbacks, er.f)
 		}
 

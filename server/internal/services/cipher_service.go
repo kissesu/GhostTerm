@@ -280,6 +280,132 @@ func (s *CipherService) decryptV2(keyVersion int16, columnName string, ciphertex
 //   - log_statement = 'none' 或 'ddl'（禁 'all'）
 //   - pg_stat_statements 关闭或 track <> 'all'
 //   - 启动期 fail-fast 校验由 cmd/server/main.go 实施（PR-3 review H1）
+// DecryptBatch 一次解密多条同列密文（finding M7 follow-up）。
+//
+// 业务背景：
+//   - feedback / payment List 路径每行单独调 Decrypt 是 N+1 模式
+//   - v2 路径仅 in-memory AES，N+1 影响小但仍 N 次 derive 子密钥；批量复用能省 CPU
+//   - v1 fallback 路径每行一次 PG round-trip → 50 行就 50 次 SELECT，明显瓶颈
+//
+// 业务流程：
+//  1. 按 keyVersion 分桶（同 keyVersion 走同一 master key 子密钥）
+//  2. v2 桶：in-memory loop 解密，N 条共用一次 deriveKey
+//  3. v1 桶：拼一次 SELECT pgp_sym_decrypt(unnest($1::bytea[]), $2) 数组传参
+//     PG 端按 unnest 顺序返回明文数组；service 按 index 写回
+//
+// 输入：ciphertexts 与 keyVersions 长度必须一致（N row 各自独立 keyVersion）；
+// 都按调用方原始顺序索引；返回 plaintexts 长度 = N 与 ciphertexts 一一对应。
+func (s *CipherService) DecryptBatch(ctx context.Context, columnName string, ciphertexts [][]byte, keyVersions []int16) ([]string, error) {
+	if len(ciphertexts) != len(keyVersions) {
+		return nil, fmt.Errorf("cipher: DecryptBatch length mismatch: %d ciphertexts vs %d keyVersions", len(ciphertexts), len(keyVersions))
+	}
+	out := make([]string, len(ciphertexts))
+
+	// 按版本分桶 + 路由（v2 in-memory / v1 PG batch）
+	// idx 数组保留 plaintext 写回 out 的原始位置
+	type bucket struct {
+		indices []int
+		cts     [][]byte
+	}
+	v2Buckets := map[int16]*bucket{} // 第一字节 0x02
+	v1Buckets := map[int16]*bucket{} // 其它 prefix
+	for i, ct := range ciphertexts {
+		if len(ct) == 0 {
+			out[i] = "" // 空密文短路
+			continue
+		}
+		ver := keyVersions[i]
+		if ver == 0 {
+			ver = s.currentVer
+		}
+		if ct[0] == cipherFormatV2 {
+			b := v2Buckets[ver]
+			if b == nil {
+				b = &bucket{}
+				v2Buckets[ver] = b
+			}
+			b.indices = append(b.indices, i)
+			b.cts = append(b.cts, ct)
+		} else {
+			b := v1Buckets[ver]
+			if b == nil {
+				b = &bucket{}
+				v1Buckets[ver] = b
+			}
+			b.indices = append(b.indices, i)
+			b.cts = append(b.cts, ct)
+		}
+	}
+
+	// v2 桶：in-memory，每桶共用 deriveKey
+	for ver, b := range v2Buckets {
+		key, err := s.deriveKey(ver, columnName)
+		if err != nil {
+			return nil, err
+		}
+		block, err := aes.NewCipher(key)
+		if err != nil {
+			return nil, fmt.Errorf("cipher: aes new %s: %w", columnName, err)
+		}
+		gcm, err := cipher.NewGCM(block)
+		if err != nil {
+			return nil, fmt.Errorf("cipher: gcm new %s: %w", columnName, err)
+		}
+		const minLen = 1 + gcmNonceLen + 16
+		for j, ct := range b.cts {
+			if len(ct) < minLen {
+				return nil, fmt.Errorf("cipher: v2 ciphertext too short %s: %d < %d", columnName, len(ct), minLen)
+			}
+			pt, err := gcm.Open(nil, ct[1:1+gcmNonceLen], ct[1+gcmNonceLen:], nil)
+			if err != nil {
+				return nil, fmt.Errorf("cipher: gcm open %s: %w", columnName, err)
+			}
+			out[b.indices[j]] = string(pt)
+		}
+	}
+
+	// v1 桶：一次 SQL 用 unnest 数组传参 + pgp_sym_decrypt 同密钥批量解密
+	for ver, b := range v1Buckets {
+		rawKey, err := s.deriveKey(ver, columnName)
+		if err != nil {
+			return nil, err
+		}
+		derived := base64.StdEncoding.EncodeToString(rawKey)
+		// pgp_sym_decrypt(unnest, key) 返回与 unnest 顺序一致的 SETOF text；
+		// 用 WITH ORDINALITY 保索引明确（避免 PG 实现细节顺序假设）
+		rows, err := s.db.Query(ctx, `
+			SELECT pgp_sym_decrypt(c, $2) FROM unnest($1::bytea[]) WITH ORDINALITY t(c, ord) ORDER BY ord
+		`, b.cts, derived)
+		if err != nil {
+			return nil, fmt.Errorf("cipher: pgp_sym_decrypt v1 batch %s: %w", columnName, err)
+		}
+		j := 0
+		for rows.Next() {
+			var pt string
+			if err := rows.Scan(&pt); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("cipher: scan v1 batch %s: %w", columnName, err)
+			}
+			if j >= len(b.indices) {
+				rows.Close()
+				return nil, fmt.Errorf("cipher: v1 batch returned more rows than expected for %s", columnName)
+			}
+			out[b.indices[j]] = pt
+			j++
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("cipher: iterate v1 batch %s: %w", columnName, err)
+		}
+		rows.Close()
+		if j != len(b.indices) {
+			return nil, fmt.Errorf("cipher: v1 batch returned %d rows, expected %d for %s", j, len(b.indices), columnName)
+		}
+	}
+
+	return out, nil
+}
+
 func (s *CipherService) decryptV1Legacy(ctx context.Context, keyVersion int16, columnName string, ciphertext []byte) (string, error) {
 	rawKey, err := s.deriveKey(keyVersion, columnName)
 	if err != nil {

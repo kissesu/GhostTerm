@@ -182,6 +182,50 @@ func TestCipherService_NonceUniqueness(t *testing.T) {
 	require.Equal(t, plaintext, dec2)
 }
 
+// TestCipherService_DecryptBatch 验证 finding M7 批量解密：N 条 v2 密文共用一次 deriveKey
+// （in-memory），返回顺序与输入顺序一致；空密文短路返空字符串。
+func TestCipherService_DecryptBatch(t *testing.T) {
+	pool, cleanup := testutil.StartPostgres(t)
+	defer cleanup()
+
+	cs, err := services.NewCipherService(pool, []byte(testCipherKey))
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	// 5 条不同明文 + 1 条空明文（验证空密文路径）
+	plaintexts := []string{"alpha", "中文反馈", "punctuation !@#$%", "longer text " + string(make([]byte, 200)), "x", ""}
+	cts := make([][]byte, len(plaintexts))
+	vers := make([]int16, len(plaintexts))
+	for i, pt := range plaintexts {
+		ct, ver, err := cs.Encrypt(ctx, "feedbacks_content", pt)
+		require.NoError(t, err)
+		cts[i] = ct
+		vers[i] = ver
+	}
+
+	got, err := cs.DecryptBatch(ctx, "feedbacks_content", cts, vers)
+	require.NoError(t, err)
+	require.Len(t, got, len(plaintexts))
+	for i, want := range plaintexts {
+		assert.Equal(t, want, got[i], "index %d batch decrypt 必须与原明文一致", i)
+	}
+}
+
+// TestCipherService_DecryptBatch_LengthMismatch 验证 ciphertexts 与 keyVersions
+// 长度不一致时返显式错误（不静默截断）。
+func TestCipherService_DecryptBatch_LengthMismatch(t *testing.T) {
+	pool, cleanup := testutil.StartPostgres(t)
+	defer cleanup()
+
+	cs, err := services.NewCipherService(pool, []byte(testCipherKey))
+	require.NoError(t, err)
+
+	_, err = cs.DecryptBatch(context.Background(), "feedbacks_content",
+		[][]byte{{0x02, 0x01, 0x02}}, []int16{})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "length mismatch")
+}
+
 // TestCipherService_DecryptUnknownKeyVersion 验证：未注册的 keyVersion 解密返
 // ErrCipherUnknownKeyVersion 而非默默用错 key 解出乱码（finding L7 配置漏防御）。
 func TestCipherService_DecryptUnknownKeyVersion(t *testing.T) {

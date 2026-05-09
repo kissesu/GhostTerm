@@ -294,13 +294,19 @@ func (s *paymentService) List(ctx context.Context, sc SessionContext, projectID 
 		}
 		rows.Close()
 
-		// 解密 remark + 解析 attachments
-		for _, e := range encs {
-			plaintext, err := s.cipher.Decrypt(ctx, "payments_remark", e.remarkCipher, e.remarkKeyVer)
-			if err != nil {
-				return fmt.Errorf("payment: decrypt remark id=%d: %w", e.p.ID, err)
-			}
-			e.p.Remark = plaintext
+		// 批量解密 remark（finding M7）+ 逐行解析 attachments
+		cts := make([][]byte, len(encs))
+		vers := make([]int16, len(encs))
+		for i, e := range encs {
+			cts[i] = e.remarkCipher
+			vers[i] = e.remarkKeyVer
+		}
+		plaintexts, err := s.cipher.DecryptBatch(ctx, "payments_remark", cts, vers)
+		if err != nil {
+			return fmt.Errorf("payment: batch decrypt remark: %w", err)
+		}
+		for i, e := range encs {
+			e.p.Remark = plaintexts[i]
 			atts, err := decodePaymentAttachments(e.attachmentsRaw)
 			if err != nil {
 				return fmt.Errorf("payment: decode attachments: %w", err)
