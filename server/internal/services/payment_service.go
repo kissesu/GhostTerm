@@ -33,6 +33,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -171,10 +172,13 @@ type EarningsSummary struct {
 // 生产 main.go 必传以驱动 settlement_received 通知。
 //
 // finding #4：Cipher 必填，写入前加密 remark / 读取后解密。
+//
+// Hub 可选 —— nil 时跳过 SSE 广播（向后兼容旧测试）；生产传 eventHub（spec v3.5 §6）。
 type PaymentServiceDeps struct {
 	Pool                *pgxpool.Pool
 	NotificationService NotificationService
 	Cipher              *CipherService
+	Hub                 EventHub
 }
 
 // paymentService 是 PaymentService 的具体实现。
@@ -182,6 +186,7 @@ type paymentService struct {
 	pool   *pgxpool.Pool
 	notif  NotificationService // Phase 12：可选；nil 时跳过通知
 	cipher *CipherService      // finding #4：列级加密 wrapper
+	hub    EventHub            // SSE 广播 hub；nil 时跳过广播保留向后兼容（spec v3.5 §6）
 }
 
 // 编译时校验：实现满足 PaymentService 接口契约（interfaces.go 中已声明）
@@ -199,6 +204,7 @@ func NewPaymentService(deps PaymentServiceDeps) (PaymentService, error) {
 		pool:   deps.Pool,
 		notif:  deps.NotificationService,
 		cipher: deps.Cipher,
+		hub:    deps.Hub,
 	}, nil
 }
 
@@ -534,6 +540,23 @@ func (s *paymentService) Create(ctx context.Context, sc SessionContext, projectI
 	if err != nil {
 		return nil, err
 	}
+
+	// SSE 实时同步：commit 成功后广播 payment.created，让项目相关用户刷新款项列表。
+	if s.hub != nil {
+		targets, terr := queryProjectTargetUsers(context.Background(), s.pool, projectID)
+		if terr != nil {
+			log.Printf("payment_service.Create: query targets: %v", terr)
+		} else {
+			s.hub.Publish(Event{
+				Type:          EventPaymentCreated,
+				OccurredAt:    time.Now(),
+				ActorUserID:   ac.UserID,
+				Data:          out,
+				TargetUserIDs: targets,
+			})
+		}
+	}
+
 	return out, nil
 }
 

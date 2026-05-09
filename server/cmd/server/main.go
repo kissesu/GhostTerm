@@ -193,11 +193,12 @@ func main() {
 		log.Fatalf("init notification service: %v", err)
 	}
 
-	// 重新构造 feedback / payment service，注入通知（参见 worker D / F minimal touch）
+	// 重新构造 feedback / payment service，注入通知 + SSE hub（spec v3.5 §6 P1.6）
 	feedbackSvc, err = services.NewFeedbackService(services.FeedbackServiceDeps{
 		Pool:                pool,
 		NotificationService: notifSvc,
 		Cipher:              cipherSvc,
+		Hub:                 eventHub,
 	})
 	if err != nil {
 		log.Fatalf("init feedback service (with notif): %v", err)
@@ -206,6 +207,7 @@ func main() {
 		Pool:                pool,
 		NotificationService: notifSvc,
 		Cipher:              cipherSvc,
+		Hub:                 eventHub,
 	})
 	if err != nil {
 		log.Fatalf("init payment service (with notif): %v", err)

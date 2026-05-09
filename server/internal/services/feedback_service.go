@@ -32,6 +32,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -114,6 +115,7 @@ type feedbackService struct {
 	pool   *pgxpool.Pool
 	notif  NotificationService // Phase 12：可选，nil 时跳过通知（向后兼容旧测试）
 	cipher *CipherService      // finding #4：列级加密 wrapper，写入前加密 / 读取后解密 content
+	hub    EventHub            // SSE 广播 hub；nil 时跳过广播保留向后兼容（spec v3.5 §6）
 }
 
 // 编译时校验
@@ -125,10 +127,13 @@ var _ FeedbackService = (*feedbackService)(nil)
 // 生产 main.go 必传以驱动 new_feedback 通知。
 //
 // finding #4：Cipher 必填 —— 测试也要走加密路径（与生产一致），nil 视为配置漂移立即拒绝。
+//
+// Hub 可选 —— nil 时跳过 SSE 广播（向后兼容旧测试）；生产传 eventHub（spec v3.5 §6）。
 type FeedbackServiceDeps struct {
 	Pool                *pgxpool.Pool
 	NotificationService NotificationService
 	Cipher              *CipherService
+	Hub                 EventHub
 }
 
 // NewFeedbackService 构造 FeedbackService。
@@ -143,6 +148,7 @@ func NewFeedbackService(deps FeedbackServiceDeps) (FeedbackService, error) {
 		pool:   deps.Pool,
 		notif:  deps.NotificationService,
 		cipher: deps.Cipher,
+		hub:    deps.Hub,
 	}, nil
 }
 
@@ -437,6 +443,23 @@ func (s *feedbackService) Create(ctx context.Context, sc SessionContext, project
 	if err != nil {
 		return nil, err
 	}
+
+	// SSE 实时同步：commit 成功后广播 feedback.created，让项目相关用户刷新反馈列表。
+	if s.hub != nil {
+		targets, terr := queryProjectTargetUsers(context.Background(), s.pool, projectID)
+		if terr != nil {
+			log.Printf("feedback_service.Create: query targets: %v", terr)
+		} else {
+			s.hub.Publish(Event{
+				Type:          EventFeedbackCreated,
+				OccurredAt:    time.Now(),
+				ActorUserID:   ac.UserID,
+				Data:          f,
+				TargetUserIDs: targets,
+			})
+		}
+	}
+
 	return f, nil
 }
 

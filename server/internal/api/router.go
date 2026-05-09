@@ -597,7 +597,8 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	// ============================================================
 	// Task 7/8 effSvc 提前构造，让 AuthHandler 也能注入（替代旧 RBAC.LoadUserPermissions）
 	// finding #20：用 NewPermissionsServiceWithAudit 让 super_admin_action 事件写审计
-	permsSvc := services.NewPermissionsServiceWithAudit(deps.Pool, deps.Audit)
+	// spec v3.5 §6 P1.6：注入 EventHub 让 UpdateRolePermissions 广播 role_permissions.updated
+	permsSvc := services.NewPermissionsServiceWithAudit(deps.Pool, deps.Audit, deps.EventHub)
 	effSvc := services.NewEffectivePermissionsService(deps.Pool)
 
 	authHandler := handlers.NewAuthHandler(deps.AuthService, deps.RBACService, effSvc)

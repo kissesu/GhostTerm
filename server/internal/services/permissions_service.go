@@ -36,6 +36,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -120,6 +122,7 @@ type PermissionsService interface {
 type permissionsService struct {
 	pool  *pgxpool.Pool
 	audit *AuditService
+	hub   EventHub // SSE 广播 hub；nil 时跳过广播保留向后兼容（spec v3.5 §6）
 }
 
 // 编译时校验
@@ -133,12 +136,13 @@ func NewPermissionsService(pool *pgxpool.Pool) PermissionsService {
 	return &permissionsService{pool: pool}
 }
 
-// NewPermissionsServiceWithAudit 构造带审计的 PermissionsService。
+// NewPermissionsServiceWithAudit 构造带审计和 SSE 广播的 PermissionsService。
 //
 // 业务背景（finding #20）：role/user 权限变更是高敏感操作，
 // 注入 audit 后 UpdateRolePermissions / UpdateUserOverrides 写 super_admin_action 事件。
-func NewPermissionsServiceWithAudit(pool *pgxpool.Pool, audit *AuditService) PermissionsService {
-	return &permissionsService{pool: pool, audit: audit}
+// hub 可为 nil（旧测试保留向后兼容），非 nil 时 UpdateRolePermissions 在 commit 后广播事件。
+func NewPermissionsServiceWithAudit(pool *pgxpool.Pool, audit *AuditService, hub EventHub) PermissionsService {
+	return &permissionsService{pool: pool, audit: audit, hub: hub}
 }
 
 // ----------------------------------------------------------
@@ -244,6 +248,23 @@ func (s *permissionsService) UpdateRolePermissions(ctx context.Context, roleID i
 			"new_permission_ids": permissionIDs,
 		},
 	})
+
+	// SSE 实时同步：commit 成功后广播 role_permissions.updated，
+	// 让该 role 下所有在线用户立即重拉 effective-permissions。
+	if s.hub != nil {
+		targets, terr := queryRoleUserIDs(ctx, s.pool, roleID)
+		if terr != nil {
+			log.Printf("permissions_service.UpdateRolePermissions: query role user ids: %v", terr)
+		} else {
+			s.hub.Publish(Event{
+				Type:          EventRolePermissionsUpdated,
+				OccurredAt:    time.Now(),
+				ActorUserID:   actorID,
+				Data:          map[string]int64{"roleId": roleID},
+				TargetUserIDs: targets,
+			})
+		}
+	}
 	return nil
 }
 

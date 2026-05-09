@@ -632,7 +632,28 @@ func (s *ProjectServiceImpl) Update(
 		out = p
 		return nil
 	})
-	return out, err
+	if err != nil {
+		return nil, err
+	}
+
+	// SSE 实时同步：commit 成功后才广播 project.updated 事件。
+	// hub == nil 时跳过广播（旧测试 / 不注入 hub 的部署保留向后兼容）。
+	if s.hub != nil {
+		targets, terr := queryProjectTargetUsers(context.Background(), s.pool, out.ID)
+		if terr != nil {
+			log.Printf("project_service.Update: query targets: %v", terr)
+		} else {
+			s.hub.Publish(Event{
+				Type:          EventProjectUpdated,
+				OccurredAt:    time.Now(),
+				ActorUserID:   userID,
+				Data:          out,
+				TargetUserIDs: targets,
+			})
+		}
+	}
+
+	return out, nil
 }
 
 // ============================================================
@@ -725,7 +746,28 @@ func (s *ProjectServiceImpl) TriggerEvent(
 		out = p
 		return nil
 	})
-	return out, err
+	if err != nil {
+		return nil, err
+	}
+
+	// SSE 实时同步：状态机事件推进后广播 project.updated。
+	// TriggerEvent 是所有状态变更的统一入口，因此只在这一处 publish 即可覆盖全部事件。
+	if s.hub != nil {
+		targets, terr := queryProjectTargetUsers(context.Background(), s.pool, out.ID)
+		if terr != nil {
+			log.Printf("project_service.TriggerEvent: query targets: %v", terr)
+		} else {
+			s.hub.Publish(Event{
+				Type:          EventProjectUpdated,
+				OccurredAt:    time.Now(),
+				ActorUserID:   userID,
+				Data:          out,
+				TargetUserIDs: targets,
+			})
+		}
+	}
+
+	return out, nil
 }
 
 // ============================================================
@@ -860,29 +902,8 @@ func scanProject(s rowScanner) (*ProjectModel, error) {
 	return &p, nil
 }
 
-// queryProjectTargetUsers 算事件目标用户 ID 集合：
-// - 全部 active admin（role_id=1）
-// - 该项目的全部 project_members
-//
-// 业务背景（spec v3.5 §6）：用 service 层 raw pool 查询，不带 RLS GUC，
-// admin 和成员都在白名单内；UNION 去重。
+// queryProjectTargetUsers method wrapper — 委托给 event_targets.go 包级 helper。
+// 保留 method 形式便于 Create 中调用；DRY 实现已迁移至 event_targets.go。
 func (s *ProjectServiceImpl) queryProjectTargetUsers(ctx context.Context, projectID int64) ([]int64, error) {
-	rows, err := s.pool.Query(ctx, `
-		SELECT u.id FROM users u WHERE u.is_active AND u.role_id = 1
-		UNION
-		SELECT pm.user_id FROM project_members pm WHERE pm.project_id = $1
-	`, projectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []int64
-	for rows.Next() {
-		var uid int64
-		if err := rows.Scan(&uid); err != nil {
-			return nil, err
-		}
-		out = append(out, uid)
-	}
-	return out, rows.Err()
+	return queryProjectTargetUsers(ctx, s.pool, projectID)
 }
