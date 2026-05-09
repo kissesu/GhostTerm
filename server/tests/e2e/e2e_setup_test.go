@@ -155,7 +155,11 @@ func setup() (func(), error) {
 	}
 
 	pgPort := resource.GetPort("5432/tcp")
+	// superuser DSN：跑 migrate（CREATE ROLE / GRANT）+ pgPool 用于 seed（NOBYPASSRLS bypass）
 	dsn := fmt.Sprintf("postgres://postgres:test@127.0.0.1:%s/progress_e2e?sslmode=disable", pgPort)
+	// 业务 DSN：用 progress_app NOBYPASSRLS 启 server，满足 main.go assertProgressAppRole
+	// 安全 H1 校验（aa88342 起强制 session_user='progress_app'，superuser 启 server 直接 fail-fast）
+	appDsn := fmt.Sprintf("postgres://progress_app:e2e_app@127.0.0.1:%s/progress_e2e?sslmode=disable", pgPort)
 
 	// 等 Postgres ready
 	var pgPool *pgxpool.Pool
@@ -201,10 +205,19 @@ func setup() (func(), error) {
 	}
 	_, _ = mig.Close()
 
-	// 注：e2e 用 postgres 超级用户连，与 integration tests 保持一致行为。
-	// 真正的 RLS 隔离（progress_app NOBYPASSRLS）需要 ops 在 0001 后单独
-	// 设密码 + 重新部署 server，在 e2e 环境内成本过高。
-	// 受影响 RLS 测试通过 dev_earnings_view security_barrier 间接验证。
+	// 给 progress_app 设密码让 server 能用业务角色启（main.go:assertProgressAppRole
+	// H1 校验要求 session_user='progress_app'）。pgPool 仍用 superuser 做 seed
+	// 避开 RLS。
+	//
+	// 这里同时给 progress_app BYPASSRLS：e2e 测业务流不测 RLS denial，
+	// production 0001 init 保持 NOBYPASSRLS（部署 runbook 不动）；RLS 隔离由
+	// integration tests + dev_earnings_view security_barrier 单独保证。BYPASSRLS
+	// 让 e2e 等同迁移前 superuser 行为，但 session_user 仍是 progress_app 满足 H1。
+	if _, err := pgPool.Exec(context.Background(), "ALTER ROLE progress_app WITH PASSWORD 'e2e_app' BYPASSRLS"); err != nil {
+		teardownPool()
+		teardownPurge()
+		return nil, fmt.Errorf("set progress_app password+bypassrls: %w", err)
+	}
 
 	// ============================================================
 	// 第三步：编译 server 二进制
@@ -244,7 +257,7 @@ func setup() (func(), error) {
 
 	cmd := exec.Command(binPath)
 	cmd.Env = append(os.Environ(),
-		"DATABASE_URL="+dsn,
+		"DATABASE_URL="+appDsn,
 		"HTTP_ADDR="+addr,
 		"JWT_ACCESS_SECRET="+e2eAccessSecret,
 		"JWT_REFRESH_SECRET="+e2eRefreshSecret,
