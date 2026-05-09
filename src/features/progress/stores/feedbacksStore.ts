@@ -15,6 +15,8 @@ interface FeedbacksState {
   errorByProject: Map<number, string>;
   loadByProject: (projectId: number) => Promise<void>;
   add: (projectId: number, input: CreateFeedbackInput) => Promise<Feedback>;
+  /** 增量 patch：把单条 Feedback 加入该 projectId 的列表（已存在同 id 则替换） */
+  upsertByProject: (projectId: number, fb: Feedback) => void;
   clear: () => void;
 }
 
@@ -52,6 +54,17 @@ export const useFeedbacksStore = create<FeedbacksState>((set, get) => ({
     byProject.set(projectId, [...existing, fb]);
     set({ byProject });
     return fb;
+  },
+
+  upsertByProject: (projectId, fb) => {
+    const byProject = new Map(get().byProject);
+    const existing = byProject.get(projectId) ?? [];
+    const idx = existing.findIndex((item) => item.id === fb.id);
+    const next = idx >= 0
+      ? existing.map((item) => item.id === fb.id ? fb : item)
+      : [...existing, fb];
+    byProject.set(projectId, next);
+    set({ byProject });
   },
 
   clear: () => set({ byProject: new Map(), loadingByProject: new Set(), errorByProject: new Map() }),

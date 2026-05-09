@@ -47,6 +47,8 @@ interface AtlasRolesState {
   saveRolePermissions: (roleId: number) => Promise<void>;
   resetRoleEdits: (roleId: number) => void;
   clearError: () => void;
+  /** 失效该 roleId 的本地 rolePermissions 快照 → 触发全量重拉（5 人场景代价低） */
+  invalidateRole: (_roleId: number) => void;
 }
 
 // 工具：复制 Set
@@ -148,5 +150,10 @@ export const useAtlasRolesStore = create<AtlasRolesState>((set, get) => ({
 
   clearError() {
     set({ error: null });
+  },
+
+  invalidateRole: (_roleId) => {
+    // 简单实现：全量重拉（5 人场景代价低；参数保留供未来精准失效扩展）
+    void get().load();
   },
 }));

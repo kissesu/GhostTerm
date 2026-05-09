@@ -23,6 +23,8 @@ interface ProjectsState {
   create: (input: CreateProjectInput) => Promise<Project>;
   triggerEvent: (id: number, input: TriggerEventInput) => Promise<Project>;
   clearTriggerError: (id: number) => void;
+  /** 增量 patch：把单个 Project 写入 Map（实时同步事件用） */
+  upsert: (p: Project) => void;
   clear: () => void;
 }
 
@@ -107,6 +109,12 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
     const errs = new Map(get().triggerErrorByProject);
     errs.delete(id);
     set({ triggerErrorByProject: errs });
+  },
+
+  upsert: (p) => {
+    const map = new Map(get().projects);
+    map.set(p.id, p);
+    set({ projects: map });
   },
 
   clear: () => set({

@@ -14,6 +14,8 @@ interface PaymentsState {
   errorByProject: Map<number, string>;
   loadByProject: (projectId: number) => Promise<void>;
   addPayment: (projectId: number, payload: PaymentCreatePayload) => Promise<Payment>;
+  /** 增量 patch：把单条 Payment 加入该 projectId 的列表（已存在同 id 则替换） */
+  upsertByProject: (projectId: number, pmt: Payment) => void;
   clear: () => void;
 }
 
@@ -51,6 +53,17 @@ export const usePaymentsStore = create<PaymentsState>((set, get) => ({
     byProject.set(projectId, [...existing, payment]);
     set({ byProject });
     return payment;
+  },
+
+  upsertByProject: (projectId, pmt) => {
+    const byProject = new Map(get().byProject);
+    const existing = byProject.get(projectId) ?? [];
+    const idx = existing.findIndex((item) => item.id === pmt.id);
+    const next = idx >= 0
+      ? existing.map((item) => item.id === pmt.id ? pmt : item)
+      : [...existing, pmt];
+    byProject.set(projectId, next);
+    set({ byProject });
   },
 
   clear: () => set({ byProject: new Map(), loadingByProject: new Set(), errorByProject: new Map() }),
