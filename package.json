@@ -1,7 +1,7 @@
 {
   "name": "ghostterm",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.6.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -71,5 +71,11 @@
     "typescript": "~5.8.3",
     "vite": "^7.0.4",
     "vitest": "^3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "msw"
+    ]
   }
 }
