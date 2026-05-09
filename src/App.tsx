@@ -15,6 +15,7 @@ import { useUpdater } from './features/updater/useUpdater';
 import UpdateBanner from './features/updater/UpdateBanner';
 import { useOpenWithFile } from './shared/hooks/useOpenWithFile';
 import SearchModal from './features/search/SearchModal';
+import { useEventStream } from './features/realtime/useEventStream';
 
 function App() {
   const appView  = useSettingsStore((s) => s.appView);
@@ -23,6 +24,9 @@ function App() {
 
   // 处理系统"打开方式"传入的文件（macOS Apple Event + Windows CLI 参数）
   useOpenWithFile();
+
+  // SSE 实时同步：accessToken 缺失时 hook 内部跳过 invoke，登录后会因 store 变化重挂载（spec v3.5 §8）
+  useEventStream();
 
   useEffect(() => {
     // 跟随系统偏好的 media query
