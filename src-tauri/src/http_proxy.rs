@@ -117,7 +117,7 @@ pub async fn http_request_cmd(
     let resp = req
         .send()
         .await
-        .map_err(|e| format!("http_proxy: send failed: {e}"))?;
+        .map_err(|e| format!("http_proxy: send failed: {e:?}"))?;
 
     let status = resp.status().as_u16();
     let resp_headers: HashMap<String, String> = resp
@@ -216,7 +216,7 @@ pub async fn http_request_multipart_cmd(
     let resp = req
         .send()
         .await
-        .map_err(|e| format!("http_proxy: multipart send failed: {e}"))?;
+        .map_err(|e| format!("http_proxy: multipart send failed: {e:?}"))?;
 
     let status = resp.status().as_u16();
     let resp_headers: HashMap<String, String> = resp
