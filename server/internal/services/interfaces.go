@@ -331,6 +331,20 @@ type Notification struct {
 	DeliveredAt *time.Time // outbox 已推送时间；nil 表示待推送
 }
 
+// EventHub SSE 实时同步广播 hub（与 WSHub 独立；spec v3.5 §5）
+//
+// 业务背景：
+// - 每个在线客户端持一个 SSE 连接，Subscribe 返回 channel + deregister 闭包
+// - Publish 按 Event.TargetUserIDs 路由；若为空则广播所有在线用户
+// - LatestEventID 供心跳帧填入，让客户端发现漏帧后主动重拉
+// - OnlineUsers 返回当前在线 userID→连接数 map（用于心跳日志/监控）
+type EventHub interface {
+	Subscribe(userID int64) (<-chan Event, func())
+	Publish(evt Event)
+	LatestEventID() int64
+	OnlineUsers() map[int64]int
+}
+
 // WSHub 是 NotificationService 推送通知的下游接口。
 //
 // 业务背景：
