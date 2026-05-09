@@ -346,6 +346,7 @@ func buildPermissionTestRouter(t *testing.T, pool *pgxpool.Pool) http.Handler {
 		PaymentService:      paymentSvc,
 		NotificationService: notifSvc,
 		WSHub:               wsHub,
+		EventHub:            services.NewEventHub(),
 		Cipher:              cipher,
 		Audit:               auditSvc,
 	})

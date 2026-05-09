@@ -280,6 +280,7 @@ func buildC2TestRouter(t *testing.T, pool *pgxpool.Pool, allowedOrigins ...strin
 		PaymentService:      paymentSvc,
 		NotificationService: notifSvc,
 		WSHub:               wsHub,
+		EventHub:            services.NewEventHub(),
 		AllowedOrigins:      allowedOrigins,
 		Cipher:              cipher,
 		Audit:               auditSvc,

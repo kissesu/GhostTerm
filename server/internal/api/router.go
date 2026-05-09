@@ -418,6 +418,7 @@ type RouterDeps struct {
 	PaymentService      services.PaymentService
 	NotificationService services.NotificationService
 	WSHub               services.WSHub
+	EventHub            services.EventHub
 
 	// RateLimit 可选：nil 时使用 sane default（5/10/30 per min）。
 	// 测试场景一般留空走默认；生产由 Config 注入便于通过 env 调参。
@@ -504,6 +505,9 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	}
 	if deps.WSHub == nil {
 		return nil, errors.New("router: WSHub is required")
+	}
+	if deps.EventHub == nil {
+		return nil, errors.New("router: EventHub is required")
 	}
 	if deps.Cipher == nil {
 		return nil, errors.New("router: Cipher is required")
@@ -659,6 +663,12 @@ func NewRouter(deps RouterDeps) (http.Handler, error) {
 	// 不走 ogen 因为 ogen 不支持 WS 升级；openapi.yaml 中仅声明该 endpoint 元数据
 	// ============================================================
 	r.Get("/api/ws/notifications", handlers.NewWSHandler(deps.AuthService, deps.WSHub))
+
+	// SSE endpoint：必须在 r.Mount("/") 之前注册（同 WS 模式，chi 优先精确路径）
+	//
+	// 协议：GET /api/events?ticket=<base64url> → 流式推送事件帧 + 30s 心跳
+	// 不走 ogen 因为 ogen 不支持 streaming response
+	r.Get("/api/events", handlers.NewEventsSSEHandler(deps.AuthService, deps.EventHub))
 
 	// ============================================================
 	// 登录与 refresh 速率限制（v2 安全审计 finding #7）

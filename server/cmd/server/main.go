@@ -180,6 +180,8 @@ func main() {
 	//    所以这两个 service 在 notif 之后构造（覆盖前面已经写过的 feedbackSvc / paymentSvc）
 	// ============================================
 	wsHub := services.NewWSHub()
+	// EventHub：SSE 实时同步广播（与 WSHub 独立，互不干扰）
+	eventHub := services.NewEventHub()
 	notifSvc, err := services.NewNotificationService(services.NotificationServiceDeps{
 		Pool: pool,
 		Hub:  wsHub,
@@ -231,6 +233,7 @@ func main() {
 		PaymentService:      paymentSvc,
 		NotificationService: notifSvc,
 		WSHub:               wsHub,
+		EventHub:            eventHub,
 		Cipher:              cipherSvc,
 		Audit:               auditSvc,
 		// finding #7：登录与 refresh 速率限制由 env 注入，便于按部署调参；
