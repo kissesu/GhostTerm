@@ -75,7 +75,7 @@ base64 = "0.22"
 # default-features = false + rustls-tls：避免 OpenSSL 依赖；跨平台一致；支持 dangerous_accept_invalid_certs
 # 业务背景：progress-server 用自签 IP 证书，WebView 原生 fetch 不能跳过 cert 验证，
 # 必须通过 reqwest 在 Rust 层做 HTTP 转发；前端 invoke 'http_request_cmd' 调用
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "multipart"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "multipart", "stream"] }
 
 # GlitchTip 错误监控 + panic 自动转发；rustls feature 让内部 reqwest 走 rustls 不拉 OpenSSL
 # 业务背景：编内 atlas-cert pinning 走 reqwest，sentry 自带 transport 独立另条 reqwest 链路（DSN 是 http :38090 不需 cert pinning）
@@ -92,6 +92,12 @@ keyring = "3"
 
 # URL 解析 - finding #22: clone_repository_cmd 白名单校验，解析 https:// host 字段
 url = "2"
+
+# URL 百分比编码 - SSE ticket 传参前编码，防止 base64url 中 + 等字符被服务端误解析
+urlencoding = "2"
+
+# 日志输出 - SSE 重连、漏帧告警（间接依赖显式化）
+log = "0.4"
 
 # 错误类型派生 - finding #22: GitUrlError 枚举的 Display/Error 实现
 thiserror = "1"

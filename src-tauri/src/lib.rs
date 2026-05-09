@@ -18,6 +18,7 @@ pub mod http_proxy;
 pub mod auth_secret;
 pub mod git_url_validator;
 pub mod monitoring;
+pub mod sse_client;
 
 // PBI-1 Commands
 use pty_manager::{spawn_pty_cmd, kill_pty_cmd, resize_pty_cmd, reconnect_pty_cmd, get_default_shell_cmd};
@@ -206,6 +207,8 @@ pub fn run() {
             // GlitchTip user scope 同步（前端 login/logout 时 invoke）
             set_sentry_user_cmd,
             clear_sentry_user_cmd,
+            // P2.2: SSE 实时推送订阅（spec v3.5 §7）
+            sse_client::subscribe_events_cmd,
         ])
         // ============================================
         // 改用 build().run() 以便在 RunEvent 回调中处理 macOS"打开方式"事件
