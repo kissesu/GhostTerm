@@ -69,19 +69,21 @@ func NewAuthHandler(
 // 错误映射：
 //   - ErrInvalidCredentials → 401 unauthorized
 //   - ErrUserInactive       → 401 unauthorized（不暴露 active 状态防 enumeration）
-//   - ErrPasswordNotSet     → 401 unauthorized + 特定 message（finding #18 / 0021 migration）
-//     前端按 message 中"首次设置"关键字识别并展示对应引导
+//   - ErrPasswordNotSet     → 401 unauthorized + details.reason='password_not_set'（finding Info follow-up）
+//     前端按 details.reason 精确识别"首次设置"场景，无需再做 message 字符串匹配
 //   - 其它                  → 500 internal（由 ogen 默认 ErrorHandler 包裹）
 //
-// 注：password_not_set 没有走专用 ErrorEnvelopeErrorCode 是为了避免本 task 触发
-// OAS contract 扩展 + ogen regen + 前端 zod 同步。前端识别用 message 关键字即可。
+// finding Info follow-up（2026-05-09）：
+//   ErrorEnvelope.error.details 是 OAS 早就声明的 additionalProperties:true nullable:true
+//   字段，前端 zod schema 同步无需改动；这里把 password_not_set 信号通过结构化字段下发，
+//   前端取 details.reason 即可，比依赖 message 文案更稳。
 func (h *AuthHandler) AuthLogin(ctx context.Context, req *oas.AuthLoginRequest) (oas.AuthLoginRes, error) {
 	access, refresh, raw, err := h.Svc.Login(ctx, req.Username, req.Password)
 	if err != nil {
 		if errors.Is(err, services.ErrPasswordNotSet) {
 			// 用户存在但密码未设置（0021 migration 后的默认 admin）
-			// 前端识别"首次设置"关键字 → 展示"请联系运维 reseed 密码"
-			return unauthorizedLoginRes("管理员需要首次设置密码，请联系系统管理员"), nil
+			// 前端识别 details.reason='password_not_set' → 展示"请联系运维 reseed 密码"
+			return passwordNotSetLoginRes(), nil
 		}
 		if errors.Is(err, services.ErrInvalidCredentials) || errors.Is(err, services.ErrUserInactive) {
 			return unauthorizedLoginRes("用户名或密码错误"), nil
@@ -368,6 +370,28 @@ func toOASUser(u services.AuthUser) oas.User {
 // 错误 schema 漂移）；AuthLoginUnauthorized 是 ErrorEnvelope 的别名。
 func unauthorizedLoginRes(msg string) *oas.AuthLoginUnauthorized {
 	envelope := newErrorEnvelope(oas.ErrorEnvelopeErrorCodeUnauthorized, msg)
+	res := oas.AuthLoginUnauthorized(envelope)
+	return &res
+}
+
+// passwordNotSetLoginRes 构造 password_not_set 专用 401 envelope（finding Info follow-up）。
+//
+// 业务背景：
+//   - 用户存在但 password_hash 为 NULL（0021 migration 后的默认 admin）
+//   - 前端识别 details.reason='password_not_set' 走"请联系运维 reseed"引导流程
+//   - code 仍走 unauthorized（OAS 枚举）保持向后兼容；reason 通过 details 双通道下发
+//   - 与 refreshTokenReusedEnvelope 同模式，让 401 子类型可被前端区分对待
+func passwordNotSetLoginRes() *oas.AuthLoginUnauthorized {
+	details := oas.ErrorEnvelopeErrorDetails{
+		"reason": jx.Raw(`"password_not_set"`),
+	}
+	envelope := oas.ErrorEnvelope{
+		Error: oas.ErrorEnvelopeError{
+			Code:    oas.ErrorEnvelopeErrorCodeUnauthorized,
+			Message: "管理员需要首次设置密码，请联系系统管理员",
+			Details: oas.NewOptNilErrorEnvelopeErrorDetails(details),
+		},
+	}
 	res := oas.AuthLoginUnauthorized(envelope)
 	return &res
 }

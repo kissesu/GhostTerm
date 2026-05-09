@@ -198,7 +198,7 @@ func (s *feedbackService) List(ctx context.Context, sc SessionContext, projectID
 		}
 
 		rows, err := tx.Query(ctx, `
-			SELECT id, project_id, content, source::TEXT, status::TEXT, recorded_by, recorded_at
+			SELECT id, project_id, content, content_key_version, source::TEXT, status::TEXT, recorded_by, recorded_at
 			FROM feedbacks
 			WHERE project_id = $1
 			ORDER BY recorded_at ASC
@@ -212,36 +212,46 @@ func (s *feedbackService) List(ctx context.Context, sc SessionContext, projectID
 		// 不能在 rows.Next 循环内调 cipher.Decrypt —— 那会在主连接迭代游标时
 		// 再借另一连接出去做 SELECT pgp_sym_decrypt（pool 异步 OK），但保留缓存
 		// 模式让逻辑更清晰且未来若改成 batch decrypt 也容易。
+		// content_key_version 一并 scan：finding L7 follow-up 让 Decrypt 按 row 版本路由 master key。
 		type encryptedRow struct {
-			f      Feedback
-			cipher []byte
+			f          Feedback
+			cipher     []byte
+			keyVersion int16
 		}
 		var encRows []encryptedRow
 		for rows.Next() {
 			var (
-				f      Feedback
-				cipher []byte
+				f          Feedback
+				cipher     []byte
+				keyVersion int16
 			)
 			if err := rows.Scan(
-				&f.ID, &f.ProjectID, &cipher, &f.Source, &f.Status,
+				&f.ID, &f.ProjectID, &cipher, &keyVersion, &f.Source, &f.Status,
 				&f.RecordedBy, &f.RecordedAt,
 			); err != nil {
 				return fmt.Errorf("feedback_service: scan feedback: %w", err)
 			}
-			encRows = append(encRows, encryptedRow{f: f, cipher: cipher})
+			encRows = append(encRows, encryptedRow{f: f, cipher: cipher, keyVersion: keyVersion})
 		}
 		if err := rows.Err(); err != nil {
 			return fmt.Errorf("feedback_service: iterate feedbacks: %w", err)
 		}
 		rows.Close()
 
-		// content 解密（每行一次 pool round-trip；行数通常 0~50 在可接受范围）
-		for _, er := range encRows {
-			plaintext, err := s.cipher.Decrypt(ctx, "feedbacks_content", er.cipher)
-			if err != nil {
-				return fmt.Errorf("feedback_service: decrypt content id=%d: %w", er.f.ID, err)
-			}
-			er.f.Content = plaintext
+		// content 批量解密（finding M7）：v2 桶 in-memory N 条共用 deriveKey；
+		// v1 桶用一次 SELECT pgp_sym_decrypt(unnest...) 替代 N 次 round-trip
+		cts := make([][]byte, len(encRows))
+		vers := make([]int16, len(encRows))
+		for i, er := range encRows {
+			cts[i] = er.cipher
+			vers[i] = er.keyVersion
+		}
+		plaintexts, err := s.cipher.DecryptBatch(ctx, "feedbacks_content", cts, vers)
+		if err != nil {
+			return fmt.Errorf("feedback_service: batch decrypt content: %w", err)
+		}
+		for i, er := range encRows {
+			er.f.Content = plaintexts[i]
 			feedbacks = append(feedbacks, er.f)
 		}
 
@@ -323,7 +333,7 @@ func (s *feedbackService) Create(ctx context.Context, sc SessionContext, project
 	//     在 InTx 内会请求第二个 pool 连接 → pool size=1 时 deadlock
 	// 不要在 InTx 内调 cipher.Decrypt 除非确认 pool size ≥ 2；
 	// 当前架构 cipher 调用全部在 tx 之外，符合 reviewer M6 建议。
-	encContent, err := s.cipher.Encrypt(ctx, "feedbacks_content", content)
+	encContent, contentKeyVer, err := s.cipher.Encrypt(ctx, "feedbacks_content", content)
 	if err != nil {
 		return nil, fmt.Errorf("feedback_service: encrypt content: %w", err)
 	}
@@ -343,18 +353,20 @@ func (s *feedbackService) Create(ctx context.Context, sc SessionContext, project
 			row             pgx.Row
 			returnedContent []byte
 		)
+		// content_key_version 一并 INSERT：finding L7 follow-up；让未来轮换主密钥时
+		// 老行可按 row 版本继续解密，无需一次性全表 backfill。
 		if in.Source == "" {
 			row = tx.QueryRow(ctx, `
-				INSERT INTO feedbacks (project_id, content, recorded_by, client_ip, user_agent)
-				VALUES ($1, $2, $3, $4, $5)
+				INSERT INTO feedbacks (project_id, content, content_key_version, recorded_by, client_ip, user_agent)
+				VALUES ($1, $2, $3, $4, $5, $6)
 				RETURNING id, project_id, content, source::TEXT, status::TEXT, recorded_by, recorded_at
-			`, projectID, encContent, ac.UserID, NullableIP(md.ClientIP), md.UserAgent)
+			`, projectID, encContent, contentKeyVer, ac.UserID, NullableIP(md.ClientIP), md.UserAgent)
 		} else {
 			row = tx.QueryRow(ctx, `
-				INSERT INTO feedbacks (project_id, content, source, recorded_by, client_ip, user_agent)
-				VALUES ($1, $2, $3::feedback_source, $4, $5, $6)
+				INSERT INTO feedbacks (project_id, content, content_key_version, source, recorded_by, client_ip, user_agent)
+				VALUES ($1, $2, $3, $4::feedback_source, $5, $6, $7)
 				RETURNING id, project_id, content, source::TEXT, status::TEXT, recorded_by, recorded_at
-			`, projectID, encContent, in.Source, ac.UserID, NullableIP(md.ClientIP), md.UserAgent)
+			`, projectID, encContent, contentKeyVer, in.Source, ac.UserID, NullableIP(md.ClientIP), md.UserAgent)
 		}
 		if err := row.Scan(
 			&f.ID, &f.ProjectID, &returnedContent, &f.Source, &f.Status,
@@ -474,15 +486,19 @@ func (s *feedbackService) UpdateStatus(ctx context.Context, sc SessionContext, f
 		}
 
 		// content RETURNING 是 BYTEA 密文，scan 到 []byte 后调 cipher.Decrypt 拿明文
-		var encContent []byte
+		// content_key_version 一并 RETURNING（finding L7）：让 Decrypt 按 row 版本选 master key
+		var (
+			encContent    []byte
+			contentKeyVer int16
+		)
 		row := tx.QueryRow(ctx, `
 			UPDATE feedbacks
 			SET status = $1::feedback_status
 			WHERE id = $2
-			RETURNING id, project_id, content, source::TEXT, status::TEXT, recorded_by, recorded_at
+			RETURNING id, project_id, content, content_key_version, source::TEXT, status::TEXT, recorded_by, recorded_at
 		`, status, feedbackID)
 		if err := row.Scan(
-			&f.ID, &f.ProjectID, &encContent, &f.Source, &f.Status,
+			&f.ID, &f.ProjectID, &encContent, &contentKeyVer, &f.Source, &f.Status,
 			&f.RecordedBy, &f.RecordedAt,
 		); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -490,7 +506,7 @@ func (s *feedbackService) UpdateStatus(ctx context.Context, sc SessionContext, f
 			}
 			return fmt.Errorf("feedback_service: update status: %w", err)
 		}
-		plaintext, err := s.cipher.Decrypt(ctx, "feedbacks_content", encContent)
+		plaintext, err := s.cipher.Decrypt(ctx, "feedbacks_content", encContent, contentKeyVer)
 		if err != nil {
 			return fmt.Errorf("feedback_service: decrypt content id=%d: %w", f.ID, err)
 		}

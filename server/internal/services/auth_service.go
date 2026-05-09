@@ -319,15 +319,16 @@ func (s *authService) Login(ctx context.Context, username, password string) (str
 // Refresh 用旧 refresh token 换新 access + 新 refresh。
 //
 // 完整 refresh token rotation 语义：
-//   - 调 rotate_refresh_token 函数（数据层原子轮转 + 重放检测）
-//   - 旧 refresh 立刻 revoked；签发新 refresh 入库
-//   - **返回新 refresh 给 client**，client 必须写回 localStorage 替换旧值
-//   - 同 token 第二次 refresh → DB rotate 返 NULL → 401（重放检测）
+//   - 先用 historicalTokenReason 检查旧 hash 是否已被 logout/used/rotate revoke：
+//     是 → ErrInvalidRefreshToken（合法生命周期重放，不全踢，finding M1）
+//   - 否则调 rotate_refresh_token 函数（数据层原子轮转 + 真 reuse 检测）
+//   - 成功 rotate → 旧 RT reason='used'；签发新 refresh 入库
+//   - rotate 返 NULL + 历史无合法 reason → 真攻击：函数已 reason='reuse_detected' 全踢 + bump token_version
+//   - **成功路径返回新 refresh 给 client**，client 必须写回 localStorage 替换旧值
+//   - 同 token 第二次 refresh → 已被标 'used' → 走"合法重放"路径返 ErrInvalidRefreshToken
 //
-// 此前 v1 版本只返 access 不返 refresh，导致 client 二次 refresh 必失败
-// （root cause: 浏览器刷新 + StrictMode 双 mount 让 verify() 并发调 refresh 二次，
-//
-//	第二次用已 revoked 的旧 token → 401 → 用户被误展 NoPermissionFallback）
+// 此前 v1 版本只返 access 不返 refresh，导致 client 二次 refresh 必失败；
+// finding M1 修正后 logout/StrictMode race 也不再误踢全会话。
 func (s *authService) Refresh(ctx context.Context, refreshToken string) (string, string, error) {
 	claims, err := auth.VerifyRefreshToken(refreshToken, s.refreshSec)
 	if err != nil {
@@ -336,6 +337,43 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (string,
 
 	oldHash := auth.HashRefreshToken(refreshToken)
 
+	// finding M1：先看历史命中行的 revocation_reason，区分合法生命周期重放与真攻击
+	//   - 'used' / 'logout' / 'rotate' → 合法生命周期重放：返 ErrInvalidRefreshToken（不踢全）
+	//     适用于 logout race / StrictMode 双 mount / 客户端重试 / 多端登出冲突等场景。
+	//     这是 finding M1 的核心修正：不再因 race 误踢用户其它设备会话。
+	//   - 'reuse_detected' / 'admin_revoke' → 已被认定的攻击/管理动作：等同 invalid（全踢已发生）
+	//   - revoked 但 reason IS NULL（legacy 行 / 0029 之前的旧数据）→ 默认按 reuse 处理走全踢
+	//     保留对未携带 reason 标记的历史 revoked 行的最严格防御。
+	//   - 找不到历史 revoked 行 → 走 rotate_refresh_token 函数判定（active 命中或真 reuse）
+	if reason, found := s.historicalTokenReason(ctx, oldHash); found {
+		md, _ := RequestMetadataFrom(ctx)
+		uid := claims.UserID
+		if reason == nil {
+			// legacy 数据 / 0029 之前 revoke 的行无 reason 标记：保守按 reuse 攻击处理
+			// rotate 函数路径 2 会做全踢；这里直接进入函数让 DB 完成全踢
+			// （不 short-circuit return，落到下方 rotate 调用）
+		} else {
+			switch *reason {
+			case "used", "logout", "rotate":
+				// 合法生命周期重放：仅记审计 trail，不踢全、不 bump token_version
+				_ = s.audit.Log(ctx, AuditEvent{
+					EventType: AuditEventRefreshTokenReuseDetected,
+					UserID:    &uid,
+					ClientIP:  md.ClientIP,
+					UserAgent: md.UserAgent,
+					Metadata:  map[string]any{"reason": "lifecycle_replay", "revocation_reason": *reason},
+				})
+				return "", "", ErrInvalidRefreshToken
+			case "reuse_detected", "admin_revoke":
+				// 已被标记为攻击 / admin 撤销：全踢已在第一次发生
+				return "", "", ErrInvalidRefreshToken
+			default:
+				// 未知 reason（CHECK 应已挡住，但保险起见）：当作 invalid
+				return "", "", ErrInvalidRefreshToken
+			}
+		}
+	}
+
 	// 生成新 refresh（rotate_refresh_token 函数会把它存入 DB）
 	newRefresh, newHash, err := auth.IssueRefreshToken(claims.UserID, s.refreshSec, s.refreshTTL)
 	if err != nil {
@@ -343,10 +381,10 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (string,
 	}
 
 	// rotate_refresh_token(p_old_hash, p_new_hash, p_ttl) 返回 user_id 或 NULL
-	// NULL 有两种语义（finding #8 后由 0022 函数行为升级）：
-	//   1. active 命中失败 + 历史命中成功 = reuse 攻击：函数已撤销该 user 全部 token + bump token_version
-	//   2. 完全无效 hash（从未入库）：JWT 校验通过但 DB 无记录
-	// service 层用 isHistoricalToken 单独查询区分两种 NULL 场景
+	// 走到这里说明：① hash 不在历史 revoked 行中 ② 要么命中 active 要么完全无记录
+	// NULL 此时仅表示完全无效 hash（active 上面已被 SELECT 过没有 revoked 记录；
+	// 但 rotate 函数自己会把 active 行 SET reason='used' 完成正常 rotate）。
+	// 真 reuse 仅在"active 命中失败 + 历史命中"时由函数侧 reason='reuse_detected' 全踢。
 	var rotatedUserID *int64
 	row := s.pool.QueryRow(ctx, `SELECT rotate_refresh_token($1, $2, $3)`,
 		oldHash, newHash, s.refreshTTL)
@@ -354,11 +392,13 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (string,
 		return "", "", fmt.Errorf("auth_service: rotate refresh: %w", err)
 	}
 	if rotatedUserID == nil {
-		// 区分 reuse 与 invalid：查 hash 是否在历史中存在过
+		// 函数返 NULL：可能 ① active 期间被并发 logout 抢 revoke（reason 已填）
+		// ② 完全无记录的 hash。两种都按 invalid 处理。
+		// 真 reuse 路径在 historicalTokenReason 已被屏蔽，不会到这里。
+		// 注：极小竞态窗口存在 —— 函数自己路径 2 触发 reuse_detected 全踢的可能。
+		// 这种情况下 isHistoricalToken 之前是 false（hash 在 active）但函数运行时被并发
+		// 改成 historical；用 ErrRefreshTokenReused 暴露给 caller 让前端走"安全告警"流程。
 		if s.isHistoricalToken(ctx, oldHash) {
-			// 审计：refresh token 重用攻击检测（高优先级安全事件）
-			// rotate_refresh_token 函数已撤销该 user 全部 token + bump token_version；
-			// 这里仅记录审计 trail 让运维事后追溯被劫持账号
 			md, _ := RequestMetadataFrom(ctx)
 			uid := claims.UserID
 			_ = s.audit.Log(ctx, AuditEvent{
@@ -366,7 +406,7 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (string,
 				UserID:    &uid,
 				ClientIP:  md.ClientIP,
 				UserAgent: md.UserAgent,
-				Metadata:  map[string]any{"reason": "rotated_token_replayed"},
+				Metadata:  map[string]any{"reason": "rotated_token_replayed_concurrent"},
 			})
 			return "", "", ErrRefreshTokenReused
 		}
@@ -389,6 +429,35 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (string,
 		return "", "", fmt.Errorf("auth_service: issue access: %w", err)
 	}
 	return access, newRefresh, nil
+}
+
+// historicalTokenReason 检查 hash 在 refresh_tokens 表中是否有 revoked 记录，并返其 reason。
+//
+// 业务背景（finding M1）：
+//   - revocation_reason 列由 0029 引入；区分"合法生命周期重放"与"真 reuse 攻击"
+//   - found=true + reason!=nil → 该 hash 是 revoked 行，按 reason 走分支
+//   - found=true + reason=nil → 该 hash 是 active 行（不该走这里，调 rotate 即可）
+//   - found=false → 该 hash 不在表里（完全无效 token）
+//
+// 设计取舍：
+//   - 仅 SELECT 一次 + LIMIT 1：表上 token_hash UNIQUE，最多 1 行命中
+//   - 查询失败时返 (false, ...) 让上游兜底走 rotate 函数路径（不阻塞用户登录）；
+//     函数侧仍能保护真 reuse 场景（双层防御）
+func (s *authService) historicalTokenReason(ctx context.Context, hash []byte) (*string, bool) {
+	var reason *string
+	var revokedAt *time.Time
+	err := s.pool.QueryRow(ctx, `
+		SELECT revocation_reason, revoked_at FROM refresh_tokens
+		WHERE token_hash = $1 LIMIT 1
+	`, hash).Scan(&reason, &revokedAt)
+	if err != nil {
+		return nil, false
+	}
+	// active 行：revoked_at IS NULL → 不属于"历史 revoked"，让上游走 rotate 路径
+	if revokedAt == nil {
+		return nil, false
+	}
+	return reason, true
 }
 
 // isHistoricalToken 检查 hash 是否在 refresh_tokens 表中存在过任何记录（含 revoked / 过期）。
@@ -447,8 +516,10 @@ func (s *authService) Logout(ctx context.Context, sc SessionContext) error {
 	`, ac.UserID); err != nil {
 		return fmt.Errorf("auth_service: bump token_version: %w", err)
 	}
+	// finding M1：revocation_reason='logout' 让后续 Refresh 调用看到本 token 时
+	// 区分"用户主动登出"与"真 reuse 攻击"——避免 logout race 误踢全会话。
 	if _, err := tx.Exec(ctx, `
-		UPDATE refresh_tokens SET revoked_at = NOW()
+		UPDATE refresh_tokens SET revoked_at = NOW(), revocation_reason = 'logout'
 		WHERE user_id = $1 AND revoked_at IS NULL
 	`, ac.UserID); err != nil {
 		return fmt.Errorf("auth_service: revoke refresh tokens: %w", err)
@@ -631,8 +702,9 @@ func (s *authService) ChangePassword(ctx context.Context, sc SessionContext, old
 		return fmt.Errorf("auth_service: update password: %w", err)
 	}
 	// 撤销其它会话的 refresh：当前会话的 access token 仍在内存有效；用户主动重登才彻底失效
+	// 改密用 admin_revoke 标记区别于普通 logout（finding M1）；让审计 / reuse 检测路径清晰
 	if _, err := tx.Exec(ctx, `
-		UPDATE refresh_tokens SET revoked_at = NOW()
+		UPDATE refresh_tokens SET revoked_at = NOW(), revocation_reason = 'admin_revoke'
 		WHERE user_id = $1 AND revoked_at IS NULL
 	`, ac.UserID); err != nil {
 		return fmt.Errorf("auth_service: revoke refresh tokens: %w", err)

@@ -183,15 +183,15 @@ func SeedFeedback(t *testing.T, ctx context.Context, pool *pgxpool.Pool, project
 	t.Helper()
 	cs, err := services.NewCipherService(pool, []byte(testutil.TestCipherKey))
 	require.NoError(t, err)
-	encrypted, err := cs.Encrypt(ctx, "feedbacks_content", content)
+	encrypted, contentKeyVer, err := cs.Encrypt(ctx, "feedbacks_content", content)
 	require.NoError(t, err)
 
 	var id int64
 	err = pool.QueryRow(ctx, `
-		INSERT INTO feedbacks (project_id, content, source, status, recorded_by, recorded_at)
-		VALUES ($1, $2, 'wechat', 'pending', $3, $4)
+		INSERT INTO feedbacks (project_id, content, content_key_version, source, status, recorded_by, recorded_at)
+		VALUES ($1, $2, $3, 'wechat', 'pending', $4, $5)
 		RETURNING id
-	`, projectID, encrypted, userID, recordedAt).Scan(&id)
+	`, projectID, encrypted, contentKeyVer, userID, recordedAt).Scan(&id)
 	require.NoError(t, err)
 	return id
 }
@@ -247,16 +247,16 @@ func SeedPayment(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 
 	cs, err := services.NewCipherService(pool, []byte(testutil.TestCipherKey))
 	require.NoError(t, err)
-	encryptedRemark, err := cs.Encrypt(ctx, "payments_remark", remark)
+	encryptedRemark, remarkKeyVer, err := cs.Encrypt(ctx, "payments_remark", remark)
 	require.NoError(t, err)
 
 	var id int64
 	err = pool.QueryRow(ctx, `
 		INSERT INTO payments
-			(project_id, direction, amount, paid_at, related_user_id, screenshot_id, remark, recorded_by, recorded_at)
-		VALUES ($1, $2::payment_direction, $3::numeric, $4, $5, $6, $7, $8, NOW())
+			(project_id, direction, amount, paid_at, related_user_id, screenshot_id, remark, remark_key_version, recorded_by, recorded_at)
+		VALUES ($1, $2::payment_direction, $3::numeric, $4, $5, $6, $7, $8, $9, NOW())
 		RETURNING id
-	`, projectID, direction, amount, paidAt, related, screenshot, encryptedRemark, userID).Scan(&id)
+	`, projectID, direction, amount, paidAt, related, screenshot, encryptedRemark, remarkKeyVer, userID).Scan(&id)
 	require.NoError(t, err)
 	return id
 }

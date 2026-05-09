@@ -146,12 +146,13 @@ func TestAuth_RefreshRotation(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, newAccess1)
 
-	// 重放：用同一个旧 refresh 再 Refresh 应当被识别为 reuse（finding #8）
-	// 旧 token 被 rotate 后再次使用 = 攻击者持有偷来的 token；返 ErrRefreshTokenReused
-	// 触发该 user 全部 refresh_tokens 撤销 + token_version bump
+	// 重放：用同一个旧 refresh 再 Refresh
+	// finding M1：rotate 后 reason='used'，第二次使用是合法生命周期重放（client race），
+	// 返 ErrInvalidRefreshToken 不再误踢全会话。真 reuse 由"reason IS NULL 历史命中"路径
+	// 单独触发（见 TestAuth_RefreshLegacyRevokedNoReasonTriggersReuseFullKill）。
 	_, _, err = env.svc.Refresh(context.Background(), refresh)
-	assert.ErrorIs(t, err, services.ErrRefreshTokenReused,
-		"旧 refresh 在第一次 rotate 后再次使用 = reuse 攻击，必须触发全会话撤销")
+	assert.ErrorIs(t, err, services.ErrInvalidRefreshToken,
+		"finding M1：rotate 后旧 RT 重放是 lifecycle replay，返 invalid 不返 reuse")
 }
 
 func TestAuth_RefreshInvalidToken(t *testing.T) {
@@ -167,61 +168,107 @@ func TestAuth_RefreshInvalidToken(t *testing.T) {
 }
 
 // ------------------------------------------------------------
-// Refresh token reuse 检测（finding #8）
-// 旧 token 第二次使用 → 撤销该 user 全部 refresh_tokens + bump token_version
+// Refresh token reuse 检测（finding #8 + finding M1）
+//
+// finding #8 之前：旧 token 第二次使用 → 撤销该 user 全部 refresh_tokens + bump token_version
+// finding M1 之后：rotate 后旧 RT 标 reason='used' 的"重放"是合法生命周期场景（race / 重试），
+//                  返 ErrInvalidRefreshToken 不全踢。真 reuse 仅在 reason IS NULL 历史命中
+//                  时触发（legacy 数据 + 极端竞态）。
 // ------------------------------------------------------------
 
-func TestAuth_RefreshReuseRevokesAllUserSessions(t *testing.T) {
+// TestAuth_RefreshRotatedTokenSecondUseIsLifecycleReplay 验证 finding M1：
+// rotate 后旧 RT (reason='used') 第二次使用 = 合法生命周期重放，不全踢其它会话。
+//
+// 业务背景：StrictMode 双 mount / cleanup 重试 / 客户端 race 都会让同一 RT 被消费两次，
+// 这是合法的客户端行为；不该被错认为攻击。
+func TestAuth_RefreshRotatedTokenSecondUseIsLifecycleReplay(t *testing.T) {
 	env := setupAuthEnv(t)
 	defer env.cleanup()
 	ctx := context.Background()
 
-	// user 登录两次拿两个 refresh token（模拟两个设备/会话）
+	// 登录两次模拟两端会话
 	_, refresh1, _, err := env.svc.Login(ctx, env.username, env.password)
 	require.NoError(t, err)
 	_, refresh2, _, err := env.svc.Login(ctx, env.username, env.password)
 	require.NoError(t, err)
 	assert.NotEqual(t, refresh1, refresh2)
 
-	// 记录 reuse 前的 token_version
 	var tvBefore int64
 	require.NoError(t, env.pool.QueryRow(ctx,
 		`SELECT token_version FROM users WHERE id=$1`, env.userID).Scan(&tvBefore))
 
-	// refresh1 正常 rotate（第一次使用 OK，受害者拿到新 token）
+	// 第一次 rotate：refresh1 → reason='used'，新 RT newRefresh1 入库
 	_, newRefresh1, err := env.svc.Refresh(ctx, refresh1)
 	require.NoError(t, err)
 	require.NotEmpty(t, newRefresh1)
 
-	// refresh1 被攻击者偷了再次使用 → 必须触发 reuse 检测
+	// 第二次用同一旧 refresh1（race 场景）—— finding M1 后是合法生命周期重放
 	_, _, err = env.svc.Refresh(ctx, refresh1)
-	require.ErrorIs(t, err, services.ErrRefreshTokenReused,
-		"旧 token 第二次使用必须触发 reuse 检测")
+	assert.ErrorIs(t, err, services.ErrInvalidRefreshToken,
+		"reason='used' 的旧 RT 重放是 lifecycle race，应返 invalid 不全踢")
+	assert.NotErrorIs(t, err, services.ErrRefreshTokenReused,
+		"finding M1：rotation race 不再误踢全会话")
 
-	// 验证 1：refresh2（无辜会话）应被 reuse-detection 撤销
+	// 关键不变量：token_version 不 bump
+	var tvAfter int64
+	require.NoError(t, env.pool.QueryRow(ctx,
+		`SELECT token_version FROM users WHERE id=$1`, env.userID).Scan(&tvAfter))
+	assert.Equal(t, tvBefore, tvAfter, "lifecycle replay 不 bump token_version")
+
+	// refresh2（其它设备会话）应保持 active
 	var rt2Revoked bool
 	require.NoError(t, env.pool.QueryRow(ctx,
 		`SELECT revoked_at IS NOT NULL FROM refresh_tokens WHERE token_hash = $1`,
 		auth.HashRefreshToken(refresh2)).Scan(&rt2Revoked))
-	assert.True(t, rt2Revoked, "refresh2 必须被全局撤销")
+	assert.False(t, rt2Revoked, "refresh2（其它设备）不应被误踢")
 
-	// 验证 2：newRefresh1（受害者刚 rotate 拿到的）也应被撤销
-	var newRT1Revoked bool
+	// newRefresh1 仍可用（race 不影响新 RT 的合法性）
+	_, _, err = env.svc.Refresh(ctx, newRefresh1)
+	assert.NoError(t, err, "rotate 拿到的新 RT 仍可继续 rotate")
+}
+
+// TestAuth_RefreshLegacyRevokedNoReasonTriggersReuseFullKill 验证：legacy 数据
+// （revoke 但 reason IS NULL）走 rotate 函数路径 2，触发全踢。
+//
+// 业务背景：0029 之前 revoke 的 refresh_tokens 行无 reason 标记；保留对这类
+// 历史数据的最严格防御 —— 既然没有标记说明是合法登出还是攻击，按攻击处理。
+func TestAuth_RefreshLegacyRevokedNoReasonTriggersReuseFullKill(t *testing.T) {
+	env := setupAuthEnv(t)
+	defer env.cleanup()
+	ctx := context.Background()
+
+	_, refresh1, _, err := env.svc.Login(ctx, env.username, env.password)
+	require.NoError(t, err)
+	_, refresh2, _, err := env.svc.Login(ctx, env.username, env.password)
+	require.NoError(t, err)
+
+	var tvBefore int64
 	require.NoError(t, env.pool.QueryRow(ctx,
-		`SELECT revoked_at IS NOT NULL FROM refresh_tokens WHERE token_hash = $1`,
-		auth.HashRefreshToken(newRefresh1)).Scan(&newRT1Revoked))
-	assert.True(t, newRT1Revoked, "受害者刚 rotate 拿到的 newRefresh1 也必须被撤销")
+		`SELECT token_version FROM users WHERE id=$1`, env.userID).Scan(&tvBefore))
 
-	// 验证 3：users.token_version 已 bump（让其它会话的 access token 立即失效）
+	// 模拟 legacy 数据：手动把 refresh1 标 revoked 但 reason IS NULL
+	_, err = env.pool.Exec(ctx,
+		`UPDATE refresh_tokens SET revoked_at = NOW(), revocation_reason = NULL WHERE token_hash = $1`,
+		auth.HashRefreshToken(refresh1))
+	require.NoError(t, err)
+
+	// 用 refresh1 调 refresh：historicalTokenReason 返 (nil, true) → 走 rotate 函数路径 2 全踢
+	_, _, err = env.svc.Refresh(ctx, refresh1)
+	require.ErrorIs(t, err, services.ErrRefreshTokenReused,
+		"legacy revoked 但 reason IS NULL 行应保守按 reuse 攻击处理")
+
+	// 验证 token_version 已 bump
 	var tvAfter int64
 	require.NoError(t, env.pool.QueryRow(ctx,
 		`SELECT token_version FROM users WHERE id=$1`, env.userID).Scan(&tvAfter))
-	assert.Greater(t, tvAfter, tvBefore, "reuse 检测必须 bump token_version")
+	assert.Greater(t, tvAfter, tvBefore, "legacy reuse 路径应 bump token_version 全踢")
 
-	// 验证 4：受害者再用 newRefresh1 也走不通（已被撤销）
-	_, _, err = env.svc.Refresh(ctx, newRefresh1)
-	assert.ErrorIs(t, err, services.ErrRefreshTokenReused,
-		"受害者的 newRefresh1 已撤销，再用必须被识别为 reuse 路径（已是历史 token）")
+	// refresh2（无辜 active 会话）应被全踢
+	var rt2Revoked bool
+	require.NoError(t, env.pool.QueryRow(ctx,
+		`SELECT revoked_at IS NOT NULL FROM refresh_tokens WHERE token_hash = $1`,
+		auth.HashRefreshToken(refresh2)).Scan(&rt2Revoked))
+	assert.True(t, rt2Revoked, "legacy reuse 触发的全踢应包含其它 active RT")
 }
 
 func TestAuth_RefreshReuseSentinelDistinctFromInvalid(t *testing.T) {
@@ -271,12 +318,111 @@ func TestAuth_LogoutInvalidatesAccess(t *testing.T) {
 	assert.ErrorIs(t, err, services.ErrInvalidAccessToken,
 		"logout 后旧 access token 因 token_version 不匹配应被拒")
 
-	// 登出后旧 refresh 在 DB 中是 revoked 状态 = 历史存在过的 token，
-	// 与 reuse 路径走同一分支（finding #8 之后语义统一）：任何已撤销 token 再用 = 潜在威胁
-	// 这是合理的：用户已主动登出，仍持有旧 token 再使用本就异常
+	// finding M1：logout 后旧 refresh 不再走"全踢"路径
+	//
+	// 0029 给 refresh_tokens 加 revocation_reason 列，logout 写入 reason='logout'。
+	// Refresh 路径检测到该 reason 就识别为"合法生命周期重放"——返 ErrInvalidRefreshToken
+	// 而非 ErrRefreshTokenReused，不 bump token_version、不全踢其它会话。
+	//
+	// 这避免了客户端 race（StrictMode 双 mount / cleanup 重试 / 多端登出冲突）
+	// 在 logout 后用旧 RT 调 refresh 把无辜会话误杀的问题。
 	_, _, err = env.svc.Refresh(context.Background(), refresh)
-	assert.ErrorIs(t, err, services.ErrRefreshTokenReused,
-		"logout 后旧 refresh 已 revoked，再使用走 reuse 检测路径")
+	assert.ErrorIs(t, err, services.ErrInvalidRefreshToken,
+		"logout 后旧 refresh reason='logout' 是合法重放，应返 invalid 不全踢")
+	assert.NotErrorIs(t, err, services.ErrRefreshTokenReused,
+		"logout race 不应被误判为 reuse 攻击")
+}
+
+// ------------------------------------------------------------
+// finding M1：logout 后旧 refresh 复用不应误踢其它会话
+// ------------------------------------------------------------
+
+func TestAuth_LogoutThenReuseDoesNotKillOtherSessions(t *testing.T) {
+	env := setupAuthEnv(t)
+	defer env.cleanup()
+	ctx := context.Background()
+
+	// 设备 A 和 B 各登录一次（模拟多端会话）
+	_, refreshA, _, err := env.svc.Login(ctx, env.username, env.password)
+	require.NoError(t, err)
+	_, refreshB, _, err := env.svc.Login(ctx, env.username, env.password)
+	require.NoError(t, err)
+
+	// 记录登出前的 token_version 与设备 B 的 access 状态
+	var tvBefore int64
+	require.NoError(t, env.pool.QueryRow(ctx,
+		`SELECT token_version FROM users WHERE id=$1`, env.userID).Scan(&tvBefore))
+
+	// 设备 A 登出
+	require.NoError(t, env.svc.Logout(ctx, services.AuthContext{
+		UserID: env.userID, RoleID: env.roleID,
+	}))
+
+	// 设备 A 客户端因 race / 重试 / cleanup 再用旧 refreshA 调 refresh
+	_, _, err = env.svc.Refresh(ctx, refreshA)
+	assert.ErrorIs(t, err, services.ErrInvalidRefreshToken,
+		"logout 后旧 RT 重放是合法生命周期，必须返 invalid 不返 reuse")
+
+	// 验证：设备 B 的 refresh 在 DB 中应仍 active（reason IS NULL）—— 不被误踢
+	// 注意 logout 已 revoke 当前 user 全部 RT（含 B），但 reason='logout'
+	// reuse_detected 路径会把所有 active RT 全 revoke + bump token_version；
+	// 本测试要验证的是 token_version 不变（logout race 路径不踢全）
+	var tvAfter int64
+	require.NoError(t, env.pool.QueryRow(ctx,
+		`SELECT token_version FROM users WHERE id=$1`, env.userID).Scan(&tvAfter))
+	assert.Equal(t, tvBefore+1, tvAfter,
+		"token_version 仅 logout 时 +1，refresh race 不应再次 bump（finding M1）")
+
+	// refreshB 在 DB 中也应是 reason='logout'（被 logout 全部 revoke）而非 reuse_detected
+	var reasonB *string
+	require.NoError(t, env.pool.QueryRow(ctx,
+		`SELECT revocation_reason FROM refresh_tokens WHERE token_hash = $1`,
+		auth.HashRefreshToken(refreshB)).Scan(&reasonB))
+	require.NotNil(t, reasonB)
+	assert.Equal(t, "logout", *reasonB,
+		"logout 路径写入的 reason 必须是 'logout'，便于 reuse 检测分流")
+}
+
+// TestAuth_RotatedTokenReplayAfterRotateMarksUsed 验证：成功 rotate 后旧 RT 第二次使用
+// 走"used 重放"路径，不再走全踢（finding M1 正向案例：与 logout race 同语义）。
+func TestAuth_RotatedTokenReplayAfterRotateMarksUsed(t *testing.T) {
+	env := setupAuthEnv(t)
+	defer env.cleanup()
+	ctx := context.Background()
+
+	_, refresh, _, err := env.svc.Login(ctx, env.username, env.password)
+	require.NoError(t, err)
+
+	// 第一次 rotate 成功，旧 refresh 标 reason='used'
+	_, _, err = env.svc.Refresh(ctx, refresh)
+	require.NoError(t, err)
+
+	// 验证旧 refresh 的 reason='used'
+	var reason *string
+	require.NoError(t, env.pool.QueryRow(ctx,
+		`SELECT revocation_reason FROM refresh_tokens WHERE token_hash = $1`,
+		auth.HashRefreshToken(refresh)).Scan(&reason))
+	require.NotNil(t, reason)
+	assert.Equal(t, "used", *reason,
+		"rotate 路径 1 必须把旧 RT 标 reason='used'（0029 函数升级）")
+
+	// 第二次用同一旧 refresh —— finding M1 之后这是"合法生命周期重放"
+	// （StrictMode 双 mount race 场景）应返 invalid 不全踢
+	var tvBefore int64
+	require.NoError(t, env.pool.QueryRow(ctx,
+		`SELECT token_version FROM users WHERE id=$1`, env.userID).Scan(&tvBefore))
+
+	_, _, err = env.svc.Refresh(ctx, refresh)
+	assert.ErrorIs(t, err, services.ErrInvalidRefreshToken,
+		"已 rotate 旧 RT 重放走 used 分支，返 invalid 不返 reuse")
+	assert.NotErrorIs(t, err, services.ErrRefreshTokenReused,
+		"used 重放不该触发 reuse 全踢")
+
+	var tvAfter int64
+	require.NoError(t, env.pool.QueryRow(ctx,
+		`SELECT token_version FROM users WHERE id=$1`, env.userID).Scan(&tvAfter))
+	assert.Equal(t, tvBefore, tvAfter,
+		"used 重放不 bump token_version（finding M1 关键不变量）")
 }
 
 // ------------------------------------------------------------

@@ -16,6 +16,12 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+# finding L5: 从 certs/atlas-ip.pem 提取 SPKI 公钥 SHA-256 hash 写到 OUT_DIR
+# 让 http_proxy 运行时仅 pin 公钥而不 pin 整张证书
+# 这样 Caddy reissue（同私钥换 cert）不需要发新版本，仅轮换私钥才需要发新版
+x509-parser = "0.16"
+sha2 = "0.10"
+base64 = "0.22"
 
 [dependencies]
 tauri = { version = "2", features = ["macos-private-api"] }
@@ -72,10 +78,18 @@ infer = "0.16"
 base64 = "0.22"
 
 # HTTP 客户端 - 给 progress-server 后端 HTTP 请求做 Tauri 层代理
-# default-features = false + rustls-tls：避免 OpenSSL 依赖；跨平台一致；支持 dangerous_accept_invalid_certs
+# default-features = false + rustls-tls：避免 OpenSSL 依赖；跨平台一致
 # 业务背景：progress-server 用自签 IP 证书，WebView 原生 fetch 不能跳过 cert 验证，
 # 必须通过 reqwest 在 Rust 层做 HTTP 转发；前端 invoke 'http_request_cmd' 调用
+# finding L5：use_preconfigured_tls 注入自定义 rustls ClientConfig 实现 SPKI pin
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "multipart"] }
+
+# rustls 直接依赖 - finding L5: 自定义 ServerCertVerifier 做 SPKI pin
+# default-features = false 关闭 aws-lc-rs，沿用 reqwest 已启用的 ring provider 避免双 backend
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+
+# sha2 - finding L5: SubjectPublicKeyInfo DER 序列的 SHA-256 摘要
+sha2 = "0.10"
 
 # E2E 测试支持 - tauri-webdriver + WebdriverIO 集成（PBI-6 使用）
 tauri-plugin-webdriver-automation = "0.1"

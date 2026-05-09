@@ -38,11 +38,14 @@ import (
 
 // encryptRemark 用 testutil.TestCipherKey 派生 payments_remark 子密钥加密 plaintext。
 // 0026 后 payments.remark 是 BYTEA，raw INSERT 不能直接传 TEXT 字面量。
+//
+// keyVersion 通过 0028 默认值 DEFAULT 1 兜底（RLS 测试关注 direction + member 不依赖
+// 加密版本）；本 helper 不返回 keyVersion，调用方 INSERT 不带 remark_key_version 列即可。
 func encryptRemark(t *testing.T, ctx context.Context, pool *pgxpool.Pool, plaintext string) []byte {
 	t.Helper()
 	cs, err := services.NewCipherService(pool, []byte(testutil.TestCipherKey))
 	require.NoError(t, err)
-	enc, err := cs.Encrypt(ctx, "payments_remark", plaintext)
+	enc, _, err := cs.Encrypt(ctx, "payments_remark", plaintext)
 	require.NoError(t, err)
 	return enc
 }
