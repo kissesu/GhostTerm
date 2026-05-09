@@ -1472,8 +1472,8 @@ func (s *ProjectCreateRequest) Validate() error {
 		if err := (validate.String{
 			MinLength:     1,
 			MinLengthSet:  true,
-			MaxLength:     0,
-			MaxLengthSet:  false,
+			MaxLength:     50,
+			MaxLengthSet:  true,
 			Email:         false,
 			Hostname:      false,
 			Regex:         nil,

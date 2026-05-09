@@ -277,7 +277,7 @@ components:
       type: object
       required: [name, customerLabel, description, deadline, developerUserIds]
       properties:
-        name: { type: string, minLength: 1 }
+        name: { type: string, minLength: 1, maxLength: 50, description: "项目名 1-50 字符（按 Unicode 字符数；与后端 utf8.RuneCountInString + DB CHECK char_length 三层一致）" }
         customerLabel: { type: string, minLength: 1, description: "客户标签（自由文本）" }
         description: { type: string, minLength: 1 }
         priority: { $ref: '#/components/schemas/ProjectPriority' }

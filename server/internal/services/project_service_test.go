@@ -19,6 +19,7 @@ package services
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -60,6 +61,19 @@ func TestValidateCreateInput(t *testing.T) {
 			Name: "demo", CustomerLabel: "测试客户", Description: "desc", Deadline: time.Time{},
 			DeveloperUserIDs: []int64{42},
 		}, true},
+		// 项目名 50 字符上限边界：50 字符通过、51 字符拒（按 Unicode 码点；与前端 zod.max(50) + DB CHECK 三层一致）
+		{"name 边界 50 字符（应通过）", CreateProjectInput{
+			Name: strings.Repeat("a", 50), CustomerLabel: "x", Description: "y", Deadline: deadline,
+			DeveloperUserIDs: []int64{42},
+		}, false},
+		{"name 51 字符（应拒）", CreateProjectInput{
+			Name: strings.Repeat("a", 51), CustomerLabel: "x", Description: "y", Deadline: deadline,
+			DeveloperUserIDs: []int64{42},
+		}, true},
+		{"name 50 个汉字（应通过；汉字 BMP=1 rune）", CreateProjectInput{
+			Name: strings.Repeat("中", 50), CustomerLabel: "x", Description: "y", Deadline: deadline,
+			DeveloperUserIDs: []int64{42},
+		}, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

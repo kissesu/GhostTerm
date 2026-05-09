@@ -4015,6 +4015,8 @@ func (s *Project) SetDevelopers(val []ProjectDeveloperRef) {
 
 // Ref: #/components/schemas/ProjectCreateRequest
 type ProjectCreateRequest struct {
+	// 项目名 1-50 字符（按 Unicode 字符数；与后端 utf8.RuneCountInString + DB CHECK
+	// char_length 三层一致）.
 	Name string `json:"name"`
 	// 客户标签（自由文本）.
 	CustomerLabel string             `json:"customerLabel"`

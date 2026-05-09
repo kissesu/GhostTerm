@@ -26,8 +26,10 @@ interface NewProjectDialogProps {
   onSuccess?: (id: number) => void;
 }
 
+// 项目名 1-50 字符（按 Unicode 字符数计）；与后端 utf8.RuneCountInString + DB CHECK char_length 三层一致。
+// z.string().max() 数 string.length，对汉字 BMP 与码点一致；emoji 4-byte 极少在项目名出现，可接受偏差。
 const Schema = z.object({
-  name: z.string().min(1, '此字段必填'),
+  name: z.string().min(1, '此字段必填').max(50, '项目名不能超过 50 字符'),
   customerLabel: z.string().min(1, '此字段必填'),
   description: z.string().min(1, '此字段必填'),
   priority: z.enum(['urgent', 'normal']),
@@ -235,8 +237,13 @@ export function NewProjectDialog({ onClose, onSuccess }: NewProjectDialogProps):
             <div className={styles.formGrid}>
               {/* 项目名 + 项目描述：全宽 */}
               <div className={`${styles.field} ${styles.formRowFull}`}>
-                <label htmlFor="np-name">项目名 <span style={{ color: 'var(--red)' }}>*</span></label>
-                <input id="np-name" ref={firstRef} value={form.name} onChange={update('name')} disabled={submitting} />
+                <label htmlFor="np-name">
+                  项目名 <span style={{ color: 'var(--red)' }}>*</span>
+                  <span style={{ marginLeft: 8, color: 'var(--c-fg-muted)', fontSize: 12, fontWeight: 'normal' }}>
+                    {Array.from(form.name).length}/50
+                  </span>
+                </label>
+                <input id="np-name" ref={firstRef} value={form.name} onChange={update('name')} maxLength={50} disabled={submitting} />
                 {errors.name && <div className={styles.fieldError}>{errors.name}</div>}
               </div>
               <div className={`${styles.field} ${styles.formRowFull}`}>

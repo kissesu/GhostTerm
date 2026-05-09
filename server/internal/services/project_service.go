@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -424,6 +425,11 @@ func (s *ProjectServiceImpl) Create(
 func validateCreateInput(in CreateProjectInput) error {
 	if in.Name == "" {
 		return fmt.Errorf("%w: name is required", ErrProjectInvalidInput)
+	}
+	// 项目名上限 50 字符（按 Unicode 码点；与前端 zod.max(50) + DB CHECK char_length 三层一致）。
+	// utf8.RuneCountInString 数 rune 数，与 PG char_length 语义一致。
+	if utf8.RuneCountInString(in.Name) > 50 {
+		return fmt.Errorf("%w: 项目名不能超过 50 字符", ErrProjectInvalidInput)
 	}
 	if in.CustomerLabel == "" {
 		return fmt.Errorf("%w: customerLabel is required", ErrProjectInvalidInput)
