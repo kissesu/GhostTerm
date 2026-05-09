@@ -285,6 +285,7 @@ curl --cacert src-tauri/certs/atlas-ip.pem https://103.236.85.144:38080/healthz
 5. **systemd LoadCredentialEncrypted 仅当前 boot 周期可用** → 移机 / 换主机时旧 .cred 文件作废，必须用新主机的 systemd-creds 重新加密注入
 6. **GlitchTip 6.x ↔ @sentry/react 版本兼容窗口窄** → 必锁 `@sentry/react@^8`（v8 LTS）；v10 envelope header `event_id` 空字符串触发 GlitchTip pydantic UUID parser 422 拒（详见 memory `feedback_glitchtip_61_incompat_sentry_javascript_v10_must_downgrade_v8_lts`）
 7. **macOS WKWebView ATS 拒明文 http** → GlitchTip envelope 走 `http://103.236.85.144:38090` 在 production 通过 `src-tauri/Info.plist` NSAppTransportSecurity 例外允许；**dev 模式不 embed Info.plist**，开发者本地 dev 跑 sentry 不上报，错误看 cargo stderr / webview console 兜底
+8. **GlitchTip 中文化资产非持久化** → 中文 dist 通过 `docker cp` 进 web 容器 RW 层，`docker compose down/up` 或 `force-recreate` 必丢；**`restart` 才保留**；envelope 上报始终走 `/api/*/envelope/` 不受 web 控制台影响（即使 SPA 404 SDK 仍能正常上报）；持久化方案见 memory `reference_glitchtip_zh_hans_i18n_deployment_runbook.md`「持久化路径」章节（自定义 Dockerfile + docker save/load）尚未做
 
 ## 关键 Bug 修复记录
 
@@ -296,6 +297,7 @@ curl --cacert src-tauri/certs/atlas-ip.pem https://103.236.85.144:38080/healthz
 | 2026-05-09 | 旧 atlas `43.132.191.253` 资源回收，新 IP `103.236.85.144` 上线 | 全仓 IP 替换：`.env.production` / `tauri.conf.json` CSP / `~/.ssh/config` HostName / 本文档；client cert pinning fingerprint 同步 |
 | 2026-05-09 | GlitchTip 6.1 + `@sentry/react` v10 envelope header `event_id=""` 让 GlitchTip pydantic UUID parser 422 拒，"dmg 第一次上报后续不上报" | 降级 `@sentry/react` v10.52→v8.55.2 LTS；GlitchTip 6.x 接 SDK 必锁 v8（详见 memory `feedback_glitchtip_61_incompat_sentry_javascript_v10_must_downgrade_v8_lts`）|
 | 2026-05-09 | GlitchTip 监控接入 v0.7.1 + Tauri Info.plist NSAppTransportSecurity ATS 例外 | 三侧 SDK 接入：前端 `@sentry/react@^8` + Tauri `sentry@^0.48`（rustls features）+ atlas Go `sentry-go v0.46.2`；DSN `http://d37cfb...e@103.236.85.144:38090/1`（atlas Go 用 127.0.0.1 同机 loopback）；ATS 例外仅 production .app bundle 生效，dev 模式 sentry 不上报 |
+| 2026-05-09 | GlitchTip 中文化 fork build 部署后 web 控制台 `/zh-Hans/static/*` 全 404 | Angular 21 `--localize` build 把 dist 内 `index.html` 的 `<base href>` 写死成 `/zh-Hans/`，但 GlitchTip 单一 locale serve 在根 `/`，浏览器拼出 `/zh-Hans/static/main-X.js` 全 404；修法：tar 前 `sed 's\|<base href="/zh-Hans/"/>\|<base href="/"/>\|g' index.html`；同时 docker cp 必须 4 处（`/code/dist/` + `/code/dist/glitchtip-frontend/` + `/code/static/glitchtip-frontend/` + **`/code/static/` STATIC_ROOT**）原 runbook 漏第 4 处让 main-X.js 仍 404；macOS tar 必带 `COPYFILE_DISABLE=1` 防 `._*` AppleDouble 文件污染 collectstatic 权限；详见 memory `reference_glitchtip_zh_hans_i18n_deployment_runbook.md` |
 
 ## 性能调优 — PG JIT 角色级关闭（部署后必跑）
 
