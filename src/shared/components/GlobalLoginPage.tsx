@@ -9,8 +9,9 @@
  *
  *              视觉契约：见 GlobalLoginPage.module.css。
  *              动画：右侧 Pretext 文本场 + ghost icon 浮动位移；
- *                    pretext 通过 esm.sh 动态加载（设计稿原方案），加载失败 fallback
- *                    到几何分行（不影响登录功能）。
+ *                    pretext 通过本地 npm 依赖 @chenglou/pretext 静态导入（finding L6 安全加固
+ *                    把原 esm.sh 远程加载切换到本地 bundle，避开第三方 CDN supply chain 风险），
+ *                    若 prepare/layout 调用异常则 fallback 到几何分行（不影响登录功能）。
  *
  *              Token 注：本页采用设计稿原 #0d0d0c 暗岩苔基线（限定在 .loginRoot 作用域，
  *              不污染 progress 模块的 OKLCH 森青）。
@@ -20,6 +21,14 @@
  */
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+
+// pretext 文本布局库 — 本地 npm 依赖，避免运行时拉 esm.sh 第三方 CDN（supply chain 风险）
+// 业务作用：精确测量字符宽度按 maxWidth 切行，相比几何 fallback 视觉更稳
+// 0.0.6 API 注：layout 仅返 lineCount，要拿到每行 text 字段必须用 prepareWithSegments + layoutWithLines
+import {
+  layoutWithLines as pretextLayoutWithLines,
+  prepareWithSegments as pretextPrepareWithSegments,
+} from '@chenglou/pretext';
 
 import { useGlobalAuthStore } from '../stores/globalAuthStore';
 import styles from './GlobalLoginPage.module.css';
@@ -64,16 +73,23 @@ function makeFallbackLines(text: string, width: number): string[] {
   return lines;
 }
 
-/** 动态加载 pretext（esm.sh CDN 方案，失败返回 null）
+/** pretext 布局适配器 — 静态 import 后只暴露 prepareWithSegments/layoutWithLines
  *
- *  设计稿原方案：从 esm.sh 远程加载 @chenglou/pretext。
- *  TS 不识别 URL import 模块路径，用 ts-ignore；vite/浏览器在运行时正常解析。
+ *  改造历史：原方案动态 import 'https://esm.sh/@chenglou/pretext'，安全 finding L6
+ *  指出该 CDN 一旦被攻陷可注入恶意 JS。改为本地 npm 依赖 + vite bundle，CSP 同步收紧
+ *  到禁止 esm.sh / Google Fonts。
+ *
+ *  返回 null 时调用方走几何 fallback（虽本地 import 几乎不会失败，留兜底防 future 改造）。
  */
-async function loadPretext(): Promise<{ prepare?: unknown; layout?: unknown } | null> {
+function loadPretext(): {
+  prepareWithSegments: typeof pretextPrepareWithSegments;
+  layoutWithLines: typeof pretextLayoutWithLines;
+} | null {
   try {
-    // @ts-expect-error URL import is not typed; resolved at runtime by the browser.
-    const mod = await import(/* @vite-ignore */ 'https://esm.sh/@chenglou/pretext');
-    return mod as { prepare?: unknown; layout?: unknown };
+    return {
+      prepareWithSegments: pretextPrepareWithSegments,
+      layoutWithLines: pretextLayoutWithLines,
+    };
   } catch {
     return null;
   }
@@ -108,7 +124,7 @@ export default function GlobalLoginPage() {
   // 启动 Pretext 文本场动画 + ghost 浮动
   //
   // 业务流程：
-  //   1. 加载 pretext（esm.sh）；失败 fallback 几何分行
+  //   1. 加载 pretext（本地 npm 依赖 @chenglou/pretext）；失败 fallback 几何分行
   //   2. 渲染 N 条 wake-line（DOM 节点）到 linesLayer
   //   3. RAF tick：ghost sin/cos 位移 + 每条 line 按距离做 wake 偏移
   //   4. 每 ~1.7s 飘出一个 keyword chip
@@ -130,24 +146,17 @@ export default function GlobalLoginPage() {
       // jsdom / 0 尺寸：跳过避免崩
       if (rect.width === 0 || rect.height === 0) return;
 
-      const pretext = await loadPretext();
+      const pretext = loadPretext();
       if (cancelled) return;
 
-      // 优先用 pretext layout；失败用几何 fallback
+      // 优先用 pretext layoutWithLines；失败用几何 fallback
       const fallbackLines = makeFallbackLines(TRANSCRIPT, rect.width * 0.74);
-      // pretext 0.0.6 API 入参/返回结构未公开稳定；这里仅在能调用时使用，否则 fallback
       let lineTexts: string[] = fallbackLines;
       try {
-        const prepareFn = (pretext as { prepare?: unknown } | null)?.prepare as
-          | ((t: string, f: string) => unknown)
-          | undefined;
-        const layoutFn = (pretext as { layout?: unknown } | null)?.layout as
-          | ((p: unknown, w: number, lh: number) => { lines?: { text?: string }[] } | null)
-          | undefined;
-        if (prepareFn && layoutFn) {
-          const prepared = prepareFn(TRANSCRIPT, '13px SFMono-Regular');
-          const laid = layoutFn(prepared, rect.width * 0.74, 20);
-          const collected = laid?.lines?.map((l) => l.text ?? '').filter(Boolean) ?? [];
+        if (pretext) {
+          const prepared = pretext.prepareWithSegments(TRANSCRIPT, '13px SFMono-Regular');
+          const laid = pretext.layoutWithLines(prepared, rect.width * 0.74, 20);
+          const collected = laid.lines.map((l) => l.text.trim()).filter(Boolean);
           if (collected.length > 0) lineTexts = collected;
         }
       } catch {

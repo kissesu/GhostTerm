@@ -5,10 +5,8 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GhostTerm</title>
-    <!-- UI 字体：Geist Sans — Vercel 开发（MIT），专为 UI 小字号优化，hinting 优秀；避开 Inter 俗套 -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <!-- UI 字体 Geist Sans 由 src/main.tsx 通过 @fontsource/geist-sans 本地 bundle，
+         CSP 不再放行 fonts.googleapis.com / fonts.gstatic.com（finding L6 安全加固） -->
   </head>
 
   <body>

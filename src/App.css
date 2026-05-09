@@ -136,8 +136,9 @@
    排版令牌
    ============================================================ */
 :root {
-  /* UI 字体：Geist Sans — Vercel 开发，专为 UI 小字号优化，hinting 优秀 */
-  --font-ui:   "Geist", -apple-system, BlinkMacSystemFont, "SF Pro Text",
+  /* UI 字体：Geist Sans — 由 @fontsource/geist-sans 本地 bundle，CSP 不依赖 Google Fonts
+     family 注册名是 "Geist Sans"（@fontsource 规范），保留 "Geist" 兼容旧浏览器拼写 */
+  --font-ui:   "Geist Sans", "Geist", -apple-system, BlinkMacSystemFont, "SF Pro Text",
                "Helvetica Neue", system-ui, sans-serif;
   /* 代码 / 终端专用等宽字体 */
   --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code",
