@@ -135,7 +135,11 @@ func main() {
 
 	// 注：原 customerSvc 已于 2026-04-30 移除（客户从独立资源降级为 projects.customer_label 字段）
 
-	projectSvc, err := services.NewProjectService(services.ProjectServiceDeps{Pool: pool})
+	// EventHub 提前构造：projectSvc 需要注入（spec v3.5 §6 P1.5）；
+	// WSHub 仍在 Phase 12 块内构造（依赖 notifSvc 顺序不变）
+	eventHub := services.NewEventHub()
+
+	projectSvc, err := services.NewProjectService(services.ProjectServiceDeps{Pool: pool, Hub: eventHub})
 	if err != nil {
 		log.Fatalf("init project service: %v", err)
 	}
@@ -180,8 +184,7 @@ func main() {
 	//    所以这两个 service 在 notif 之后构造（覆盖前面已经写过的 feedbackSvc / paymentSvc）
 	// ============================================
 	wsHub := services.NewWSHub()
-	// EventHub：SSE 实时同步广播（与 WSHub 独立，互不干扰）
-	eventHub := services.NewEventHub()
+	// eventHub 已在上方 projectSvc 构造前声明（spec v3.5 §6 P1.5），此处直接使用
 	notifSvc, err := services.NewNotificationService(services.NotificationServiceDeps{
 		Pool: pool,
 		Hub:  wsHub,

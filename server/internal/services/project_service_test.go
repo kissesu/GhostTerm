@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -187,6 +188,48 @@ func TestProjectModel_MoneyFieldType(t *testing.T) {
 	var _ progressdb.Money = ProjectModel{}.CurrentQuote
 	var _ progressdb.Money = ProjectModel{}.AfterSalesTotal
 	var _ progressdb.Money = ProjectModel{}.TotalReceived
+}
+
+// ============================================================
+// stubEventHub + TestCreate_HubNotPublishedOnTxFailure
+// ============================================================
+
+// stubEventHub 验证 Create 是否在事务 commit 后调用 hub.Publish
+type stubEventHub struct {
+	mu        sync.Mutex
+	published []Event
+}
+
+func (s *stubEventHub) Subscribe(int64) (<-chan Event, func()) { panic("not used") }
+func (s *stubEventHub) Publish(evt Event) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.published = append(s.published, evt)
+}
+func (s *stubEventHub) LatestEventID() int64       { return int64(len(s.published)) }
+func (s *stubEventHub) OnlineUsers() map[int64]int { return nil }
+
+// 验证：校验失败（input invalid）时 hub 不应被 publish
+// 业务背景：校验失败在进 InTx 之前，hub.Publish 调用在 InTx 成功之后；
+// 用 name="" 触发 ErrProjectInvalidInput 路径，确保不会有误调 hub 的代码在校验前执行。
+// （正向 publish + 事务成功路径的集成测试放 integration_test，需要 dockertest 真实 DB）
+func TestCreate_HubNotPublishedOnTxFailure(t *testing.T) {
+	hub := &stubEventHub{}
+	// cs role(3) + name 空 → validateCreateInput 拒绝 → ErrProjectInvalidInput
+	svc := &ProjectServiceImpl{pool: nil, hub: hub}
+	_, err := svc.Create(context.Background(), 100, 3 /* cs */, CreateProjectInput{
+		Name: "", CustomerLabel: "y", Description: "z",
+		Deadline:         time.Now().Add(time.Hour),
+		DeveloperUserIDs: []int64{42},
+	})
+	if !errors.Is(err, ErrProjectInvalidInput) {
+		t.Fatalf("应返回 ErrProjectInvalidInput；got=%v", err)
+	}
+	hub.mu.Lock()
+	defer hub.mu.Unlock()
+	if len(hub.published) != 0 {
+		t.Errorf("校验失败时 hub 不应 publish；published=%d", len(hub.published))
+	}
 }
 
 // ============================================================

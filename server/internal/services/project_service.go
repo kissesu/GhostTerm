@@ -26,6 +26,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 	"unicode/utf8"
 
@@ -167,6 +168,7 @@ type StatusChangeLogModel struct {
 // ProjectServiceDeps 装配 NewProjectService 所需依赖。
 type ProjectServiceDeps struct {
 	Pool *pgxpool.Pool
+	Hub  EventHub // SSE 广播 hub（spec v3.5 §6）；nil 时跳过广播保留向后兼容
 }
 
 // ProjectServiceImpl 是 ProjectService 的具体实现。
@@ -175,6 +177,7 @@ type ProjectServiceDeps struct {
 // ProjectService 接口仍以 any 为入参占位，待 plan 后续 phase 统一收紧时再对齐。
 type ProjectServiceImpl struct {
 	pool *pgxpool.Pool
+	hub  EventHub // SSE 广播 hub；nil 时跳过广播保留向后兼容（spec v3.5 §6）
 }
 
 // NewProjectService 构造 ProjectService 具体实现。
@@ -185,7 +188,7 @@ func NewProjectService(deps ProjectServiceDeps) (*ProjectServiceImpl, error) {
 	if deps.Pool == nil {
 		return nil, errors.New("project_service: pool is required")
 	}
-	return &ProjectServiceImpl{pool: deps.Pool}, nil
+	return &ProjectServiceImpl{pool: deps.Pool, hub: deps.Hub}, nil
 }
 
 // ============================================================
@@ -418,6 +421,26 @@ func (s *ProjectServiceImpl) Create(
 	if err != nil {
 		return nil, err
 	}
+
+	// SSE 实时同步：commit 成功后才广播 project.created 事件；
+	// 事务回滚时此处不会执行（InTx 返回 error 已 early-return）。
+	// s.hub == nil 时跳过广播保留向后兼容（旧测试 pool=nil 场景）。
+	if s.hub != nil {
+		targets, terr := s.queryProjectTargetUsers(context.Background(), project.ID)
+		if terr != nil {
+			// 不让广播失败影响业务返回；记录日志即可
+			log.Printf("project_service: query targets for event publish: %v", terr)
+		} else {
+			s.hub.Publish(Event{
+				Type:          EventProjectCreated,
+				OccurredAt:    time.Now(),
+				ActorUserID:   creatorUserID,
+				Data:          project,
+				TargetUserIDs: targets,
+			})
+		}
+	}
+
 	return project, nil
 }
 
@@ -835,4 +858,31 @@ func scanProject(s rowScanner) (*ProjectModel, error) {
 		p.Developers = []ProjectDeveloperRef{}
 	}
 	return &p, nil
+}
+
+// queryProjectTargetUsers 算事件目标用户 ID 集合：
+// - 全部 active admin（role_id=1）
+// - 该项目的全部 project_members
+//
+// 业务背景（spec v3.5 §6）：用 service 层 raw pool 查询，不带 RLS GUC，
+// admin 和成员都在白名单内；UNION 去重。
+func (s *ProjectServiceImpl) queryProjectTargetUsers(ctx context.Context, projectID int64) ([]int64, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT u.id FROM users u WHERE u.is_active AND u.role_id = 1
+		UNION
+		SELECT pm.user_id FROM project_members pm WHERE pm.project_id = $1
+	`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []int64
+	for rows.Next() {
+		var uid int64
+		if err := rows.Scan(&uid); err != nil {
+			return nil, err
+		}
+		out = append(out, uid)
+	}
+	return out, rows.Err()
 }
