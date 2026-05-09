@@ -43,6 +43,7 @@ import (
 
 	"github.com/ghostterm/progress-server/internal/auth"
 	"github.com/ghostterm/progress-server/internal/services"
+	"github.com/ghostterm/progress-server/internal/testutil"
 	"github.com/ghostterm/progress-server/tests/fixtures"
 )
 
@@ -455,12 +456,14 @@ func TestEffectivePermissions_AllUserDeniesEmptyResult(t *testing.T) {
 
 func TestEffectivePermissions_DBErrorReturnsUnavailableSentinel(t *testing.T) {
 	ctx := context.Background()
-	tdb := fixtures.NewTestDB(t)
+	// 必须用 Exclusive pool —— services 包默认走 sharedPool 共享模式，
+	// 本测试故意 Close pool 模拟 DB 故障，关掉的若是共享池会让后续测试全炸。
+	pool, cleanup := testutil.StartPostgresExclusive(t)
+	defer cleanup()
 	// 故意提前 Close pool 模拟 DB 不可用
-	tdb.Pool.Close()
-	defer tdb.Close() // 二次 Close 是 no-op，安全
+	pool.Close()
 
-	svc := services.NewEffectivePermissionsService(tdb.Pool)
+	svc := services.NewEffectivePermissionsService(pool)
 	got, err := svc.Compute(ctx, 1) // userID 任取，pool 已 closed 必失败
 	require.Error(t, err, "pool closed 必须返回错误")
 	require.Nil(t, got, "失败必须返回 nil")
