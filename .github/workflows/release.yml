@@ -63,13 +63,10 @@ jobs:
           workspaces: src-tauri -> target
 
       # pnpm 必须在 setup-node 前安装
-      # 锁 10 不用 latest：pnpm 11 默认拒绝 dependency build scripts
-      # (esbuild/msw postinstall 必须跑)，且 package.json pnpm.onlyBuiltDependencies
-      # 在 pnpm 11 已失效。本地与生产统一 pnpm 10。
+      # 不指定 version 让 action-setup 从 package.json packageManager 字段读
+      # (单一事实源)。两处同时指定会触发 ERR_PNPM_BAD_PM_VERSION。
       - name: 安装 pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - name: 安装 Node.js
         uses: actions/setup-node@v4
@@ -172,10 +169,9 @@ jobs:
         with:
           workspaces: src-tauri -> target
 
+      # 与 macOS 块同：从 package.json packageManager 读版本（单一事实源）
       - name: 安装 pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: latest
 
       - name: 安装 Node.js
         uses: actions/setup-node@v4
