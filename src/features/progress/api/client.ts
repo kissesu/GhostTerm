@@ -146,8 +146,14 @@ export async function tauriAwareFetch(url: string, init: RequestInit): Promise<R
       headers,
       body: typeof init.body === 'string' ? init.body : null,
     });
-    return new Response(httpResp.body, {
-      status: httpResp.status,
+    // null-body status（fetch spec: 1xx/204/205/304 时 Response body 必须 null/undefined，空字符串 "" 也触发 TypeError）
+    // Rust http_proxy 在无 body 响应时返 body=""；这里把 null-body status + 空 body 转 null 防 TypeError
+    // 修复 2026-05-10：用户改密成功后 ProfileDialog 显示 "TypeError: Response cannot have a body with the given status"
+    const status = httpResp.status;
+    const isNullBodyStatus = status === 204 || status === 205 || status === 304 || (status >= 100 && status < 200);
+    const body = isNullBodyStatus || httpResp.body === '' ? null : httpResp.body;
+    return new Response(body, {
+      status,
       headers: httpResp.headers,
     });
   }
