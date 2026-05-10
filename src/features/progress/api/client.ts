@@ -180,9 +180,13 @@ export async function apiFetch<T>(
   // 401 silent refresh + retry 一次（access token 过期是预期行为，不应直接 logout）
   // ============================================
   let res = await doFetch(path, rest, anonymous, initHeaders as Record<string, string> | undefined);
+  // refreshed 必须 hoist 到第四步使用 —— silent refresh 成功后 retry 仍 401 = 业务级 401（如旧密码错），
+  // 不能 clearLocal（否则用户改密时输错旧密码会被静默踢登录页，看不到错误提示）。
+  // 修复 2026-05-10：用户原话"提交修改密码后直接就跳转登录页了, 修改成功或失败都没有给用户提示"。
+  let refreshed = false;
   if (res.status === 401 && !anonymous) {
     // access 过期 → 单飞 refresh → 成功则用新 token 重试一次；失败再走 401 → clearLocal
-    const refreshed = await silentRefreshOnce();
+    refreshed = await silentRefreshOnce();
     if (refreshed) {
       res = await doFetch(path, rest, anonymous, initHeaders as Record<string, string> | undefined);
     }
@@ -207,9 +211,11 @@ export async function apiFetch<T>(
   // ============================================
   // 第四步：错误分支
   // ============================================
-  // 401 触发：silent refresh 已在第二步尝试过；retry 仍 401 = refresh token 也失效
-  // 此时清登录态让 ProgressShell 切回 LoginPage（区别于 access 单纯过期的"伪 401"）
-  if (res.status === 401 && !anonymous) {
+  // 401 触发清本地登录态：仅当 silent refresh **未成功**时才走（refresh 失败 = refresh token 也过期 = 真鉴权失效）。
+  // refreshed=true 但 retry 仍 401 = 业务级 401（如旧密码错 / ws ticket 无效），不应 clearLocal——
+  // 否则用户改密时输错旧密码会被静默踢登录页看不到任何提示。
+  // 修复 2026-05-10：用户原话"提交修改密码后直接就跳转登录页了, 修改成功或失败都没有给用户提示"。
+  if (res.status === 401 && !anonymous && !refreshed) {
     const { useGlobalAuthStore } = await import('../../../shared/stores/globalAuthStore');
     // clearLocal 改 async（finding #12 keychain 迁移）；await 让 keychain 删除完成
     // 后再继续抛错，避免下一次 401 还能读到旧 token 重复尝试
