@@ -25,16 +25,21 @@ import { useToastStore } from '../progress/stores/toastStore';
 import { getBaseUrl } from '../progress/api/client';
 
 export function useEventStream(): void {
+  // 订阅 accessToken（store selector 返新值触发 re-render → effect deps 变化重跑）。
+  // 用 accessToken 而非 user.id 作 deps：
+  //   - userId 仅登录/登出变 → 但 silent refresh 拿新 access token 时 Rust SSE task 旧 token issueWSTicket 会 401
+  //   - accessToken 变 → effect 重跑用新 token 启动 SSE（牺牲 ~15min 一次重连频率换可靠性）
+  // 修复 2026-05-10：useEffect[]+getState() 一次性快照让 mount 时 hydrating accessToken=null 永远跳过 subscribe → SSE 永不启动 → 双客户端实测看到两实例同项目状态完全不同步
+  const accessToken = useGlobalAuthStore((s) => s.accessToken);
+
   useEffect(() => {
+    if (!accessToken) return;
+
     let unlistenEvent: UnlistenFn | undefined;
     let unlistenReload: UnlistenFn | undefined;
     let cancelled = false;
 
     void (async () => {
-      const accessToken = useGlobalAuthStore.getState().accessToken;
-      // 未登录时不启动 SSE：避免无效连接占用资源
-      if (!accessToken) return;
-
       try {
         await invoke('subscribe_events_cmd', {
           baseUrl: getBaseUrl(),
@@ -47,7 +52,7 @@ export function useEventStream(): void {
         return;
       }
 
-      // cleanup 在 invoke 完成前已调（React StrictMode 卸载）→ 直接返回
+      // cleanup 在 invoke 完成前已调（React StrictMode 卸载 / accessToken 变化触发 re-run）→ 直接返回
       if (cancelled) return;
 
       // 监听来自 Rust SSE 客户端解析后的业务事件
@@ -80,7 +85,7 @@ export function useEventStream(): void {
       unlistenReload?.();
       document.removeEventListener('visibilitychange', onVis);
     };
-  }, []);
+  }, [accessToken]);
 }
 
 /**

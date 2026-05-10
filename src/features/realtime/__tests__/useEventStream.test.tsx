@@ -20,9 +20,16 @@ vi.mock('@tauri-apps/api/event', () => ({
 const reloadMock = vi.fn().mockResolvedValue(undefined);
 vi.mock('../reloadVisibleData', () => ({ reloadVisibleData: () => reloadMock() }));
 
-vi.mock('../../../shared/stores/globalAuthStore', () => ({
-  useGlobalAuthStore: { getState: () => ({ accessToken: 'test-token', user: { id: 1 } }) },
-}));
+// useEventStream 现在用 hook 形式 useGlobalAuthStore((s) => s.accessToken) + 传统 getState() 都用
+// mock 必须既支持函数调用（selector）又支持 getState 方法
+vi.mock('../../../shared/stores/globalAuthStore', () => {
+  const state = { accessToken: 'test-token', user: { id: 1 } };
+  const useGlobalAuthStore = Object.assign(
+    (selector: (s: typeof state) => unknown) => selector(state),
+    { getState: () => state },
+  );
+  return { useGlobalAuthStore };
+});
 
 vi.mock('../../progress/api/client', () => ({
   getBaseUrl: () => 'https://atlas.example/test',
