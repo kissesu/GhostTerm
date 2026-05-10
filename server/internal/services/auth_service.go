@@ -26,6 +26,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ghostterm/progress-server/internal/auth"
+	progressdb "github.com/ghostterm/progress-server/internal/db"
 )
 
 // AuthContext 是中间件解析 access token 后注入到 request context 的会话信息。
@@ -547,10 +548,19 @@ func (s *authService) IssueWSTicket(ctx context.Context, sc SessionContext) (str
 		return "", time.Time{}, err
 	}
 	expiresAt := time.Now().Add(s.wsTicketTTL)
-	if _, err := s.pool.Exec(ctx, `
-		INSERT INTO ws_tickets (ticket_hash, user_id, role_id, expires_at)
-		VALUES ($1, $2, $3, $4)
-	`, hash, ac.UserID, ac.RoleID, expiresAt); err != nil {
+	// ws_tickets RLS policy: WITH CHECK (current_user_id() IS NOT NULL)
+	// 必须在 InTx + SetSessionContext 内 INSERT，否则 RLS 拒（之前 wsClient.ts 0 callsite 未触发；
+	// 2026-05-10 SSE useEventStream 启用后首次激活该路径暴露此 bug）
+	if err := progressdb.InTx(ctx, s.pool, func(tx pgx.Tx) error {
+		if err := progressdb.SetSessionContext(ctx, tx, ac.UserID, ac.RoleID); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `
+			INSERT INTO ws_tickets (ticket_hash, user_id, role_id, expires_at)
+			VALUES ($1, $2, $3, $4)
+		`, hash, ac.UserID, ac.RoleID, expiresAt)
+		return err
+	}); err != nil {
 		return "", time.Time{}, fmt.Errorf("auth_service: persist ws ticket: %w", err)
 	}
 	return raw, expiresAt, nil
