@@ -32,6 +32,7 @@ import {
 import { useGlobalAuthStore } from '../stores/globalAuthStore';
 import { ProgressApiError } from '../../features/progress/api/client';
 import { changePassword, updateMyProfile } from '../api/account';
+import { useToastStore } from '../../features/progress/stores/toastStore';
 import styles from './ProfileDialog.module.css';
 
 interface ProfileDialogProps {
@@ -179,12 +180,23 @@ export default function ProfileDialog({ onClose }: ProfileDialogProps): ReactEle
         oldPassword: pwdForm.oldPassword,
         newPassword: pwdForm.newPassword,
       });
-      // 用户原话 2026-05-03"修改密码后让用户手动重登" —— 不自动 logout
-      setPwdSuccess('密码已修改，建议重新登录以同步其它会话状态');
+      // 用户原话 2026-05-10"提交成功后且正确提示后应该立即清理用户信息缓存, 跳转登录页让用户重新登录"
+      // 流程：toast 显示 1.5s 让用户看清提示 → 调 logout 清登录态 → ProgressShell 自动切回 LoginPage
+      // （之前 2026-05-03 偏好"不自动 logout"已被本次推翻）
+      useToastStore.getState().show('密码已修改，正在退出当前会话…', 1800);
+      setPwdSuccess('密码已修改，正在退出当前会话…');
       setPwdForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
+      window.setTimeout(() => {
+        // logout 失败也无所谓——clearLocal 是兜底（后端 revoked refresh token 已让其它会话失效）
+        void useGlobalAuthStore.getState().logout().catch(() => {
+          void useGlobalAuthStore.getState().clearLocal();
+        });
+        onClose();
+      }, 1500);
     } catch (err) {
       const msg = err instanceof ProgressApiError ? err.message : String(err);
       setPwdError(msg || '密码修改失败');
+      useToastStore.getState().show(msg || '密码修改失败', 3500);
     } finally {
       setPwdSubmitting(false);
     }
