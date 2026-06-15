@@ -1,17 +1,17 @@
 // @file: http_proxy.rs
 // @description: progress-server HTTP 代理 - 让前端通过 Tauri 调用 reqwest 转发请求
-//               业务背景：progress-server 用自签 IP 证书部署（atlas 备案接入未在腾讯云，无法用域名 + 公开 CA）
+//               业务背景：progress-server 用自签 IP 证书部署(80/443 被同机 thesis-tool 占,走 38080 高端口)
 //                        WebView (WKWebView/WebView2) 原生 fetch 不能加载自签证书 → ERR_CERT_AUTHORITY_INVALID
 //                        改用 reqwest 在 Rust 层做证书钉死（cert pinning）转发请求
 //                        前端 client.ts doFetch 检测 Tauri 环境时改调 invoke('http_request_cmd', ...)
 //               安全设计（PR-1 Task 4 finding #11 修复）：
 //                        - 删除 .danger_accept_invalid_certs(true)，不再裸跑（旧实现任意 MITM 自签证书都能冒充）
-//                        - include_bytes! 编译期内嵌 atlas-ip.pem 进二进制
-//                        - .add_root_certificate(...) 注入 atlas Caddy 自签证书
+//                        - include_bytes! 编译期内嵌 tencent-ip.pem 进二进制
+//                        - .add_root_certificate(...) 注入腾讯云 Caddy 自签证书
 //                        - .tls_built_in_root_certs(false) 拒所有公共 CA，仅信编内这一张
 //                        - .https_only(true) 杜绝 HTTP fallback，即使 BASE_URL 错配 http:// 也拒
-//                        公共 WiFi MITM 即使持任意公共 CA 签发的伪造证书也无法冒充 atlas（103.236.85.144）
-//                        证书 10 年有效（至 2036-05-08），过期前 30 天发新 release
+//                        公共 WiFi MITM 即使持任意公共 CA 签发的伪造证书也无法冒充服务端(129.28.42.191)
+//                        证书 10 年有效(至 2036-06-15),过期前 30 天发新 release
 //               转发设计：尽量薄 — 只做 method/url/headers/body 转发，不做 cookie / redirect 自定义
 //                        大体响应包含 status + headers + body 文本（progress API 全 JSON 响应）
 //                        Authorization 头由前端 client.ts 注入，本层不感知
@@ -25,9 +25,9 @@ use std::time::Duration;
 use reqwest::tls::Certificate;
 use serde::{Deserialize, Serialize};
 
-// atlas Caddy 自签证书 PEM（CN=103.236.85.144，SAN=IP:103.236.85.144 + DNS:localhost，10 年有效期）
+// 腾讯云 Lighthouse Caddy 自签证书 PEM（CN=129.28.42.191，SAN=IP:129.28.42.191 + IP:127.0.0.1 + DNS:localhost，10 年有效期）
 // include_bytes! 在编译期把证书字节内嵌进二进制 — 用户机器无需任何额外文件，证书与代码一起分发
-const ATLAS_CERT_PEM: &[u8] = include_bytes!("../certs/atlas-ip.pem");
+const TENCENT_CERT_PEM: &[u8] = include_bytes!("../certs/tencent-ip.pem");
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HttpResponse {
@@ -50,7 +50,7 @@ pub(crate) fn get_or_init_client() -> Result<&'static reqwest::Client, String> {
         return Ok(c);
     }
     // 解析编内证书 — PEM 格式由构建期 include_bytes! 注入，运行时仅做一次解析
-    let cert = Certificate::from_pem(ATLAS_CERT_PEM)
+    let cert = Certificate::from_pem(TENCENT_CERT_PEM)
         .map_err(|e| format!("http_proxy: parse pinned cert failed: {e}"))?;
 
     let client = reqwest::Client::builder()

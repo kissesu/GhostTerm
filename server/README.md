@@ -108,7 +108,9 @@ go test -count=1 -timeout 900s ./tests/e2e/...
 
 ## 部署
 
-参见 [`server/docs/deployment.md`](docs/deployment.md)。
+- 生产 runbook(腾讯云 Lighthouse 成都,2026-06-15 起):[`server/docs/deployment-tencent.md`](docs/deployment-tencent.md)
+- 通用部署指南(架构 / 模板):[`server/docs/deployment.md`](docs/deployment.md)
+- 历史 atlas runbook(西安 systemd 部署,已下线):[`server/docs/_archived/deployment-atlas.md`](docs/_archived/deployment-atlas.md)
 
 ## CI
 

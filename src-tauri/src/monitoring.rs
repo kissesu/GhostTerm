@@ -7,8 +7,10 @@
 // @author: Atlas.oi
 // @date: 2026-05-09
 
-/// GlitchTip DSN（公开 key 设计，不算 secret，硬编码入 git；切环境时改这一行）
-const SENTRY_DSN: &str = "http://d37cfb92a0e04b9681598cfce0567b1e@103.236.85.144:38090/1";
+/// Sentry / GlitchTip DSN(公开 key 设计,不算 secret,硬编码入 git)
+/// 2026-06-15 上云换腾讯云后停用 self-host GlitchTip,DSN 留空 = 监控关闭。
+/// sentry::init 接受空 DSN 时所有 event 静默丢弃,API 仍可用,不影响业务。
+const SENTRY_DSN: &str = "";
 
 /// 初始化 Sentry / GlitchTip 客户端 + 安装 panic hook
 ///

@@ -1,0 +1,46 @@
+# @file Caddyfile.prod
+# @description GhostTerm 进度模块 — 腾讯云 Lighthouse Caddy 反代(38080)
+#
+# 部署目标:腾讯云 Lighthouse 4C8G / Ubuntu 24.04 / IP 129.28.42.191
+# 38080 端口非标免备案;自签 IP 证书(SAN=IP),Tauri reqwest cert pinning 信任
+# 反代到同 docker network 的 ghostterm-server:8080(容器名解析)
+#
+# @author Atlas.oi
+# @date 2026-06-15
+
+{
+	auto_https off
+	admin off
+}
+
+:38080 {
+	# 用 :38080 而非 IP:38080 因为 TLS client 用 IP 连接时不发 SNI,
+	# 后者会让 Caddy 在握手时找不到 site 匹配,返回 internal_error
+	tls /etc/ghostterm/cert.pem /etc/ghostterm/key.pem {
+		protocols tls1.3
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		Permissions-Policy "geolocation=(), microphone=(), camera=()"
+		-Server
+	}
+
+	reverse_proxy ghostterm-server:8080 {
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host {host}
+	}
+
+	log {
+		output file /var/log/caddy/ghostterm.log {
+			roll_size 100mb
+			roll_keep 5
+			roll_keep_for 90d
+		}
+		format json
+	}
+}

@@ -1,0 +1,89 @@
+# @file docker-compose.prod.yml
+# @description GhostTerm 进度模块 — 腾讯云 Lighthouse 生产栈(成都一区)
+#              与同机 thesis-tool 完全隔离(独立 compose project + 独立网络),
+#              不抢 80/443(Caddy 监听 38080)。
+#
+# 部署形态(2026-06-15 拍板)：
+#   - postgres + ghostterm-server + caddy 三服务,无源码,server 二进制走 bind mount
+#   - secrets 用 host bind:/etc/ghostterm/secrets/(chmod 600)+ env_file
+#   - migrate 不在 compose 内常驻,bootstrap 用 docker run --rm 一次性跑
+#
+# @author Atlas.oi
+# @date 2026-06-15
+
+name: ghostterm
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ghostterm-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_root_pw
+      POSTGRES_DB: progress
+      POSTGRES_INITDB_ARGS: "--no-locale --encoding=UTF8"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    secrets:
+      - pg_root_pw
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d progress"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      - ghostterm
+
+  ghostterm-server:
+    image: alpine:3.20
+    container_name: ghostterm-server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - /etc/ghostterm/server.env
+    volumes:
+      - /opt/ghostterm/bin/ghostterm-server:/usr/local/bin/ghostterm-server:ro
+      - filedata:/var/lib/ghostterm/files
+    command: ["/usr/local/bin/ghostterm-server"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+    networks:
+      - ghostterm
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: ghostterm-caddy
+    restart: unless-stopped
+    depends_on:
+      ghostterm-server:
+        condition: service_healthy
+    ports:
+      - "38080:38080"
+    volumes:
+      - ./Caddyfile.prod:/etc/caddy/Caddyfile:ro
+      - /etc/ghostterm/cert.pem:/etc/ghostterm/cert.pem:ro
+      - /etc/ghostterm/key.pem:/etc/ghostterm/key.pem:ro
+      - caddylogs:/var/log/caddy
+    networks:
+      - ghostterm
+
+volumes:
+  pgdata:
+  filedata:
+  caddylogs:
+
+secrets:
+  pg_root_pw:
+    file: /etc/ghostterm/secrets/pg_root_pw
+
+networks:
+  ghostterm:
+    name: ghostterm
+    driver: bridge
