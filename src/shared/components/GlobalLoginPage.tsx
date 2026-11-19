@@ -98,7 +98,7 @@ export default function GlobalLoginPage() {
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     try {
-      await login(username, password);
+      await login(username, password, remember);
     } catch {
       // 错误已写入 store.error；这里仅吞掉以避免 unhandled rejection
     }
@@ -290,18 +290,11 @@ export default function GlobalLoginPage() {
 
                 <div className={styles.formTools}>
                   <label className={styles.check} data-testid="global-login-remember">
-                    <span
-                      className={`${styles.checkBox} ${remember ? styles.checkBoxOn : ''}`}
-                      onClick={() => setRemember((v) => !v)}
-                      role="checkbox"
-                      aria-checked={remember}
-                      tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.key === ' ' || e.key === 'Enter') {
-                          e.preventDefault();
-                          setRemember((v) => !v);
-                        }
-                      }}
+                    <input
+                      type="checkbox"
+                      className={styles.checkBox}
+                      checked={remember}
+                      onChange={(e) => setRemember(e.target.checked)}
                     />
                     保持本机登录
                   </label>

@@ -25,7 +25,7 @@
 
 import { create } from 'zustand';
 import { z } from 'zod';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 
 import { apiFetch, ProgressApiError } from '../../features/progress/api/client';
 import {
@@ -41,63 +41,18 @@ import { useGlobalPermissionStore } from './globalPermissionStore';
 import { useProgressPermissionStore } from '../../features/progress/stores/progressPermissionStore';
 import { setSentryUser, clearSentryUser } from '../../sentry';
 
-// ============================================
-// keychain 读/写/删 —— 走 Tauri IPC
-//
-// 设计点：
-//  1) 所有函数都是 async：webview 与 Rust 进程之间是异步消息通道，
-//     不能像 localStorage 那样同步返回。
-//  2) read / clear 容错：keychain 不可用 / 用户拒绝授权时不阻断主流程，
-//     吞错并按"无 token / 清理失败"处理；write 不容错—登录后写不进去
-//     就让用户立即看到错误，而不是静默丢凭证。
-//  3) 测试环境：setup.ts 已全局 vi.mock '@tauri-apps/api/core' 让 invoke
-//     成为 vi.fn()；测试用例按需 mockResolvedValueOnce 注入 keychain 状态。
-// ============================================
-// 安全 review M5：keychain 失败时的内存兜底
-//
-// 原实现：writeRefresh 失败让 login() 整体抛错 → 用户怎么登都登不进。
-// Linux 场景：
-//   - headless server / 无 GUI session
-//   - libsecret 未安装 / D-Bus session bus 未启动
-//   - keyring crate `set_password` 返 PlatformFailure
-// dmg/msi 当前不发 AppImage，潜伏低风险但 keyring 3 deps 暗示后续可能给 Linux。
-//
-// 修法：keychain 失败时 fallback 到模块级 memory（仍比 localStorage 安全 ——
-// 关闭 app 即清；用户须每次重启重登），并 console.warn 提示"本次会话不持久"。
-// 不让 login() 整体失败，保留可用性。
-let memoryRefreshFallback: string | null = null;
-
+// 登录和轮换使用系统凭证库。仅本次登录的刷新令牌保存在 store 内存中。
 async function readRefresh(): Promise<string | null> {
-  try {
-    const fromKeychain = (await invoke<string | null>('get_refresh_token_cmd')) ?? null;
-    // keychain 优先；keychain 返 null 时检查内存兜底（同一进程 lifetime）
-    return fromKeychain ?? memoryRefreshFallback;
-  } catch (e) {
-    console.error('[auth] read refresh from keychain failed (fallback to memory):', e);
-    return memoryRefreshFallback;
-  }
+  if (!isTauri()) return null;
+  return (await invoke<string | null>('get_refresh_token_cmd')) ?? null;
 }
 
 async function writeRefresh(token: string | null): Promise<void> {
+  if (!isTauri()) return;
   if (token) {
-    try {
-      await invoke('set_refresh_token_cmd', { token });
-      // 写 keychain 成功也同步 memory，让本进程后续 read 一致（单一信源）
-      memoryRefreshFallback = token;
-    } catch (e) {
-      // 安全 review M5：keychain 写失败时不抛，回退到 memory
-      // 让用户能登录但当前会话不持久（关 app 即清）；console.warn 让用户感知
-      console.warn('[auth] keychain write failed, using in-memory fallback (session not persisted across app restart):', e);
-      memoryRefreshFallback = token;
-    }
+    await invoke('set_refresh_token_cmd', { token });
   } else {
-    memoryRefreshFallback = null;
-    try {
-      await invoke('delete_refresh_token_cmd');
-    } catch (e) {
-      // 清理失败不阻断登出语义（用户视角"我要退出"已达成）
-      console.warn('[auth] clear refresh keychain entry failed (non-fatal):', e);
-    }
+    await invoke('delete_refresh_token_cmd');
   }
 }
 
@@ -122,6 +77,7 @@ let refreshInflight: Promise<void> | null = null;
 interface GlobalAuthState {
   accessToken: string | null;
   refreshToken: string | null;
+  rememberLogin: boolean;
   user: UserPayload | null;
   /** 当前是否正在登录 / 加载 me，UI 用于 disable 按钮 */
   loading: boolean;
@@ -142,8 +98,8 @@ interface GlobalAuthState {
   /** 应用启动时从系统 keychain 拉 refreshToken 到内存；幂等 */
   hydrate: () => Promise<void>;
   /** 用户名 + 密码登录 */
-  login: (username: string, password: string) => Promise<void>;
-  /** 用 refreshToken 换新 accessToken；失败会清空 refresh */
+  login: (username: string, password: string, remember?: boolean) => Promise<void>;
+  /** 用 refreshToken 换新 accessToken；凭证失效时清除登录态 */
   refresh: () => Promise<void>;
   /** 登出：调后端 + 清空本地状态 + 清 keychain */
   logout: () => Promise<void>;
@@ -156,6 +112,7 @@ interface GlobalAuthState {
 export const useGlobalAuthStore = create<GlobalAuthState>((set, get) => ({
   accessToken: null,
   refreshToken: null,
+  rememberLogin: false,
   user: null,
   loading: false,
   error: null,
@@ -185,7 +142,7 @@ export const useGlobalAuthStore = create<GlobalAuthState>((set, get) => ({
         const token = await readRefresh();
         // 重新检查 hydrating，防止 hydrate 期间 logout 已清除 refreshToken
         if (!get().hydrating) return;
-        set({ refreshToken: token, hydrating: false });
+        set({ refreshToken: token, rememberLogin: !!token, hydrating: false });
       } finally {
         hydrateInflight = null;
       }
@@ -196,7 +153,7 @@ export const useGlobalAuthStore = create<GlobalAuthState>((set, get) => ({
   // ----------------------------------------------------------
   // login: POST /api/auth/login → { accessToken, refreshToken, user }
   // ----------------------------------------------------------
-  async login(username, password) {
+  async login(username, password, remember = true) {
     set({ loading: true, error: null });
     try {
       const data: LoginResponsePayload = await apiFetch(
@@ -210,10 +167,11 @@ export const useGlobalAuthStore = create<GlobalAuthState>((set, get) => ({
       );
       // 写 keychain 失败必须冒泡 —— 不能登录"成功"却没存住 refresh
       // hydrating 顺便置 false：登录路径与"启动 hydrate"语义合并到位
-      await writeRefresh(data.refreshToken);
+      await writeRefresh(remember ? data.refreshToken : null);
       set({
         accessToken: data.accessToken,
         refreshToken: data.refreshToken,
+        rememberLogin: remember,
         user: data.user,
         loading: false,
         error: null,
@@ -249,12 +207,10 @@ export const useGlobalAuthStore = create<GlobalAuthState>((set, get) => ({
   async refresh() {
     // 单飞复用：StrictMode 双 mount / 多旁路并发 401 时只发一次 /api/auth/refresh
     if (refreshInflight) return refreshInflight;
+    const current = get().refreshToken;
+    if (!current) throw new ProgressApiError(401, 'unauthorized', '缺少刷新令牌');
     refreshInflight = (async () => {
       try {
-        const current = get().refreshToken;
-        if (!current) {
-          throw new ProgressApiError(401, 'unauthorized', 'no refresh token');
-        }
         let data;
         try {
           data = await apiFetch(
@@ -267,15 +223,17 @@ export const useGlobalAuthStore = create<GlobalAuthState>((set, get) => ({
             RefreshResponseSchema,
           );
         } catch (err) {
-          // refresh 失败 = refresh token 失效；清空 keychain 与本地 state 避免后续重复尝试
-          await writeRefresh(null);
-          set({ accessToken: null, refreshToken: null, user: null });
+          if (err instanceof ProgressApiError && err.status === 401 && get().refreshToken === current) {
+            await get().clearLocal();
+          }
           throw err;
         }
         // 后端 rotate 后的新 refreshToken 必须写回 keychain + state
         // （rotate_refresh_token 单次消费，下次 refresh 必须用新 token）
-        await writeRefresh(data.refreshToken);
+        if (get().refreshToken !== current) return;
+        // 服务端已轮换令牌，即使本次磁盘写入失败，本进程也必须使用新值。
         set({ accessToken: data.accessToken, refreshToken: data.refreshToken });
+        if (get().rememberLogin) await writeRefresh(data.refreshToken);
       } finally {
         refreshInflight = null;
       }
@@ -293,12 +251,7 @@ export const useGlobalAuthStore = create<GlobalAuthState>((set, get) => ({
     } catch {
       // 后端失败不阻断本地登出 —— 用户语义就是"我要退出"
     } finally {
-      await writeRefresh(null);
-      set({ accessToken: null, refreshToken: null, user: null, error: null });
-      useGlobalPermissionStore.getState().clear();
-      useProgressPermissionStore.getState().clear();
-      // 退出后报错不再绑老用户身份
-      clearSentryUser();
+      await get().clearLocal();
     }
   },
 
@@ -322,11 +275,15 @@ export const useGlobalAuthStore = create<GlobalAuthState>((set, get) => ({
   // 改 async：keychain 删除是异步 IPC，调用方必要时可 await 等待清理完成
   // ----------------------------------------------------------
   async clearLocal() {
-    await writeRefresh(null);
-    set({ accessToken: null, refreshToken: null, user: null, error: null });
+    set({ accessToken: null, refreshToken: null, rememberLogin: false, user: null, error: null, hydrating: false });
     useGlobalPermissionStore.getState().clear();
-    // 401 强退后报错不再绑老用户身份（与 logout 对称）
+    useProgressPermissionStore.getState().clear();
     clearSentryUser();
+    try {
+      await writeRefresh(null);
+    } catch (err) {
+      console.warn('[auth] 清除本机钥匙串凭证失败', err);
+    }
   },
 }));
 

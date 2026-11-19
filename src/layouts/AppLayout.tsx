@@ -150,6 +150,8 @@ export default function AppLayout() {
   // 之前 work tab 不调后端纯前端 → 即使 token 过期也能用，切到 progress 才挡门
   // ============================================
   const [sessionVerified, setSessionVerified] = useState(false);
+  const [restoreAttempt, setRestoreAttempt] = useState(0);
+  const [restoreFailed, setRestoreFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -161,18 +163,19 @@ export default function AppLayout() {
       }
       // finding #12：先从 keychain 拉 refreshToken 到内存（旧版同步 readRefresh，
       // 新版异步 IPC）。hydrate() 幂等，多次 mount 安全。
-      await hydrate();
-      if (cancelled) return;
-      // hydrate 后从最新 store state 取 refreshToken（不能用闭包 refreshToken 变量
-      // —— 那是 effect 启动时的快照，hydrate 期间已陈旧）
-      const tokenAfterHydrate = useGlobalAuthStore.getState().refreshToken;
-      // 有 refreshToken 但无 access：尝试 refresh + loadMe
-      if (tokenAfterHydrate) {
-        try {
-          await refresh();
-          await loadMe();
-        } catch {
-          // refresh 失败 store 已自清
+      try {
+        await hydrate();
+        if (cancelled) return;
+        const session = useGlobalAuthStore.getState();
+        if (session.refreshToken) {
+          if (!session.accessToken) await refresh();
+          if (!cancelled) await loadMe();
+        }
+      } catch {
+        const session = useGlobalAuthStore.getState();
+        if (!cancelled && (session.hydrating || session.refreshToken)) {
+          setRestoreFailed(true);
+          return;
         }
       }
       // 完全没 token：跳过验证直接挡门
@@ -184,7 +187,7 @@ export default function AppLayout() {
     };
     // 仅在 mount 时跑一次；user 后续变化由其他 effect 管
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [restoreAttempt]);
 
   // ============================================
   // Task 9：登录后拉取最新 effective permissions（nav 级 tab 门控数据源）
@@ -306,9 +309,17 @@ export default function AppLayout() {
             color: 'var(--c-fg-muted)',
             fontSize: 13,
           }}
-          aria-busy="true"
+          aria-busy={!restoreFailed}
         >
-          正在恢复会话…
+          {restoreFailed ? (
+            <div role="alert">
+              暂时无法恢复会话。
+              <button type="button" onClick={() => {
+                setRestoreFailed(false);
+                setRestoreAttempt((attempt) => attempt + 1);
+              }}>重试</button>
+            </div>
+          ) : '正在恢复会话…'}
         </div>
       </div>
     );

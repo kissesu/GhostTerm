@@ -1,6 +1,6 @@
 [package]
 name = "ghostterm"
-version = "0.8.0"
+version = "0.8.1"
 description = "GhostTerm - 轻量级代码编辑器 + 终端一体化工具，深度集成 Claude Code"
 authors = ["Atlas.oi"]
 edition = "2021"
@@ -88,7 +88,7 @@ tauri-plugin-dialog = "2.7.0"
 # 系统 keychain 访问 - refreshToken 安全存储（finding #12 纵深防御）
 # macOS Keychain / Windows Credential Manager / Linux Secret Service 跨平台一致
 # webview JS 即使绕过 CSP + DOMPurify 也无法访问 OS keychain
-keyring = "3"
+keyring = { version = "3", features = ["apple-native", "windows-native"] }
 
 # URL 解析 - finding #22: clone_repository_cmd 白名单校验，解析 https:// host 字段
 url = "2"

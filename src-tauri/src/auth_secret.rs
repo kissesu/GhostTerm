@@ -16,7 +16,11 @@ use keyring::Entry;
 // SERVICE 用反向域名风格隔离应用级凭证；ACCOUNT 标识 token 类型
 // 同应用未来加 access_token 等其他凭证只需新增 ACCOUNT 常量
 // ============================================
+#[cfg(not(test))]
 const SERVICE: &str = "com.atlas.ghostterm";
+// 真实系统凭证库测试使用独立命名空间。
+#[cfg(test)]
+const SERVICE: &str = "com.atlas.ghostterm.tests";
 const ACCOUNT: &str = "refresh_token";
 
 /// 把 refreshToken 写入系统 keychain（覆盖式）
@@ -60,6 +64,13 @@ pub fn delete_refresh_token_cmd() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[test]
+    fn desktop_uses_native_credential_store() {
+        let entry = Entry::new("com.atlas.ghostterm.tests", "backend").unwrap();
+        assert!(!entry.get_credential().is::<keyring::mock::MockCredential>());
+    }
 
     // ============================================
     // 集成测试需要真实 keychain（macOS 会弹授权 dialog / Linux 需 D-Bus session bus）

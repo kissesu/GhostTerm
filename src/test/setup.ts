@@ -13,6 +13,7 @@ import { vi } from 'vitest';
 // 各测试文件通过 vi.mocked(invoke).mockResolvedValue(...) 定制返回值
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
+  isTauri: () => true,
 }));
 
 // Mock @tauri-apps/api/event - 测试环境无 Tauri 事件系统

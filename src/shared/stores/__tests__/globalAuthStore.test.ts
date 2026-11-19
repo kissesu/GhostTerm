@@ -41,7 +41,7 @@ vi.mock('../globalPermissionStore', () => ({
 
 import { useGlobalAuthStore } from '../globalAuthStore';
 import { useProgressPermissionStore } from '../../../features/progress/stores/progressPermissionStore';
-import { apiFetch } from '../../../features/progress/api/client';
+import { apiFetch, ProgressApiError } from '../../../features/progress/api/client';
 import { invoke } from '@tauri-apps/api/core';
 
 // ============================================
@@ -153,5 +153,45 @@ describe('globalAuthStore → progressPermissionStore 联动 (Task 34)', () => {
     await useGlobalAuthStore.getState().logout();
 
     expect(useProgressPermissionStore.getState().has('event:E7')).toBe(false);
+  });
+});
+
+describe('会话凭证持久化', () => {
+  const loginData = {
+    user: { id: 1, username: 'atlas', roleId: 1 },
+    accessToken: '初始访问令牌', refreshToken: '初始刷新令牌',
+  };
+  const rotated = { accessToken: '轮换访问令牌', refreshToken: '轮换刷新令牌' };
+
+  it('取消保持登录后清除旧凭证，轮换令牌也只留在当前会话', async () => {
+    mockKeychainStore.refresh_token = 'previous';
+    vi.mocked(apiFetch).mockResolvedValueOnce(loginData)
+      .mockResolvedValueOnce(null).mockResolvedValueOnce(rotated);
+    await useGlobalAuthStore.getState().login('atlas', 'test', false);
+    expect(mockKeychainStore.refresh_token).toBeUndefined();
+    await useGlobalAuthStore.getState().refresh();
+    expect(mockKeychainStore.refresh_token).toBeUndefined();
+    expect(useGlobalAuthStore.getState().refreshToken).toBe(rotated.refreshToken);
+  });
+
+  it('重新启动后恢复已保存的令牌，断网保留它，重试成功后保存新令牌', async () => {
+    mockKeychainStore.refresh_token = loginData.refreshToken;
+    useGlobalAuthStore.setState({ hydrating: true });
+    await useGlobalAuthStore.getState().hydrate();
+    vi.mocked(apiFetch).mockRejectedValueOnce(new Error('离线')).mockResolvedValueOnce(rotated);
+    await expect(useGlobalAuthStore.getState().refresh()).rejects.toThrow('离线');
+    expect(mockKeychainStore.refresh_token).toBe(loginData.refreshToken);
+    await useGlobalAuthStore.getState().refresh();
+    expect(mockKeychainStore.refresh_token).toBe(rotated.refreshToken);
+  });
+
+  it('服务端明确拒绝刷新令牌后清除本机凭证', async () => {
+    mockKeychainStore.refresh_token = loginData.refreshToken;
+    useGlobalAuthStore.setState({ hydrating: true });
+    await useGlobalAuthStore.getState().hydrate();
+    vi.mocked(apiFetch).mockRejectedValueOnce(new ProgressApiError(401, 'unauthorized', '已失效'));
+    await expect(useGlobalAuthStore.getState().refresh()).rejects.toThrow('已失效');
+    expect(mockKeychainStore.refresh_token).toBeUndefined();
+    expect(useGlobalAuthStore.getState().refreshToken).toBeNull();
   });
 });
